@@ -27,7 +27,12 @@ Put the contract in the domain and describe intent:
 ```python
 class TaskRepository(ABC):
     @abstractmethod
-    async def get_by_id(self, *, task_id: UUID) -> Task | None: ...
+    async def get_by_id(
+        self,
+        *,
+        task_id: UUID,
+        user_id: UUID,
+    ) -> Task | None: ...
 
     @abstractmethod
     async def save(self, *, task: Task) -> Task: ...

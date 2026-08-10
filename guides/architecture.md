@@ -45,7 +45,12 @@ Define application-owned interfaces as nominal abstract base classes:
 # domain/repository.py
 class TaskRepository(ABC):
     @abstractmethod
-    async def get_by_id(self, *, task_id: UUID) -> Task | None: ...
+    async def get_by_id(
+        self,
+        *,
+        task_id: UUID,
+        user_id: UUID,
+    ) -> Task | None: ...
 
 
 # infrastructure/repository.py
@@ -53,7 +58,12 @@ from api.features.tasks.domain.repository import TaskRepository
 
 
 class SqlTaskRepository(SqlRepository[TaskModel, Task], TaskRepository):
-    async def get_by_id(self, *, task_id: UUID) -> Task | None: ...
+    async def get_by_id(
+        self,
+        *,
+        task_id: UUID,
+        user_id: UUID,
+    ) -> Task | None: ...
 ```
 
 The concrete class must import and inherit the ABC even when it would happen to satisfy the same shape without inheritance. This makes the intended contract explicit, prevents instantiation while abstract methods are missing, and gives language servers a navigable implementation/definition relationship.

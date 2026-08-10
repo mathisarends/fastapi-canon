@@ -31,11 +31,11 @@ AuthenticatedUserId = Annotated[UUID, Depends(authenticated_user_id)]
 
 async def endpoint(
     user_id: AuthenticatedUserId,
-    service: FromDishka[TaskService],
+    task_service: FromDishka[TaskService],
 ) -> TaskResponse: ...
 ```
 
-FastAPI and Dishka types stop at the presentation layer. Pass plain values and application types to services.
+FastAPI and Dishka types stop at the presentation layer. Pass plain values and application types to services. Name injected instances after their role, such as `task_service`, so the local namespace remains meaningful.
 
 ## Composition root
 

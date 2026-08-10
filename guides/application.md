@@ -15,14 +15,19 @@ class TaskService:
     def __init__(self, repository: TaskRepository) -> None:
         self._repository = repository
 
-    async def create(self, *, title: str) -> Task:
-        task = Task(title=title)
+    async def create(self, *, user_id: UUID, title: str) -> Task:
+        task = Task(user_id=user_id, title=title)
         return await self._repository.save(task=task)
 ```
 
 Create a domain entity or value object on its own named line before passing it to a repository, gateway, event, or nested constructor. Avoid `save(task=Task(...))`: the local name exposes an important state transition, is easier to inspect in a debugger, and leaves room for validation or events without rewriting the call.
 
 Keep keyword-only use-case parameters when several values have the same primitive type or when call-site meaning benefits from labels.
+
+Pass the authenticated actor into application methods that operate on
+user-owned data. Repository reads for owned resources include that identity in
+their contract and query, rather than loading globally and relying on the
+presentation layer to have authenticated someone.
 
 ## Orchestration
 

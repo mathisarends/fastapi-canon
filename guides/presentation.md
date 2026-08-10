@@ -14,12 +14,21 @@ the endpoint. Put collection conversion in a named presentation mapper:
 
 ```python
 async def list_tasks(
-    service: FromDishka[TaskService],
+    authenticated_user_id: AuthenticatedUserId,
+    task_service: FromDishka[TaskService],
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> TaskListResponse:
-    tasks = await service.list_recent(limit=limit)
+    tasks = await task_service.list_recent(
+        user_id=authenticated_user_id,
+        limit=limit,
+    )
     return to_list_response(tasks)
 ```
+
+Name injected instances after their role, such as `task_service`, rather than
+using generic names such as `service`. An authenticated principal is use-case
+input, not an unused guard parameter; pass it to every operation whose data is
+user-owned.
 
 Every route decorator must declare:
 

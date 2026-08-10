@@ -33,6 +33,10 @@ Construct domain objects as named local variables before passing them to reposit
 
 Raise application/domain exceptions from services. Translate them to HTTP responses in presentation exception handlers.
 
+Pass the authenticated actor into every application operation on user-owned
+data. Include the owner identity in repository read queries so listing and
+mutation cannot cross ownership boundaries.
+
 ## Dependency injection
 
 Use Dishka providers as the composition root for non-HTTP dependencies. Scope stateful database sessions, repositories, and services to a request; scope configuration, engines, and stateless clients to the application.
@@ -55,7 +59,7 @@ Use Alembic migrations for schema changes. Do not call `metadata.create_all()` d
 
 ## HTTP API
 
-Keep routers thin: validate transport input, call one or more application services, map results, and select HTTP status codes. Assign service results to named locals before mapping; do not inline awaited service calls or collection mapping in endpoint returns.
+Keep routers thin: validate transport input, call one or more application services, map results, and select HTTP status codes. Assign service results to named locals before mapping; do not inline awaited service calls or collection mapping in endpoint returns. Name injected instances after their role, such as `task_service`, rather than `service`.
 
 Use separate request and response schemas. Centralize shared Pydantic configuration in a presentation base schema.
 

@@ -13,12 +13,17 @@ async def authenticated_user_id(
     token: Annotated[str, Depends(access_token_cookie)],
     verifier: FromDishka[TokenVerifier],
 ) -> UUID:
-    return verifier.verify(token).user_id
+    return verifier.verify(token=token).user_id
 
 AuthenticatedUserId = Annotated[UUID, Depends(authenticated_user_id)]
 ```
 
 Endpoints accept `AuthenticatedUserId`; application services accept a plain `UUID` or richer domain principal. Neither the service nor domain imports `Depends`, reads cookies, or raises `HTTPException`.
+
+Do not accept an authenticated identity only to discard it. Pass it into every
+application operation that reads or changes user-owned data, and include it in
+the corresponding repository query. A request for another user's resource
+should normally produce the same not-found result as an absent resource.
 
 Authentication is cross-cutting presentation behavior. Define the dependency alias once and import that public alias in every protected feature router. Do not copy token extraction into individual endpoints or hide protection behind an undocumented router convention. Public routes such as health checks remain explicitly unauthenticated. See the reference task [`router.py`](../examples/reference-service/src/app/features/tasks/presentation/router.py) for shared use and declared `401` response schemas.
 
@@ -92,7 +97,11 @@ Cookie deletion must repeat the same name, path, and domain scope used when sett
 
 Authenticate once at the boundary, then authorize at the use-case and resource boundary. Do not rely on a hidden UI control or a router prefix as authorization.
 
-Repositories may provide ownership-aware queries, but application services decide the policy. Prefer returning not-found for resources whose existence should not be disclosed. Centralize role/scope vocabulary and default to denial when policy data is missing.
+Repository contracts for user-owned resources accept the owner identity and
+constrain the query with it. Application services decide the policy and pass
+the authenticated actor explicitly. Prefer returning not-found for resources
+whose existence should not be disclosed. Centralize role/scope vocabulary and
+default to denial when policy data is missing.
 
 ## Errors and observability
 
