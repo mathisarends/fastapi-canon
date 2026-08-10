@@ -1,0 +1,44 @@
+[project]
+name = "fastapi-canon-reference"
+version = "0.1.0"
+description = "Reference service for the FastAPI canon"
+requires-python = ">=3.12"
+dependencies = [
+    "aiosqlite>=0.21",
+    "dishka>=1.6",
+    "fastapi>=0.115",
+    "pydantic-settings>=2.8",
+    "sqlmodel>=0.0.24",
+    "uvicorn>=0.34",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28",
+    "mypy>=1.15",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.25",
+    "ruff>=0.11",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.2,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "app"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
