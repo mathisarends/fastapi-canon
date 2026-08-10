@@ -5,12 +5,13 @@ from dishka import AsyncContainer, make_async_container
 from dishka.integrations.fastapi import setup_dishka
 from fastapi import APIRouter, FastAPI
 
+from app.authentication.feature import feature as authentication_feature
 from app.features.tasks.feature import feature as tasks_feature
 from app.infrastructure.database.provider import DatabaseProvider
 from app.presentation.feature import Feature
 from app.presentation.health import router as health_router
 
-FEATURES: tuple[Feature, ...] = (tasks_feature,)
+FEATURES: tuple[Feature, ...] = (authentication_feature, tasks_feature)
 
 
 def create_container() -> AsyncContainer:

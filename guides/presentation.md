@@ -54,7 +54,7 @@ For the corresponding persistence boundary, see [Infrastructure](infrastructure.
 
 Use `FromDishka` for application services. Use FastAPI `Depends` for HTTP-derived values such as authentication, cookies, headers, and request context. Framework dependency types do not cross into application methods.
 
-For scopes and provider composition, see [Dependency Injection](dependency_injection.md). For the authenticated-principal pattern, see [Authentication](authentication.md#layer-boundaries).
+For provider composition, see [Dependency Injection](dependency_injection.md). For the authenticated-principal pattern, see [Authentication](authentication.md#layer-boundaries).
 
 ## Errors
 

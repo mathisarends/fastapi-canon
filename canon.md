@@ -19,6 +19,10 @@ metadata through a small framework-free `Entity` base; use `Aggregate = Entity`
 as semantic sugar for aggregate roots. Reserve frozen dataclasses for value
 objects and application result records.
 
+Keep entity state private and expose only required reads through getter-only
+properties. Mutate protected state through named domain methods. Use a public
+attribute only when unrestricted direct reading and writing is intentional.
+
 Define persistence contracts beside the domain that needs them. Make contracts use domain language and domain types, not generic query APIs or ORM models.
 
 Prefer `ABC` and `@abstractmethod` for interfaces owned by the application. Concrete implementations must import and explicitly inherit the ABC. Use `Protocol` only when structural typing is intentional, especially for third-party or caller-owned shapes.
@@ -42,6 +46,8 @@ Use one `AsyncSession` transaction per HTTP request. Commit after successful req
 Repositories receive an existing session. They may `flush` to obtain database-generated values but must not commit.
 
 Keep domain entities, SQLModel table models, and Pydantic API schemas distinct. Map explicitly at layer boundaries.
+
+Keep table models in one central ORM module while that remains navigable. Co-locate them with feature infrastructure only after real size or cohesion pressure, and always register every table explicitly for schema tooling.
 
 Use a typed generic SQL repository only for mechanics that are truly identical across aggregates. Put meaningful queries and operations on feature-specific repository contracts and implementations.
 
@@ -85,6 +91,6 @@ Use a `src/` layout, `pyproject.toml`, uv, Ruff, and mypy. Keep runtime and deve
 
 Use a uv workspace when multiple independently packaged Python components share one repository and must be developed or released together. Keep a single package when boundaries are only internal modules.
 
-Use Docker Compose for reproducible local multi-process environments and production-like infrastructure dependencies.
+Keep `compose.yml` at the repository root and each Dockerfile beside the package or process it describes.
 
 Run formatting, linting, type checking, and builds in CI from a locked dependency graph.

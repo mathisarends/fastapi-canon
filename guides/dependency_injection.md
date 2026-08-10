@@ -37,20 +37,6 @@ async def endpoint(
 
 FastAPI and Dishka types stop at the presentation layer. Pass plain values and application types to services.
 
-## Scopes
-
-Choose the narrowest lifetime that matches the dependency:
-
-| Scope | Typical dependencies |
-| --- | --- |
-| application | settings, async engine, connection pools, stateless API clients |
-| request | database session, repositories, application services, request caches |
-| explicit task/session | long-running jobs, streaming or WebSocket resources |
-
-Do not make mutable request state application-scoped. Do not retain request-scoped objects in background tasks or WebSockets. Long-lived work receives a factory or opens a dedicated DI scope and transaction.
-
-Resource providers use `yield` and own cleanup. The FastAPI lifespan closes the application container so application-scoped engines and clients are disposed.
-
 ## Composition root
 
 Create the container and FastAPI application in one root module. That module is allowed to know concrete implementations; domain and application modules are not.

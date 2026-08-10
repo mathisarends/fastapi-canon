@@ -26,7 +26,7 @@ Use explicit `to_domain` and `to_model` functions/methods. Ensure returned domai
 
 Provider functions are the only place that select a concrete adapter for a port. Scope repositories with their request/session resource. Scope engines, pools, settings, and safe stateless clients to the application.
 
-Resource providers acquire and release connections/clients with `yield`. Long-running jobs and streams receive a factory or their own scope; they never capture an HTTP request session. For the complete lifetime rules, see [Dependency Injection](dependency_injection.md#scopes).
+Resource providers acquire and release connections/clients with `yield`. Long-running jobs and streams receive a factory or their own scope; they never capture an HTTP request session.
 
 ## Configuration
 
@@ -36,8 +36,8 @@ Keep secret values out of representations and logs. Validate required settings a
 
 ## Resilience and observability
 
-Set explicit connection, request, and pool timeouts. Retry only transient, idempotent operations with bounded backoff; do not layer retries at several levels. Preserve cancellation and make resource cleanup unconditional.
+Set timeouts at adapter boundaries and retry only transient, idempotent
+operations. Never log secrets or tokens. Preserve exception chaining when
+translating infrastructure failures.
 
-Log adapter outcomes with operation names, duration, safe remote identifiers, and correlation context. Do not log payloads that may contain tokens, credentials, or personal data. Translate low-level errors without discarding the original exception chain needed for diagnostics.
-
-Docker-backed infrastructure and Compose conventions are described in [Docker and Compose](docker.md).
+The Alembic layout is described in [Database migrations](migrations.md). The container file layout is shown in [Docker](docker.md).

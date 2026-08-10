@@ -62,13 +62,30 @@ Prefer database-generated timestamps and identifiers where the database must be 
 
 Load relationships deliberately. Repository methods must return fully usable domain values and must not rely on lazy loading after the session closes.
 
+## Table placement and registration
+
+Keep SQLModel table declarations together in `api.infrastructure.database.orm` while the model set remains reasonably small. One obvious file is easier to discover and gives Alembic a direct, explicit metadata import; do not distribute a handful of models across feature folders in anticipation of future growth.
+
+Split only when the central file has become large enough to harm navigation, ownership, or feature cohesion. At that point, co-locate each table model with its feature's infrastructure code, for example `api.features.tasks.infrastructure.models`. Keep shared database primitives such as the base table type and naming convention in `api.infrastructure.database`.
+
+Regardless of placement, give schema tooling one explicit registration point. With the default single-file layout, Alembic directly imports every table class from `orm.py`. Once models are distributed across features, add a small central registration function instead:
+
+```python
+# api/infrastructure/database/models.py
+def register_models() -> None:
+    # Imports register table classes in SQLModel.metadata.
+    from api.features.tasks.infrastructure import models as task_models
+    from api.features.users.infrastructure import models as user_models
+
+    _ = (task_models, user_models)
+```
+
+Alembic and local bootstrap tools call this function before reading `SQLModel.metadata`. Application routers, repositories, or dependency providers must not be responsible for table registration as an accidental side effect. For the Alembic layout, see [Database migrations](migrations.md).
+
 ## Concurrency
 
 Use database constraints as the final integrity boundary. For read-modify-write behavior, select with `FOR UPDATE` or use an atomic statement as appropriate. Handle expected uniqueness races explicitly, usually with a savepoint, without rolling back unrelated work in the outer transaction.
 
 ## Migrations
 
-- Import all table metadata in Alembic's environment before autogeneration.
-- Review generated migrations; do not treat autogeneration as schema design.
-- Give constraints and indexes stable names.
-- Keep migrations forward-compatible with the deployed application sequence.
+Alembic is authoritative for persistent schemas. Do not use `SQLModel.metadata.create_all()` as a production migration mechanism. For ownership and file placement, see [Database migrations](migrations.md).

@@ -2,6 +2,8 @@
 
 Authentication establishes who is calling. Session management carries that identity between requests. Authorization decides whether the caller may perform the use case. Design all three explicitly.
 
+For a practical cross-cutting implementation, see the reference service's [`TokenVerifier` ABC](../examples/reference-service/src/app/authentication/application/token_verifier.py), [`LocalTokenVerifier`](../examples/reference-service/src/app/authentication/infrastructure/verifier.py), shared [`AuthenticatedUserId`](../examples/reference-service/src/app/authentication/presentation/dependencies.py), and central [`401` handler](../examples/reference-service/src/app/authentication/presentation/errors.py). The local opaque-token adapter exists only to keep the example self-contained; a deployed service replaces that adapter without changing consuming routes.
+
 ## Layer boundaries
 
 Keep HTTP credential extraction in presentation. A dependency validates the credential and returns the smallest useful principal:
@@ -11,12 +13,14 @@ async def authenticated_user_id(
     token: Annotated[str, Depends(access_token_cookie)],
     verifier: FromDishka[TokenVerifier],
 ) -> UUID:
-    return verifier.verify_access_token(token).user_id
+    return verifier.verify(token).user_id
 
 AuthenticatedUserId = Annotated[UUID, Depends(authenticated_user_id)]
 ```
 
 Endpoints accept `AuthenticatedUserId`; application services accept a plain `UUID` or richer domain principal. Neither the service nor domain imports `Depends`, reads cookies, or raises `HTTPException`.
+
+Authentication is cross-cutting presentation behavior. Define the dependency alias once and import that public alias in every protected feature router. Do not copy token extraction into individual endpoints or hide protection behind an undocumented router convention. Public routes such as health checks remain explicitly unauthenticated. See the reference task [`router.py`](../examples/reference-service/src/app/features/tasks/presentation/router.py) for shared use and declared `401` response schemas.
 
 Model token creation/validation and identity-provider calls as application ports. Infrastructure implements them with a specific JWT or OAuth library. Keep cookie writing and deletion in a presentation helper because cookies are HTTP response behavior.
 

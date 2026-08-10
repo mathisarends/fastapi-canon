@@ -1,17 +1,22 @@
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Query, status
 
+from app.authentication.presentation import AuthenticatedUserId
 from app.features.tasks.application import TaskService
 from app.features.tasks.presentation.mapper import to_list_response, to_response
 from app.features.tasks.presentation.schemas import (
     CreateTaskRequest,
-    ErrorResponse,
     TaskListResponse,
     TaskResponse,
 )
+from app.presentation.schema import ErrorResponse
+
+AUTHENTICATION_RESPONSES: dict[int | str, dict[str, Any]] = {
+    status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
+}
 
 router = APIRouter(
     prefix="/tasks",
@@ -25,9 +30,11 @@ router = APIRouter(
     operation_id="create_task",
     response_model=TaskResponse,
     status_code=status.HTTP_201_CREATED,
+    responses=AUTHENTICATION_RESPONSES,
 )
 async def create_task(
     body: CreateTaskRequest,
+    _authenticated_user_id: AuthenticatedUserId,
     service: FromDishka[TaskService],
 ) -> TaskResponse:
     task = await service.create(title=body.title)
@@ -39,8 +46,10 @@ async def create_task(
     operation_id="list_tasks",
     response_model=TaskListResponse,
     status_code=status.HTTP_200_OK,
+    responses=AUTHENTICATION_RESPONSES,
 )
 async def list_tasks(
+    _authenticated_user_id: AuthenticatedUserId,
     service: FromDishka[TaskService],
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> TaskListResponse:
@@ -53,10 +62,14 @@ async def list_tasks(
     operation_id="complete_task",
     response_model=TaskResponse,
     status_code=status.HTTP_200_OK,
-    responses={status.HTTP_404_NOT_FOUND: {"model": ErrorResponse}},
+    responses={
+        **AUTHENTICATION_RESPONSES,
+        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+    },
 )
 async def complete_task(
     task_id: UUID,
+    _authenticated_user_id: AuthenticatedUserId,
     service: FromDishka[TaskService],
 ) -> TaskResponse:
     task = await service.complete(task_id=task_id)

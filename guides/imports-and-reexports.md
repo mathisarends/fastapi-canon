@@ -41,8 +41,8 @@ Importing the public facade must be cheap and side-effect free. It must not conn
 Code outside the owning subpackage imports its supported facade:
 
 ```python
-from app.features.tasks.domain import Task, TaskRepository
-from app.features.tasks.application import TaskNotFound, TaskService
+from api.features.tasks.domain import Task, TaskRepository
+from api.features.tasks.application import TaskNotFound, TaskService
 ```
 
 Code inside the same subpackage imports sibling definition modules directly when that makes ownership clearer. Do not make internal modules call back through their own package facade.
@@ -50,7 +50,7 @@ Code inside the same subpackage imports sibling definition modules directly when
 A concrete implementation of an application-owned ABC is the deliberate exception to facade-first consumption: import the ABC from its definition module and inherit it explicitly.
 
 ```python
-from app.features.tasks.domain.repository import TaskRepository
+from api.features.tasks.domain.repository import TaskRepository
 
 
 class SqlTaskRepository(SqlRepository[TaskModel, Task], TaskRepository): ...
@@ -63,7 +63,7 @@ This preserves nominal conformance and gives language servers the most direct de
 Python executes a parent package's `__init__.py` before importing any child. Re-exporting a feature descriptor from the feature root would therefore load routers, providers, FastAPI, and infrastructure even when a consumer asks only for `features.tasks.domain`. Keep the feature-root `__init__.py` empty and import the dedicated assembly module directly:
 
 ```python
-from app.features.tasks.feature import feature as tasks_feature
+from api.features.tasks.feature import feature as tasks_feature
 ```
 
 `feature.py` is the public composition surface; routers, concrete providers, and exception registration remain private behind its descriptor. Re-export from a feature root only when the feature has no inward subpackages whose lightweight import would be compromised.
@@ -86,7 +86,7 @@ from contracts import TaskCreated
 
 Never import through another member's filesystem layout such as `services.worker.src...`, reach into a private `_module`, or depend on a transitive workspace member without declaring it. If consumers repeatedly need an internal symbol, either promote it deliberately to the owner's facade or reconsider the package boundary.
 
-For workspace layout and dependency rules, see [Workspace](workspace.md).
+For workspace layout and dependency rules, see [uv workspace](uv-workspace.md).
 
 ## Compatibility and typing
 

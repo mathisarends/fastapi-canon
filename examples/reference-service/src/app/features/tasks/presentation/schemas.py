@@ -19,7 +19,3 @@ class TaskResponse(Schema):
 
 class TaskListResponse(Schema):
     items: list[TaskResponse]
-
-
-class ErrorResponse(Schema):
-    detail: str

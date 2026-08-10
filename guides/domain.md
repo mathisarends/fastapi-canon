@@ -22,8 +22,16 @@ class Entity:
         id: UUID | None = None,
         created_time: datetime | None = None,
     ) -> None:
-        self.id = id or uuid4()
-        self.created_at = created_time or datetime.now(UTC)
+        self._id = id or uuid4()
+        self._created_at = created_time or datetime.now(UTC)
+
+    @property
+    def id(self) -> UUID:
+        return self._id
+
+    @property
+    def created_at(self) -> datetime:
+        return self._created_at
 
 
 # Semantic sugar
@@ -47,13 +55,28 @@ class Task(Aggregate):
         created_time: datetime | None = None,
     ) -> None:
         super().__init__(id=id, created_time=created_time)
-        self.title = title
-        self.completed = completed
+        self._title = title
+        self._completed = completed
+
+    @property
+    def title(self) -> str:
+        return self._title
+
+    @property
+    def completed(self) -> bool:
+        return self._completed
 
     def complete(self) -> Self:
-        self.completed = True
+        self._completed = True
         return self
 ```
+
+Keep entity state private by convention. Expose only attributes that consumers
+need to read, using getter-only properties for read-only access. Change
+protected state through named domain methods so the aggregate retains control
+of its invariants. Use a public attribute only when unrestricted direct read
+and write access is intentionally part of the domain model; do not add a
+property setter merely for convenience.
 
 Do not let callers replace identity or creation metadata during a state
 transition. Repositories reconstruct persisted aggregates through the

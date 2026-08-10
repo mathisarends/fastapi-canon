@@ -26,6 +26,7 @@ async def client(
         async with AsyncClient(
             transport=ASGITransport(app=app),
             base_url="http://test",
+            headers={"Authorization": "Bearer local-development-token"},
         ) as test_client:
             yield test_client
 
@@ -60,3 +61,14 @@ async def test_task_http_flow(client: AsyncClient) -> None:
         "get_health",
         "list_tasks",
     }
+
+
+async def test_tasks_require_authentication(client: AsyncClient) -> None:
+    response = await client.get(
+        "/api/v1/tasks",
+        headers={"Authorization": ""},
+    )
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+    assert response.json() == {"detail": "Authentication required"}

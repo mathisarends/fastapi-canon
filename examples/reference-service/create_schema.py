@@ -1,4 +1,4 @@
-"""Bootstrap the local example database; use Alembic in production services."""
+"""Bootstrap this disposable local example; persistent schemas use Alembic."""
 
 import asyncio
 

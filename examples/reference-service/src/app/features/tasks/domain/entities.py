@@ -14,9 +14,17 @@ class Task(Aggregate):
         created_time: datetime | None = None,
     ) -> None:
         super().__init__(id=id, created_time=created_time)
-        self.title = title
-        self.completed = completed
+        self._title = title
+        self._completed = completed
+
+    @property
+    def title(self) -> str:
+        return self._title
+
+    @property
+    def completed(self) -> bool:
+        return self._completed
 
     def complete(self) -> Self:
-        self.completed = True
+        self._completed = True
         return self

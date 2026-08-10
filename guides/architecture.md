@@ -5,7 +5,7 @@
 Prefer feature ownership over global technical folders:
 
 ```text
-src/app/
+src/api/
 ├── features/
 │   └── tasks/
 │       ├── domain/
@@ -18,6 +18,8 @@ src/app/
 ├── presentation/
 └── main.py
 ```
+
+In a workspace, the import package matches its member (`api/src/api`, `worker/src/worker`). See [uv workspace](uv-workspace.md) for the repository conventions.
 
 Shared folders contain mechanisms used by multiple features, never a miscellaneous collection of business helpers. A feature may omit a layer until it needs it.
 
@@ -47,7 +49,7 @@ class TaskRepository(ABC):
 
 
 # infrastructure/repository.py
-from app.features.tasks.domain.repository import TaskRepository
+from api.features.tasks.domain.repository import TaskRepository
 
 
 class SqlTaskRepository(SqlRepository[TaskModel, Task], TaskRepository):
