@@ -1,8 +1,12 @@
 # FastAPI Canon
 
-Opinionated conventions for building maintainable, scalable FastAPI services, distilled from patterns learned while building several production FastAPI applications.
+Opinionated conventions for building **maintainable, scalable** FastAPI services, distilled from patterns learned while building several production FastAPI applications.
 
-This is a **work-in-progress** collection of opinions, not a complete framework. It deliberately leaves out everything agents already tend to get right on their own, and focuses instead on the recurring stumbling blocks I keep seeing built without these patterns, the ones I believe hold up better with them. The goal isn't full coverage; it's a shared understanding of where medium-to-large FastAPI projects tend to bottleneck: one consistent structure across projects, clear responsibilities, and testability. That's what builds trust in a codebase over time.
+This is a **work-in-progress** collection of opinions, not a complete framework. It deliberately leaves out everything agents already tend to get right on their own, and focuses instead on the recurring stumbling blocks I keep seeing built _without_ these patterns, the ones I believe hold up better _with_ them. The goal isn't full coverage, it's a shared understanding of where medium-to-large FastAPI projects tend to bottleneck:
+
+- one **consistent structure** across projects
+- **clear responsibilities** per layer
+- **testability** by construction
 
 It targets **medium to large** projects, where feature growth, team size, or lifetime make architectural discipline pay off. Small scripts and single-file APIs don't need this.
 
@@ -18,7 +22,7 @@ If you are an agent reading this to bootstrap a new project, start with [`guides
 The repository has two parts:
 
 | Part                                                        | Purpose                                                                        |
-| ----------------------------------------------------------- | -------------------------------------------------------------------------------|
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | [`guides/`](guides)                                         | One topic per file: the rules for that area, with rationale and code samples.  |
 | [`examples/reference-service/`](examples/reference-service) | A small real FastAPI service (task API) implementing every pattern end to end. |
 
@@ -27,7 +31,7 @@ flowchart LR
     guides["guides/*.md<br/>(rules + rationale per topic)"] --> reference["examples/reference-service<br/>(patterns applied in a real service)"]
 ```
 
-Read a guide for the rules and the *why*, and the reference service for *how it looks in real code*.
+Read a guide for the rules and the _why_, and the reference service for _how it looks in real code_.
 
 Guides are kept intentionally short and normative rather than exhaustive, so they stay cheap to load as agent context.
 
@@ -72,7 +76,7 @@ The domain owns its ports (e.g. `TaskRepository` as an `ABC`); infrastructure im
 - **Login, sessions, OAuth?** [Authentication](guides/authentication.md).
 - **Package boundaries?** [Imports and Re-exports](guides/imports-and-reexports.md).
 - **Repo/tooling layout?** [uv workspace](guides/uv-workspace.md), [Docker](guides/docker.md), [Infrastructure](guides/infrastructure.md).
-- **Want to see it all in one working service?** [`examples/reference-service/`](examples/reference-service), a task API you can run locally (`uv sync --all-groups && uv run python create_schema.py && uv run uvicorn app.main:app --reload`).
+- **Want to see it all in one working service?** [`examples/reference-service/`](examples/reference-service), a task API implementing every pattern end to end.
 
 The reference service itself is intentionally too small to justify this much structure on its own; a single-feature task API doesn't need four layers. It exists purely to demonstrate the pattern in a runnable, end-to-end shape, not to argue that this project's size warrants it.
 
