@@ -34,10 +34,13 @@ router = APIRouter(
 )
 async def create_task(
     body: CreateTaskRequest,
-    _authenticated_user_id: AuthenticatedUserId,
-    service: FromDishka[TaskService],
+    authenticated_user_id: AuthenticatedUserId,
+    task_service: FromDishka[TaskService],
 ) -> TaskResponse:
-    task = await service.create(title=body.title)
+    task = await task_service.create(
+        user_id=authenticated_user_id,
+        title=body.title,
+    )
     return to_response(task)
 
 
@@ -49,11 +52,14 @@ async def create_task(
     responses=AUTHENTICATION_RESPONSES,
 )
 async def list_tasks(
-    _authenticated_user_id: AuthenticatedUserId,
-    service: FromDishka[TaskService],
+    authenticated_user_id: AuthenticatedUserId,
+    task_service: FromDishka[TaskService],
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> TaskListResponse:
-    tasks = await service.list_recent(limit=limit)
+    tasks = await task_service.list_recent(
+        user_id=authenticated_user_id,
+        limit=limit,
+    )
     return to_list_response(tasks)
 
 
@@ -69,8 +75,11 @@ async def list_tasks(
 )
 async def complete_task(
     task_id: UUID,
-    _authenticated_user_id: AuthenticatedUserId,
-    service: FromDishka[TaskService],
+    authenticated_user_id: AuthenticatedUserId,
+    task_service: FromDishka[TaskService],
 ) -> TaskResponse:
-    task = await service.complete(task_id=task_id)
+    task = await task_service.complete(
+        user_id=authenticated_user_id,
+        task_id=task_id,
+    )
     return to_response(task)

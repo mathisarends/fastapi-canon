@@ -8,9 +8,9 @@ from app.features.tasks.infrastructure.repository import SqlTaskRepository
 
 class TaskProvider(Provider):
     @provide(scope=Scope.REQUEST)
-    def repository(self, session: AsyncSession) -> TaskRepository:
+    def task_repository(self, session: AsyncSession) -> TaskRepository:
         return SqlTaskRepository(session)
 
     @provide(scope=Scope.REQUEST)
-    def service(self, repository: TaskRepository) -> TaskService:
+    def task_service(self, repository: TaskRepository) -> TaskService:
         return TaskService(repository)

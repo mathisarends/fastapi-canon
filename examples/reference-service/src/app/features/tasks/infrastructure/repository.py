@@ -17,6 +17,7 @@ class SqlTaskRepository(SqlRepository[TaskModel, Task], TaskRepository):
         return Task(
             id=model.id,
             created_time=model.created_at,
+            user_id=model.user_id,
             title=model.title,
             completed=model.completed,
         )
@@ -25,16 +26,25 @@ class SqlTaskRepository(SqlRepository[TaskModel, Task], TaskRepository):
         return TaskModel(
             id=entity.id,
             created_at=entity.created_at,
+            user_id=entity.user_id,
             title=entity.title,
             completed=entity.completed,
         )
 
-    async def get_by_id(self, *, task_id: UUID) -> Task | None:
-        return await self.find_by_id(task_id)
+    async def get_by_id(self, *, task_id: UUID, user_id: UUID) -> Task | None:
+        statement = select(TaskModel).where(
+            TaskModel.id == task_id,
+            TaskModel.user_id == user_id,
+        )
+        model = await self._session.scalar(statement)
+        return self.to_domain(model) if model is not None else None
 
-    async def list_recent(self, *, limit: int) -> list[Task]:
+    async def list_recent(self, *, user_id: UUID, limit: int) -> list[Task]:
         statement = (
-            select(TaskModel).order_by(col(TaskModel.created_at).desc()).limit(limit)
+            select(TaskModel)
+            .where(TaskModel.user_id == user_id)
+            .order_by(col(TaskModel.created_at).desc())
+            .limit(limit)
         )
         models = (await self._session.scalars(statement)).all()
         return [self.to_domain(model) for model in models]
