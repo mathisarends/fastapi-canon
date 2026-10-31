@@ -39,12 +39,14 @@ def install_openapi(
     *,
     include_validation_error: bool,
     include_http_exceptions: bool,
+    include_internal_error: bool = False,
 ) -> None:
     installed = getattr(app.state, INSTALLED_OPENAPI_STATE_KEY, None)
     configuration = _OpenAPIConfiguration(
         registry=registry,
         include_validation_error=include_validation_error,
         include_http_exceptions=include_http_exceptions,
+        include_internal_error=include_internal_error,
     )
     if installed is not None:
         if not isinstance(installed, _OpenAPIInstallation):
@@ -77,6 +79,7 @@ def install_openapi(
             document,
             include_validation_error=current.include_validation_error,
             include_http_exceptions=current.include_http_exceptions,
+            include_internal_error=current.include_internal_error,
         )
         app.openapi_schema = compiled
         return compiled
@@ -90,6 +93,7 @@ class _OpenAPIConfiguration:
     registry: ErrorRegistry | None
     include_validation_error: bool
     include_http_exceptions: bool
+    include_internal_error: bool
 
 
 @dataclass(slots=True)
@@ -103,6 +107,7 @@ def compile_document(
     *,
     include_validation_error: bool,
     include_http_exceptions: bool,
+    include_internal_error: bool = False,
 ) -> dict[str, Any]:
     result = copy.deepcopy(document)
     components = result.setdefault("components", {}).setdefault("schemas", {})
@@ -126,7 +131,30 @@ def compile_document(
             _request_validation_schema(registry),
         )
 
+    if include_internal_error:
+        if registry is None or registry.type_base is None:
+            raise ErrorConfigurationError(
+                "internal error normalization requires type_base"
+            )
+        _add_component(
+            components, "InternalServerProblem", _internal_error_schema(registry)
+        )
+
+    operation_ids: dict[str, str] = {}
     for path, operation in iter_operations(result):
+        operation_id = operation.get("operationId")
+        if operation_id is not None:
+            if not isinstance(operation_id, str) or not operation_id.strip():
+                raise ErrorConfigurationError(
+                    f"route {path!r} has an invalid operationId"
+                )
+            previous = operation_ids.get(operation_id)
+            if previous is not None:
+                raise ErrorConfigurationError(
+                    f"duplicate operationId {operation_id!r} on {previous} and {path}; "
+                    "declare a unique operation_id for each operation"
+                )
+            operation_ids[operation_id] = path
         responses = operation.setdefault("responses", {})
         _errors, http_statuses, _success = contracts_from_responses(
             path, responses, registry
@@ -150,6 +178,24 @@ def compile_document(
                     _retain_success_content(response, success_media_type)
         if include_validation_error:
             _replace_default_validation_response(responses)
+            if "422" in responses:
+                _add_builtin_response(
+                    components,
+                    responses,
+                    422,
+                    "request_validation_error",
+                    "RequestValidationProblem",
+                    "Request validation failed",
+                )
+        if include_internal_error:
+            _add_builtin_response(
+                components,
+                responses,
+                500,
+                "internal_server_error",
+                "InternalServerProblem",
+                "Internal Server Error",
+            )
 
     return result
 
@@ -456,6 +502,73 @@ def _request_validation_schema(registry: ErrorRegistry) -> dict[str, Any]:
     cast(list[str], schema["required"]).append("errors")
     schema["title"] = "RequestValidationProblem"
     return schema
+
+
+def _internal_error_schema(registry: ErrorRegistry) -> dict[str, Any]:
+    schema = _base_problem_schema()
+    schema["title"] = "InternalServerProblem"
+    schema["properties"].update(
+        {
+            "type": {
+                "type": "string",
+                "const": f"{registry.type_base}/internal_server_error",
+            },
+            "title": {"type": "string", "const": "Internal Server Error"},
+            "status": {"type": "integer", "const": 500},
+            "code": {"type": "string", "const": "internal_server_error"},
+        }
+    )
+    return schema
+
+
+def _add_builtin_response(
+    components: dict[str, Any],
+    responses: dict[str, Any],
+    status: int,
+    code: str,
+    component: str,
+    title: str,
+) -> None:
+    """Include framework failures in the same union as declared domain failures."""
+    reference = f"#/components/schemas/{component}"
+    response = responses.setdefault(str(status), {"description": title})
+    # Explicit manual response references remain application-owned.
+    if "$ref" in response:
+        return
+    content = response.setdefault("content", {})
+    problem = content.setdefault(_PROBLEM_MEDIA_TYPE, {"schema": {"$ref": reference}})
+    schema = problem["schema"]
+    if schema == {"$ref": reference}:
+        return
+    mapping = schema.get("discriminator", {}).get("mapping", {})
+    if "$ref" in schema:
+        existing_reference = schema["$ref"]
+        existing_component = components.get(existing_reference.rsplit("/", 1)[-1], {})
+        existing_code = (
+            existing_component.get("properties", {}).get("code", {}).get("const")
+        )
+        if not isinstance(existing_code, str):
+            return
+        if existing_code == code:
+            raise ErrorConfigurationError(
+                f"problem code {code!r} conflicts with normalization"
+            )
+        problem["schema"] = {
+            "oneOf": [{"$ref": existing_reference}, {"$ref": reference}],
+            "discriminator": {
+                "propertyName": "code",
+                "mapping": {existing_code: existing_reference, code: reference},
+            },
+        }
+    elif "oneOf" in schema and mapping:
+        if code in mapping:
+            if mapping[code] != reference:
+                raise ErrorConfigurationError(
+                    f"problem code {code!r} conflicts with normalization"
+                )
+            return
+        schema["oneOf"].append({"$ref": reference})
+        mapping[code] = reference
 
 
 def _add_component(

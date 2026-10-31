@@ -14,7 +14,7 @@ router = CanonRouter(
 )
 
 
-@router.get("/{product_id}", raises=[product_not_found])
+@router.get("/{product_id}", operation_id="get_product", raises=[product_not_found])
 @inject
 async def get_product(
     product_id: str,
@@ -25,6 +25,7 @@ async def get_product(
 
 @router.post(
     "/{product_id}/reservations",
+    operation_id="reserve_product",
     raises=[product_not_found, product_unavailable],
 )
 @inject

@@ -1,6 +1,7 @@
 """Opinionated FastAPI feature composition with Dishka and Problem Details."""
 
 from .error import Error, ErrorConfigurationError, ErrorRegistry, Problem
+from .exceptions import ConfigurationError
 from .feature import (
     Composition,
     ErrorOptions,
@@ -19,6 +20,7 @@ __all__ = [
     "CanonResponse",
     "CanonRouter",
     "Composition",
+    "ConfigurationError",
     "Error",
     "ErrorConfigurationError",
     "ErrorOptions",

@@ -110,6 +110,32 @@ jobs:
       - if: matrix.resolution == 'locked'
         run: uv run pytest
 
+  codegen:
+    name: OpenAPI Python client smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+          python-version: "3.14"
+      - run: uv sync --frozen --all-groups
+      - run: |
+          uv run python - <<'PY'
+          import json
+          from pathlib import Path
+          from examples.showcase.app import app, composition
+          composition.validate(app)
+          output = Path("dist/codegen-smoke")
+          output.mkdir(parents=True, exist_ok=True)
+          (output / "openapi.json").write_text(json.dumps(app.openapi()), encoding="utf-8")
+          PY
+      - run: >-
+          uvx --from openapi-python-client==0.29.1 openapi-python-client generate
+          --path dist/codegen-smoke/openapi.json --meta none
+          --output-path dist/codegen-smoke/generated_client
+      - run: uv run python -m compileall -q dist/codegen-smoke/generated_client
+
   package:
     name: Build and clean-wheel import
     runs-on: ubuntu-latest

@@ -22,6 +22,7 @@ class CanonRouter(APIRouter):
         *,
         error_registry: ErrorRegistry | None = None,
         raises: Sequence[AnyError] = (),
+        http_statuses: Sequence[int] = (),
         **kwargs: Any,
     ) -> None:
         raw_error_registry: object = error_registry
@@ -31,18 +32,35 @@ class CanonRouter(APIRouter):
             msg = "error_registry must be an ErrorRegistry instance or None"
             raise ErrorConfigurationError(msg)
         self.error_registry = error_registry
+        self._included_error_registries: list[ErrorRegistry] = []
         self.raises = _normalize_raises(
             raises,
             registry=error_registry,
             parameter="raises",
         )
+        self.http_statuses = _normalize_http_statuses(http_statuses)
         super().__init__(**kwargs)
+
+    @property
+    def error_registries(self) -> tuple[ErrorRegistry, ...]:
+        """Registries owned by this router and its included Canon routers."""
+        registries = (
+            () if self.error_registry is None else (self.error_registry,)
+        ) + tuple(self._included_error_registries)
+        return tuple({id(registry): registry for registry in registries}.values())
+
+    def include_router(self, router: APIRouter, **kwargs: Any) -> None:
+        """Include routes and preserve ownership of their error definitions."""
+        super().include_router(router, **kwargs)
+        if isinstance(router, CanonRouter):
+            self._included_error_registries.extend(router.error_registries)
 
     def api_route[CallableT: Callable[..., Any]](
         self,
         path: str,
         *,
         raises: Sequence[AnyError] = (),
+        http_statuses: Sequence[int] = (),
         response: CanonResponse | None = None,
         **kwargs: Any,
     ) -> Callable[[CallableT], CallableT]:
@@ -75,6 +93,7 @@ class CanonRouter(APIRouter):
         configured_responses = kwargs.pop("responses", None)
         kwargs["responses"] = self._responses_for_route(
             local_raises,
+            http_statuses=_normalize_http_statuses(http_statuses),
             response=response,
             configured=configured_responses,
         )
@@ -85,86 +104,103 @@ class CanonRouter(APIRouter):
         path: str,
         *,
         raises: Sequence[AnyError] = (),
+        http_statuses: Sequence[int] = (),
         response: CanonResponse | None = None,
         **kwargs: Any,
     ) -> Callable[[CallableT], CallableT]:
-        return self._method_route("GET", path, raises, response, kwargs)
+        return self._method_route("GET", path, raises, http_statuses, response, kwargs)
 
     def put[CallableT: Callable[..., Any]](
         self,
         path: str,
         *,
         raises: Sequence[AnyError] = (),
+        http_statuses: Sequence[int] = (),
         response: CanonResponse | None = None,
         **kwargs: Any,
     ) -> Callable[[CallableT], CallableT]:
-        return self._method_route("PUT", path, raises, response, kwargs)
+        return self._method_route("PUT", path, raises, http_statuses, response, kwargs)
 
     def post[CallableT: Callable[..., Any]](
         self,
         path: str,
         *,
         raises: Sequence[AnyError] = (),
+        http_statuses: Sequence[int] = (),
         response: CanonResponse | None = None,
         **kwargs: Any,
     ) -> Callable[[CallableT], CallableT]:
-        return self._method_route("POST", path, raises, response, kwargs)
+        return self._method_route("POST", path, raises, http_statuses, response, kwargs)
 
     def delete[CallableT: Callable[..., Any]](
         self,
         path: str,
         *,
         raises: Sequence[AnyError] = (),
+        http_statuses: Sequence[int] = (),
         response: CanonResponse | None = None,
         **kwargs: Any,
     ) -> Callable[[CallableT], CallableT]:
-        return self._method_route("DELETE", path, raises, response, kwargs)
+        return self._method_route(
+            "DELETE", path, raises, http_statuses, response, kwargs
+        )
 
     def options[CallableT: Callable[..., Any]](
         self,
         path: str,
         *,
         raises: Sequence[AnyError] = (),
+        http_statuses: Sequence[int] = (),
         response: CanonResponse | None = None,
         **kwargs: Any,
     ) -> Callable[[CallableT], CallableT]:
-        return self._method_route("OPTIONS", path, raises, response, kwargs)
+        return self._method_route(
+            "OPTIONS", path, raises, http_statuses, response, kwargs
+        )
 
     def head[CallableT: Callable[..., Any]](
         self,
         path: str,
         *,
         raises: Sequence[AnyError] = (),
+        http_statuses: Sequence[int] = (),
         response: CanonResponse | None = None,
         **kwargs: Any,
     ) -> Callable[[CallableT], CallableT]:
-        return self._method_route("HEAD", path, raises, response, kwargs)
+        return self._method_route("HEAD", path, raises, http_statuses, response, kwargs)
 
     def patch[CallableT: Callable[..., Any]](
         self,
         path: str,
         *,
         raises: Sequence[AnyError] = (),
+        http_statuses: Sequence[int] = (),
         response: CanonResponse | None = None,
         **kwargs: Any,
     ) -> Callable[[CallableT], CallableT]:
-        return self._method_route("PATCH", path, raises, response, kwargs)
+        return self._method_route(
+            "PATCH", path, raises, http_statuses, response, kwargs
+        )
 
     def trace[CallableT: Callable[..., Any]](
         self,
         path: str,
         *,
         raises: Sequence[AnyError] = (),
+        http_statuses: Sequence[int] = (),
         response: CanonResponse | None = None,
         **kwargs: Any,
     ) -> Callable[[CallableT], CallableT]:
-        return self._method_route("TRACE", path, raises, response, kwargs)
+        return self._method_route(
+            "TRACE", path, raises, http_statuses, response, kwargs
+        )
 
     def _method_route[CallableT: Callable[..., Any]](
         self,
         method: str,
         path: str,
         raises: Sequence[AnyError],
+        http_statuses: Sequence[int],
         response: CanonResponse | None,
         kwargs: dict[str, Any],
     ) -> Callable[[CallableT], CallableT]:
@@ -172,6 +208,7 @@ class CanonRouter(APIRouter):
             path,
             methods=[method],
             raises=raises,
+            http_statuses=http_statuses,
             response=response,
             **kwargs,
         )
@@ -180,16 +217,20 @@ class CanonRouter(APIRouter):
         self,
         local_raises: tuple[AnyError, ...],
         *,
+        http_statuses: tuple[int, ...],
         response: CanonResponse | None,
         configured: object,
     ) -> OpenAPIResponses:
         manual = _normalize_responses(configured)
         declared = _distinct((*self.raises, *local_raises))
-        if declared:
+        statuses = tuple(dict.fromkeys((*self.http_statuses, *http_statuses)))
+        if declared or statuses:
             registry = self.error_registry
-            if registry is None:  # pragma: no cover - guarded by _normalize_raises
-                raise AssertionError("raises require an error registry")
-            canon = registry.responses(*declared, success=response)
+            if registry is None:
+                registry = ErrorRegistry(errors=[])
+            canon = registry.responses(
+                *declared, http_statuses=statuses, success=response
+            )
             if response is not None:
                 canon[response.status].pop(SUCCESS_EXTENSION, None)
         elif response is not None:
@@ -256,3 +297,21 @@ def _response_class(response: CanonResponse) -> type[Response]:
     ):
         return JSONResponse
     return Response
+
+
+def _normalize_http_statuses(values: Sequence[int]) -> tuple[int, ...]:
+    raw_values: object = values
+    if isinstance(raw_values, str) or not isinstance(raw_values, Sequence):
+        raise ErrorConfigurationError(
+            "http_statuses must be a sequence of HTTP statuses"
+        )
+    for index, status in enumerate(values):
+        if (
+            not isinstance(status, int)
+            or isinstance(status, bool)
+            or not 400 <= status <= 599
+        ):
+            raise ErrorConfigurationError(
+                f"http_statuses[{index}] must be between 400 and 599"
+            )
+    return tuple(dict.fromkeys(values))

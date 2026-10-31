@@ -180,9 +180,9 @@ def test_empty_success_contract_matches_endpoint_status() -> None:
     app.include_router(router)
     errors.install(app)
 
-    assert app.openapi()["paths"]["/ready"]["get"]["responses"] == {
-        "204": {"description": "No content"}
-    }
+    responses = app.openapi()["paths"]["/ready"]["get"]["responses"]
+    assert responses["204"] == {"description": "No content"}
+    assert "500" in responses
 
 
 def test_empty_redirect_suppresses_fastapi_generated_json_content() -> None:

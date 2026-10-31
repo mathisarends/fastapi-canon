@@ -10,10 +10,7 @@ from fastapi import APIRouter, FastAPI
 from starlette.types import ExceptionHandler, Lifespan
 
 from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
-from fastapi_canon.openapi import (
-    install_openapi_contracts,
-    validate_openapi_contracts,
-)
+from fastapi_canon.openapi import validate_openapi_contracts
 from fastapi_canon.router import CanonRouter
 
 type FeatureLifespan = Lifespan[FastAPI]
@@ -22,6 +19,7 @@ type ProviderSource = Provider | ProviderFactory
 type RouterFactory = Callable[[], APIRouter]
 
 _INSTALLATION_STATE_KEY = "_fastapi_canon_installation"
+_DEFAULT_TYPE_BASE = "urn:fastapi-canon:problem"
 
 
 class FeatureConfigurationError(ErrorConfigurationError):
@@ -92,12 +90,19 @@ class Feature:
             msg = f"feature {normalized_name!r} lifespan must be callable or None"
             raise FeatureConfigurationError(msg)
 
-        resolved_errors = errors
-        if resolved_errors is None:
-            resolved_errors = _collect_router_errors(
-                normalized_routers,
-                feature_name=normalized_name,
-            )
+        router_errors = _collect_router_errors(
+            normalized_routers,
+            feature_name=normalized_name,
+        )
+        resolved_errors = _merge_errors(
+            tuple(
+                (normalized_name, registry)
+                for registry in (errors, router_errors)
+                if registry is not None
+            ),
+            name=normalized_name,
+            type_base=None,
+        )
 
         object.__setattr__(self, "name", normalized_name)
         object.__setattr__(self, "routers", normalized_routers)
@@ -126,13 +131,17 @@ class ErrorOptions:
         include_http_exceptions: bool = True,
         include_unhandled_error: bool = True,
     ) -> None:
-        _validate_optional_string(type_base, "type_base")
-        _validate_optional_string(registry_name, "registry_name")
+        try:
+            validated = ErrorRegistry(
+                errors=[], type_base=type_base, name=registry_name
+            )
+        except ErrorConfigurationError as error:
+            raise FeatureConfigurationError(str(error)) from error
         _validate_bool(include_validation_error, "include_validation_error")
         _validate_bool(include_http_exceptions, "include_http_exceptions")
         _validate_bool(include_unhandled_error, "include_unhandled_error")
-        object.__setattr__(self, "type_base", type_base)
-        object.__setattr__(self, "registry_name", registry_name)
+        object.__setattr__(self, "type_base", validated.type_base)
+        object.__setattr__(self, "registry_name", validated.name)
         object.__setattr__(
             self,
             "include_validation_error",
@@ -248,8 +257,15 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         name=composition.errors.registry_name,
         type_base=composition.errors.type_base,
     )
-    container = _make_container(
-        tuple(contribution.provider for contribution in materialized_providers)
+    # Normalization belongs to the application, even without domain errors.
+    registry = ErrorRegistry.merge(
+        *((registry,) if registry is not None else ()),
+        name=composition.errors.registry_name,
+        type_base=(
+            composition.errors.type_base
+            or (registry.type_base if registry is not None else None)
+            or _DEFAULT_TYPE_BASE
+        ),
     )
     _validate_error_installation(
         app,
@@ -260,32 +276,30 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         include_http_exceptions=composition.errors.include_http_exceptions,
         include_unhandled_error=composition.errors.include_unhandled_error,
     )
-    if container is not None and app.middleware_stack is not None:
-        msg = "features with providers must be installed before the app starts"
+    if app.middleware_stack is not None:
+        msg = "features must be installed before the app starts"
         raise FeatureConfigurationError(msg)
+    container = _make_container(
+        tuple(contribution.provider for contribution in materialized_providers)
+    )
 
-    original_lifespan = app.router.lifespan_context
     for router in installed_routers:
         app.include_router(router)
     for spec in handler_specs:
         app.add_exception_handler(spec.exception, spec.handler)
-    if registry is not None:
-        registry.install(
-            app,
-            include_validation_error=composition.errors.include_validation_error,
-            include_http_exceptions=composition.errors.include_http_exceptions,
-            include_unhandled_error=composition.errors.include_unhandled_error,
-        )
-    else:
-        install_openapi_contracts(app)
+    registry.install(
+        app,
+        include_validation_error=composition.errors.include_validation_error,
+        include_http_exceptions=composition.errors.include_http_exceptions,
+        include_unhandled_error=composition.errors.include_unhandled_error,
+    )
     if container is not None:
         setup_dishka(container, app)
-    if lifespans or container is not None:
-        app.router.lifespan_context = _compose_lifespan(
-            original_lifespan,
-            lifespans,
-            container,
-        )
+    app.router.lifespan_context = _compose_lifespan(
+        app.router.lifespan_context,
+        lifespans,
+        container,
+    )
 
     completed = _Installation(
         features=composition.features,
@@ -340,23 +354,18 @@ def _collect_router_errors(
     registries: list[tuple[str, ErrorRegistry]] = []
     seen: set[int] = set()
     for router in routers:
-        if not isinstance(router, CanonRouter) or router.error_registry is None:
+        if not isinstance(router, CanonRouter):
             continue
-        if id(router.error_registry) in seen:
-            continue
-        seen.add(id(router.error_registry))
-        registries.append((feature_name, router.error_registry))
+        for registry in router.error_registries:
+            if id(registry) in seen:
+                continue
+            seen.add(id(registry))
+            registries.append((feature_name, registry))
     return _merge_errors(
         tuple(registries),
         name=f"{feature_name}-routers" if len(registries) > 1 else None,
         type_base=None,
     )
-
-
-def _validate_optional_string(value: object, parameter: str) -> None:
-    if value is not None and not isinstance(value, str):
-        msg = f"{parameter} must be a string or None"
-        raise FeatureConfigurationError(msg)
 
 
 def _validate_feature_name(value: object) -> str:
@@ -623,12 +632,13 @@ def _compose_lifespan(
     @asynccontextmanager
     async def composed(app: FastAPI) -> AsyncIterator[Mapping[str, Any]]:
         async with AsyncExitStack() as stack:
+            if container is not None:
+                stack.push_async_callback(container.close)
+            validate_openapi_contracts(app)
             states: list[Mapping[str, object]] = []
             original_state = await stack.enter_async_context(original(app))
             if original_state is not None:
                 states.append(original_state)
-            if container is not None:
-                stack.push_async_callback(container.close)
             for lifespan in feature_lifespans:
                 state = await stack.enter_async_context(lifespan(app))
                 if state is not None:

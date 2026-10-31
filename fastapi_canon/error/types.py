@@ -6,6 +6,8 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel
 
+from fastapi_canon.exceptions import ConfigurationError
+
 type JsonScalar = bool | int | float | str | None
 type JsonValue = JsonScalar | list[JsonValue] | dict[str, JsonValue]
 type OpenAPIHeader = Mapping[str, JsonValue]
@@ -44,7 +46,7 @@ type Headers[ExceptionT: Exception] = (
 CODE_PATTERN = re.compile(r"^[a-z][a-z0-9_]{2,}$")
 
 
-class ErrorConfigurationError(ValueError):
+class ErrorConfigurationError(ConfigurationError):
     """Raised when error definitions cannot form a safe, coherent contract."""
 
 

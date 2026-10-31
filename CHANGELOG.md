@@ -2,6 +2,41 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
+## Unreleased
+
+### Added
+
+- One public `ConfigurationError` base for composition, error, and response
+  configuration failures.
+- Router-level and operation-level `http_statuses=` on every Canon HTTP decorator.
+- Error registry ownership through nested `CanonRouter.include_router()` calls.
+- Duplicate OpenAPI operation ID validation for generated client contracts.
+- A concept guide covering composition, exception mapping, code generation, and
+  HTTP, streaming, and WebSocket transport boundaries.
+- A CI smoke test generating a Python client from the compiled showcase contract.
+
+### Changed
+
+- Composition always installs the configured error normalizers, including for
+  applications with no domain registry. Missing type bases default to
+  `urn:fastapi-canon:problem`; resolved domain type URIs are preserved.
+- Explicit feature registries supplement automatically collected registries.
+- Composition validates OpenAPI at startup before application resources open.
+- Normalized 500 problems are documented; framework and declared domain errors
+  at 422 or 500 share a code-discriminated union.
+- All compositions and error registries must be installed before app startup.
+- Registry reinstallation requires identical normalization options. Domain
+  exception classes and codes conflicting with enabled normalizers are rejected.
+
+### Fixed
+
+- Failed registry installation no longer leaves partially installed handlers.
+- Router lifespans participate alongside application and feature lifespans.
+- The Dishka container outlives application and feature resources and is closed
+  if startup contract validation or the application lifespan fails.
+- Registered domain and HTTP exceptions on WebSockets produce a denial response
+  before acceptance when supported, or a transport-appropriate close afterward.
+
 ## 0.4.0 - 2026-09-10
 
 ### Added

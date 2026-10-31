@@ -12,6 +12,7 @@ ERRORS_EXTENSION = "x-fastapi-canon-errors"
 HTTP_STATUSES_EXTENSION = "x-fastapi-canon-http-statuses"
 SUCCESS_EXTENSION = "x-fastapi-canon-success"
 INSTALLED_REGISTRY_STATE_KEY = "_fastapi_canon_error_registry"
+INSTALLED_HANDLERS_STATE_KEY = "_fastapi_canon_error_options"
 INSTALLED_OPENAPI_STATE_KEY = "_fastapi_canon_openapi"
 
 

@@ -6,6 +6,10 @@ contracts, exception handlers, and lifespan into one immutable value. The
 application installs an explicitly ordered set of those values at its
 composition root.
 
+See [the concept guide](CONCEPTS.md) for how declarations become runtime responses
+and OpenAPI, transport boundaries, and the contract expected from generated code
+and coding agents.
+
 `CanonRouter` is the canonical API for declaring application routes. It adds
 composable `raises=` and `response=` contracts to FastAPI's familiar route
 decorators. Ordinary `APIRouter` declarations and the lower-level response
@@ -70,11 +74,12 @@ feature = Feature(
 )
 ```
 
-When `errors=` is omitted, a feature collects the registries referenced by its
-direct `CanonRouter` contributions. Supplying `errors=` remains available when
-ownership must be explicit, such as a registry used by routers in another
-feature. Repeated contributions of the same definitions are merged once at the
-application boundary.
+A feature collects registries from its `CanonRouter` contributions, including
+Canon routers nested through `include_router()`. Supplying `errors=` adds
+definitions, such as those used by ordinary `APIRouter` or custom handlers.
+Repeated contributions of the same definitions are merged once at the
+application boundary. A plain `APIRouter` wrapper does not track registry
+ownership; contribute its registries explicitly through `Feature(errors=...)`.
 
 Mutable sequences passed to `Feature` are copied to tuples. Installing features
 preserves declaration order for routes and startup. Shutdown runs in reverse
@@ -199,10 +204,19 @@ async def get_project(project_id: str) -> dict[str, str]:
     raise ProjectNotFound(project_id)
 ```
 
-Generic normalized `HTTPException` contracts remain available through the
-low-level compatibility API described below. A domain error and a generic HTTP
-problem may share a status; the generated response then uses the same
-discriminated `oneOf` representation.
+Declare normalized `HTTPException` contracts with `http_statuses=` on a router
+or operation. No domain registry is needed for these declarations:
+
+```python
+router = CanonRouter(http_statuses=[401])
+
+
+@router.get("/private", http_statuses=[403])
+async def private() -> dict[str, str]: ...
+```
+
+A domain error and a generic HTTP problem may share a status; the generated
+response then uses the same discriminated `oneOf` representation.
 
 FastAPI `responses={...}` entries without canon error declarations require no
 additional metadata. Success contracts and other media types can be declared
@@ -257,7 +271,16 @@ enabled, FastAPI's default `422` response is replaced by
 When all local registries already share a `type_base`, it is inferred. The
 `ErrorOptions` settings `include_validation_error`,
 `include_http_exceptions`, and `include_unhandled_error` are passed to
-the integrated error engine and default to `True`.
+the integrated error engine and default to `True`. Normalization applies even
+when no feature contributes a domain registry. If no `type_base` is configured
+or inferred, composition uses `urn:fastapi-canon:problem`. A domain error's
+already resolved type URI remains unchanged.
+
+Normalized internal failures are documented as `InternalServerProblem` at status
+500. Framework validation and internal failures sharing a status with a declared
+domain error use the same `code`-discriminated union. Explicit manual response
+schemas remain application-owned. Domain codes `request_validation_error` and
+`internal_server_error` are reserved while their normalizers are enabled.
 
 Use `ExceptionHandlerSpec` for a deliberately custom Starlette/FastAPI handler:
 
@@ -330,13 +353,18 @@ declarations at route declaration time. Other FastAPI decorator options continue
 to pass through unchanged.
 
 Application-registry membership and HTTP-normalization checks run when OpenAPI
-is generated. Call `composition.validate(app)` after applying a composition, or
+is generated. Composition also validates contracts at startup before opening
+application and feature resources. Call `composition.validate(app)` after applying a composition, or
 `validate_openapi_contracts(app)` for a manually assembled application, to make
 that validation intent explicit. Compilation failures are not cached. Routes
 excluded with `include_in_schema=False` are outside document-level validation;
 `CanonRouter` still validates their explicit declarations when they are
 registered. Router-level `raises=` applies to operations declared on that
-router, not to separately included child routers.
+router. The same applies to `http_statuses=`. Included child routers retain
+their own declarations and registries.
+
+Use explicit, unique `operation_id=` values when generated client method names
+are a public API. Canon rejects duplicate operation IDs during compilation.
 
 ## Success response contracts
 
@@ -507,6 +535,21 @@ exception inside the iterator cannot be converted into another HTTP response.
 SSE protocols can define an application-specific failure event; a failed binary
 iterator produces an incomplete download.
 
+### WebSocket boundary
+
+Registered domain errors and normalized `HTTPException` failures raised before
+`websocket.accept()` produce the same Problem Details denial response when the
+server supports the ASGI WebSocket denial extension. Otherwise Canon closes the
+connection. After acceptance, Canon closes with code 1008 for client problems or
+1011 for server problems. The close reason contains `Error.code` (or
+`http_<status>`), truncated to 123 ASCII characters.
+
+WebSocket message formats belong to the application protocol. Canon does not
+insert error frames into that protocol. FastAPI's `WebSocketException` and
+WebSocket request-validation handling stay native. Unregistered WebSocket
+exceptions follow the server's normal behavior. WebSocket operations are outside
+OpenAPI and HTTP client generation.
+
 ## Low-level FastAPI compatibility
 
 `CanonRouter` is the canonical API for new application code. The lower-level
@@ -552,12 +595,16 @@ installs that compiler automatically, including when no error registry exists.
 - Duplicate routers, providers, handlers, and error collisions fail during
   configuration.
 - Registry and handler configuration is checked against a temporary application
-  before installation. Operation contracts are checked during OpenAPI generation.
-- Provider-backed features must be installed before the application starts.
+  before installation. Operation contracts are checked during OpenAPI generation
+  and application startup.
+- All features must be installed before the application starts.
 - Disabling a feature means omitting it from `Composition`, which removes all of
   its contributions together.
 
-Configuration failures raise `FeatureConfigurationError`.
+All Canon configuration failures inherit `ConfigurationError` (`ValueError`).
+`FeatureConfigurationError`, `ErrorConfigurationError`, and
+`ResponseConfigurationError` provide more specific diagnostics. Runtime domain
+exceptions remain ordinary application exceptions.
 
 ## Requirements
 
