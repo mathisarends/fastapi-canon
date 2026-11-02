@@ -162,5 +162,5 @@ def _notification_feature(options: Telemetry) -> Feature:
         name="notifications",
         routers=(router,),
         providers=(NotifierProvider,),
-        instrumentation=(instrument(NotificationGateway),),
+        instrumentation=instrument(NotificationGateway),
     )

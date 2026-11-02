@@ -120,7 +120,7 @@ async def scenario(
                     name="http",
                     providers=[provider],
                     routers=[router],
-                    instrumentation=[instrument(UseCase), instrument(Repository)],
+                    instrumentation=instrument(UseCase, Repository),
                 ),
                 observations,
                 cancel_started,

@@ -6,6 +6,14 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Breaking changes
 
+- `instrument(Port, OtherPort, ...)` now requires at least one positional port
+  and always returns a tuple of immutable declarations, including for a single
+  port. Shared `expected` and `component` options apply to every port in the call.
+  Replace `Feature(instrumentation=[instrument(Port)])` with
+  `Feature(instrumentation=instrument(Port))`. Combine ports with the same options
+  in one call; use `instrumentation=[*instrument(FirstPort),
+  *instrument(SecondPort, expected=(ExpectedError,))]` for distinct groups.
+  Replace `instrument(port=Port)` with `instrument(Port)`.
 - HTTP requests excluded by `Telemetry.exclude` now also suppress participating
   downstream OpenTelemetry instrumentation, such as HTTPX, for the request's
   execution context. Remove application middleware that duplicates this

@@ -33,9 +33,10 @@ tasks = Feature(
     name="tasks",
     routers=(router,),
     providers=(TaskProvider,),
-    instrumentation=(
-        instrument(TaskRepository),
-        instrument(TaskService, expected=(TaskNotFound,)),
+    instrumentation=instrument(
+        TaskRepository,
+        TaskService,
+        expected=(TaskNotFound,),
     ),
 )
 app = Composition(
@@ -47,9 +48,22 @@ app = Composition(
 ).apply(FastAPI())
 ```
 
-`instrument(Port)` returns immutable `Instrumentation` metadata. Put it in
-`Feature.instrumentation`, leaving Dishka providers focused on their normal
-bindings. Existing `@provide` factory methods work too. Composition generates
+`instrument(Port, OtherPort, ...)` requires at least one positional port and
+returns a tuple of immutable `Instrumentation` declarations in input order,
+including for a single port. Pass that tuple directly to `Feature.instrumentation`.
+The keyword-only `expected` and `component` options apply to every port in the call.
+For ports with different settings, unpack multiple groups into one sequence:
+
+```python
+instrumentation = [
+    *instrument(TaskRepository, AuditRepository),
+    *instrument(TaskService, expected=(TaskNotFound,)),
+    *instrument(BillingGateway, component="billing"),
+]
+```
+
+Dishka providers stay focused on their normal bindings.
+Existing `@provide` factory methods work too. Composition generates
 separate decorator providers only when `telemetry=Telemetry(...)` is supplied.
 With `telemetry=None`, the declarations add no DI dependencies or decorators and
 import no Canon OpenTelemetry runtime. Direct Dishka containers can use the same
@@ -76,10 +90,19 @@ features. Use `instrument(Port, component="billing")` for a named binding; the
 default is Dishka's empty component. Spans belong to the feature declaring the
 instrumentation, even when another feature contributes the binding.
 
+### Migration from 0.11
+
+`instrument(Port)` now returns a tuple rather than a single declaration.
+Replace `Feature(instrumentation=[instrument(Port)])` with
+`Feature(instrumentation=instrument(Port))`. Combine ports sharing settings with
+`instrument(FirstPort, SecondPort, expected=(ExpectedError,))`. Unpack each call
+with `*instrument(...)` when combining groups with different settings in a list
+or tuple. Replace `instrument(port=Port)` with the positional `instrument(Port)`.
+
 ### Migration from 0.10
 
 `observe()` has been removed, without an alias. Move its declarations out of
-Provider classes into `Feature(instrumentation=[instrument(Port), ...])`. Remove
+Provider classes into `Feature(instrumentation=instrument(Port, OtherPort))`. Remove
 separate telemetry-only providers/features. Keep `expected=(...)` on the new
 declaration, and supply `component=` explicitly for named Dishka bindings.
 SDK configuration and ownership remain unchanged.
@@ -163,8 +186,9 @@ headers, and SQL parameters are not captured by the port wrapper.
 `canon.port.expected_exception` event with `exception.type`, leaves span status
 unset, and omits `error.type`. Subclasses match too. This is an application
 classification, not a universal OpenTelemetry rule. Cancellation propagates
-without an error event/status. These settings apply to that port only; configure
-other instrumented ports independently when the same exception crosses them.
+without an error event/status. These settings apply to every port in the call;
+other groups retain their own expected-failure classification when the same
+exception crosses them.
 
 The optional histogram uses only `canon.feature`, `canon.port`,
 `code.function.name`, and, for unexpected failures, `error.type`. Argument values

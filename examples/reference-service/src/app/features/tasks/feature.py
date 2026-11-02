@@ -11,7 +11,7 @@ feature = Feature(
     routers=(router,),
     providers=(TaskProvider,),
     instrumentation=(
-        instrument(TaskRepository),
-        instrument(TaskService, expected=(TaskNotFound,)),
+        *instrument(TaskRepository),
+        *instrument(TaskService, expected=(TaskNotFound,)),
     ),
 )
