@@ -86,7 +86,7 @@ async def test_http_request_shares_configuration_exclusions_and_resource_lifetim
                     name="resources",
                     providers=[Dependencies],
                     routers=[router],
-                    instrumentation=[instrument(Service)],
+                    instrumentation=instrument(Service),
                 ),
                 telemetry=Telemetry(
                     tracer_provider=capture.provider,

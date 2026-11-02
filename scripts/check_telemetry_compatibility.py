@@ -102,7 +102,7 @@ def _verify() -> None:
                 name="compatibility",
                 routers=[router],
                 providers=[provider],
-                instrumentation=[instrument(Port)],
+                instrumentation=instrument(Port),
             ),
             telemetry=options,
         )

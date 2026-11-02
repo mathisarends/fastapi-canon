@@ -95,8 +95,10 @@ response or connection is accepted. Once streaming or protocol communication
 starts, failures follow that transport's declared protocol. JSON-RPC envelopes,
 raw/binary sockets and `fastapi-webrtc.v1` retain their existing wire behavior.
 
-Telemetry is explicit at the composition boundary. `instrument(Port)` is declared
-in `Feature.instrumentation`, including for async `__call__` use cases. Composition
+Telemetry is explicit at the composition boundary. Pass the tuple returned by
+`instrument(Port, OtherPort, ...)` directly to `Feature.instrumentation`, including
+for async `__call__` use cases. The call's `expected` and `component` options apply
+to every port in that group. Composition
 creates its Dishka decorators only when telemetry is enabled, leaving providers
 usable independently. `Telemetry.rpc_middleware()` explicitly bridges the
 selected providers into a WebSocket service. Optional features do not create

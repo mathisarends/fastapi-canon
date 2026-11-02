@@ -265,7 +265,7 @@ def _observation_check(*, enabled: bool) -> None:
             name="observed",
             providers=[Dependencies],
             routers=[router],
-            instrumentation=[instrument(Port)],
+            instrumentation=instrument(Port),
         ),
         telemetry=Telemetry() if enabled else None,
     ).apply(FastAPI())

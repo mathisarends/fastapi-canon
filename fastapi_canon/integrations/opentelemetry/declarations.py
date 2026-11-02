@@ -27,7 +27,7 @@ __all__ = ["Instrumentation", "Telemetry", "instrument"]
 
 @dataclass(frozen=True, slots=True, init=False)
 class Instrumentation:
-    """An immutable feature declaration returned by :func:`instrument`."""
+    """An immutable declaration for one port binding."""
 
     port: type[Any]
     expected: tuple[type[Exception], ...]
@@ -63,17 +63,23 @@ class Instrumentation:
 
 def instrument(
     port: type[Any],
-    *,
+    /,
+    *more_ports: type[Any],
     expected: Sequence[type[Exception]] = (),
     component: str = "",
-) -> Instrumentation:
-    """Declare instrumentation for a feature's port or async callable use case.
+) -> tuple[Instrumentation, ...]:
+    """Declare instrumentation for one or more ports or async callable use cases.
 
-    Pass the result to ``Feature(instrumentation=[...])``. No OpenTelemetry
-    import or Dishka decorator is created until composition enables telemetry.
-    The component selects the Dishka binding; the default is the empty component.
+    Pass the tuple directly to ``Feature(instrumentation=instrument(Port, ...))``.
+    Shared expected failures and the Dishka component apply to every port.
+    Unpack multiple calls into a sequence to combine differently configured groups.
+    No OpenTelemetry import or Dishka decorator is created until composition
+    enables telemetry. The default component is Dishka's empty component.
     """
-    return Instrumentation(port=port, expected=expected, component=component)
+    return tuple(
+        Instrumentation(port=target, expected=expected, component=component)
+        for target in (port, *more_ports)
+    )
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
