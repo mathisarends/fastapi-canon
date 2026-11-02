@@ -179,7 +179,9 @@ providers return the borrowed configuration; they never create or close SDKs.
 ### Explicit resource adapters
 
 Install `fastapi-canon[otel-httpx]` plus the HTTPX or HTTPX2 client library you use,
-and `fastapi-canon[otel-sqlalchemy]` plus your database driver. The core `otel`
+and `fastapi-canon[otel-sqlalchemy]` plus your database driver. The SQLAlchemy extra
+includes its asyncio dependencies, including greenlet, for sync/async engine
+support across supported SQLAlchemy versions. The core `otel`
 extra does not install client libraries, SQLAlchemy or the SDK.
 
 ```python

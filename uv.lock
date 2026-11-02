@@ -621,7 +621,7 @@ otel-sqlalchemy = [
     { name = "fastapi" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-instrumentation" },
-    { name = "sqlalchemy" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
 ]
 sse = [
     { name = "fastapi" },
@@ -684,7 +684,7 @@ requires-dist = [
     { name = "pydantic", marker = "extra == 'sse'", specifier = ">=2.11.2,<3" },
     { name = "pydantic", marker = "extra == 'websockets'", specifier = ">=2.11,<3" },
     { name = "pydantic-core", marker = "extra == 'websockets'", specifier = ">=2.33" },
-    { name = "sqlalchemy", marker = "extra == 'otel-sqlalchemy'", specifier = ">=2.0,<3" },
+    { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'otel-sqlalchemy'", specifier = ">=2.0,<3" },
     { name = "starlette", marker = "extra == 'webrtc'", specifier = ">=0.41" },
     { name = "typing-extensions", marker = "extra == 'codegen'", specifier = ">=4.12.2" },
     { name = "typing-extensions", marker = "extra == 'webrtc'", specifier = ">=4.12" },

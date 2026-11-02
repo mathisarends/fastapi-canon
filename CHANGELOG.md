@@ -40,7 +40,8 @@ All notable changes to `fastapi-canon` are documented in this file.
   request suppression and remove only their own instrumentation. HTTPX/HTTPX2
   reuse the public contrib per-client API; SQLAlchemy uses engine-local event
   listeners without wrapping factories or changing global instrumentors.
-- Opt-in `otel-httpx` and `otel-sqlalchemy` extras. Resource and SDK lifecycle
+- Opt-in `otel-httpx` and `otel-sqlalchemy` extras, including SQLAlchemy's asyncio
+  dependencies for sync/async engine support. Resource and SDK lifecycle
   remains application-owned. URLs, SQL text and exception messages are omitted
   by default; `capture_url=True` and `capture_statement=True` explicitly opt into
   potentially sensitive text. Headers, bodies and SQL parameters are not captured.
