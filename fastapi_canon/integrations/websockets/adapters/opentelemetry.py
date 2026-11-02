@@ -86,7 +86,7 @@ def _attached_context(parent: context.Context | None) -> Generator[None, None, N
 
 
 class OpenTelemetry(RpcMiddleware):
-    """Use application OTEL providers to trace and measure RPC and stream operations."""
+    """Trace WebSocket controller calls and measure connections and streams."""
 
     def __init__(
         self,
@@ -215,7 +215,7 @@ class OpenTelemetry(RpcMiddleware):
             )
             with manager as span:
                 connection_token = self._connection_span.set(
-                    None if span is None else span.get_span_context()
+                    trace.get_current_span().get_span_context()
                 )
                 try:
                     yield
@@ -275,9 +275,11 @@ class OpenTelemetry(RpcMiddleware):
         links: tuple[Link, ...] = ()
         if scope.metadata is not None:
             parent = _remote_context(scope.metadata, self._propagate_baggage)
-            connection_span = self._connection_span.get()
-            if connection_span is not None and connection_span.is_valid:
-                links = (Link(connection_span),)
+        elif scope.request.connection is not None:
+            parent = trace.set_span_in_context(trace.INVALID_SPAN)
+        connection_span = self._connection_span.get()
+        if connection_span is not None and connection_span.is_valid:
+            links = (Link(connection_span),)
         with self._span(
             name, SpanKind.SERVER, attributes, parent=parent, links=links
         ) as span:

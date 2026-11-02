@@ -99,10 +99,10 @@ def _main() -> None:
         _cli("sse")
     if "websockets" in selected:
         from fastapi_canon.integrations.websockets import (
+            CanonWebSocketRouter,
             Inject,
             RpcChannel,
             RpcMiddleware,
-            RpcRouter,
             RpcSocket,
         )
 
@@ -112,7 +112,7 @@ def _main() -> None:
         async def ping() -> str:
             return "pong"
 
-        rpc = RpcRouter()
+        rpc = CanonWebSocketRouter()
         rpc.socket("/rpc", channels=(channel,))
 
         @channel.socket("messages")
@@ -138,7 +138,9 @@ def _main() -> None:
             await socket.send_text(label)
             await socket.close()
 
-        custom_rpc = RpcRouter(context=connection_label, middleware=[RpcMiddleware()])
+        custom_rpc = CanonWebSocketRouter(
+            context=connection_label, middleware=[RpcMiddleware()]
+        )
         custom_rpc.socket("/custom", channels=[RpcChannel("custom")], serve=custom)
         routers.append(custom_rpc)
         _cli("websockets")

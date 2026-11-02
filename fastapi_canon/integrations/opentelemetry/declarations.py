@@ -126,11 +126,12 @@ class Telemetry:
         provider.provide(lambda: self, provides=Telemetry, scope=Scope.APP)
         return provider
 
-    def rpc_middleware(self) -> OpenTelemetry:
+    def websocket_middleware(self) -> OpenTelemetry:
         """Create the WebSocket middleware explicitly, forwarding the same providers.
 
-        Install ``fastapi-canon[websockets,otel]`` and pass this to ``RpcDefinition``. No
-        connection span is added, and RPC baggage propagation remains disabled.
+        Install ``fastapi-canon[websockets,otel]`` and pass this to
+        ``CanonWebSocketRouter``. Calls without message context start independent
+        traces. No connection span is added, and remote baggage remains disabled.
         """
         from fastapi_canon.integrations.websockets.adapters.opentelemetry import (
             OpenTelemetry,

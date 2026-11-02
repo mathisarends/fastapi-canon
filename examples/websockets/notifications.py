@@ -2,10 +2,10 @@ from collections.abc import AsyncIterator
 from typing import Literal
 
 from fastapi_canon.integrations.websockets import (
+    CanonWebSocketRouter,
     Inject,
     RpcChannel,
     RpcModel,
-    RpcRouter,
 )
 
 
@@ -39,7 +39,7 @@ async def job_changes(events: Inject[JobEvents]) -> AsyncIterator[JobUpdate]:
         yield event
 
 
-app = RpcRouter()
+app = CanonWebSocketRouter()
 app.socket("/rpc", channels=(router,))
 
 

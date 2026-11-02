@@ -250,7 +250,7 @@ class FastApiResolver(Protocol):
     """Resolve RPC dependencies per WebSocket and prepare the context function.
 
     Pass ``Dishka`` from ``fastapi_canon.integrations.websockets.adapters.dishka``
-    as ``resolver=`` to ``RpcRouter`` to integrate Dishka.
+    as ``resolver=`` to ``CanonWebSocketRouter`` to integrate Dishka.
     """
 
     def for_websocket(self, websocket: WebSocket) -> RpcResolverLike: ...
@@ -260,7 +260,7 @@ class FastApiResolver(Protocol):
     ) -> FunctionT: ...
 
 
-class RpcRouter(APIRouter):
+class CanonWebSocketRouter(APIRouter):
     """Define WebSocket endpoints, mount their routes and export one contract."""
 
     def __init__(
@@ -283,7 +283,7 @@ class RpcRouter(APIRouter):
     ) -> None:
         super().__init__(prefix=prefix)
         if (path is None) != (channels is None):
-            raise ValueError("RpcRouter needs path and channels together")
+            raise ValueError("CanonWebSocketRouter needs path and channels together")
         self._definition = RpcDefinition(
             version=version,
             error_mapper=error_mapper,
@@ -304,7 +304,8 @@ class RpcRouter(APIRouter):
         if context is not None and self._websocket_resolver is not None:
             self._context = self._websocket_resolver.dependency(context)
         self._rejections = chain_rejections(
-            rejections, contract_rejections(rejecting_contracts(rejects, "RpcRouter"))
+            rejections,
+            contract_rejections(rejecting_contracts(rejects, "CanonWebSocketRouter")),
         )
         self._error_mapper = error_mapper
         self._limits = limits

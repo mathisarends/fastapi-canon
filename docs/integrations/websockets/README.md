@@ -85,7 +85,7 @@ Code generation and OpenTelemetry dependencies remain optional extras.
 
 ```python
 from fastapi import FastAPI
-from fastapi_canon.integrations.websockets import RpcChannel, RpcRouter
+from fastapi_canon.integrations.websockets import RpcChannel, CanonWebSocketRouter
 
 greetings = RpcChannel("greetings")
 
@@ -95,7 +95,7 @@ async def hello() -> str:
     return "Hello"
 
 
-rpc = RpcRouter()
+rpc = CanonWebSocketRouter()
 rpc.socket("/rpc", channels=(greetings,))
 app = FastAPI()
 app.include_router(rpc)
@@ -115,7 +115,7 @@ from fastapi_canon.integrations.websockets import (
     Inject,
     RpcChannel,
     RpcModel,
-    RpcRouter,
+    CanonWebSocketRouter,
     RpcSuccess,
 )
 
@@ -148,7 +148,7 @@ async def create(params: CreateTask, store: Inject[TaskStore]) -> Task:
     return await store.create(params.title)
 
 
-app = RpcRouter(version=1)
+app = CanonWebSocketRouter(version=1)
 app.socket("/rpc", channels=(tasks,))
 
 
@@ -184,8 +184,8 @@ hooks, limits and custom transports.
 | --- | --- |
 | `RpcChannel` | Group operations under a namespace with `@channel.method()`, `.event()`, `.subscription()` and `.stream()`. |
 | `RpcModel` | Base class for parameter, result and event payloads. |
-| `RpcRouter` | Mount channels on a socket path with `service.socket(...)`. |
-| `RpcRouter` | Define endpoints and include their routes in FastAPI or a feature. |
+| `CanonWebSocketRouter` | Mount channels on a socket path with `service.socket(...)`. |
+| `CanonWebSocketRouter` | Define endpoints and include their routes in FastAPI or a feature. |
 | `Inject[T]` | Resolve a server-side dependency; it never appears in the contract. |
 | `RpcError` | Subclass for typed errors; declare them with `raises=` so generated clients raise matching exceptions. |
 

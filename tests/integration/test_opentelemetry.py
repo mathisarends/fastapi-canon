@@ -28,9 +28,8 @@ from fastapi_canon import (
 )
 from fastapi_canon.error import Error, ErrorRegistry
 from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
-from fastapi_canon.integrations.websockets.definition import RpcDefinition
+from fastapi_canon.integrations.websockets import CanonWebSocketRouter
 from tests.fixtures.telemetry import SpanCapture
-from tests.fixtures.websockets import router_for
 
 
 class Missing(Exception):
@@ -613,7 +612,7 @@ def test_duplicate_instrumentation_is_rejected(
     assert not app.user_middleware
 
 
-def test_rpc_forwards_providers() -> None:
+def test_websocket_controllers_export_independent_traces_before_disconnect() -> None:
     from fastapi_canon.integrations.websockets import (
         RpcChannel,
     )
@@ -621,29 +620,55 @@ def test_rpc_forwards_providers() -> None:
     with SpanCapture() as capture:
         options = Telemetry(tracer_provider=capture.provider)
         channel = RpcChannel("tasks")
+        tracer = capture.provider.get_tracer("application")
 
         @channel.method("ping")
         async def ping() -> str:
+            with tracer.start_as_current_span("controller.work"):
+                await asyncio.sleep(0)
             return "pong"
 
-        service = RpcDefinition(middleware=(options.rpc_middleware(),))
-        service.socket("/rpc", channels=(channel,))
+        router = CanonWebSocketRouter(
+            "/rpc", channels=(channel,), middleware=(options.websocket_middleware(),)
+        )
         app = Composition(
-            features=(Feature(name="rpc", routers=[router_for(service)]),),
+            features=(Feature(name="websocket", routers=[router]),),
             telemetry=options,
         ).apply(FastAPI())
         with TestClient(app) as client, client.websocket_connect("/rpc") as websocket:
             websocket.send_json({"jsonrpc": "2.0", "id": 1, "method": "tasks.ping"})
             assert websocket.receive_json()["result"] == "pong"
-        rpc = capture.one("tasks.ping")
+            first = capture.one("tasks.ping")
+            assert first.parent is None
+            websocket.send_json({"jsonrpc": "2.0", "id": 2, "method": "tasks.ping"})
+            assert websocket.receive_json()["result"] == "pong"
+            calls = [span for span in capture.spans if span.name == "tasks.ping"]
+            assert len(calls) == 2
+            assert calls[0].context is not None and calls[1].context is not None
+            assert calls[0].context.trace_id != calls[1].context.trace_id
+            assert all(span.parent is None for span in calls)
+            assert all(span.name != "WS /rpc" for span in capture.spans)
+            work = [span for span in capture.spans if span.name == "controller.work"]
+            assert len(work) == 2
+            assert all(span.parent is not None for span in work)
+            assert {
+                span.parent.span_id for span in work if span.parent is not None
+            } == {span.context.span_id for span in calls if span.context is not None}
         connection = capture.one("WS /rpc")
         endpoint = capture.one("fastapi.endpoint")
-        assert rpc.parent is not None and endpoint.context is not None
         assert endpoint.parent is not None and connection.context is not None
-        assert rpc.parent.span_id == endpoint.context.span_id
         assert endpoint.parent.span_id == connection.context.span_id
+        assert all(
+            span.links[0].context.trace_id == connection.context.trace_id
+            for span in calls
+        )
+        linked = {span.links[0].context.span_id for span in calls}
+        assert len(linked) == 1
+        assert linked <= {
+            span.context.span_id for span in capture.spans if span.context is not None
+        }
         assert (
-            len([span for span in capture.spans if span.kind is SpanKind.SERVER]) == 2
+            len([span for span in capture.spans if span.kind is SpanKind.SERVER]) == 3
         )
 
 

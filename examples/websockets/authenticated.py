@@ -8,12 +8,12 @@ from dishka import Provider, Scope, from_context, make_async_container, provide
 from dishka.integrations.fastapi import FromDishka, setup_dishka
 from fastapi import FastAPI, WebSocket
 from fastapi_canon.integrations.websockets import (
+    CanonWebSocketRouter,
     Inject,
     RpcChannel,
     RpcConnection,
     RpcErrorBinding,
     RpcRejection,
-    RpcRouter,
 )
 from fastapi_canon.integrations.websockets.adapters.dishka import Dishka, DishkaResolver
 from fastapi_canon.integrations.websockets.dependencies import RpcResolver
@@ -94,7 +94,7 @@ def create_app() -> FastAPI:
     async def whoami(identity: Inject[RequestIdentity]) -> str:
         return identity.login.user
 
-    router = RpcRouter(
+    router = CanonWebSocketRouter(
         "/rpc",
         channels=[channel],
         context=open_session,

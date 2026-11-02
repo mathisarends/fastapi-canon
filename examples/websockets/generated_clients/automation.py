@@ -2,6 +2,7 @@ import asyncio
 from collections.abc import AsyncIterator
 
 from fastapi_canon.integrations.websockets import (
+    CanonWebSocketRouter,
     Inject,
     RpcBinaryInput,
     RpcBinaryOutput,
@@ -10,7 +11,6 @@ from fastapi_canon.integrations.websockets import (
     RpcMessageType,
     RpcModel,
     RpcRejection,
-    RpcRouter,
     RpcSocket,
     RpcSocketProtocol,
     ServerVariable,
@@ -151,7 +151,7 @@ async def cdp(socket: Inject[RpcSocket]) -> None:
         await socket.send(message)
 
 
-service = RpcRouter()
+service = CanonWebSocketRouter()
 service.socket("/automation/rpc", channels=(tasks,), name="production")
 service.socket("/browser/rpc", channels=(tabs,), name="browser")
 service.socket(

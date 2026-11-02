@@ -20,7 +20,7 @@ from fastapi_canon.integrations.websockets import (
     RpcStreamScope,
 )
 from fastapi_canon.integrations.websockets.adapters.fastapi import (
-    RpcRouter,
+    CanonWebSocketRouter,
     serve_websocket,
 )
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
@@ -136,7 +136,7 @@ async def test_uninstrumented_fastapi_rejection_does_not_update_outer_scope():
     child = RpcDefinition().socket(
         "/child", channels=[RpcChannel("child")], context=str
     )
-    router = RpcRouter(
+    router = CanonWebSocketRouter(
         context=authenticate, rejections={ValueError: RpcRejection.FORBIDDEN}
     )
     router.mount(child)
@@ -425,7 +425,7 @@ def test_fastapi_observes_context_rejections_and_does_not_enter_twice():
         assert connection_name.get() == "rpc"
         raise ValueError("Access denied")
 
-    router = RpcRouter(
+    router = CanonWebSocketRouter(
         context=authenticate,
         middleware=[recorder],
         rejections={ValueError: RpcRejection.FORBIDDEN},
@@ -557,7 +557,7 @@ def test_custom_handlers_report_accepted_connections_and_close_codes(peer_discon
         else:
             await websocket.close(4001, "custom close")
 
-    router = RpcRouter()
+    router = CanonWebSocketRouter()
     router.mount(endpoint, handler=handler)
     web = FastAPI()
     web.include_router(router)
@@ -608,7 +608,7 @@ def test_custom_handlers_support_activity_callbacks_on_middleware(with_instrumen
         await websocket.accept()
         await websocket.close(4001, "custom close")
 
-    router = RpcRouter()
+    router = CanonWebSocketRouter()
     router.mount(endpoint, handler=handler)
     web = FastAPI()
     web.include_router(router)
@@ -650,7 +650,7 @@ def test_custom_handlers_compose_delegated_middleware_once(stream, registered, s
     async def handler(websocket: WebSocket) -> None:
         await serve_websocket(endpoint, websocket, middleware=[delegated])
 
-    router = RpcRouter()
+    router = CanonWebSocketRouter()
     router.mount(endpoint, handler=handler)
     web = FastAPI()
     web.include_router(router)
@@ -689,7 +689,7 @@ async def test_custom_handlers_report_cancellation_and_failed_acceptance(cancel)
             accepted.set()
             await asyncio.Event().wait()
 
-        router = RpcRouter()
+        router = CanonWebSocketRouter()
         router.mount(endpoint, handler=handler)
         web = FastAPI()
         web.include_router(router)

@@ -2,7 +2,7 @@
 
 ## WebSocket router boundary
 
-`RpcRouter` registers endpoints with `APIRouter.websocket()` and integrates through
+`CanonWebSocketRouter` registers endpoints with `APIRouter.websocket()` and integrates through
 `include_router()`. Connection dependencies use `Depends`, and handlers use the
 public `WebSocket` constructor, properties and methods. Custom-handler observation
 wraps the public send/receive callables in a separate WebSocket instance.

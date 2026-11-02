@@ -12,11 +12,11 @@ from fastapi_canon.integrations.websockets import (
     RpcChannel,
     RpcConnection,
     RpcModel,
-    RpcRouter,
+    CanonWebSocketRouter,
 )
 
 tasks = RpcChannel("tasks")
-app = RpcRouter()
+app = CanonWebSocketRouter()
 app.socket("/rpc", channels=(tasks,))
 ```
 
@@ -56,7 +56,7 @@ responses are not sent.
 A failure can end a connection instead of a call: a `before_accept` hook or a
 context function refuses it, an event source or binary stream breaks. Declare
 the [error bindings](errors.md#bind-domain-exceptions) of such failures in
-`rejects=`, on `RpcRouter` for failures every endpoint shares and on
+`rejects=`, on `CanonWebSocketRouter` for failures every endpoint shares and on
 `socket()` or `stream()` for one endpoint's failures. Each binding names the
 `RpcRejection` its exception becomes:
 
@@ -66,7 +66,7 @@ from fastapi_canon.integrations.websockets import RpcErrorBinding, RpcRejection
 session_expired = RpcErrorBinding(SessionExpired, rejection=RpcRejection.UNAUTHORIZED)
 session_not_found = RpcErrorBinding(SessionNotFound, rejection=RpcRejection.NOT_FOUND)
 
-app = RpcRouter(rejects=[session_expired])
+app = CanonWebSocketRouter(rejects=[session_expired])
 app.socket(
     "/sessions/{session_id}/events",
     channels=(session_events,),
@@ -79,7 +79,7 @@ answers 404 with `Session not found` rather than the exception text. The same
 binding can also appear in a method's `raises=`, where it answers calls with
 the `session_not_found` error.
 
-`RpcRouter`, `serve()`, `serve_websocket()`, and
+`CanonWebSocketRouter`, `serve()`, `serve_websocket()`, and
 `RpcTestClient` accept `rejections=` for call-specific policies: a mapping from
 exception types to `RpcRejection` values, using the exception text as reason,
 or a callable that returns an `RpcReject` or `None`:
@@ -305,7 +305,11 @@ middleware instance:
 ```python
 from contextlib import asynccontextmanager
 
-from fastapi_canon.integrations.websockets import RpcMiddleware, RpcRouter, RpcSuccess
+from fastapi_canon.integrations.websockets import (
+    RpcMiddleware,
+    CanonWebSocketRouter,
+    RpcSuccess,
+)
 
 
 class GatewayMetrics(RpcMiddleware):
@@ -334,7 +338,7 @@ class GatewayMetrics(RpcMiddleware):
         logger.info("rpc connected endpoint=%s", connection.endpoint)
 
 
-app = RpcRouter(middleware=[GatewayMetrics()])
+app = CanonWebSocketRouter(middleware=[GatewayMetrics()])
 ```
 
 Scope failures are logged without replacing the serving error. `RpcMiddleware`
@@ -371,7 +375,7 @@ disabling the byte limit.
 [Back to documentation](index.md)
 ## Draining connections
 
-Each service has a `service.drain` coordinator; pass `RpcRouter(drain=RpcDrain())`
+Each service has a `service.drain` coordinator; pass `CanonWebSocketRouter(drain=RpcDrain())`
 to share one coordinator across services. `await service.drain.drain(timeout=30)`
 is idempotent and permanently moves that coordinator into shutdown. The first
 call chooses the budget; cancellation of a caller waiting for drain does not

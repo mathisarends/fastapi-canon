@@ -19,9 +19,9 @@ from fastapi_canon.integrations.sse.codegen.ir import build_ir as stream_ir
 from fastapi_canon.integrations.sse.codegen.openapi import export_schema
 from fastapi_canon.integrations.sse.codegen.python import generate_python
 from fastapi_canon.integrations.websockets import (
+    CanonWebSocketRouter,
     Inject,
     RpcChannel,
-    RpcRouter,
 )
 from fastapi_canon.integrations.websockets.codegen import (
     PythonClientOptions,
@@ -114,7 +114,9 @@ async def test_rpc_router_contributes_catalog_and_uses_composition_type_base() -
     async def whoami(tenant: Inject[str]) -> str:
         return tenant
 
-    router = RpcRouter("/ws/{tenant}", channels=[channel, system], context=session)
+    router = CanonWebSocketRouter(
+        "/ws/{tenant}", channels=[channel, system], context=session
+    )
     app = Composition(
         features=(Feature(name="projects", routers=[router]),),
         errors=ErrorOptions(type_base="urn:application:problems"),
@@ -175,7 +177,7 @@ async def test_rpc_router_serves_all_endpoint_kinds_with_one_contract() -> None:
         await socket.send_text("custom")
         await socket.close()
 
-    router = RpcRouter(version=2, prefix="/api")
+    router = CanonWebSocketRouter(version=2, prefix="/api")
     router.socket("/rpc", channels=[channel])
     router.stream("/frames", frames)
     router.socket("/echo", echo)

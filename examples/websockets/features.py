@@ -1,4 +1,8 @@
-from fastapi_canon.integrations.websockets import RpcChannel, RpcModel, RpcRouter
+from fastapi_canon.integrations.websockets import (
+    CanonWebSocketRouter,
+    RpcChannel,
+    RpcModel,
+)
 
 
 class StatusResult(RpcModel):
@@ -23,7 +27,7 @@ async def profile() -> ProfileResult:
     return ProfileResult(name="Mathis")
 
 
-app = RpcRouter(version=2)
+app = CanonWebSocketRouter(version=2)
 app.socket("/rpc", channels=(system, account))
 
 

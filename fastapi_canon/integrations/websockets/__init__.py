@@ -1,8 +1,8 @@
 from fastapi_canon._version import __version__
 
 from .adapters.fastapi import (
+    CanonWebSocketRouter,
     FastApiSocket,
-    RpcRouter,
     serve_websocket,
 )
 from .channel import RpcChannel
@@ -83,7 +83,7 @@ from .streams import (
 
 __all__ = [
     "FastApiSocket",
-    "RpcRouter",
+    "CanonWebSocketRouter",
     "serve_websocket",
     "RpcConnectionExpiry",
     "RpcDrain",

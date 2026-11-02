@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from fastapi_canon import CanonRouter, Composition, Error, ErrorRegistry, Feature
 from fastapi_canon.integrations.sse import CanonStreamRouter
-from fastapi_canon.integrations.websockets import RpcChannel, RpcRouter
+from fastapi_canon.integrations.websockets import CanonWebSocketRouter, RpcChannel
 
 
 class ProjectMissing(Exception):
@@ -80,7 +80,7 @@ async def cancel(params: CancelProject) -> None:
     require_project(params.project_id)
 
 
-websockets = RpcRouter("/ws", channels=[projects])
+websockets = CanonWebSocketRouter("/ws", channels=[projects])
 feature = Feature(name="projects", routers=[http, streams, websockets])
 
 

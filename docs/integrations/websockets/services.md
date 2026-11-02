@@ -17,7 +17,11 @@ Pydantic model, and their return annotation describes the result.
 from fastapi import FastAPI
 
 from fastapi_canon import Composition, Feature
-from fastapi_canon.integrations.websockets import RpcChannel, RpcModel, RpcRouter
+from fastapi_canon.integrations.websockets import (
+    RpcChannel,
+    RpcModel,
+    CanonWebSocketRouter,
+)
 
 
 class CreateTask(RpcModel):
@@ -42,7 +46,7 @@ async def health() -> None:
     return None
 
 
-rpc = RpcRouter("/rpc", channels=[tasks])
+rpc = CanonWebSocketRouter("/rpc", channels=[tasks])
 feature = Feature(name="tasks", routers=[rpc])
 app = Composition(features=(feature,)).apply(FastAPI())
 contract = rpc.contract(title="Tasks", base_url="wss://api.example.com", app=app)
@@ -77,7 +81,7 @@ prefix of another operation when the protocol is materialized.
 
 ## Mount endpoints
 
-Use `RpcRouter` for one JSON-RPC WebSocket path. Define the channel operations
+Use `CanonWebSocketRouter` for one JSON-RPC WebSocket path. Define the channel operations
 before constructing the router, which freezes them together for serving and
 OpenRPC export. The router contributes
 their error registries to `Feature`. Pass the composed app to `contract()` to
@@ -85,15 +89,15 @@ export the same problem types served at runtime.
 
 For a per-connection FastAPI dependency, pass its async function as `context=`.
 Its concrete return annotation supplies the type available to handlers through
-`Inject[T]`. Use `resolver=Dishka()` for Dishka dependencies. Construct `RpcRouter()` without a path to register multiple paths with
+`Inject[T]`. Use `resolver=Dishka()` for Dishka dependencies. Construct `CanonWebSocketRouter()` without a path to register multiple paths with
 `socket()` and `stream()` and export them together.
 
 Mount several channels on one JSON-RPC socket:
 
 ```python
-from fastapi_canon.integrations.websockets import RpcRouter
+from fastapi_canon.integrations.websockets import CanonWebSocketRouter
 
-app = RpcRouter(version=2)
+app = CanonWebSocketRouter(version=2)
 endpoint = app.socket(
     "/projects/{project_id}/rpc",
     channels=(tasks, admin),
@@ -144,7 +148,7 @@ point.
 
 ## Protocol version
 
-`RpcRouter(version=...)` takes a positive integer. The version is emitted as
+`CanonWebSocketRouter(version=...)` takes a positive integer. The version is emitted as
 `<version>.0.0` in OpenRPC, so changing a wire contract can be reflected in the
 service definition and generated artifacts together.
 
@@ -152,7 +156,7 @@ Configure shared serving defaults once and override them only where an endpoint
 differs:
 
 ```python
-app = RpcRouter(error_mapper=map_error, limits=RpcLimits(max_concurrency=16))
+app = CanonWebSocketRouter(error_mapper=map_error, limits=RpcLimits(max_concurrency=16))
 app.socket(
     "/rpc",
     channels=(tasks,),
@@ -192,7 +196,7 @@ async def long_running() -> None:
     await finish_long_running_work()
 
 
-app = RpcRouter(limits=RpcLimits(request_timeout=30.0))
+app = CanonWebSocketRouter(limits=RpcLimits(request_timeout=30.0))
 app.socket("/rpc", channels=[tasks])
 ```
 
@@ -315,7 +319,9 @@ Register that same instance on the service and handshake hook:
 
 ```python
 capacity = SharedCapacity(connections=200, requests=64)
-app = RpcRouter(middleware=[capacity], limits=RpcLimits(max_pending_requests=128))
+app = CanonWebSocketRouter(
+    middleware=[capacity], limits=RpcLimits(max_pending_requests=128)
+)
 app.socket("/rpc", channels=[tasks], before_accept=capacity.before_accept)
 web.include_router(app)
 ```

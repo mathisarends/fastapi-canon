@@ -112,9 +112,9 @@ there is no second domain-to-RPC mapping to maintain.
 from fastapi import FastAPI
 
 from fastapi_canon import Composition, Feature
-from fastapi_canon.integrations.websockets import RpcRouter
+from fastapi_canon.integrations.websockets import CanonWebSocketRouter
 
-websockets = RpcRouter("/ws", channels=[projects])
+websockets = CanonWebSocketRouter("/ws", channels=[projects])
 
 app = Composition(
     features=(Feature(name="projects", routers=[http, streams, websockets]),),

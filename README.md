@@ -37,7 +37,7 @@ The generated API follows your domain: `client.projects.get()`,
 | `Error` + `ErrorRegistry` + `raises=` | Shared public problem definitions for runtime responses, contracts and generated SDKs. |
 | `CanonRouter` + `CanonResponse` | Familiar FastAPI routes with composable error and success contracts, including JSON, empty and binary responses. |
 | `CanonStreamRouter` | Typed SSE events, declared terminal problems and explicit completion, consumed through async iteration. |
-| `RpcChannel` + `RpcRouter` | Typed WebSocket RPC methods, notifications, subscriptions and declared socket/binary sessions. |
+| `RpcChannel` + `CanonWebSocketRouter` | Typed WebSocket RPC methods, notifications, subscriptions and declared socket/binary sessions. |
 | `fastapi-canon generate` | One domain SDK per target, shared models/errors, internal protocol bindings and drift checks. |
 | `fastapi-canon check errors` | Source analysis for missing error mappings/declarations, with explicit incomplete-analysis diagnostics. |
 | Optional WebRTC and telemetry | Typed media-session contracts and explicit OpenTelemetry instrumentation at the composition boundary. |
@@ -181,7 +181,7 @@ See [Canon stream contracts](docs/streams.md),
 Add a WebSocket method using the same public error definition:
 
 ```python
-from fastapi_canon.integrations.websockets import RpcChannel, RpcRouter
+from fastapi_canon.integrations.websockets import RpcChannel, CanonWebSocketRouter
 
 projects = RpcChannel("projects", error_registry=errors)
 
@@ -195,7 +195,7 @@ async def cancel(params: CancelProject) -> None:
     require_project(params.project_id)
 
 
-websockets = RpcRouter("/ws", channels=[projects])
+websockets = CanonWebSocketRouter("/ws", channels=[projects])
 ```
 
 After all route declarations, replace the original composition block with this

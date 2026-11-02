@@ -5,7 +5,7 @@ import fastapi_canon.integrations.websockets.connection as connection_module
 import pytest
 from examples.websockets.authenticated import Login, Sessions, create_app
 from fastapi.testclient import TestClient
-from fastapi_canon.integrations.websockets import RpcRouter
+from fastapi_canon.integrations.websockets import CanonWebSocketRouter
 from starlette.testclient import WebSocketDenialResponse
 from starlette.websockets import WebSocketDisconnect
 
@@ -56,4 +56,4 @@ def test_router_requires_a_concrete_context_return_type():
         return object()
 
     with pytest.raises(TypeError, match="needs a concrete class"):
-        RpcRouter(context=context)
+        CanonWebSocketRouter(context=context)
