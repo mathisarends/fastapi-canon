@@ -8,6 +8,7 @@ Optional transports and telemetry ship inside the same distribution and version.
 fastapi_canon/                  Library and public facades
   error/                       Error values, catalog and HTTP/OpenAPI adapters
   integrations/                SSE, WebSockets, WebRTC and telemetry
+    database/                  Optional SQLAlchemy ownership and Alembic runner
   codegen/                     Shared SDK planning and generation
   checks/                      Static error-contract analysis
 tests/
@@ -39,6 +40,14 @@ and composition owns routing, Dishka and lifecycle integration. Each transport
 has its own role and must not import sibling transports or eagerly load optional
 engines. Generators may read protocol contracts. Repository scripts sit outside
 the runtime package and may orchestrate its supported integrations.
+
+Core `scopes.py` belongs to composition and owns HTTP function scopes plus
+independent `ServiceScope` factories. It has no SQLAlchemy or Alembic dependency.
+The optional database integration sits above composition: it contributes an
+ordinary Feature and its Dishka provider, and owns database-specific session and
+migration behavior. The CLI may consume this integration; core composition does
+not depend on it. Root database exports are lazy so core imports and command help
+remain available without database runtimes.
 
 `request_logging` belongs to composition. It wraps the lazily built middleware
 stack outside the server-error handler, so it can observe the actual 500 response

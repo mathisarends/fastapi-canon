@@ -16,10 +16,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         ("webrtc", "Export WebRTC contracts and generate browser clients"),
         ("check", "Check application contracts without importing application code"),
         ("generate", "Generate one domain SDK from configured application contracts"),
+        ("db", "Manage database revisions with Alembic"),
     ):
         commands.add_parser(name, help=description, add_help=False)
     args, remaining = parser.parse_known_args(argv)
-    if args.command == "generate":
+    if args.command == "db":
+        from fastapi_canon.integrations.database.cli import main as database_main
+
+        return database_main(remaining)
+    elif args.command == "generate":
         from fastapi_canon.codegen.cli import main as generate_main
 
         return generate_main(remaining)

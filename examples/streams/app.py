@@ -3,12 +3,19 @@
 from collections.abc import AsyncIterator
 from typing import Annotated, Literal
 
-from dishka import FromDishka, Provider, Scope, provide
+from dishka import AsyncContainer, FromDishka, Provider, Scope, provide
 from dishka.integrations.fastapi import inject
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from fastapi_canon import Composition, Error, ErrorRegistry, Feature, HTTPMethod
+from fastapi_canon import (
+    Composition,
+    Error,
+    ErrorRegistry,
+    Feature,
+    HTTPMethod,
+    ServiceScope,
+)
 from fastapi_canon.integrations.sse import CanonStreamRouter
 
 
@@ -52,6 +59,10 @@ class RunProvider(Provider):
     @provide(scope=Scope.REQUEST)
     def run_service(self) -> RunService:
         return RunService()
+
+    @provide(scope=Scope.APP)
+    def run_scope(self, container: AsyncContainer) -> ServiceScope[RunService]:
+        return ServiceScope(container, RunService)
 
 
 authentication_required = Error(
@@ -104,8 +115,12 @@ router = CanonStreamRouter(
     dependencies=[Depends(require_existing_run)],
 )
 @inject
-async def events(run_id: int, runs: FromDishka[RunService]) -> AsyncIterator[RunEvent]:
-    async for event in runs.events(run_id):
+async def events(
+    run_id: int, runs: FromDishka[ServiceScope[RunService]]
+) -> AsyncIterator[RunEvent]:
+    async with runs() as service:
+        snapshot = [event async for event in service.events(run_id)]
+    for event in snapshot:
         yield event
 
 
@@ -118,9 +133,11 @@ async def events(run_id: int, runs: FromDishka[RunService]) -> AsyncIterator[Run
 )
 @inject
 async def create_events(
-    run_id: int, body: RunRequest, runs: FromDishka[RunService]
+    run_id: int, body: RunRequest, runs: FromDishka[ServiceScope[RunService]]
 ) -> AsyncIterator[RunEvent]:
-    async for event in runs.events(run_id, steps=body.steps):
+    async with runs() as service:
+        snapshot = [event async for event in service.events(run_id, steps=body.steps)]
+    for event in snapshot:
         yield event
 
 

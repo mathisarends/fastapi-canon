@@ -19,6 +19,13 @@ All notable changes to `fastapi-canon` are documented in this file.
   it through one application log handler. Use `Telemetry(logs=False)` when that
   server diagnostic should be the only exception log. Internally consumed
   response-validation and rendering failures still retain their Canon diagnostic.
+- Composition-owned HTTP dependency scopes now end after response validation and
+  before the response is sent. Remove application dependencies that duplicate
+  this scope management. Streams and background tasks must open their own short
+  `ServiceScope` instead of retaining request-owned resources. The minimum
+  FastAPI version is now 0.121 for function-scoped dependency cleanup. WebSocket
+  session/request scope behavior is unchanged.
+
 
 ### Added
 
@@ -29,6 +36,20 @@ All notable changes to `fastapi-canon` are documented in this file.
 - The reference telemetry demo exports ordinary Python service logs and request
   records through one OTLP path to Loki, with provisioned Loki/Tempo links in both
   directions for the distributed tasks-to-notifier request.
+
+- Optional `Database` integration with SQLite/aiosqlite and PostgreSQL/asyncpg,
+  app-owned engines, request-owned sessions, commit on successful scope exit,
+  rollback on exceptions/cancellation, and SQLModel session support. SQLite
+  connections enforce foreign keys and explicit transaction control.
+- `ServiceScope[Service]` for workers and long-lived operations that need a
+  fresh, short dependency scope using the same application providers.
+- Application-owned Alembic revisions through `AlembicMigrations` and
+  `fastapi-canon db init|revision|upgrade|check`. The application checks revision
+  heads at startup; applying migrations remains an explicit deployment step.
+- Typed custom-session factory aliases and injectable PostgreSQL transaction
+  advisory locks. SQLite rejects unsupported advisory locking unless omission is
+  explicitly configured. Owned table/column presence is checked even behind a
+  current revision; existing schemas are repaired with forward migrations.
 
 ## 0.12.0 - 2026-11-02
 

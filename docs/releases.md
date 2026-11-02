@@ -13,11 +13,11 @@ historical runs, tags and assets linked below remain in their original repositor
 ## Current versions
 
 Source **0.13.0 is prepared and unreleased**. It makes `Composition.features`
-keyword-only and adds opt-in request logging. Migrate positional features to
-`Composition(features=(first, second))` or `Composition(features=features)`;
-see the [0.13.0 breaking changes](../CHANGELOG.md#0130---unreleased).
-The published release remains 0.12.0 until the release workflow is authorized
-and verified.
+keyword-only and adds opt-in request logging, SQLite/PostgreSQL integration
+and Alembic migrations. HTTP dependency scopes close before responses are sent.
+Migrate positional features to `Composition(features=[first, second])`; see
+the [0.13.0 breaking changes](../CHANGELOG.md#0130---unreleased).
+The published release remains 0.12.0 until publication is authorized and verified.
 
 Canon **0.12.0** was published on 2026-11-02 from
 [verified source `703fce8`](https://github.com/mathisarends/fastapi_canon/commit/703fce8a769253c604b0e4f1901e69f43aac42b9),

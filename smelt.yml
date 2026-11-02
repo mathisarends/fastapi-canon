@@ -46,6 +46,9 @@ architecture:
     fastapi_canon.openapi: adapters
     fastapi_canon.router: routing
     fastapi_canon.feature: composition
+    fastapi_canon.scopes: composition
+    fastapi_canon.integrations.database: persistence
+
     fastapi_canon.request_logging: composition
     fastapi_canon._version: values
     fastapi_canon.policy: routing
@@ -68,17 +71,17 @@ architecture:
   layers:
     tooling:
       path: scripts
-      may_depend_on: [values, responses, adapters, routing, composition, transport, sse, rpc, rtc, telemetry, generation, analysis]
+      may_depend_on: [values, responses, adapters, routing, composition, transport, sse, rpc, rtc, telemetry, generation, analysis, persistence]
       third_party:
         default: deny
         # Installed-wheel resource smoke checks also exercise SQLAlchemy.
-        allow: [packaging, fastapi, pydantic, pydantic_core, typing_extensions, starlette, dishka, httpx, httpx2, jsonschema, jinja2, pytest, uvicorn, anyio, aiortc, av, opentelemetry, sqlalchemy]
+        allow: [packaging, fastapi, pydantic, pydantic_core, typing_extensions, starlette, dishka, httpx, httpx2, jsonschema, jinja2, pytest, uvicorn, anyio, aiortc, av, opentelemetry, sqlalchemy, sqlmodel, alembic]
     showcase:
       path: examples
-      may_depend_on: [values, responses, adapters, routing, composition, transport, sse, rpc, rtc, telemetry, generation, analysis, application]
+      may_depend_on: [values, responses, adapters, routing, composition, transport, sse, rpc, rtc, telemetry, generation, analysis, application, persistence]
       third_party:
         default: deny
-        allow: [fastapi, pydantic, pydantic_core, typing_extensions, starlette, dishka, opentelemetry, httpx, httpx2, sqlmodel, sqlalchemy, pydantic_settings, uvicorn]
+        allow: [fastapi, pydantic, pydantic_core, typing_extensions, starlette, dishka, opentelemetry, httpx, httpx2, sqlmodel, sqlalchemy, pydantic_settings, uvicorn, anyio, alembic]
     values:
       path: values
       third_party:
@@ -114,6 +117,12 @@ architecture:
       third_party:
         default: deny
         allow: []
+    persistence:
+      path: database
+      may_depend_on: [values, responses, adapters, routing, composition, telemetry, rpc]
+      third_party:
+        default: deny
+        allow: [sqlalchemy, alembic, anyio, dishka, fastapi, starlette, pydantic, typing_extensions, pydantic_core, opentelemetry]
     transport:
       path: integrations
       may_depend_on: [values, responses, adapters, routing]
@@ -170,6 +179,7 @@ architecture:
       - composition
       - telemetry
       - analysis
+      - persistence
       third_party:
         default: deny
         allow:
@@ -185,9 +195,11 @@ architecture:
         - aiortc
         - av
         - opentelemetry
+        - sqlalchemy
+        - alembic
     application:
       path: application
-      may_depend_on: [values, responses, adapters, routing, composition, telemetry, rpc]
+      may_depend_on: [values, responses, adapters, routing, composition, telemetry, rpc, persistence]
       third_party:
         default: deny
         allow:
@@ -203,6 +215,10 @@ architecture:
         - sqlmodel
         - sqlalchemy
         - pydantic_settings
+        # Applications may consume the optional Database root exports; their
+        # transitive implementation owns Alembic and shielded async cleanup.
+        - alembic
+        - anyio
   imports:
     transitive: true
     type_checking: include
