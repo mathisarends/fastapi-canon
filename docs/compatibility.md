@@ -2,7 +2,7 @@
 
 ## Native telemetry bridge
 
-The unreleased 0.12.0 bridge is exercised from built wheels on Python 3.12 against
+The 0.12.0 bridge is exercised from built wheels on Python 3.12 against
 FastAPI 0.143.0 and the locked 0.143.3 version, with actual SDK span exporters and
 metric readers. The check covers the shared private configuration dictionary,
 disabled auto-configuration, provider identity, repeated composition, exclusion,
@@ -123,6 +123,8 @@ The installed-wheel matrix covers:
 | Combination | What it establishes |
 | --- | --- |
 | `[otel]` | Native telemetry and observed ports with the API alone, without an SDK |
+| `[otel-httpx]` | Explicit per-client HTTPX instrumentation and cleanup |
+| `[otel-sqlalchemy]` | Engine-local sync/async SQLAlchemy instrumentation and pool observations |
 | Canon base | Composition with optional tools and engines absent |
 | `[sse]` | SSE runtime with the required FastAPI/Pydantic bounds |
 | `[websockets]` | RPC and typed/raw/binary sockets |

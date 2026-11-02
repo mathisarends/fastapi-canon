@@ -6,8 +6,8 @@ See the [public API](../../canon.md#public-namespaces) and
 [package migration guide](../../package-migration.md).
 
 [![CI](https://github.com/mathisarends/fastapi_canon/actions/workflows/ci.yml/badge.svg)](https://github.com/mathisarends/fastapi_canon/actions/workflows/ci.yml)
-[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](pyproject.toml)
-[![MIT License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](../../../pyproject.toml)
+[![MIT License](https://img.shields.io/badge/license-MIT-green)](../../../LICENSE)
 
 **Decorate a FastAPI endpoint. Get typed streaming clients in TypeScript and Python.**
 
