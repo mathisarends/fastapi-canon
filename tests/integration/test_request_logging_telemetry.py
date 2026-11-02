@@ -33,10 +33,12 @@ async def test_overlapping_requests_correlate_with_exported_server_spans(
 
     with SpanCapture() as capture:
         Composition(
-            Feature(
-                name="tasks",
-                errors=ErrorRegistry(
-                    errors=[], type_base="https://example.test/problems"
+            features=(
+                Feature(
+                    name="tasks",
+                    errors=ErrorRegistry(
+                        errors=[], type_base="https://example.test/problems"
+                    ),
                 ),
             ),
             request_logging=True,

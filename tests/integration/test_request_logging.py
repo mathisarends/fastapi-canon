@@ -97,7 +97,7 @@ def test_included_router_logs_complete_template_without_telemetry(
         return task_id
 
     app = Composition(
-        Feature(name="tasks", routers=[router]),
+        features=(Feature(name="tasks", routers=[router]),),
         router_factory=lambda: CanonRouter(prefix="/api/v1"),
         request_logging=True,
     ).apply(FastAPI())

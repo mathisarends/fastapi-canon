@@ -79,9 +79,9 @@ async def chat(
     return Session(on_message={CHAT: on_message})
 
 
-app = Composition(Feature(name="chat", routers=[rtc], providers=[Services])).apply(
-    FastAPI()
-)
+app = Composition(
+    features=(Feature(name="chat", routers=[rtc], providers=[Services]),)
+).apply(FastAPI())
 ```
 
 Callbacks are called directly with the documented `Peer`, message, track or

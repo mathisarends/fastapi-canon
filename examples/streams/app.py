@@ -125,7 +125,7 @@ async def create_events(
 
 
 feature = Feature(name="runs", routers=[router], providers=[RunProvider])
-composition = Composition(feature)
+composition = Composition(features=(feature,))
 
 
 def create_app() -> FastAPI:

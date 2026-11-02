@@ -71,10 +71,19 @@ async def list_projects() -> list[str]:
 
 project_feature = Feature(name="projects", routers=[projects])
 
-app = Composition(project_feature).apply(FastAPI())
+app = Composition(features=(project_feature,)).apply(FastAPI())
 ```
 
 ## Feature composition
+
+Pass an ordered list or tuple with `Composition(features=...)`. Canon copies the
+sequence into an immutable tuple, preserving declaration order and validating
+duplicate instances and names. The default `features=()` creates an empty
+composition. All constructor options are keyword-only.
+
+From 0.13.0, migrate `Composition(first, second)` to
+`Composition(features=(first, second))`, and `Composition(*features)` to
+`Composition(features=features)`.
 
 Every contribution is optional:
 
@@ -125,7 +134,7 @@ async def require_request_id() -> None: ...
 
 
 composition = Composition(
-    project_feature,
+    features=(project_feature,),
     router_factory=lambda: CanonRouter(
         prefix="/api/v1",
         tags=["api"],
@@ -182,8 +191,10 @@ routers, pass it at the composition boundary instead:
 
 ```python
 composition = Composition(
-    projects_feature,
-    users_feature,
+    features=(
+        projects_feature,
+        users_feature,
+    ),
     router_policy=protected,
     router_factory=lambda: CanonRouter(prefix="/api/v1"),
 )
@@ -295,7 +306,7 @@ project_feature = Feature(
 )
 
 app = Composition(
-    project_feature,
+    features=(project_feature,),
     errors=ErrorOptions(
         type_base="https://api.example.com/problems",
     ),

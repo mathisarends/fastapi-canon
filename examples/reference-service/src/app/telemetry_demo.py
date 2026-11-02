@@ -121,9 +121,11 @@ def create_tasks_app() -> FastAPI:  # smelt: ignore[SMT429] -- external API
     app = FastAPI(title="Canon telemetry: tasks", lifespan=lifecycle)
     app.include_router(health_router)
     Composition(
-        Feature(name="database", providers=(TracedDatabaseProvider,)),
-        *FEATURES[1:],
-        _notification_feature(),
+        features=(
+            Feature(name="database", providers=(TracedDatabaseProvider,)),
+            *FEATURES[1:],
+            _notification_feature(),
+        ),
         telemetry=options,
         request_logging=True,
         errors=ErrorOptions(type_base="https://api.example.test/problems"),
@@ -143,7 +145,7 @@ def create_notifier_app() -> FastAPI:  # smelt: ignore[SMT429] -- external API
         return {"status": "received"}
 
     return Composition(
-        Feature(name="notifications", routers=(router,)),
+        features=(Feature(name="notifications", routers=(router,)),),
         telemetry=options,
         request_logging=True,
     ).apply(FastAPI(title="Canon telemetry: notifier", lifespan=lifecycle))

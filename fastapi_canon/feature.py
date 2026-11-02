@@ -176,7 +176,8 @@ class Composition:
 
     def __init__(
         self,
-        *features: Feature,
+        *,
+        features: Sequence[Feature] = (),
         errors: ErrorOptions | None = None,
         router_factory: RouterFactory | None = None,
         router_policy: RouterPolicy | None = None,

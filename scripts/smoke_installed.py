@@ -135,7 +135,7 @@ def _main() -> None:
         from fastapi_canon import Composition, ErrorOptions, Feature
 
         app = Composition(
-            Feature(name="installed", routers=routers),
+            features=(Feature(name="installed", routers=routers),),
             errors=ErrorOptions(type_base="https://example.test/problems"),
         ).apply(app)
     else:
@@ -290,11 +290,13 @@ def _observation_check(*, enabled: bool) -> None:
         return await port.ping()
 
     app = Composition(
-        Feature(
-            name="observed",
-            providers=[Dependencies],
-            routers=[router],
-            instrumentation=instrument(Port),
+        features=(
+            Feature(
+                name="observed",
+                providers=[Dependencies],
+                routers=[router],
+                instrumentation=instrument(Port),
+            ),
         ),
         telemetry=Telemetry() if enabled else None,
     ).apply(FastAPI())
@@ -711,7 +713,9 @@ def _router_policies() -> None:
         )
         router.get("/policy", raises=[item_denied])(lambda: "ok")
         feature = Feature(name="policy", routers=[router])
-        composition = Composition(feature, router_policy=None if direct else policy)
+        composition = Composition(
+            features=(feature,), router_policy=None if direct else policy
+        )
         app = composition.apply(FastAPI())
         composition.validate(app)
         with TestClient(app) as client:
@@ -725,7 +729,7 @@ def _router_policies() -> None:
             len(response["content"]["application/problem+json"]["schema"]["oneOf"]) == 2
         )
         if not direct:
-            public = Composition(feature).apply(FastAPI())
+            public = Composition(features=(feature,)).apply(FastAPI())
             assert TestClient(public).get("/policy").status_code == 200
 
 
@@ -749,7 +753,9 @@ def _shared_problem_check() -> None:
     async def fail() -> None:
         raise Missing("private")
 
-    app = Composition(Feature(name="missing", routers=[router])).apply(FastAPI())
+    app = Composition(features=(Feature(name="missing", routers=[router]),)).apply(
+        FastAPI()
+    )
     with TestClient(app) as client:
         response = client.get("/missing")
     payload = response.json()

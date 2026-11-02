@@ -90,7 +90,7 @@ Applications use feature slices and inward dependencies. Domain code is framewor
 Feature routers contribute routes and declarations; dependencies own
 authentication, authorization and application resources.
 
-`Composition(..., request_logging=True)` enables structured HTTP completion and
+`Composition(features=features, request_logging=True)` enables structured HTTP completion and
 abort records independently of telemetry. It defaults to disabled and requires
 no extra package. See [request logging](request-logging.md) for the record fields,
 trace correlation and application-owned logging setup.

@@ -106,7 +106,7 @@ async def get_project(project_id: int) -> dict[str, int]:
 
 
 feature = Feature(name="projects", routers=[http])
-composition = Composition(feature)
+composition = Composition(features=(feature,))
 app = composition.apply(FastAPI())
 composition.validate(app)
 ```
@@ -203,7 +203,7 @@ one to install all three routers and expose the OpenRPC source for generation:
 
 ```python
 feature = Feature(name="projects", routers=[http, streams, websockets])
-composition = Composition(feature)
+composition = Composition(features=(feature,))
 app = composition.apply(FastAPI())
 composition.validate(app)
 contract = service.contract(title="Projects", base_url="ws://localhost:8000", app=app)

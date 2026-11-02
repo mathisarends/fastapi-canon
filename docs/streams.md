@@ -113,7 +113,7 @@ async def events(run_id: str, runs: FromDishka[RunService]) -> AsyncIterator[Run
 
 
 feature = Feature(name="runs", routers=[router], providers=[RunProvider])
-composition = Composition(feature)
+composition = Composition(features=(feature,))
 app = composition.apply(FastAPI())
 composition.validate(app)
 ```

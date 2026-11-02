@@ -144,7 +144,7 @@ async def test_http_exclusion_suppresses_use_case_ports_and_httpx(
         return str(scope["path"]).startswith("/excluded")
 
     app = Composition(
-        scenario.feature,
+        features=(scenario.feature,),
         telemetry=Telemetry(
             tracer_provider=capture.provider,
             meter_provider=meter,
@@ -303,7 +303,7 @@ async def test_parallel_applications_reuse_features_without_exclusion_leaks(
 ) -> None:
     capture, meter, reader = telemetry
     excluded = Composition(
-        scenario.feature,
+        features=(scenario.feature,),
         telemetry=Telemetry(
             tracer_provider=capture.provider,
             meter_provider=meter,
@@ -374,7 +374,7 @@ def _application(
     feature: Feature, capture: SpanCapture, meter: MeterProvider
 ) -> FastAPI:
     return Composition(
-        feature,
+        features=(feature,),
         telemetry=Telemetry(
             tracer_provider=capture.provider,
             meter_provider=meter,

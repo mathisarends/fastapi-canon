@@ -2,10 +2,17 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
-## Unreleased
+## 0.13.0 - Unreleased
 
 ### Breaking changes
 
+- `Composition` now accepts features only through the keyword-only
+  `features: Sequence[Feature] = ()` option. Replace `Composition(tasks, notifier)`
+  with `Composition(features=(tasks, notifier))`, or pass a list with
+  `Composition(features=[tasks, notifier])`. Replace `Composition(*features, ...)`
+  with `Composition(features=features, ...)`. Omission still means no features;
+  declaration order, duplicate checks and the immutable tuple snapshot are
+  preserved. Positional feature arguments now raise `TypeError`.
 - Unhandled HTTP exceptions are diagnosed by the ASGI server after Starlette
   sends Canon's safe 500 response. Applications relying on the additional
   `fastapi_canon.error.handlers` traceback should retain `uvicorn.error` and route
@@ -15,7 +22,7 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Added
 
-- `Composition(..., request_logging=True)` emits structured completion/abort
+- `Composition(features=features, request_logging=True)` emits structured completion/abort
   records on `fastapi_canon.access`, including route templates, sent status,
   streaming response duration, Canon problem codes and available server-span IDs.
   It defaults to disabled and works without the Canon OTel extra.

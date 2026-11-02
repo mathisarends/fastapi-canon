@@ -1,7 +1,8 @@
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import FrozenInstanceError
+from typing import cast
 
 import pytest
 from dishka import FromDishka, Provider, Scope, provide
@@ -43,7 +44,40 @@ def test_feature_requires_a_diagnostic_name(name: str) -> None:
 
 def test_composition_rejects_duplicate_feature_names() -> None:
     with pytest.raises(FeatureConfigurationError, match=r"catalog.*duplicated"):
-        Composition(Feature(name="catalog"), Feature(name="catalog"))
+        Composition(
+            features=(
+                Feature(name="catalog"),
+                Feature(name="catalog"),
+            )
+        )
+
+
+@pytest.mark.parametrize("as_tuple", [False, True])
+def test_composition_accepts_feature_sequences(as_tuple: bool) -> None:
+    first = Feature(name="first")
+    second = Feature(name="second")
+    features: Sequence[Feature] = (first, second) if as_tuple else [first, second]
+
+    composition = Composition(features=features)
+
+    assert composition.features == (first, second)
+    assert isinstance(composition.features, tuple)
+
+
+def test_composition_copies_feature_list() -> None:
+    first = Feature(name="first")
+    features = [first]
+    composition = Composition(features=features)
+
+    features.append(Feature(name="later"))
+
+    assert composition.features == (first,)
+
+
+def test_composition_rejects_positional_features() -> None:
+    constructor = cast(Callable[..., Composition], Composition)
+    with pytest.raises(TypeError, match="positional"):
+        constructor(Feature(name="catalog"))
 
 
 def test_composition_includes_routers_in_declaration_order() -> None:
@@ -59,8 +93,10 @@ def test_composition_includes_routers_in_declaration_order() -> None:
         return {"feature": "second"}
 
     app = Composition(
-        Feature(name="first", routers=[first]),
-        Feature(name="second", routers=[second]),
+        features=(
+            Feature(name="first", routers=[first]),
+            Feature(name="second", routers=[second]),
+        ),
     ).apply(FastAPI())
 
     with TestClient(app) as client:
@@ -93,7 +129,7 @@ def test_composition_router_factory_applies_shared_router_configuration() -> Non
         return []
 
     app = Composition(
-        Feature(name="catalog", routers=[catalog]),
+        features=(Feature(name="catalog", routers=[catalog]),),
         router_factory=router_factory,
     ).apply(FastAPI())
 
@@ -117,7 +153,7 @@ def test_router_factory_must_return_a_fresh_router() -> None:
 
     with pytest.raises(FeatureConfigurationError, match="fresh APIRouter"):
         Composition(
-            Feature(name="catalog"),
+            features=(Feature(name="catalog"),),
             router_factory=lambda: router,
         ).apply(app)
 
@@ -127,7 +163,7 @@ def test_router_factory_must_return_a_fresh_router() -> None:
 def test_composition_is_idempotent_for_same_declarations() -> None:
     router = APIRouter()
     feature = Feature(name="catalog", routers=[router])
-    composition = Composition(feature)
+    composition = Composition(features=(feature,))
     app = FastAPI()
 
     first = composition.apply(app)
@@ -141,16 +177,16 @@ def test_composition_is_idempotent_for_same_declarations() -> None:
 
 def test_composition_rejects_a_different_second_composition() -> None:
     app = FastAPI()
-    Composition(Feature(name="first")).apply(app)
+    Composition(features=(Feature(name="first"),)).apply(app)
 
     with pytest.raises(FeatureConfigurationError, match="different composition"):
-        Composition(Feature(name="second")).apply(app)
+        Composition(features=(Feature(name="second"),)).apply(app)
 
 
 def test_composition_and_error_options_are_immutable() -> None:
     feature = Feature(name="catalog")
     options = ErrorOptions(type_base="https://example.test/problems")
-    composition = Composition(feature, errors=options)
+    composition = Composition(features=(feature,), errors=options)
 
     assert composition.features == (feature,)
     assert composition.errors is options
@@ -175,8 +211,10 @@ def test_composition_rejects_shared_router_without_partial_application() -> None
 
     with pytest.raises(FeatureConfigurationError, match="same router"):
         Composition(
-            Feature(name="catalog", routers=[router]),
-            Feature(name="orders", routers=[router]),
+            features=(
+                Feature(name="catalog", routers=[router]),
+                Feature(name="orders", routers=[router]),
+            ),
         ).apply(app)
 
     assert tuple(app.routes) == original_routes
@@ -199,7 +237,11 @@ def test_composition_validates_dishka_graph_without_partial_application() -> Non
 
     with pytest.raises(FeatureConfigurationError, match="invalid Dishka provider"):
         Composition(
-            Feature(name="catalog", routers=[router], providers=[InvalidProvider()]),
+            features=(
+                Feature(
+                    name="catalog", routers=[router], providers=[InvalidProvider()]
+                ),
+            ),
         ).apply(app)
 
     assert tuple(app.routes) == original_routes
@@ -236,7 +278,7 @@ def test_provider_class_and_factory_are_materialized_during_apply() -> None:
 
     assert created == []
 
-    Composition(feature).apply(FastAPI())
+    Composition(features=(feature,)).apply(FastAPI())
 
     assert created == ["class", "factory"]
 
@@ -247,7 +289,7 @@ def test_invalid_provider_factory_result_names_its_feature() -> None:
 
     with pytest.raises(FeatureConfigurationError, match=r"feature 'catalog'.*str"):
         Composition(
-            Feature(name="catalog", providers=[invalid_factory]),
+            features=(Feature(name="catalog", providers=[invalid_factory]),),
         ).apply(FastAPI())
 
 
@@ -261,10 +303,12 @@ def test_composition_builds_and_closes_shared_container() -> None:
         return {"value": value}
 
     app = Composition(
-        Feature(
-            name="resources",
-            routers=[router],
-            providers=[ResourceProvider(events)],
+        features=(
+            Feature(
+                name="resources",
+                routers=[router],
+                providers=[ResourceProvider(events)],
+            ),
         ),
     ).apply(FastAPI())
 
@@ -298,8 +342,10 @@ def test_lifespans_start_in_order_and_stop_in_reverse_order() -> None:
 
     app = FastAPI(lifespan=app_lifespan)
     Composition(
-        Feature(name="first", lifespan=lifespan("first")),
-        Feature(name="second", lifespan=lifespan("second")),
+        features=(
+            Feature(name="first", lifespan=lifespan("first")),
+            Feature(name="second", lifespan=lifespan("second")),
+        ),
     ).apply(app)
 
     with TestClient(app):
@@ -346,11 +392,13 @@ def test_router_lifespans_run_inside_feature_and_dependency_lifetimes() -> None:
             events.append("resource-close")
 
     app = Composition(
-        Feature(
-            name="rtc",
-            routers=[APIRouter(lifespan=router_lifespan)],
-            providers=[Resources],
-            lifespan=feature_lifespan,
+        features=(
+            Feature(
+                name="rtc",
+                routers=[APIRouter(lifespan=router_lifespan)],
+                providers=[Resources],
+                lifespan=feature_lifespan,
+            ),
         )
     ).apply(FastAPI(lifespan=app_lifespan))
     with TestClient(app):
@@ -385,7 +433,7 @@ def test_router_event_handlers_run_once(app_lifespan: bool) -> None:
         on_shutdown=[lambda: events.append("shutdown")],
     )
     app = Composition(
-        Feature(name="legacy", routers=[router], providers=[Resources])
+        features=(Feature(name="legacy", routers=[router], providers=[Resources]),)
     ).apply(FastAPI(lifespan=lifespan) if app_lifespan else FastAPI())
     with TestClient(app):
         pass
@@ -413,8 +461,10 @@ def test_lifespan_cleans_up_when_later_startup_fails() -> None:
     app = FastAPI()
     app.state.fail_startup = True
     Composition(
-        Feature(name="started", lifespan=started),
-        Feature(name="failing", lifespan=failing),
+        features=(
+            Feature(name="started", lifespan=started),
+            Feature(name="failing", lifespan=failing),
+        ),
     ).apply(app)
 
     async def startup() -> None:
@@ -447,7 +497,7 @@ def test_error_registries_are_merged_for_runtime_and_openapi() -> None:
         raise NotFoundError
 
     app = Composition(
-        Feature(name="items", routers=[router], errors=errors),
+        features=(Feature(name="items", routers=[router], errors=errors),),
         errors=ErrorOptions(type_base="https://example.test/problems"),
     ).apply(FastAPI())
 
@@ -479,7 +529,7 @@ def test_feature_collects_error_registry_from_canon_router() -> None:
 
     feature = Feature(name="items", routers=[router])
     app = Composition(
-        feature,
+        features=(feature,),
         errors=ErrorOptions(type_base="https://example.test/problems"),
     ).apply(FastAPI())
 
@@ -504,8 +554,10 @@ def test_shared_router_registry_is_contributed_only_once() -> None:
     second.get("/second", raises=[error])(lambda: None)
 
     app = Composition(
-        Feature(name="first", routers=[first]),
-        Feature(name="second", routers=[second]),
+        features=(
+            Feature(name="first", routers=[first]),
+            Feature(name="second", routers=[second]),
+        ),
         errors=ErrorOptions(type_base="https://example.test/problems"),
     ).apply(FastAPI())
 
@@ -520,7 +572,9 @@ def test_composition_installs_success_openapi_without_an_error_registry() -> Non
         status_code=307,
         responses=CanonResponse.empty(status=307).responses(),
     )(lambda: None)
-    app = Composition(Feature(name="health", routers=[router])).apply(FastAPI())
+    app = Composition(features=(Feature(name="health", routers=[router]),)).apply(
+        FastAPI()
+    )
 
     schema = app.openapi()
 
@@ -552,14 +606,16 @@ def test_error_collision_does_not_install_routers() -> None:
 
     with pytest.raises(FeatureConfigurationError, match="conflicting code"):
         Composition(
-            Feature(
-                name="first",
-                routers=[router],
-                errors=ErrorRegistry(name="first", errors=[first]),
-            ),
-            Feature(
-                name="second",
-                errors=ErrorRegistry(name="second", errors=[second]),
+            features=(
+                Feature(
+                    name="first",
+                    routers=[router],
+                    errors=ErrorRegistry(name="first", errors=[first]),
+                ),
+                Feature(
+                    name="second",
+                    errors=ErrorRegistry(name="second", errors=[second]),
+                ),
             ),
             errors=ErrorOptions(type_base="https://example.test/problems"),
         ).apply(app)
@@ -582,10 +638,12 @@ def test_feature_exception_handler_is_installed() -> None:
         raise TeapotError
 
     app = Composition(
-        Feature(
-            name="teapot",
-            routers=[router],
-            exception_handlers=[ExceptionHandlerSpec(TeapotError, handler)],
+        features=(
+            Feature(
+                name="teapot",
+                routers=[router],
+                exception_handlers=[ExceptionHandlerSpec(TeapotError, handler)],
+            ),
         ),
     ).apply(FastAPI())
 

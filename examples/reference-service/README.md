@@ -66,7 +66,7 @@ This returns `{"status":"sent"}` and produces a trace containing both HTTP serve
 spans, a NotificationGateway port span and an outgoing HTTPX2 span. During that
 request, `tasks` writes `Sending notification` and `notifier` writes
 `Notification received` using ordinary `logging.getLogger(__name__).info(...)`.
-Both applications enable `Composition(..., request_logging=True)`, adding
+Both applications enable `Composition(features=features, request_logging=True)`, adding
 `http.request.completed` records with structured request fields and server-span
 IDs. `--no-access-log` disables Uvicorn's additional access lines.
 
