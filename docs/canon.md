@@ -1,7 +1,6 @@
 # Canon package and public API
 
-The [canonicalization record](../CANONICALIZATION_DECISIONS.md) distinguishes the
-agreed target design from implemented capabilities. Canon includes
+Canon includes
 [shared problem contracts](problems.md).
 RPC problem envelopes, terminal SSE control events, and the combined client
 facade are included in this source.
@@ -22,7 +21,7 @@ history and records the publisher cutover. Repository names do not change the
 
 `fastapi-canon` is the only active library distribution. Its wheel contains
 composition, HTTP contracts, SSE, WebSockets, WebRTC, telemetry declarations,
-testing helpers and the existing generators. They share one Canon version.
+and the existing generators. They share one Canon version.
 
 Python extras select third-party dependencies, not source modules or additional
 Canon distributions. The base depends on FastAPI, Pydantic and Dishka. Importing
@@ -38,7 +37,7 @@ dependencies, telemetry runtimes or media engines.
 | `otel` | Native FastAPI telemetry, observed Dishka ports and WebSocket middleware |
 | `codegen` | Template, schema-validation and model dependencies for generators |
 
-The root `pyproject.toml` builds `fastapi_canon/` directly. Tests, examples, guides
+The root `pyproject.toml` builds `fastapi_canon/` directly. Tests, examples, documentation
 and development tooling are organized by purpose, without retained package
 projects. See [repository architecture](architecture.md) for the folder map.
 The release configuration selects only the root Canon library.
@@ -63,7 +62,6 @@ represent another PyPI distribution.
 | WebSocket RPC, messages and binary streams | `fastapi_canon.integrations.websockets.RpcChannel`, `RpcService`, `RpcRoutes`, `RpcSocket` | [WebSockets](integrations/websockets/index.md) |
 | WebRTC with Canon admission errors | `fastapi_canon.integrations.webrtc.CanonWebRtcRouter`, `Session` | [WebRTC admission](webrtc.md) |
 | Telemetry declarations | `fastapi_canon.integrations.opentelemetry.Telemetry`, `instrument` | [Telemetry](telemetry.md) |
-| Isolated trace assertions | `fastapi_canon.testing.telemetry.SpanCapture` | [Telemetry testing](telemetry.md) |
 
 Typical application imports are explicit:
 
@@ -87,8 +85,7 @@ message an RPC method. Protocol-specific methods and lifecycles stay explicit.
 
 ## Composition and runtime ownership
 
-Applications use feature slices and inward dependencies as described in
-[architecture](../guides/architecture.md). Domain code is framework-free.
+Applications use feature slices and inward dependencies. Domain code is framework-free.
 `Composition` installs features and owns the application Dishka container.
 Feature routers contribute routes and declarations; dependencies own
 authentication, authorization and application resources.

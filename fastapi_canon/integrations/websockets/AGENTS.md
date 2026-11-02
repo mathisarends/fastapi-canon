@@ -52,4 +52,4 @@ Install pre-commit only from the repository root.
 - Generated code must pass `ruff check` and `ruff format` in the consuming repository.
   Change generated clients through generators/templates, then check for drift.
 - Tests live in `tests/unit/integrations/websockets/` and use qualified imports.
-- Canon owns package metadata; `tooling/websockets.ruff.toml` retains its focused lint settings.
+- Canon owns package metadata; `fastapi_canon/integrations/websockets/.ruff.toml` retains its focused lint settings.

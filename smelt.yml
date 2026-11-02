@@ -55,7 +55,6 @@ architecture:
     fastapi_canon.integrations.websockets: rpc
     fastapi_canon.integrations.webrtc: rtc
     fastapi_canon.integrations.opentelemetry: telemetry
-    fastapi_canon.testing: testing
     app: application
     fastapi_canon.checks: analysis
     fastapi_canon.check_error_contracts: analysis
@@ -68,13 +67,13 @@ architecture:
   layers:
     tooling:
       path: scripts
-      may_depend_on: [values, responses, adapters, routing, composition, transport, sse, rpc, rtc, telemetry, generation, analysis, testing]
+      may_depend_on: [values, responses, adapters, routing, composition, transport, sse, rpc, rtc, telemetry, generation, analysis]
       third_party:
         default: deny
         allow: [packaging, fastapi, pydantic, pydantic_core, typing_extensions, starlette, dishka, httpx, httpx2, jsonschema, jinja2, pytest, uvicorn, anyio, aiortc, av, opentelemetry]
     showcase:
       path: examples
-      may_depend_on: [values, responses, adapters, routing, composition, transport, sse, rpc, rtc, telemetry, generation, analysis, testing, application]
+      may_depend_on: [values, responses, adapters, routing, composition, transport, sse, rpc, rtc, telemetry, generation, analysis, application]
       third_party:
         default: deny
         allow: [fastapi, pydantic, pydantic_core, typing_extensions, starlette, dishka, opentelemetry, httpx, httpx2, sqlmodel, sqlalchemy, pydantic_settings, uvicorn]
@@ -168,7 +167,6 @@ architecture:
       - composition
       - telemetry
       - analysis
-      - testing
       third_party:
         default: deny
         allow:
@@ -184,12 +182,6 @@ architecture:
         - aiortc
         - av
         - opentelemetry
-    testing:
-      path: testing
-      may_depend_on: [values, responses, adapters, routing, composition, telemetry, rpc]
-      third_party:
-        default: deny
-        allow: [dishka, fastapi, starlette, pydantic, typing_extensions, pydantic_core, opentelemetry]
     application:
       path: application
       may_depend_on: [values, responses, adapters, routing, composition, telemetry, rpc]
@@ -219,7 +211,7 @@ structure:
       match: fastapi_canon
       export_at: 3
       required: [error, feature, openapi, response, router]
-      public: [., error, integrations.**, testing.**, check_error_contracts]
+      public: [., error, integrations.**, check_error_contracts]
       imports:
         style: absolute
       private_modules: forbid
@@ -278,7 +270,7 @@ ignore:
 - rule: import-style
   paths: ['**/__init__.py']
   reason: Package facades deliberately use relative imports; ordinary Canon modules use absolute
-    imports (guides/imports-and-reexports.md).
+    imports.
 - rule: unknown-layer
   modules: [app.**]
   reason: The reference application uses its own feature topology, not the library layer directory
@@ -293,5 +285,4 @@ ignore:
 - rule: prefer-package-import
   paths: [examples/reference-service/src/app/features/tasks/infrastructure/repository.py]
   reason: Concrete repository implementations deliberately import their owned ABC from its
-    definition for nominal conformance and IDE navigation (guides/imports-and-reexports.md).
-    Omit this exception if that guide changes.
+    definition for nominal conformance and IDE navigation.

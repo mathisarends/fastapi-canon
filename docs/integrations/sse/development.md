@@ -32,7 +32,7 @@ example transport, with an 85% combined floor. Identical runtime copies in the
 fixtures are checked for drift rather than counted twice. TypeScript's generated
 example transport has floors of 95% lines, 90% branches and 90% functions.
 The root client gate enforces those TypeScript floors. Run pytest with `--cov`
-when checking the separate Python coverage configuration.
+when checking the Python coverage configuration in `pyproject.toml`.
 
 The schema matrix validates accepted/rejected payloads and runs strict TypeScript
 and Python type checks on newly generated packages, including both HTTP backends.

@@ -1,9 +1,7 @@
 # Working on fastapi-canon
 
 Read `smelt.yml` and `docs/architecture.md` before changing package boundaries or
-test structure. They describe this checkout's implemented library. The separate
-`CANONICALIZATION_DECISIONS.md` records broader design decisions; verify an API
-exists in this checkout before using it. Write repository Markdown in English.
+test structure. They describe this checkout's implemented library. Verify an API exists in this checkout before using it. Write repository Markdown in English.
 
 Use `README.md` for the library overview, `docs/canon.md` for public namespaces,
 `docs/contributing.md` for commands and `docs/compatibility.md` for tested scope.
@@ -28,9 +26,9 @@ Shared errors and common generation are documented in `docs/problems.md` and
 - Transport modules must not import each other or load optional engines eagerly.
   Use one Canon version. Add shared abstractions only for concrete reuse.
 - Consumer imports use `fastapi_canon`, `fastapi_canon.error` or the documented
-  integration/testing facades. Inside the library use absolute imports and the
+  integration facades. Inside the library use absolute imports and the
   existing facade when it does not reverse dependency direction. Package facades
-  retain their relative re-exports, following `guides/imports-and-reexports.md`.
+  retain their relative re-exports, using relative imports.
 - Use descriptive module names. Keep private helpers inside those modules, with
   public definitions before private implementation details. Preserve Python 3.12.
 - Tests mirror source under `tests/unit`, `tests/integration` and `tests/contract`.
@@ -44,10 +42,10 @@ Shared errors and common generation are documented in `docs/problems.md` and
   weaken rules, add broad exclusions or record a debt baseline to pass checks.
   Necessary inline exceptions need a concrete reason; unused suppressions fail.
 - Runnable demos live in `examples/`, transport guides in `docs/integrations/`,
-  development scripts in `scripts/` and scoped analyzer settings in `tooling/`.
+  development scripts in `scripts/` and scoped analyzer settings alongside the code they check.
   The reference service is an editable example dependency, not a release target.
-  Application code follows `guides/architecture.md`: feature slices, inward
-  dependencies, framework-free domain and Dishka for application dependencies.
+  Application code uses feature slices, inward dependencies, framework-free domain
+  and Dishka for application dependencies.
 
 ## Workflow and verification
 

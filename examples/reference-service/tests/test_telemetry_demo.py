@@ -7,10 +7,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from fastapi_canon.integrations.opentelemetry import Telemetry
-from fastapi_canon.testing.telemetry import SpanCapture
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel import SQLModel
 from starlette.types import Lifespan
+from telemetry import SpanCapture
 
 pytest.importorskip("opentelemetry.instrumentation.httpx")
 pytest.importorskip("opentelemetry.instrumentation.sqlalchemy")

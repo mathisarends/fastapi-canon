@@ -3,8 +3,7 @@
 `fastapi-canon generate` combines operations from OpenAPI, OpenRPC and WebRTC
 contracts in a common plan, model graph and error runtime.
 The generated public API follows domain names; protocol clients live under
-`internal/`. See the [decision record](../CANONICALIZATION_DECISIONS.md) and
-[server problem guide](problems.md).
+`internal/`. See the [server problem guide](problems.md).
 
 ## Contents
 

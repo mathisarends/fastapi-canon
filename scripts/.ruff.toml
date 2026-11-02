@@ -1,1 +1,5 @@
-extend = "../tooling/repository.ruff.toml"
+target-version = "py312"
+line-length = 88
+
+[lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
