@@ -6,8 +6,8 @@ from fastapi_canon.integrations.websockets import (
     RpcChannel,
     RpcLimits,
     RpcMiddleware,
-    RpcService,
 )
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.testing import InMemorySocketFactory
 
 
@@ -30,7 +30,7 @@ async def test_ping_bypasses_saturated_handlers_and_observation():
             entered.set()
             await release.wait()
 
-        service = RpcService(
+        service = RpcDefinition(
             limits=RpcLimits(max_concurrency=1, max_pending_requests=1),
             middleware=[Middleware()],
         )

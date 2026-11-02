@@ -42,228 +42,80 @@ oversized fragmented messages against the actual backend during deployment.
 
 ## FastAPI
 
-FastAPI support is included in the base distribution:
-
-```bash
-uv add fastapi-canon[websockets]
-```
-
-Mount every endpoint declared on a service:
+`RpcRouter` defines and mounts WebSocket endpoints. Include it directly in
+`Feature(routers=[rpc])` or `web.include_router(rpc)`.
 
 ```python
 from fastapi import FastAPI
+from fastapi_canon.integrations.websockets import RpcRouter
 
-from fastapi_canon.integrations.websockets import create_router
-
+rpc = RpcRouter("/rpc", channels=[channel])
 web = FastAPI()
-web.include_router(create_router(app))
+web.include_router(rpc)
+contract = rpc.contract(title="Control", base_url="wss://api.example.com", app=web)
 ```
 
-Common runtime options are configured once on the router:
+For several paths in one contract, construct the router without a path, then
+register each endpoint. Both methods add the FastAPI route immediately.
+Finish channel declarations before including the router or exporting its contract.
 
 ```python
-from fastapi import Depends
-
-
-web.include_router(
-    create_router(
-        app,
-        resolver=resolver,
-        context={Settings: settings},
-        limits=limits,
-        error_mapper=map_error,
-    ),
-    prefix="/api",
-    dependencies=[Depends(authenticate)],
-)
+rpc = RpcRouter()
+rpc.socket("/rpc", channels=[tasks, projects])
+rpc.stream("/frames", frames)
+rpc.socket("/browser/cdp", cdp)
+web.include_router(rpc)
 ```
 
-When a resolver can only be built after the app exists, use
-`resolver_factory=`. It receives the live `WebSocket` once per connection:
-
-```python
-web.include_router(
-    create_router(
-        app,
-        resolver_factory=lambda websocket: Resolver(websocket.app.state.container),
-    )
-)
-```
-
-Configure FastAPI concerns such as the prefix and dependencies through
-`include_router()`. The adapter registers JSON-RPC and binary-stream endpoints
-as WebSocket routes and maps pre-acceptance rejections to HTTP denial responses
-when the server supports the WebSocket denial extension. Without that extension,
-the ASGI server falls back to a generic HTTP 403 denial.
-
-FastAPI dependencies on `include_router()` are useful for transport-level
-checks such as authentication. Their return values are not injected into RPC
-methods; use `context=` or `resolver=` for application dependencies, or mount
-endpoints individually with `RpcRoutes`.
+Configure RPC limits, middleware, error mapping and handshake rejection defaults
+on `RpcRouter`. Endpoint options override those defaults. A router `prefix=`
+is included in its endpoint paths and OpenRPC contract. A prefix applied later
+by `include_router()` belongs in the contract's `base_url`.
 
 ### Mount endpoints with FastAPI dependencies
 
-`RpcRoutes` mounts endpoints on an existing router, including routers from
-other libraries. An endpoint declares the type of its connection context with
-`context=`; its handlers receive that value as `Inject[T]`:
+Pass an async dependency as `context=`. Its concrete return annotation supplies
+the type injected into handlers as `Inject[T]`. The dependency can receive
+path parameters, FastAPI dependencies and Dishka services.
 
 ```python
-from collections.abc import AsyncIterator
-
-from fastapi_canon.integrations.websockets import Inject, RpcChannel, RpcService
-
-output = RpcChannel("output")
+from fastapi_canon.integrations.websockets.adapters.dishka import Dishka
 
 
-@output.stream(content_type="text/plain")
-async def lines(job: Inject[Job]) -> AsyncIterator[bytes]:
-    async for line in job.output():
-        yield line
+async def open_job(job_id: str) -> Job:
+    return await jobs.require(job_id)
 
 
-app = RpcService()
-job_events = app.socket("/jobs/{job_id}/events", channels=(jobs,), context=Job)
-job_output = app.stream("/jobs/{job_id}/output", lines, context=Job)
+rpc = RpcRouter(context=open_job, resolver=Dishka(), rejects=[job_not_found])
+rpc.socket("/jobs/{job_id}/rpc", channels=[job_events])
+rpc.stream("/jobs/{job_id}/output", output)
+web.include_router(rpc)
 ```
 
-`RpcRoutes` supplies that value through an async context function. It runs as a
-regular FastAPI dependency per connection, path parameters included:
+Use `Composition` with feature providers to install and close the shared Dishka
+container, or configure Dishka's FastAPI middleware and lifespan explicitly.
+The context is resolved before acceptance. Declared `rejects=` and
+`rejections=` map its failures to HTTP denial responses when the ASGI server
+supports that extension. Otherwise the server returns its generic 403 denial.
 
-```python
-from typing import Annotated
-from uuid import UUID
-
-from fastapi import APIRouter, Depends
-
-from fastapi_canon.integrations.websockets import RpcRoutes
-
-
-async def open_job(
-    job_id: UUID,
-    actor: Annotated[Actor, Depends(authenticate)],
-    jobs: Annotated[JobRepository, Depends(get_job_repository)],
-) -> Job:
-    return await jobs.get_authorized(job_id, actor)
-
-
-router = APIRouter(prefix="/jobs")
-job_routes = RpcRoutes(
-    router,
-    context=open_job,
-    rejects=[job_not_found, job_access_denied],
-)
-job_routes.mount(job_events)
-job_routes.mount(job_output)
-web.include_router(router)
-```
-
-The routes take their type from the context function's return annotation, so
-`job_routes` is an `RpcRoutes[Job]` and type checkers reject endpoints that
-declare another context or none. `mount()` checks the same at runtime; a
-context function annotated with a subclass of the declared type is accepted.
-Routes without `context=` mount endpoints without a declared context. To supply
-several values, declare a dataclass as the context.
-
-`mount()` adds one WebSocket route at the endpoint's declared path, so it
-always matches the contract. Mounting fails when that path lies outside the
-router's prefix or the endpoint is already mounted. JSON-RPC sockets and binary
-streams mount the same way.
-
-`resolver=` accepts any fastapi_canon.integrations.websockets resolver for the remaining `Inject[T]` values.
-To integrate a DI library, pass an object implementing `FastApiResolver`
-instead: it creates a resolver per WebSocket and may wrap the context function.
-`fastapi_canon.integrations.websockets.adapters.dishka.Dishka` is one such [integration](dependencies.md#dishka).
-
-`rejects=` takes [error bindings](errors.md#bind-domain-exceptions) with a
-`rejection=`, and `rejections=` takes a mapping or callable. Both follow
-[the core rules](connections-and-events.md#map-failures-to-rejections), are
-consulted before the `rejects=` of the mounted endpoint and its service, and
-also cover the context function and its dependencies: before acceptance the
-handshake is rejected with an HTTP denial response, after acceptance the
-socket closes with the matching code. Unmapped failures propagate unchanged.
-Dependencies passed to `APIRouter(dependencies=...)` run before this check, so
-map their failures with FastAPI's own exception handling.
+FastAPI dependencies on `include_router()` can also perform admission checks.
+Their return values reach RPC handlers through the configured context or resolver.
 
 ### Mount a custom connection handler
 
-Pass `handler=` to `mount()` when an endpoint needs an application-owned
-connection lifecycle, such as sending a pending status before waiting for a
-resource:
+Use `serve=` on an endpoint declaration for a custom FastAPI handler. It can
+declare `Inject[T]` arguments for the context and resolver dependencies.
+The same connection middleware and rejection policies wrap the handler.
 
 ```python
-from fastapi import WebSocket
-
-from fastapi_canon.integrations.websockets import Inject
-from fastapi_canon.integrations.websockets.adapters.dishka import Dishka
-from fastapi_canon.integrations.websockets import RpcRoutes
-
-
-async def serve_job(
-    websocket: WebSocket,
-    job: Inject[Job],
-    lifecycle: Inject[JobLifecycle],
-) -> None:
-    await lifecycle.run(websocket, job_id=job.id)
+async def custom(websocket: WebSocket, job: Inject[Job]) -> None:
+    await websocket.accept()
+    await websocket.send_text(job.id)
+    await websocket.close()
 
 
-job_routes = RpcRoutes(router, context=open_job, resolver=Dishka())
-job_routes.mount(job_events, handler=serve_job)
+rpc.socket("/jobs/{job_id}/custom", channels=[job_events], serve=custom)
 ```
-
-`JobLifecycle` is an application service. The handler uses the same `Inject[T]`
-syntax as RPC methods: the endpoint's declared context type receives the
-authorized result of `context=`, and other dependencies come from `resolver=`.
-Parameter names are arbitrary. Context parameters must use `Inject[T]`; an
-unmarked context or an injected subclass of the declared context type fails
-during mounting. Handlers must be async functions with positional-or-keyword
-or keyword-only parameters. Other parameters retain normal FastAPI dependency,
-path, and query resolution.
-
-The context dependency runs even when the handler does not request its result.
-After successful dependency resolution, fastapi_canon.integrations.websockets enters one connection scope,
-adds the context under the endpoint's declared type, resolves the handler's
-`Inject[T]` parameters, and calls the handler. The scope opens before the
-handler accepts the socket and exits on completion, failure, or cancellation.
-With Dishka, injected services live in the fastapi_canon.integrations.websockets SESSION scope and can depend
-on the context through `from_context`; REQUEST-scoped services belong in RPC
-calls. Neither the context nor `Inject[T]` requires a Dishka `@inject` decorator.
-See [Dishka integration](dependencies.md#dishka) for application setup and the
-separate FastAPI dependency scope.
-
-The route retains the endpoint's path, name, prefix validation, duplicate-mount
-checks, and rejection policy. Declared failures in FastAPI dependencies,
-handler injection, the handler, or connection-scope cleanup reject the
-handshake before acceptance and close an accepted socket afterwards. An already
-closed socket is not closed again; unmapped failures propagate.
-
-The handler owns acceptance (including any subprotocol), messages, resource
-acquisition, disconnect handling, cancellation of its tasks, and socket closure.
-fastapi_canon.integrations.websockets does not start a serving loop or create runtime objects such as
-`RpcConnection` for a custom handler. Standard runtime settings such as `limits=`
-and `error_mapper=` are applied by the standard serving runtime, not by the
-custom handler wrapper. Changing the mounting handler does not change the
-exported contract; the handler must implement the endpoint's declared protocol.
-
-### Write your own route
-
-When a route needs its own code around the connection, such as a path that
-differs from the contract, call `serve_websocket()` from a regular FastAPI
-WebSocket route. It serves JSON-RPC sockets and binary streams alike, accepts
-the same runtime options as `create_router()`, and returns quietly when
-Starlette cancels the task after a disconnect:
-
-```python
-from fastapi import WebSocket
-
-from fastapi_canon.integrations.websockets import serve_websocket
-
-
-@web.websocket("/legacy/rpc")
-async def legacy_rpc(websocket: WebSocket) -> None:
-    await serve_websocket(app.endpoint("events"), websocket, context={Clock: clock})
-```
-
-Prefer `RpcRoutes` for routes that only need FastAPI dependencies.
 
 ## Custom adapters
 
@@ -421,11 +273,10 @@ pre-stop endpoint and wait for completion before sending the termination signal:
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi_canon.integrations.websockets import RpcDrain, RpcService
-from fastapi_canon.integrations.websockets import create_router
+from fastapi_canon.integrations.websockets import RpcDrain, RpcRouter
 
 drain = RpcDrain()
-rpc = RpcService(drain=drain)
+rpc = RpcRouter(drain=drain)
 # Register rpc.socket(...) and rpc.stream(...) here.
 
 
@@ -436,7 +287,7 @@ async def lifespan(web):
 
 
 web = FastAPI(lifespan=lifespan)
-web.include_router(create_router(rpc))
+web.include_router(rpc)
 
 
 @web.post("/internal/drain")  # Protect this with your deployment authentication.
@@ -458,5 +309,4 @@ therefore cannot make teardown after lifespan `yield` into a pre-close hook.
 The repository's real TCP smoke test uses Uvicorn's `websockets-sansio` backend,
 drains through HTTP while a WebSocket call is in flight, receives the result and
 1012 close, then stops Uvicorn and verifies lifespan cleanup. This verifies the
-deployment ordering beyond a lifespan-only unit test. FastAPI `RpcRoutes` and
-`create_router` inherit the mounted service's coordinator automatically.
+deployment ordering beyond a lifespan-only unit test. The FastAPI routes use the router's drain coordinator.

@@ -10,8 +10,8 @@ from fastapi_canon.integrations.websockets import (
     RpcLimits,
     RpcMiddleware,
     RpcModel,
-    RpcService,
 )
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.testing import RpcTestClient
 
 from tests.unit.integrations.websockets.deadlines import ControlledDeadlines
@@ -112,7 +112,7 @@ async def test_deadline_bounds_subscription_handshake_but_does_not_limit_stream(
         finally:
             stream_stopped.set()
 
-    service = RpcService(limits=RpcLimits(max_concurrency=1, request_timeout=5))
+    service = RpcDefinition(limits=RpcLimits(max_concurrency=1, request_timeout=5))
     service.socket("/rpc", channels=[channel])
     socket = InMemorySocket("/rpc")
     serving = asyncio.create_task(service.serve(socket))
@@ -200,7 +200,7 @@ async def test_subscription_failures_use_scoped_bindings(declared, caplog) -> No
     @channel.method(raises=[binding])
     async def lookup() -> None: ...
 
-    service = RpcService()
+    service = RpcDefinition()
     service.socket("/rpc", channels=[channel])
     document = service.contract(
         title="Sessions", base_url="ws://localhost"
@@ -244,7 +244,7 @@ async def test_subscription_params_notifications_and_cleanup() -> None:
             finally:
                 stopped.set()
 
-        service = RpcService()
+        service = RpcDefinition()
         service.socket("/rpc", channels=(channel,))
         socket = InMemorySocket("/rpc")
         task = asyncio.create_task(service.serve(socket))
@@ -314,7 +314,7 @@ async def test_subscription_limit_and_contract() -> None:
             await asyncio.Future()
             yield SessionEvent(value=params.session_id)
 
-        service = RpcService()
+        service = RpcDefinition()
         service.socket("/rpc", channels=(channel,))
         document = service.contract(
             title="Session", base_url="ws://localhost"

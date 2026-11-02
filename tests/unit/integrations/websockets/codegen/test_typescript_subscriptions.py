@@ -9,12 +9,12 @@ from fastapi_canon.integrations.websockets import (
     RpcChannel,
     RpcErrorBinding,
     RpcModel,
-    RpcService,
 )
 from fastapi_canon.integrations.websockets.codegen import generate_typescript_client
 from fastapi_canon.integrations.websockets.codegen.typescript import (
     TypeScriptClientOptions,
 )
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 
 
 class SessionParams(RpcModel):
@@ -44,7 +44,7 @@ def test_generated_typescript_subscription(tmp_path: Path) -> None:
     async def events(params: SessionParams) -> AsyncIterator[SessionEvent]:
         yield SessionEvent(value=params.session_id)
 
-    service = RpcService()
+    service = RpcDefinition()
     service.socket("/rpc", channels=(channel,))
     generate_typescript_client(
         service.contract(title="Session", base_url="ws://localhost").to_openrpc(),

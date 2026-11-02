@@ -85,16 +85,15 @@ export the same problem types served at runtime.
 
 For a per-connection FastAPI dependency, pass its async function as `context=`.
 Its concrete return annotation supplies the type available to handlers through
-`Inject[T]`. Use `resolver=Dishka()` for Dishka dependencies. Use `RpcService`
-and `RpcRoutes` directly for multiple paths in one contract, custom handshake
-rejections, raw sockets, or binary streams.
+`Inject[T]`. Use `resolver=Dishka()` for Dishka dependencies. Construct `RpcRouter()` without a path to register multiple paths with
+`socket()` and `stream()` and export them together.
 
 Mount several channels on one JSON-RPC socket:
 
 ```python
-from fastapi_canon.integrations.websockets import RpcService
+from fastapi_canon.integrations.websockets import RpcRouter
 
-app = RpcService(version=2)
+app = RpcRouter(version=2)
 endpoint = app.socket(
     "/projects/{project_id}/rpc",
     channels=(tasks, admin),
@@ -140,13 +139,12 @@ configuration.
 For a standalone dotted namespace, the channel name can default to it:
 `RpcChannel(namespace="voice.turn")`.
 
-The service stays mutable until `freeze()`, `protocol`, `contract()`, or an
-adapter materializes its protocol. Add all channels and endpoints before that
+The service stays mutable until `freeze()`, `protocol`, `contract()`, or the router serves its first connection. Add all channels and endpoints before that
 point.
 
 ## Protocol version
 
-`RpcService(version=...)` takes a positive integer. The version is emitted as
+`RpcRouter(version=...)` takes a positive integer. The version is emitted as
 `<version>.0.0` in OpenRPC, so changing a wire contract can be reflected in the
 service definition and generated artifacts together.
 
@@ -154,7 +152,7 @@ Configure shared serving defaults once and override them only where an endpoint
 differs:
 
 ```python
-app = RpcService(error_mapper=map_error, limits=RpcLimits(max_concurrency=16))
+app = RpcRouter(error_mapper=map_error, limits=RpcLimits(max_concurrency=16))
 app.socket(
     "/rpc",
     channels=(tasks,),
@@ -162,7 +160,7 @@ app.socket(
 )
 ```
 
-`serve()` and `create_router()` use these defaults unless an explicit call-site
+`serve()` and the mounted FastAPI routes use these defaults unless an explicit call-site
 override is supplied.
 
 Malformed JSON, including input nested beyond the JSON decoder's recursion
@@ -194,7 +192,7 @@ async def long_running() -> None:
     await finish_long_running_work()
 
 
-app = RpcService(limits=RpcLimits(request_timeout=30.0))
+app = RpcRouter(limits=RpcLimits(request_timeout=30.0))
 app.socket("/rpc", channels=[tasks])
 ```
 
@@ -317,9 +315,9 @@ Register that same instance on the service and handshake hook:
 
 ```python
 capacity = SharedCapacity(connections=200, requests=64)
-app = RpcService(middleware=[capacity], limits=RpcLimits(max_pending_requests=128))
+app = RpcRouter(middleware=[capacity], limits=RpcLimits(max_pending_requests=128))
 app.socket("/rpc", channels=[tasks], before_accept=capacity.before_accept)
-web.include_router(create_router(app))
+web.include_router(app)
 ```
 
 Custom transports using `app.serve()` also run the registered handshake hook.

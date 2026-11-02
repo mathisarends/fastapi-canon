@@ -59,7 +59,7 @@ class Resolver:
     async def resolve[T](self, dependency: type[T]) -> T: ...
 ```
 
-Pass it as `resolver=` to `RpcService.serve()`, an endpoint, `create_router()`,
+Pass it as `resolver=` to `RpcRouter`, `RpcRouter.serve()`, an endpoint,
 or `create_server()`. A synchronous or asynchronous callable taking the
 requested type is accepted as a lightweight alternative.
 
@@ -97,37 +97,13 @@ resolver = DishkaResolver(container)
 ```
 
 The adapter maps a connection to Dishka's `SESSION` scope and each RPC call to
-a child scope. Supply it anywhere a fastapi_canon.integrations.websockets resolver is accepted. For FastAPI,
-prefer the router integration, which reads the root container when each socket
-connects:
-
-```python
-from fastapi_canon.integrations.websockets.adapters.dishka import dishka_router
-
-web.include_router(dishka_router(app))
-```
-
-The integration reads `web.state.dishka_container`; pass the APP container to
-`DishkaResolver` when constructing one manually. A SESSION container from
-`websocket.state` is rejected because fastapi_canon.integrations.websockets opens that scope itself and adds
-`RpcConnection` to its context.
-
-To mount endpoints with FastAPI dependencies, pass `Dishka()` as the resolver
-of [`RpcRoutes`](transports.md#mount-endpoints-with-fastapi-dependencies). The
-context function may then declare `FromDishka[T]` parameters without
-`@inject`; they resolve from the container of Dishka's middleware, so call
-`setup_dishka()` on the app:
+a child scope. Pass `resolver=Dishka()` to the router to read the app's root
+container at connection time.
 
 ```python
 from dishka.integrations.fastapi import FromDishka
-
+from fastapi_canon.integrations.websockets import RpcRouter
 from fastapi_canon.integrations.websockets.adapters.dishka import Dishka
-from fastapi_canon.integrations.websockets import RpcRoutes
-
-screencast = app.stream("/sessions/{session_id}/screencast", frames, context=Session)
-events = app.socket(
-    "/sessions/{session_id}/events", channels=(session_events,), context=Session
-)
 
 
 async def open_session(
@@ -138,15 +114,20 @@ async def open_session(
     return await sessions.get_authorized(session_id, actor)
 
 
-session_routes = RpcRoutes(
-    router,
+rpc = RpcRouter(
     context=open_session,
     resolver=Dishka(),
     rejects=[session_not_found],
 )
-session_routes.mount(screencast)
-session_routes.mount(events)
+rpc.stream("/sessions/{session_id}/screencast", frames)
+rpc.socket("/sessions/{session_id}/events", channels=[session_events])
+web.include_router(rpc)
 ```
+
+The context function can declare `FromDishka[T]` parameters without `@inject`.
+Install Dishka through `Composition` and feature providers, or configure
+`setup_dishka()` and the container lifespan explicitly. A manually constructed
+`DishkaResolver` needs the APP container.
 
 Handlers receive the session as `Inject[Session]` and everything else from
 Dishka. The context also joins Dishka's SESSION context, so providers can
@@ -161,12 +142,9 @@ Keep RPC dependencies in the fastapi_canon.integrations.websockets scope and do 
 
 ## Authenticated connections
 
-`dishka_router(service, context=value)` and `create_router` accept a context
-value or mapping. They do not execute `context` as a FastAPI dependency. The
-optional `resolver_factory` on `dishka_router` customizes per-socket resolution;
-`before_accept` and `rejections` retain their existing handshake semantics.
-Use `RpcRoutes(router, context=async_dependency, resolver=Dishka(), rejects=...)`
+Use `RpcRouter(context=async_dependency, resolver=Dishka(), rejects=[...])`
 when authentication needs FastAPI dependencies, cookies, origins or path values.
+The context return annotation supplies its injection type.
 
 The executable [authenticated example](../../../examples/websockets/authenticated.py) checks an
 Origin allowlist and a session cookie before accepting. Typed rejection bindings

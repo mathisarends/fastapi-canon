@@ -1,6 +1,7 @@
 import json
 
-from fastapi_canon.integrations.websockets import RpcChannel, RpcService
+from fastapi_canon.integrations.websockets import RpcChannel
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.protocol import RpcProtocol
 from fastapi_canon.integrations.websockets.schema import render_openrpc
 
@@ -22,7 +23,7 @@ def test_contract_exports_cancellation_and_only_explicit_method_deadlines():
     @channel.method(timeout=5)
     async def bounded() -> None: ...
 
-    app = RpcService()
+    app = RpcDefinition()
     app.socket("/rpc", channels=[channel])
     document = app.contract(title="Deadlines", base_url="ws://localhost").to_openrpc()
     methods = {method["name"]: method for method in document["methods"]}

@@ -24,7 +24,7 @@ from fastapi_canon.integrations.websockets.protocol import (
 )
 
 if TYPE_CHECKING:
-    from fastapi_canon.integrations.websockets.service import RpcAnyEndpoint
+    from fastapi_canon.integrations.websockets.definition import RpcAnyEndpoint
 
 logger: logging.Logger = logging.getLogger(LOGGER_NAME)
 

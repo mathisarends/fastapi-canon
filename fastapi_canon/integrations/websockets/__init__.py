@@ -3,8 +3,6 @@ from fastapi_canon._version import __version__
 from .adapters.fastapi import (
     FastApiSocket,
     RpcRouter,
-    RpcRoutes,
-    create_router,
     serve_websocket,
 )
 from .channel import RpcChannel
@@ -25,6 +23,7 @@ from .connection import (
 )
 from .constants import LOGGER_NAME
 from .contract import RpcContract, ServerVariable
+from .definition import RpcEndpoint, RpcSocketEndpoint, RpcStreamEndpoint
 from .dependencies import (
     Inject,
     RpcResolver,
@@ -67,7 +66,6 @@ from .middleware import (
 from .models import RpcModel
 from .protocol import RpcProtocol
 from .server import RpcErrorMapper, RpcResponseMessage, RpcServer
-from .service import RpcEndpoint, RpcService, RpcSocketEndpoint, RpcStreamEndpoint
 from .sockets import (
     RpcMessageType,
     RpcSocket,
@@ -86,8 +84,6 @@ from .streams import (
 __all__ = [
     "FastApiSocket",
     "RpcRouter",
-    "RpcRoutes",
-    "create_router",
     "serve_websocket",
     "RpcConnectionExpiry",
     "RpcDrain",
@@ -151,7 +147,6 @@ __all__ = [
     "RpcResponseMessage",
     "RpcProtocol",
     "RpcServer",
-    "RpcService",
     "RpcWebSocket",
     "RpcStreamDirection",
     "RpcStreamClose",

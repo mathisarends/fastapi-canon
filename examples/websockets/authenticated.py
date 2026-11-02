@@ -6,15 +6,14 @@ from typing import Any
 
 from dishka import Provider, Scope, from_context, make_async_container, provide
 from dishka.integrations.fastapi import FromDishka, setup_dishka
-from fastapi import APIRouter, FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket
 from fastapi_canon.integrations.websockets import (
     Inject,
     RpcChannel,
     RpcConnection,
     RpcErrorBinding,
     RpcRejection,
-    RpcRoutes,
-    RpcService,
+    RpcRouter,
 )
 from fastapi_canon.integrations.websockets.adapters.dishka import Dishka, DishkaResolver
 from fastapi_canon.integrations.websockets.dependencies import RpcResolver
@@ -95,11 +94,9 @@ def create_app() -> FastAPI:
     async def whoami(identity: Inject[RequestIdentity]) -> str:
         return identity.login.user
 
-    service = RpcService()
-    endpoint = service.socket("/rpc", channels=(channel,), context=Login)
-    router = APIRouter()
-    RpcRoutes(
-        router,
+    router = RpcRouter(
+        "/rpc",
+        channels=[channel],
         context=open_session,
         resolver=AuthenticatedDishka(),
         rejects=(
@@ -110,7 +107,7 @@ def create_app() -> FastAPI:
                 ForbiddenOrigin, message=str, rejection=RpcRejection.FORBIDDEN
             ),
         ),
-    ).mount(endpoint)
+    )
     app.include_router(router)
     setup_dishka(container, app)
     return app

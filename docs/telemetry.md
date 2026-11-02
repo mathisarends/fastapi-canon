@@ -319,11 +319,11 @@ engine factories process-wide, and `uninstrument()` removes its instrumentation
 globally. Those semantics belong to the direct contrib API, not Canon's
 engine-local adapter. Do not combine them on the same engine.
 
-RPC is explicit because Canon does not own `RpcService` instances:
+RPC is explicit because Canon does not own `RpcRouter` instances:
 
 ```python
 telemetry = Telemetry(tracer_provider=tracer_provider, meter_provider=meter_provider)
-rpc = RpcService(middleware=(telemetry.rpc_middleware(),))
+rpc = RpcRouter(middleware=(telemetry.rpc_middleware(),))
 app = Composition(features=(tasks,), telemetry=telemetry).apply(FastAPI())
 ```
 

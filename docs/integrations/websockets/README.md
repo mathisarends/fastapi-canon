@@ -85,7 +85,7 @@ Code generation and OpenTelemetry dependencies remain optional extras.
 
 ```python
 from fastapi import FastAPI
-from fastapi_canon.integrations.websockets import RpcChannel, RpcService, create_router
+from fastapi_canon.integrations.websockets import RpcChannel, RpcRouter
 
 greetings = RpcChannel("greetings")
 
@@ -95,13 +95,13 @@ async def hello() -> str:
     return "Hello"
 
 
-rpc = RpcService()
+rpc = RpcRouter()
 rpc.socket("/rpc", channels=(greetings,))
 app = FastAPI()
-app.include_router(create_router(rpc))
+app.include_router(rpc)
 ```
 
-For feature-level mounting on an existing `APIRouter`, use `RpcRoutes`. For
+Include the router directly in `Feature(routers=[rpc])`. For
 Canon/Dishka composition, see the [three-transport example](../../../examples/stack_service.py).
 Both reuse the same WebSocket runtime; no second RPC router model is introduced.
 
@@ -115,7 +115,7 @@ from fastapi_canon.integrations.websockets import (
     Inject,
     RpcChannel,
     RpcModel,
-    RpcService,
+    RpcRouter,
     RpcSuccess,
 )
 
@@ -148,7 +148,7 @@ async def create(params: CreateTask, store: Inject[TaskStore]) -> Task:
     return await store.create(params.title)
 
 
-app = RpcService(version=1)
+app = RpcRouter(version=1)
 app.socket("/rpc", channels=(tasks,))
 
 
@@ -184,8 +184,8 @@ hooks, limits and custom transports.
 | --- | --- |
 | `RpcChannel` | Group operations under a namespace with `@channel.method()`, `.event()`, `.subscription()` and `.stream()`. |
 | `RpcModel` | Base class for parameter, result and event payloads. |
-| `RpcService` | Mount channels on a socket path with `service.socket(...)`. |
-| `create_router` / `RpcRoutes` | Serve a service from a FastAPI app or an existing `APIRouter`. |
+| `RpcRouter` | Mount channels on a socket path with `service.socket(...)`. |
+| `RpcRouter` | Define endpoints and include their routes in FastAPI or a feature. |
 | `Inject[T]` | Resolve a server-side dependency; it never appears in the contract. |
 | `RpcError` | Subclass for typed errors; declare them with `raises=` so generated clients raise matching exceptions. |
 

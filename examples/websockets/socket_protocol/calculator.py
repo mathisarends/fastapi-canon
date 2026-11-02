@@ -19,11 +19,10 @@ from fastapi_canon.integrations.websockets import (
     Inject,
     RpcChannel,
     RpcMessageType,
-    RpcService,
+    RpcRouter,
     RpcSocket,
     RpcSocketProtocol,
     ServerVariable,
-    create_router,
 )
 
 CALC = RpcSocketProtocol(name="calc", version="1")
@@ -57,7 +56,7 @@ async def session(socket: Inject[RpcSocket]) -> None:
         await socket.send(json.dumps(reply))
 
 
-service = RpcService()
+service = RpcRouter()
 service.socket("/calculator/rpc", channels=(calculator,))
 service.socket("/calculator/session", session)
 
@@ -68,4 +67,4 @@ contract = service.contract(
 )
 
 app = FastAPI()
-app.include_router(create_router(service))
+app.include_router(service)

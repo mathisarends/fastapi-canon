@@ -5,7 +5,6 @@ import pytest
 from fastapi_canon.integrations.websockets import (
     ProtocolDefinitionError,
     RpcChannel,
-    RpcService,
 )
 from fastapi_canon.integrations.websockets.codegen import (
     generate_python_client,
@@ -16,6 +15,7 @@ from fastapi_canon.integrations.websockets.codegen.options import (
     PythonClientOptions,
     TypeScriptClientOptions,
 )
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.schema import render_openrpc
 from fastapi_canon.integrations.websockets.testing import InMemorySocketFactory
 from pydantic import TypeAdapter
@@ -71,7 +71,7 @@ async def test_retry_after_execution_and_lost_response(
         executions += 1
         return 42
 
-    service = RpcService()
+    service = RpcDefinition()
     service.socket("/rpc", channels=[channel])
 
     def configure(socket, attempt):

@@ -27,6 +27,7 @@ from fastapi_canon.codegen.ir import GenerationError
 from fastapi_canon.codegen.planner import build_plan
 from fastapi_canon.codegen.render import render
 from fastapi_canon.integrations.sse.codegen.openapi import export_schema
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 
 
 def test_unified_python_calls_streams_and_model_error_identity(tmp_path: Path) -> None:
@@ -489,7 +490,7 @@ def test_canonical_names_wire_aliases_and_primitive_results(tmp_path: Path) -> N
 
     from fastapi_canon import CanonRouter, Composition, Feature
     from fastapi_canon.integrations.sse import CanonStreamRouter
-    from fastapi_canon.integrations.websockets import RpcChannel, RpcService
+    from fastapi_canon.integrations.websockets import RpcChannel
 
     class APIState(StrEnum):
         READY = "HTTPStatus"
@@ -543,7 +544,7 @@ def test_canonical_names_wire_aliases_and_primitive_results(tmp_path: Path) -> N
 
     state.__annotations__["return"] = Literal[APIState.READY]
     channel.method()(state)
-    service = RpcService()
+    service = RpcDefinition()
     endpoint = service.socket("/ws", channels=[channel])
     application = Composition(
         features=(Feature(name="records", routers=[http_router, streams]),)

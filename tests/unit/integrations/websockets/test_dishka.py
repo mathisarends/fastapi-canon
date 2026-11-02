@@ -5,15 +5,17 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
-from fastapi import APIRouter, FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket
 from fastapi.testclient import TestClient
-from fastapi_canon.integrations.websockets import Inject, RpcChannel, RpcService
+from fastapi_canon.integrations.websockets import Inject, RpcChannel
 from fastapi_canon.integrations.websockets.adapters.dishka import (
     Dishka,
     DishkaResolver,
-    dishka_router,
 )
-from fastapi_canon.integrations.websockets.adapters.fastapi import RpcRoutes
+from fastapi_canon.integrations.websockets.adapters.fastapi import RpcRouter
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
+
+from tests.fixtures.websockets import router_for
 
 dishka = pytest.importorskip("dishka")
 Scope = dishka.Scope
@@ -114,11 +116,11 @@ def test_dishka_router_reads_the_app_container_at_connection_time() -> None:
     async def resolve(service: Inject[Service]) -> bool:
         return service is expected
 
-    rpc = RpcService()
+    rpc = RpcDefinition()
     rpc.socket("/rpc", channels=(channel,))
     app = FastAPI()
     app.state.dishka_container = root
-    app.include_router(dishka_router(rpc))
+    app.include_router(router_for(rpc, resolver=Dishka()))
 
     with (
         TestClient(app) as client,
@@ -155,12 +157,12 @@ def test_dishka_exposes_the_context_to_dishka_providers() -> None:
     async def owner(streamer: Inject[Streamer]) -> int:
         return streamer.owner.id
 
-    rpc = RpcService()
+    rpc = RpcDefinition()
     endpoint = rpc.socket(
         "/owners/{owner_id}/rpc", channels=(channel,), name="owners", context=Owner
     )
-    router = APIRouter(prefix="/owners")
-    RpcRoutes(router, context=resolve_owner, resolver=Dishka()).mount(endpoint)
+    router = RpcRouter(prefix="/owners", context=resolve_owner, resolver=Dishka())
+    router.mount(endpoint)
     app = FastAPI()
     app.state.dishka_container = dishka.make_async_container(Provider())
     app.include_router(router)
@@ -194,11 +196,10 @@ def test_dishka_injects_the_context_function(transport_parameter: str) -> None:
     async def owner(owner: Inject[Owner]) -> str:
         return owner.name
 
-    rpc = RpcService()
+    rpc = RpcDefinition()
     endpoint = rpc.socket(
         "/owners/{owner_id}/rpc", channels=(channel,), name="owners", context=Owner
     )
-    router = APIRouter(prefix="/owners")
 
     async def open_owner(owner_id: int, owners: dishka.FromDishka[Owners]) -> Owner:
         return Owner(f"{owners.prefix}-{owner_id}")
@@ -221,7 +222,8 @@ def test_dishka_injects_the_context_function(transport_parameter: str) -> None:
             assert _canon_websockets_websocket == "context"
             return Owner(f"{owners.prefix}-{owner_id}")
 
-    RpcRoutes(router, context=open_owner, resolver=Dishka()).mount(endpoint)
+    router = RpcRouter(prefix="/owners", context=open_owner, resolver=Dishka())
+    router.mount(endpoint)
 
     app = FastAPI()
     app.include_router(router)
@@ -292,14 +294,12 @@ def test_custom_handlers_resolve_context_and_providers_in_one_session(
     if explicit_injection:
         handler = dishka.integrations.fastapi.inject(handler)
 
-    service = RpcService()
+    service = RpcDefinition()
     endpoint = service.socket(
         "/owners/{owner_id}/rpc", channels=(RpcChannel("demo"),), context=Owner
     )
-    router = APIRouter(prefix="/owners")
-    RpcRoutes(router, context=open_owner, resolver=Dishka()).mount(
-        endpoint, handler=handler
-    )
+    router = RpcRouter(prefix="/owners", context=open_owner, resolver=Dishka())
+    router.mount(endpoint, handler=handler)
     app = FastAPI()
     app.include_router(router)
     setup_dishka(dishka.make_async_container(Provider()), app)

@@ -98,9 +98,8 @@ def _main() -> None:
         from fastapi_canon.integrations.websockets import (
             Inject,
             RpcChannel,
-            RpcService,
+            RpcRouter,
             RpcSocket,
-            create_router,
         )
 
         channel = RpcChannel("health")
@@ -109,7 +108,7 @@ def _main() -> None:
         async def ping() -> str:
             return "pong"
 
-        rpc = RpcService()
+        rpc = RpcRouter()
         rpc.socket("/rpc", channels=(channel,))
 
         @channel.socket("messages")
@@ -125,7 +124,7 @@ def _main() -> None:
                 await socket.send(SocketOutput(value=message.value + 1))
 
         rpc.socket("/session", session)
-        routers.append(create_router(rpc))
+        routers.append(rpc)
         _cli("websockets")
     if "webrtc" in selected:
         engine = _RecordingEngine()

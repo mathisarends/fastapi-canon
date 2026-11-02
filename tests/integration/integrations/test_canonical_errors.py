@@ -22,12 +22,12 @@ from fastapi_canon.integrations.websockets import (
     Inject,
     RpcChannel,
     RpcRouter,
-    RpcService,
 )
 from fastapi_canon.integrations.websockets.codegen import (
     PythonClientOptions,
     render_python_client,
 )
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 
 
 def test_empty_catalog_keeps_its_configured_internal_problem_identity() -> None:
@@ -149,6 +149,59 @@ async def test_rpc_router_contributes_catalog_and_uses_composition_type_base() -
     assert document["servers"][0]["url"] == "wss://example.test/ws/{tenant}"
 
 
+async def test_rpc_router_serves_all_endpoint_kinds_with_one_contract() -> None:
+    from fastapi import FastAPI, WebSocket
+    from websockets.asyncio.client import connect
+
+    from fastapi_canon.integrations.websockets import RpcSocket
+    from tests.unit.integrations.webrtc.server import serve
+
+    channel = RpcChannel("demo")
+
+    @channel.method()
+    async def ping() -> str:
+        return "pong"
+
+    @channel.stream()  # type: ignore[arg-type]  # Runtime checks require a free function.
+    async def frames() -> AsyncIterator[bytes]:
+        yield b"frame"
+
+    @channel.socket()  # type: ignore[arg-type]  # Runtime checks require a free function.
+    async def echo(socket: Inject[RpcSocket]) -> None:
+        await socket.send(await socket.receive())
+
+    async def custom(socket: WebSocket) -> None:
+        await socket.accept()
+        await socket.send_text("custom")
+        await socket.close()
+
+    router = RpcRouter(version=2, prefix="/api")
+    router.socket("/rpc", channels=[channel])
+    router.stream("/frames", frames)
+    router.socket("/echo", echo)
+    router.socket("/custom", channels=[RpcChannel("custom")], serve=custom)
+    app = Composition(features=[Feature(name="demo", routers=[router])]).apply(
+        FastAPI()
+    )
+    async with asyncio.timeout(15), serve(app) as base_url:
+        async with connect(f"{base_url}/api/rpc") as socket:
+            await socket.send('{"jsonrpc":"2.0","id":1,"method":"demo.ping"}')
+            assert json.loads(await socket.recv())["result"] == "pong"
+        async with connect(f"{base_url}/api/frames") as socket:
+            assert await socket.recv() == b"frame"
+        async with connect(f"{base_url}/api/echo") as socket:
+            await socket.send("echo")
+            assert await socket.recv() == "echo"
+        async with connect(f"{base_url}/api/custom") as socket:
+            assert await socket.recv() == "custom"
+    document = router.contract(title="Demo", base_url="wss://example.test").to_openrpc()
+    assert document["info"]["version"] == "2.0.0"
+    assert {server["url"] for server in document["servers"]} == {
+        "wss://example.test/api/rpc",
+        "wss://example.test/api/custom",
+    }
+
+
 def test_nested_public_extensions_keep_aliases_and_valid_contract_references() -> None:
     from pydantic import BaseModel, Field
 
@@ -181,7 +234,7 @@ def test_nested_public_extensions_keep_aliases_and_valid_contract_references() -
     async def missing() -> None:
         raise Missing("private")
 
-    service = RpcService()
+    service = RpcDefinition()
     service.socket("/ws", channels=[channel])
     document = service.contract(title="Nested", base_url="wss://test").to_openrpc()
     server = channel.create_server()

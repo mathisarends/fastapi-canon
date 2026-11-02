@@ -7,8 +7,8 @@ from fastapi_canon.integrations.websockets import (
     RpcDisconnect,
     RpcReject,
     RpcRejection,
-    RpcService,
 )
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.testing import (
     InMemorySocket,
     InMemorySocketFactory,
@@ -26,7 +26,7 @@ async def ping() -> None:
     return None
 
 
-service = RpcService()
+service = RpcDefinition()
 service.socket("/rooms", channels=(control_channel,), name="rooms")
 
 
@@ -254,7 +254,7 @@ async def test_factory_cancellation_during_handshake_leaves_no_tasks():
             entered.set()
             await asyncio.Event().wait()
 
-        app = RpcService()
+        app = RpcDefinition()
         app.socket("/rpc", channels=[control_channel], before_accept=before_accept)
         async with InMemorySocketFactory(app) as factory:
             connecting = asyncio.create_task(factory("ws://test/rpc"))
@@ -269,7 +269,7 @@ async def test_factory_preserves_actual_server_handshake_rejections():
     async def before_accept(handshake):
         raise RpcReject(RpcRejection.FORBIDDEN, "not allowed")
 
-    app = RpcService()
+    app = RpcDefinition()
     app.socket("/rpc", channels=[control_channel], before_accept=before_accept)
     async with InMemorySocketFactory(app) as factory:
         with pytest.raises(RpcTestHandshakeRejected) as raised:

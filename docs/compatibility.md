@@ -1,5 +1,15 @@
 # Compatibility
 
+## WebSocket router boundary
+
+`RpcRouter` registers endpoints with `APIRouter.websocket()` and integrates through
+`include_router()`. Connection dependencies use `Depends`, and handlers use the
+public `WebSocket` constructor, properties and methods. Custom-handler observation
+wraps the public send/receive callables in a separate WebSocket instance.
+Python signature metadata belongs to Canon's own handler functions.
+[FastAPI router API](https://fastapi.tiangolo.com/reference/apirouter/),
+[WebSocket API](https://fastapi.tiangolo.com/reference/websockets/).
+
 ## Native telemetry bridge
 
 The 0.12.0 bridge is exercised from built wheels on Python 3.12 against

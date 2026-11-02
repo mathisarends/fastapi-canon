@@ -5,8 +5,7 @@ import fastapi_canon.integrations.websockets.connection as connection_module
 import pytest
 from examples.websockets.authenticated import Login, Sessions, create_app
 from fastapi.testclient import TestClient
-from fastapi_canon.integrations.websockets import RpcService
-from fastapi_canon.integrations.websockets.adapters.dishka import dishka_router
+from fastapi_canon.integrations.websockets import RpcRouter
 from starlette.testclient import WebSocketDenialResponse
 from starlette.websockets import WebSocketDisconnect
 
@@ -52,9 +51,9 @@ def test_authenticated_calls_and_expiry(monkeypatch):
             assert closed.value.reason == "credentials_expired"
 
 
-def test_dishka_router_reports_context_factory_misuse():
+def test_router_requires_a_concrete_context_return_type():
     async def context():
         return object()
 
-    with pytest.raises(TypeError, match="RpcRoutes"):
-        dishka_router(RpcService(), context=context)
+    with pytest.raises(TypeError, match="needs a concrete class"):
+        RpcRouter(context=context)

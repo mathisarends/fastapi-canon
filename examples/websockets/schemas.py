@@ -1,6 +1,6 @@
 import json
 
-from fastapi_canon.integrations.websockets import RpcChannel, RpcModel, RpcService
+from fastapi_canon.integrations.websockets import RpcChannel, RpcModel, RpcRouter
 from fastapi_canon.integrations.websockets.schema import render_openrpc
 
 
@@ -23,7 +23,7 @@ async def run(params: SearchParams) -> SearchResult:
     return SearchResult(items=[])
 
 
-app = RpcService(version=3)
+app = RpcRouter(version=3)
 app.socket("/rpc", channels=(router,))
 
 

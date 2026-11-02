@@ -3,14 +3,14 @@ from fastapi_canon.integrations.websockets import (
     ProtocolDefinitionError,
     RpcChannel,
     RpcLimits,
-    RpcService,
 )
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 
 
 def test_endpoint_matching_and_static_priority() -> None:
     dynamic = RpcChannel("dynamic")
     static = RpcChannel("static")
-    service = RpcService()
+    service = RpcDefinition()
     service.socket("/items/{item_id}", channels=(dynamic,), name="item")
     expected = service.socket("/items/special", channels=(static,), name="special")
     endpoint, values = service.match("/items/special")
@@ -22,12 +22,12 @@ def test_endpoint_matching_and_static_priority() -> None:
 @pytest.mark.parametrize("path", ["rpc", "/rpc/", "/a//b", "/rpc?q=1", "/rpc#x"])
 def test_invalid_paths(path: str) -> None:
     with pytest.raises(ProtocolDefinitionError):
-        RpcService().socket(path, channels=(RpcChannel("channel"),))
+        RpcDefinition().socket(path, channels=(RpcChannel("channel"),))
 
 
 def test_channel_cannot_be_mounted_twice() -> None:
     channel = RpcChannel("control")
-    service = RpcService()
+    service = RpcDefinition()
     service.socket("/one", channels=(channel,))
     with pytest.raises(ProtocolDefinitionError, match="only be mounted once"):
         service.socket("/two", channels=(channel,))
@@ -37,7 +37,7 @@ def test_endpoints_record_their_declared_context() -> None:
     class Session:
         pass
 
-    service = RpcService()
+    service = RpcDefinition()
     session = service.socket(
         "/session", channels=(RpcChannel("session"),), context=Session
     )
@@ -55,7 +55,7 @@ def test_endpoints_record_their_declared_context() -> None:
 
 def test_service_freezes_channels() -> None:
     channel = RpcChannel("control")
-    service = RpcService()
+    service = RpcDefinition()
     service.socket("/rpc", channels=(channel,))
     service.freeze()
     with pytest.raises(ProtocolDefinitionError, match="frozen"):
@@ -71,7 +71,7 @@ def test_endpoints_inherit_and_override_serve_configuration() -> None:
 
     default_limits = RpcLimits(max_concurrency=4)
     endpoint_limits = RpcLimits(max_concurrency=2)
-    service = RpcService(error_mapper=default_mapper, limits=default_limits)
+    service = RpcDefinition(error_mapper=default_mapper, limits=default_limits)
     inherited = service.socket("/one", channels=(RpcChannel("one"),), name="one")
     overridden = service.socket(
         "/two",
@@ -94,7 +94,7 @@ def test_mounting_a_root_channel_includes_its_children() -> None:
     @turn.method()
     async def start() -> None: ...
 
-    service = RpcService()
+    service = RpcDefinition()
     service.socket("/rpc", channels=(root,))
 
     assert service.protocol.methods[0].name == "voice.turn.start"
@@ -110,7 +110,7 @@ def test_method_names_collide_across_channels() -> None:
     @second.method("play")
     async def play_again() -> None: ...
 
-    service = RpcService()
+    service = RpcDefinition()
     service.socket("/rpc", channels=(first, second))
 
     with pytest.raises(ProtocolDefinitionError, match="Duplicate RPC name"):
@@ -118,7 +118,7 @@ def test_method_names_collide_across_channels() -> None:
 
 
 def test_close_when_events_complete_requires_events() -> None:
-    service = RpcService()
+    service = RpcDefinition()
     service.socket(
         "/rpc", channels=(RpcChannel("plain"),), close_when_events_complete=True
     )

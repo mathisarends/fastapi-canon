@@ -6,8 +6,8 @@ from fastapi_canon.integrations.websockets import (
     RpcConnectionExpiry,
     RpcReject,
     RpcRejection,
-    RpcService,
 )
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.testing import InMemorySocketFactory
 from pydantic import BaseModel
 
@@ -40,7 +40,7 @@ async def test_expiry_refreshes_python_headers_or_stops_on_denial(
             raise RpcReject(RpcRejection.UNAUTHORIZED, "Unauthorized")
         return None
 
-    service = RpcService()
+    service = RpcDefinition()
     service.socket("/rpc", channels=[channel], before_accept=authenticate)
     calls = 0
 

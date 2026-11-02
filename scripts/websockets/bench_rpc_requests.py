@@ -10,7 +10,7 @@ import sys
 import time
 from pathlib import Path
 
-from fastapi_canon.integrations.websockets import RpcChannel, RpcModel, RpcService
+from fastapi_canon.integrations.websockets import RpcChannel, RpcModel, RpcRouter
 from fastapi_canon.integrations.websockets.testing import InMemorySocket
 from pydantic import BaseModel
 
@@ -43,7 +43,7 @@ async def items(params: Echo) -> list[Echo]:
     return [params] * 10
 
 
-service = RpcService()
+service = RpcRouter()
 service.socket("/rpc", channels=(bench,))
 
 

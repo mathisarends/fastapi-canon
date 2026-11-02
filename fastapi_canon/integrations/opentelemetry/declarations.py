@@ -129,7 +129,7 @@ class Telemetry:
     def rpc_middleware(self) -> OpenTelemetry:
         """Create the WebSocket middleware explicitly, forwarding the same providers.
 
-        Install ``fastapi-canon[websockets,otel]`` and pass this to ``RpcService``. No
+        Install ``fastapi-canon[websockets,otel]`` and pass this to ``RpcDefinition``. No
         connection span is added, and RPC baggage propagation remains disabled.
         """
         from fastapi_canon.integrations.websockets.adapters.opentelemetry import (

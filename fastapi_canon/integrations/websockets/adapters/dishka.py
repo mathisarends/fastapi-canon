@@ -1,25 +1,14 @@
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator, Callable, Mapping, Sequence
+from collections.abc import AsyncGenerator, Callable, Mapping
 from contextlib import asynccontextmanager
-from inspect import Parameter, iscoroutinefunction, signature
+from inspect import Parameter, signature
 from typing import TYPE_CHECKING, Any, get_type_hints
 
 if TYPE_CHECKING:
     from dishka import AsyncContainer
-    from fastapi import APIRouter, WebSocket
+    from fastapi import WebSocket
 
-    from fastapi_canon.integrations.websockets.adapters.fastapi import (
-        FastApiResolverFactory,
-    )
-    from fastapi_canon.integrations.websockets.connection import (
-        RpcBeforeAccept,
-        RpcLimits,
-        RpcRejections,
-    )
-    from fastapi_canon.integrations.websockets.middleware import RpcMiddlewareLike
-    from fastapi_canon.integrations.websockets.server import RpcErrorMapper
-    from fastapi_canon.integrations.websockets.service import RpcService
 
 from fastapi_canon.integrations.websockets.dependencies import RpcResolver
 
@@ -64,47 +53,8 @@ class DishkaResolver:
             yield DishkaResolver(request_container)
 
 
-# Public Dishka integration factory consumed by application code.
-def dishka_router(
-    service: RpcService,
-    *,
-    context: object | Mapping[type[Any], object] | None = None,
-    resolver_factory: FastApiResolverFactory | None = None,
-    error_mapper: RpcErrorMapper | None = None,
-    limits: RpcLimits | None = None,
-    before_accept: RpcBeforeAccept | None = None,
-    rejections: RpcRejections | None = None,
-    middleware: Sequence[RpcMiddlewareLike] = (),
-) -> APIRouter:
-    """Mount a service with a context value, not a FastAPI context dependency.
-
-    Use ``RpcRoutes(context=async_dependency, resolver=Dishka(), rejects=...)``
-    for per-connection authentication through FastAPI and Dishka dependencies.
-    ``resolver_factory`` can customize the resolver built for each WebSocket.
-    """
-    from fastapi_canon.integrations.websockets import create_router
-
-    if iscoroutinefunction(context):
-        raise TypeError(
-            "dishka_router context is a value; use RpcRoutes(context=...) "
-            "for an async FastAPI context dependency"
-        )
-
-    return create_router(
-        service,
-        resolver_factory=resolver_factory
-        or (lambda websocket: DishkaResolver(websocket.app.state.dishka_container)),
-        context=context,
-        error_mapper=error_mapper,
-        limits=limits,
-        before_accept=before_accept,
-        rejections=rejections,
-        middleware=middleware,
-    )
-
-
 class Dishka:
-    """Resolve ``RpcRoutes`` dependencies with the app's root Dishka container.
+    """Resolve ``RpcRouter`` dependencies with the app's root Dishka container.
 
     The context function may declare ``FromDishka[T]`` parameters without
     ``@inject``; they resolve from the container of Dishka's FastAPI

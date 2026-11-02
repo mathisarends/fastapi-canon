@@ -8,8 +8,8 @@ from pydantic import BaseModel
 
 from fastapi_canon import CanonRouter, Composition, Feature
 from fastapi_canon.integrations.sse import CanonStreamRouter
-from fastapi_canon.integrations.websockets import Inject, RpcChannel, RpcService
-from fastapi_canon.integrations.websockets.adapters.dishka import dishka_router
+from fastapi_canon.integrations.websockets import Inject, RpcChannel, RpcRouter
+from fastapi_canon.integrations.websockets.adapters.dishka import Dishka
 
 __all__ = ["app", "create_app"]
 
@@ -71,11 +71,11 @@ def create_app() -> FastAPI:
     async def increment_rpc(operations: Inject[Operations]) -> IncrementResult:
         return IncrementResult(value=operations.increment())
 
-    rpc = RpcService()
+    rpc = RpcRouter(resolver=Dishka())
     rpc.socket("/rpc", channels=(channel,))
     feature = Feature(
         name="counter",
-        routers=[http, streams, dishka_router(rpc)],
+        routers=[http, streams, rpc],
         providers=[StackProvider],
     )
     app = Composition(features=(feature,)).apply(FastAPI(title="Canon stack example"))

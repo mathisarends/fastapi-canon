@@ -6,9 +6,9 @@ from fastapi_canon.integrations.websockets import (
     RpcChannel,
     RpcError,
     RpcModel,
-    RpcService,
     ServerVariable,
 )
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.schema import render_openrpc
 from fastapi_canon.integrations.websockets.schema.export import render_contract
 
@@ -33,7 +33,7 @@ async def frames() -> AsyncIterator[bytes]:
     yield b"frame"
 
 
-service = RpcService(version=2)
+service = RpcDefinition(version=2)
 service.socket("/projects/{project_id}/rpc", channels=(channel,), subprotocol="rpc.v2")
 service.stream("/projects/{project_id}/frames", frames)
 contract = service.contract(

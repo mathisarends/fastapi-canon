@@ -18,7 +18,7 @@ The handler's signature determines the stream's direction:
 ```python
 from collections.abc import AsyncIterator
 
-from fastapi_canon.integrations.websockets import Inject, RpcChannel, RpcService
+from fastapi_canon.integrations.websockets import Inject, RpcChannel, RpcRouter
 
 
 class FrameSource:
@@ -35,7 +35,7 @@ async def preview(source: Inject[FrameSource]) -> AsyncIterator[bytes]:
         yield frame
 
 
-app = RpcService()
+app = RpcRouter()
 app.stream("/projects/{project_id}/preview", preview)
 ```
 

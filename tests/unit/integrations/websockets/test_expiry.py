@@ -11,9 +11,9 @@ from fastapi_canon.integrations.websockets import (
     RpcConnectionClose,
     RpcConnectionExpiry,
     RpcMiddleware,
-    RpcService,
     RpcSocket,
 )
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.testing import (
     InMemorySocket,
     InMemorySocketFactory,
@@ -62,7 +62,7 @@ def expiring_service(timestamp, *, middleware=()):
     async def authenticate(handshake):
         return {RpcConnectionExpiry: RpcConnectionExpiry(timestamp)}
 
-    service = RpcService(middleware=middleware)
+    service = RpcDefinition(middleware=middleware)
     service.socket("/rpc", channels=[channel], before_accept=authenticate)
     service.stream("/binary", frames, before_accept=authenticate)
     service.socket("/raw", raw, before_accept=authenticate)
@@ -234,7 +234,7 @@ async def test_expiry_interrupts_accepted_connection_initialization(
     async def authenticate(handshake):
         return {RpcConnectionExpiry: RpcConnectionExpiry(1000)}
 
-    service = RpcService(middleware=[Instrumentation()])
+    service = RpcDefinition(middleware=[Instrumentation()])
     service.socket("/rpc", channels=[channel], before_accept=authenticate)
     service.stream("/binary", frames, before_accept=authenticate)
     service.socket("/raw", raw, before_accept=authenticate)

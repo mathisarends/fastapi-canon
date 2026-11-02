@@ -23,8 +23,8 @@ from fastapi_canon.integrations.websockets import (
     RpcRejection,
     RpcRequestCancelledError,
     RpcRequestTimeoutError,
-    RpcService,
 )
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 
 from tests.unit.integrations.websockets.deadlines import ControlledDeadlines
 from tests.unit.integrations.websockets.testing import InMemorySocket, RpcTestClient
@@ -85,7 +85,7 @@ async def test_hung_calls_expire_including_queued_batch_item_and_release_capacit
     async def ping() -> str:
         return "pong"
 
-    app = RpcService(
+    app = RpcDefinition(
         limits=RpcLimits(max_concurrency=2, max_pending_requests=3, request_timeout=5),
         strict_errors=True,
         middleware=[recorder],
@@ -146,7 +146,7 @@ async def test_cancel_bypasses_saturated_slots_preserves_id_types_and_cleans_sco
     async def ping() -> str:
         return "pong"
 
-    app = RpcService(
+    app = RpcDefinition(
         limits=RpcLimits(max_concurrency=1, max_pending_requests=2),
         strict_errors=True,
         middleware=[recorder],
@@ -206,7 +206,7 @@ async def test_same_batch_cancel_before_task_start_keeps_one_batch_response():
     async def ping() -> str:
         return "pong"
 
-    app = RpcService(limits=RpcLimits(max_pending_requests=2))
+    app = RpcDefinition(limits=RpcLimits(max_pending_requests=2))
     app.socket("/rpc", channels=[channel])
     async with deadline_socket(app) as (socket, _):
         await socket.client_send(
@@ -250,7 +250,7 @@ async def test_malformed_cancel_notifications_do_not_cancel_work(invalid):
             await release.wait()
             return "completed"
 
-        app = RpcService(limits=RpcLimits(max_pending_requests=1))
+        app = RpcDefinition(limits=RpcLimits(max_pending_requests=1))
         app.socket("/rpc", channels=[channel])
         async with deadline_socket(app) as (socket, _):
             await socket.client_send(json.dumps(deadline_request(1)))
@@ -279,7 +279,7 @@ async def test_duplicate_in_flight_ids_close_without_overwriting_original(batch)
             finally:
                 stopped.set()
 
-        app = RpcService()
+        app = RpcDefinition()
         app.socket("/rpc", channels=[channel])
         async with deadline_socket(app) as (socket, serving):
             if batch:
@@ -322,7 +322,7 @@ async def test_cancel_is_processed_while_writer_and_outgoing_queue_are_full(inva
         faults = SocketFaults()
         faults.block()
         socket = InMemorySocket("/rpc", server_to_client=faults)
-        app = RpcService(
+        app = RpcDefinition(
             limits=RpcLimits(max_pending_requests=2, max_queue_size=1),
             middleware=[recorder],
         )
@@ -377,7 +377,7 @@ async def test_middleware_interruption_returns_and_observes_failure(
             assert phase != "enter"
             return 42
 
-        app = RpcService(
+        app = RpcDefinition(
             middleware=[recorder, Blocking()], limits=RpcLimits(request_timeout=5)
         )
         app.socket("/rpc", channels=[channel])
@@ -410,7 +410,7 @@ async def test_boolean_batch_id_cannot_alias_a_valid_request_id():
         executions.append(True)
         return 42
 
-    app = RpcService()
+    app = RpcDefinition()
     app.socket("/rpc", channels=[channel])
     async with deadline_socket(app) as (socket, _):
         await socket.client_send(
@@ -430,7 +430,7 @@ async def test_response_frames_from_the_client_are_invalid_requests():
     async def work() -> int:
         return 42
 
-    app = RpcService()
+    app = RpcDefinition()
     app.socket("/rpc", channels=[channel])
     async with deadline_socket(app) as (socket, _):
         await socket.client_send(
@@ -472,7 +472,7 @@ async def test_shutdown_cancellation_releases_admission_without_cancelled_respon
             finally:
                 stopped.set()
 
-        app = RpcService(middleware=[recorder])
+        app = RpcDefinition(middleware=[recorder])
         app.socket("/rpc", channels=[channel])
         socket = InMemorySocket("/rpc")
         serving = asyncio.create_task(app.serve(socket))
@@ -537,7 +537,7 @@ async def echo(params: Params, connection: Inject[RpcConnection]) -> Params:
     return params
 
 
-service = RpcService(middleware=[instrumentation])
+service = RpcDefinition(middleware=[instrumentation])
 service.socket("/rpc", channels=(channel,))
 
 
@@ -588,7 +588,7 @@ async def test_binary_stream() -> None:
         yield b"one"
 
     stream_metrics = StreamMetrics()
-    rpc = RpcService(middleware=[stream_metrics])
+    rpc = RpcDefinition(middleware=[stream_metrics])
     rpc.stream("/frames", frames)
     async with RpcTestClient(rpc, "/frames") as client:
         assert await client.next_frame() == b"one"
@@ -599,7 +599,7 @@ async def test_binary_stream() -> None:
 
 
 async def test_unsupported_subprotocol_is_rejected_before_acceptance() -> None:
-    rpc = RpcService()
+    rpc = RpcDefinition()
     rpc.socket("/rpc", channels=(channel,), subprotocol="rpc.v2")
 
     async with RpcTestClient(rpc, "/rpc", subprotocols=("rpc.v1",)) as client:
@@ -622,7 +622,7 @@ async def test_socket_path_model_is_validated_and_injected() -> None:
     async def get(path: Inject[RoomPath]) -> str:
         return str(path.room_id)
 
-    rpc = RpcService()
+    rpc = RpcDefinition()
     rpc.socket("/rooms/{room_id}", channels=(room,), path_model=RoomPath)
     value = "bc1560c4-68c2-471f-b2f7-2ef3e6cc87bd"
 
@@ -641,7 +641,7 @@ def test_socket_path_model_fields_must_match_template() -> None:
     class WrongPath(RpcModel):
         other: UUID
 
-    rpc = RpcService()
+    rpc = RpcDefinition()
     with pytest.raises(ProtocolDefinitionError, match="must match path variables"):
         rpc.socket("/rooms/{room_id}", channels=(channel,), path_model=WrongPath)
 
@@ -714,7 +714,7 @@ async def test_pending_rejection_logs_are_bounded_even_at_debug(caplog) -> None:
             entered.set()
             await release.wait()
 
-        app = RpcService(
+        app = RpcDefinition(
             middleware=[Instrumentation()], limits=RpcLimits(max_pending_requests=1)
         )
         app.socket("/rpc", channels=[channel])
@@ -760,7 +760,7 @@ async def test_requests_beyond_the_pending_limit_are_rejected() -> None:
             await release.wait()
             return params
 
-        pending_service = RpcService()
+        pending_service = RpcDefinition()
         pending_service.socket("/rpc", channels=(pending,))
         socket = InMemorySocket("/rpc")
         task = asyncio.create_task(
@@ -807,7 +807,7 @@ async def test_batches_reserve_capacity_per_item_and_preserve_response_shape():
             await release.wait()
             return params
 
-        app = RpcService(limits=RpcLimits(max_concurrency=2, max_pending_requests=2))
+        app = RpcDefinition(limits=RpcLimits(max_concurrency=2, max_pending_requests=2))
         app.socket("/rpc", channels=[channel])
         socket = InMemorySocket("/rpc")
         serving = asyncio.create_task(app.serve(socket))
@@ -928,7 +928,7 @@ async def test_item_capacity_is_released_after_every_outcome(ending, monkeypatch
         async def ready() -> str:
             return "ok"
 
-        app = RpcService(limits=RpcLimits(max_pending_requests=1))
+        app = RpcDefinition(limits=RpcLimits(max_pending_requests=1))
         app.socket("/rpc", channels=[channel])
         socket = InMemorySocket("/rpc")
         serving = asyncio.create_task(app.serve(socket))
@@ -1025,7 +1025,7 @@ async def test_documented_shared_capacity_releases_worker_permits(ending):
             await release.wait()
             raise RpcInvalidParamsError(message="controlled failure")
 
-        app = RpcService(middleware=[capacity])
+        app = RpcDefinition(middleware=[capacity])
         app.socket("/rpc", channels=[channel], before_accept=capacity.before_accept)
         sockets = [InMemorySocket("/rpc") for _ in range(3)]
         serving = []
@@ -1166,7 +1166,7 @@ async def test_server_events_are_sent_as_typed_notifications() -> None:
             self.sent.append((name, size))
 
     event_metrics = EventMetrics()
-    rpc = RpcService(middleware=[event_metrics])
+    rpc = RpcDefinition(middleware=[event_metrics])
     rpc.socket("/events", channels=(events,))
 
     async with RpcTestClient(rpc, "/events", context=ready) as client:
@@ -1191,7 +1191,7 @@ async def test_invalid_server_event_does_not_close_connection() -> None:
         await ready.wait()
         yield Params(value="still running")
 
-    rpc = RpcService()
+    rpc = RpcDefinition()
     rpc.socket("/events", channels=(events,))
 
     async with RpcTestClient(rpc, "/events") as client:
@@ -1207,7 +1207,7 @@ async def test_event_can_opt_in_to_closing_on_error() -> None:
     async def changed() -> AsyncIterator[Params]:
         yield {}  # type: ignore[misc]
 
-    rpc = RpcService()
+    rpc = RpcDefinition()
     rpc.socket("/events", channels=(events,))
 
     async with RpcTestClient(rpc, "/events") as client:
@@ -1230,7 +1230,7 @@ async def test_mapped_event_source_failure_closes_the_connection() -> None:
         raise AccessRevoked("revoked")
         yield Params(value="never")
 
-    rpc = RpcService()
+    rpc = RpcDefinition()
     rpc.socket("/events", channels=(events,))
 
     async with RpcTestClient(
@@ -1248,7 +1248,7 @@ async def test_before_accept_failures_are_rejected_with_mapped_rejections() -> N
     async def authenticate(handshake: RpcHandshake) -> None:
         raise SessionNotFound("no session")
 
-    rpc = RpcService()
+    rpc = RpcDefinition()
     rpc.socket("/rpc", channels=(channel,), before_accept=authenticate)
 
     async with RpcTestClient(
@@ -1290,7 +1290,7 @@ async def test_closing_after_the_final_event_delivers_queued_notifications() -> 
         yield Params(value="last")
         await connection.close()
 
-    rpc = RpcService()
+    rpc = RpcDefinition()
     rpc.socket("/events", channels=(events,))
     socket = DelayedSocket("/events")
 
@@ -1312,7 +1312,7 @@ async def test_socket_closes_when_its_events_complete() -> None:
         await asyncio.sleep(0.01)
         yield Params(value="second")
 
-    rpc = RpcService()
+    rpc = RpcDefinition()
     rpc.socket("/events", channels=(events,), close_when_events_complete=True)
     socket = DelayedSocket("/events")
 
@@ -1362,7 +1362,7 @@ async def test_rejections_are_looked_up_from_call_to_endpoint_to_service(
     async def authenticate(handshake: RpcHandshake) -> None:
         raise failure
 
-    rpc = RpcService(
+    rpc = RpcDefinition(
         rejects=[
             rejects(SessionExpired, RpcRejection.UNAUTHORIZED),
             rejects(SessionNotFound, RpcRejection.UNAVAILABLE),
@@ -1389,7 +1389,7 @@ async def test_stream_endpoints_apply_their_contracts() -> None:
         raise SessionNotFound("missing")
         yield b""
 
-    rpc = RpcService()
+    rpc = RpcDefinition()
     rpc.stream(
         "/audio", frames, rejects=[rejects(SessionNotFound, RpcRejection.UNAVAILABLE)]
     )
@@ -1404,7 +1404,7 @@ async def test_contracts_reject_with_their_message_by_default() -> None:
     async def authenticate(handshake: RpcHandshake) -> None:
         raise SessionNotFound("internal lookup detail")
 
-    rpc = RpcService()
+    rpc = RpcDefinition()
     rpc.socket(
         "/rpc",
         channels=(RpcChannel("sessions"),),
@@ -1438,7 +1438,7 @@ async def test_event_bindings_are_scoped_and_exported(declared, caplog) -> None:
     @channel.method(raises=[binding])
     async def lookup() -> None: ...
 
-    service = RpcService()
+    service = RpcDefinition()
     service.socket("/rpc", channels=[channel])
     document = service.contract(
         title="Sessions", base_url="ws://localhost"
@@ -1473,7 +1473,9 @@ async def test_event_bindings_are_scoped_and_exported(declared, caplog) -> None:
 )
 def test_endpoint_rejects_takes_one_rejecting_binding_per_exception(raises) -> None:
     with pytest.raises(ProtocolDefinitionError):
-        RpcService().socket("/rpc", channels=(RpcChannel("sessions"),), rejects=raises)
+        RpcDefinition().socket(
+            "/rpc", channels=(RpcChannel("sessions"),), rejects=raises
+        )
 
 
 async def test_request_envelope_is_validated_once(monkeypatch) -> None:

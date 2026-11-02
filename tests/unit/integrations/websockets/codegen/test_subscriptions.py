@@ -13,10 +13,10 @@ from fastapi_canon.integrations.websockets import (
     RpcDisconnect,
     RpcErrorBinding,
     RpcModel,
-    RpcService,
 )
 from fastapi_canon.integrations.websockets.codegen import generate_python_client
 from fastapi_canon.integrations.websockets.codegen.python import PythonClientOptions
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 
 from tests.unit.integrations.websockets.testing import InMemorySocket
 
@@ -52,7 +52,7 @@ async def test_generated_python_subscription_errors_are_typed(
             yield SessionEvent(value="first")
             raise SessionMissing(42)
 
-        service = RpcService()
+        service = RpcDefinition()
         service.socket("/rpc", channels=[channel])
         package = f"failure_subscription_client_{declared}"
         generate_python_client(
@@ -127,7 +127,7 @@ async def test_generated_python_subscription_roundtrip(tmp_path: Path) -> None:
             finally:
                 stopped.set()
 
-        service = RpcService()
+        service = RpcDefinition()
         service.socket("/rpc", channels=(channel,))
         package = "subscription_client"
         generate_python_client(
@@ -185,7 +185,7 @@ async def test_subscription_resubscribes_after_reconnect(tmp_path: Path) -> None
     async def events(params: SessionParams) -> AsyncIterator[SessionEvent]:
         yield SessionEvent(value=params.session_id)
 
-    service = RpcService()
+    service = RpcDefinition()
     service.socket("/rpc", channels=(channel,))
     package = "reconnect_subscription_client"
     generate_python_client(

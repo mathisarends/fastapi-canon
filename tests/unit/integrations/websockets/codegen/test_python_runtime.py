@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 from fastapi_canon.integrations.websockets.codegen import generate_python_client
 from fastapi_canon.integrations.websockets.codegen.python import PythonClientOptions
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from pydantic import TypeAdapter
 
 
@@ -384,7 +385,7 @@ async def test_abandoned_call_cancels_server_once_and_preserves_local_outcome(
     websocket_runtime, monkeypatch, ending
 ):
     async with asyncio.timeout(10):
-        from fastapi_canon.integrations.websockets import RpcChannel, RpcService
+        from fastapi_canon.integrations.websockets import RpcChannel
         from fastapi_canon.integrations.websockets.testing import InMemorySocketFactory
 
         before = asyncio.all_tasks()
@@ -415,7 +416,7 @@ async def test_abandoned_call_cancels_server_once_and_preserves_local_outcome(
 
             socket.client_to_server.drop_when = record
 
-        app = RpcService()
+        app = RpcDefinition()
         app.socket("/rpc", channels=[channel])
         async with InMemorySocketFactory(app, configure=configure) as factory:
             transport = await websocket_runtime.WebSocketTransport.open(
@@ -537,7 +538,7 @@ async def test_late_response_from_a_served_endpoint_keeps_the_client_usable(
     websocket_runtime: ModuleType,
 ) -> None:
     async with asyncio.timeout(10):
-        from fastapi_canon.integrations.websockets import RpcChannel, RpcService
+        from fastapi_canon.integrations.websockets import RpcChannel
         from fastapi_canon.integrations.websockets.testing import InMemorySocketFactory
 
         channel = RpcChannel("resilience")
@@ -553,7 +554,7 @@ async def test_late_response_from_a_served_endpoint_keeps_the_client_usable(
         async def fast() -> str:
             return "ok"
 
-        service = RpcService()
+        service = RpcDefinition()
         service.socket("/rpc", channels=[channel])
 
         def configure(socket, attempt):
@@ -811,7 +812,6 @@ async def test_served_close_preserves_code_in_requests_notifications_and_closed(
             RpcChannel,
             RpcConnection,
             RpcConnectionClose,
-            RpcService,
         )
         from fastapi_canon.integrations.websockets.testing import InMemorySocketFactory
 
@@ -824,7 +824,7 @@ async def test_served_close_preserves_code_in_requests_notifications_and_closed(
             )
             await asyncio.Event().wait()
 
-        app = RpcService()
+        app = RpcDefinition()
         app.socket("/rpc", channels=[channel])
         async with InMemorySocketFactory(app) as factory:
             transport = await websocket_runtime.WebSocketTransport.open(
@@ -850,14 +850,13 @@ async def test_simultaneous_interrupted_sends_keep_their_own_delivery_state(
     from fastapi_canon.integrations.websockets import (
         RpcChannel,
         RpcConnectionClose,
-        RpcService,
     )
     from fastapi_canon.integrations.websockets.testing import (
         InMemoryClientSocket,
         InMemorySocketFactory,
     )
 
-    app = RpcService()
+    app = RpcDefinition()
     app.socket("/rpc", channels=[RpcChannel("pending")])
     entered = asyncio.Queue()
 

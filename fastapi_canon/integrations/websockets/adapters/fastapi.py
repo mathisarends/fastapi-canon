@@ -24,6 +24,7 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.websockets import WebSocketState
+from pydantic import BaseModel
 from starlette.types import Message
 
 from fastapi_canon.error.catalog import registry_scope
@@ -40,9 +41,18 @@ from fastapi_canon.integrations.websockets.connection import (
     RpcLimits,
     RpcRejection,
     RpcRejections,
+    RpcWebSocket,
     chain_rejections,
 )
 from fastapi_canon.integrations.websockets.contract import RpcContract, ServerVariable
+from fastapi_canon.integrations.websockets.definition import (
+    RpcAnyEndpoint,
+    RpcDefinition,
+    RpcEndpoint,
+    RpcSocketEndpoint,
+    RpcStreamEndpoint,
+    endpoint_rejections,
+)
 from fastapi_canon.integrations.websockets.dependencies import (
     RpcInjectedParameter,
     RpcResolverLike,
@@ -50,6 +60,7 @@ from fastapi_canon.integrations.websockets.dependencies import (
     connection_scope,
     injected_parameter,
 )
+from fastapi_canon.integrations.websockets.drain import RpcDrain
 from fastapi_canon.integrations.websockets.errors import (
     RpcErrorBinding,
     contract_rejections,
@@ -63,16 +74,9 @@ from fastapi_canon.integrations.websockets.middleware import (
     _serving_scope,
     _ServingState,
 )
+from fastapi_canon.integrations.websockets.protocol import RpcProtocol
 from fastapi_canon.integrations.websockets.runtime import _rejection
 from fastapi_canon.integrations.websockets.server import RpcErrorMapper
-from fastapi_canon.integrations.websockets.service import (
-    RpcAnyEndpoint,
-    RpcEndpoint,
-    RpcService,
-    RpcSocketEndpoint,
-    RpcStreamEndpoint,
-    endpoint_rejections,
-)
 from fastapi_canon.integrations.websockets.websocket import (
     CLOSE_CODES,
     REJECTION_CLOSE_CODES,
@@ -89,6 +93,8 @@ _HTTP_STATUS = {
     RpcRejection.UNAVAILABLE: 503,
     RpcRejection.INTERNAL_ERROR: 500,
 }
+
+_OBSERVED_SOCKET_KEY = "fastapi_canon.integrations.websockets.observed_socket"
 
 
 class FastApiSocket:
@@ -163,78 +169,6 @@ async def _reject(
         )
     else:
         await websocket.close(REJECTION_CLOSE_CODES[rejection], close_reason(reason))
-
-
-def create_router(
-    service: RpcService,
-    *,
-    resolver: RpcResolverLike | None = None,
-    resolver_factory: FastApiResolverFactory | None = None,
-    context: object | Mapping[type[Any], object] | None = None,
-    error_mapper: RpcErrorMapper | None = None,
-    limits: RpcLimits | None = None,
-    before_accept: RpcBeforeAccept | None = None,
-    rejections: RpcRejections | None = None,
-    middleware: Sequence[RpcMiddlewareLike] = (),
-) -> APIRouter:
-    if resolver is not None and resolver_factory is not None:
-        raise ValueError("resolver and resolver_factory are mutually exclusive")
-    service.freeze()
-    middleware = tuple(middleware)
-    router = APIRouter()
-    for endpoint in service.endpoints:
-        handler = _create_handler(
-            endpoint,
-            resolver=resolver,
-            resolver_factory=resolver_factory,
-            context=context,
-            error_mapper=error_mapper,
-            limits=limits,
-            before_accept=before_accept,
-            rejections=rejections,
-            middleware=middleware,
-        )
-        router.add_api_websocket_route(endpoint.path, handler, name=endpoint.name)
-    return router
-
-
-def _create_handler(
-    endpoint: RpcAnyEndpoint,
-    *,
-    resolver: RpcResolverLike | None,
-    resolver_factory: FastApiResolverFactory | None,
-    context: object | Mapping[type[Any], object] | None,
-    error_mapper: RpcErrorMapper | None,
-    limits: RpcLimits | None,
-    before_accept: RpcBeforeAccept | None,
-    rejections: RpcRejections | None,
-    middleware: Sequence[RpcMiddlewareLike],
-):
-    boundary = (
-        asynccontextmanager(_middleware_dependency(endpoint, middleware))
-        if middleware or endpoint.middleware
-        else None
-    )
-
-    async def handler(websocket: WebSocket) -> None:
-        async with boundary(websocket) if boundary is not None else nullcontext():
-            connection_resolver = (
-                resolver_factory(websocket)
-                if resolver_factory is not None
-                else resolver
-            )
-            await serve_websocket(
-                endpoint,
-                websocket,
-                resolver=connection_resolver,
-                context=context,
-                error_mapper=error_mapper,
-                limits=limits,
-                before_accept=before_accept,
-                rejections=rejections,
-            )
-
-    return handler
 
 
 async def serve_websocket(
@@ -316,7 +250,7 @@ class FastApiResolver(Protocol):
     """Resolve RPC dependencies per WebSocket and prepare the context function.
 
     Pass ``Dishka`` from ``fastapi_canon.integrations.websockets.adapters.dishka``
-    as ``resolver=`` to ``RpcRoutes`` to integrate Dishka.
+    as ``resolver=`` to ``RpcRouter`` to integrate Dishka.
     """
 
     def for_websocket(self, websocket: WebSocket) -> RpcResolverLike: ...
@@ -327,93 +261,38 @@ class FastApiResolver(Protocol):
 
 
 class RpcRouter(APIRouter):
-    """Serve one JSON-RPC WebSocket path and export its OpenRPC contract."""
+    """Define WebSocket endpoints, mount their routes and export one contract."""
 
     def __init__(
         self,
-        path: str,
+        path: str | None = None,
         *,
-        channels: Sequence[RpcChannel],
+        channels: Sequence[RpcChannel] | None = None,
         version: int = 1,
         context: Callable[..., Awaitable[Any]] | None = None,
         resolver: RpcResolverLike | FastApiResolver | None = None,
+        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        rejections: RpcRejections | None = None,
+        middleware: Sequence[RpcMiddlewareLike] = (),
+        error_mapper: RpcErrorMapper | None = None,
+        limits: RpcLimits | None = None,
+        strict_errors: bool = False,
+        drain: RpcDrain | None = None,
+        prefix: str = "",
+        before_accept: RpcBeforeAccept | None = None,
     ) -> None:
-        super().__init__()
-        self._service = RpcService(version=version)
-        context_type = NoneType if context is None else _context_type(context)
-        endpoint = self._service.socket(path, channels=channels, context=context_type)
-        self._service.freeze()
-        RpcRoutes(self, context=context, resolver=resolver).mount(endpoint)
-
-    def contract(
-        self,
-        *,
-        title: str,
-        base_url: str,
-        description: str = "Typed JSON-RPC API.",
-        variables: Mapping[str, ServerVariable] | None = None,
-        app: FastAPI | None = None,
-    ) -> RpcContract:
-        return self._service.contract(
-            title=title,
-            base_url=base_url,
-            description=description,
-            variables=variables,
-            app=app,
+        super().__init__(prefix=prefix)
+        if (path is None) != (channels is None):
+            raise ValueError("RpcRouter needs path and channels together")
+        self._definition = RpcDefinition(
+            version=version,
+            error_mapper=error_mapper,
+            limits=limits,
+            middleware=middleware,
+            strict_errors=strict_errors,
+            drain=drain,
+            rejects=rejects,
         )
-
-
-class RpcRoutes[ContextT]:
-    """Mount WebSocket endpoints on an existing FastAPI router.
-
-    ``context`` runs as a FastAPI dependency per connection, path parameters
-    included. Its result reaches handlers as ``Inject[T]``, where T is the
-    context type the mounted endpoint declares. Failures covered by ``rejects``
-    or ``rejections`` reject the handshake or close the socket, depending on
-    whether it was already accepted.
-    """
-
-    @overload
-    def __init__(
-        self: "RpcRoutes[None]",
-        router: APIRouter,
-        *,
-        context: None = None,
-        resolver: RpcResolverLike | FastApiResolver | None = None,
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
-        rejections: RpcRejections | None = None,
-        middleware: Sequence[RpcMiddlewareLike] = (),
-        error_mapper: RpcErrorMapper | None = None,
-        limits: RpcLimits | None = None,
-    ) -> None: ...
-
-    @overload
-    def __init__(
-        self,
-        router: APIRouter,
-        *,
-        context: Callable[..., Awaitable[ContextT]],
-        resolver: RpcResolverLike | FastApiResolver | None = None,
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
-        rejections: RpcRejections | None = None,
-        middleware: Sequence[RpcMiddlewareLike] = (),
-        error_mapper: RpcErrorMapper | None = None,
-        limits: RpcLimits | None = None,
-    ) -> None: ...
-
-    def __init__(
-        self,
-        router: APIRouter,
-        *,
-        context: Callable[..., Awaitable[Any]] | None = None,
-        resolver: RpcResolverLike | FastApiResolver | None = None,
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
-        rejections: RpcRejections | None = None,
-        middleware: Sequence[RpcMiddlewareLike] = (),
-        error_mapper: RpcErrorMapper | None = None,
-        limits: RpcLimits | None = None,
-    ) -> None:
-        self._router = router
         self._resolver: RpcResolverLike | None = None
         self._websocket_resolver: FastApiResolver | None = None
         if isinstance(resolver, FastApiResolver):
@@ -425,15 +304,182 @@ class RpcRoutes[ContextT]:
         if context is not None and self._websocket_resolver is not None:
             self._context = self._websocket_resolver.dependency(context)
         self._rejections = chain_rejections(
-            rejections,
-            contract_rejections(rejecting_contracts(rejects, "RpcRoutes")),
+            rejections, contract_rejections(rejecting_contracts(rejects, "RpcRouter"))
         )
         self._error_mapper = error_mapper
         self._limits = limits
+        self._before_accept = before_accept
         self._middleware = tuple(middleware)
         self._mounted: set[RpcAnyEndpoint] = set()
+        if path is not None and channels is not None:
+            self.socket(path, channels=channels)
+            self._definition.freeze()
 
-    def mount(
+    @property
+    def drain(self) -> RpcDrain:
+        return self._definition.drain
+
+    @property
+    def protocol(self) -> RpcProtocol:
+        return self._definition.protocol
+
+    @property
+    def endpoints(self) -> tuple[RpcAnyEndpoint, ...]:
+        return self._definition.endpoints
+
+    def endpoint(self, name: str) -> RpcAnyEndpoint:
+        return self._definition.endpoint(name)
+
+    @property
+    def version(self) -> int:
+        return self._definition.version
+
+    def freeze(self) -> RpcProtocol:
+        return self._definition.freeze()
+
+    def match(self, path: str) -> tuple[RpcAnyEndpoint, dict[str, str]] | None:
+        return self._definition.match(path)
+
+    async def serve(self, socket: RpcWebSocket, **options: Any) -> None:
+        options.setdefault("resolver", self._resolver)
+        options.setdefault("rejections", self._rejections)
+        await self._definition.serve(socket, **options)
+
+    def contract(
+        self,
+        *,
+        title: str,
+        base_url: str,
+        description: str = "Typed JSON-RPC API.",
+        variables: Mapping[str, ServerVariable] | None = None,
+        app: FastAPI | None = None,
+    ) -> RpcContract:
+        return self._definition.contract(
+            title=title,
+            base_url=base_url,
+            description=description,
+            variables=variables,
+            app=app,
+        )
+
+    @overload
+    def socket(
+        self,
+        path: str,
+        /,
+        *,
+        channels: Sequence[RpcChannel],
+        name: str | None = None,
+        error_mapper: RpcErrorMapper | None = None,
+        middleware: Sequence[RpcMiddlewareLike] = (),
+        limits: RpcLimits | None = None,
+        subprotocol: str | None = None,
+        summary: str | None = None,
+        before_accept: RpcBeforeAccept | None = None,
+        path_model: type[BaseModel] | None = None,
+        context: type[None] = NoneType,
+        close_when_events_complete: bool = False,
+        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        serve: Callable[..., Awaitable[None]] | None = None,
+    ) -> RpcEndpoint[None]: ...
+
+    @overload
+    def socket[ContextT](
+        self,
+        path: str,
+        /,
+        *,
+        channels: Sequence[RpcChannel],
+        name: str | None = None,
+        error_mapper: RpcErrorMapper | None = None,
+        middleware: Sequence[RpcMiddlewareLike] = (),
+        limits: RpcLimits | None = None,
+        subprotocol: str | None = None,
+        summary: str | None = None,
+        before_accept: RpcBeforeAccept | None = None,
+        path_model: type[BaseModel] | None = None,
+        context: type[ContextT],
+        close_when_events_complete: bool = False,
+        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        serve: Callable[..., Awaitable[None]] | None = None,
+    ) -> RpcEndpoint[ContextT]: ...
+
+    @overload
+    def socket[ContextT](
+        self,
+        path: str,
+        handler: Callable[..., Any],
+        /,
+        *,
+        name: str | None = None,
+        middleware: Sequence[RpcMiddlewareLike] = (),
+        limits: RpcLimits | None = None,
+        subprotocol: str | None = None,
+        summary: str | None = None,
+        before_accept: RpcBeforeAccept | None = None,
+        context: type[ContextT] = NoneType,
+        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        serve: Callable[..., Awaitable[None]] | None = None,
+    ) -> RpcSocketEndpoint[ContextT]: ...
+
+    def socket(
+        self,
+        path: str,
+        handler: Callable[..., Any] | None = None,
+        /,
+        *,
+        channels: Sequence[RpcChannel] | None = None,
+        context: type[Any] | None = None,
+        serve: Callable[..., Awaitable[None]] | None = None,
+        **options: Any,
+    ) -> RpcEndpoint[Any] | RpcSocketEndpoint[Any]:
+        options.setdefault("before_accept", self._before_accept)
+        endpoint = self._definition.socket(
+            self.prefix + path,
+            handler,
+            channels=channels,
+            context=context or self._context_type or NoneType,
+            **options,
+        )
+        self.mount(endpoint, handler=serve)
+        return endpoint
+
+    def stream[ContextT](
+        self,
+        path: str,
+        stream: Callable[..., Any],
+        /,
+        *,
+        name: str | None = None,
+        middleware: Sequence[RpcMiddlewareLike] = (),
+        limits: RpcLimits | None = None,
+        subprotocol: str | None = None,
+        summary: str | None = None,
+        before_accept: RpcBeforeAccept | None = None,
+        error_mapper: RpcErrorMapper | None = None,
+        context: type[ContextT] = NoneType,
+        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        serve: Callable[..., Awaitable[None]] | None = None,
+    ) -> RpcStreamEndpoint[ContextT]:
+        endpoint = self._definition.stream(
+            self.prefix + path,
+            stream,
+            name=name,
+            middleware=middleware,
+            limits=limits,
+            subprotocol=subprotocol,
+            summary=summary,
+            before_accept=before_accept or self._before_accept,
+            error_mapper=error_mapper,
+            context=self._context_type
+            if context is NoneType and self._context_type is not None
+            else context,
+            rejects=rejects,
+        )
+        self.mount(endpoint, handler=serve)
+        return endpoint
+
+    def mount[ContextT](
         self,
         endpoint: (
             RpcEndpoint[ContextT]
@@ -448,11 +494,12 @@ class RpcRoutes[ContextT]:
             raise ValueError(f"RPC endpoint {endpoint.name!r} is already mounted")
         self._check_context(endpoint)
         dependencies = []
-        if self._middleware or endpoint.middleware:
+        middleware = () if endpoint.service is self._definition else self._middleware
+        if middleware or endpoint.middleware:
             dependencies.append(
                 Depends(
                     _middleware_dependency(
-                        endpoint, self._middleware, custom=handler is not None
+                        endpoint, middleware, custom=handler is not None
                     )
                 )
             )
@@ -463,15 +510,16 @@ class RpcRoutes[ContextT]:
                 )
             )
         )
-        self._router.add_api_websocket_route(
+        self.websocket(
             self._route_path(endpoint),
-            self._handler(endpoint)
-            if handler is None
-            else self._custom_handler(endpoint, handler),
             name=endpoint.name,
             dependencies=dependencies,
+        )(
+            self._handler(endpoint)
+            if handler is None
+            else self._custom_handler(endpoint, handler)
         )
-        contributions = list(getattr(self._router, "_canon_error_registries", ()))
+        contributions = list(getattr(self, "_canon_error_registries", ()))
 
         def collect(channel: Any) -> None:
             if channel.error_registry is not None:
@@ -481,7 +529,7 @@ class RpcRoutes[ContextT]:
 
         for channel in endpoint.channels if isinstance(endpoint, RpcEndpoint) else ():
             collect(channel)
-        self._router._canon_error_registries = tuple(contributions)  # type: ignore[attr-defined]
+        self._canon_error_registries = tuple(contributions)  # type: ignore[attr-defined]
         self._mounted.add(endpoint)
 
     def _check_context(self, endpoint: RpcAnyEndpoint) -> None:
@@ -497,7 +545,7 @@ class RpcRoutes[ContextT]:
             )
 
     def _route_path(self, endpoint: RpcAnyEndpoint) -> str:
-        prefix = self._router.prefix
+        prefix = self.prefix
         path = endpoint.path
         if not path.startswith(prefix) or path[len(prefix) :][:1] not in ("", "/"):
             raise ValueError(
@@ -518,8 +566,13 @@ class RpcRoutes[ContextT]:
                     else self._resolver
                 ),
                 context=None if context_type is None else {context_type: context},
-                error_mapper=self._error_mapper,
-                limits=self._limits,
+                error_mapper=None
+                if endpoint.service is self._definition
+                else self._error_mapper,
+                limits=None if endpoint.service is self._definition else self._limits,
+                before_accept=None
+                if endpoint.service is self._definition
+                else self._before_accept,
                 rejections=self._rejections,
             )
 
@@ -616,6 +669,10 @@ class RpcRoutes[ContextT]:
 
         async def handler(**arguments: Any) -> None:
             websocket = arguments[websocket_name]
+            observe = websocket.scope.get(_OBSERVED_SOCKET_KEY)
+            if observe is not None:
+                websocket = await observe()
+                arguments[websocket_name] = websocket
             if websocket_name not in signature.parameters:
                 arguments.pop(websocket_name)
             context = arguments.pop(context_name, None)
@@ -686,6 +743,9 @@ def _reject_failures(
             rejected = _rejection(error, rejections)
             if rejected is None:
                 raise
+            observe = websocket.scope.get(_OBSERVED_SOCKET_KEY)
+            if observe is not None:
+                websocket = await observe()
             if websocket.application_state is WebSocketState.CONNECTING:
                 if state is not None:
                     _record_rejection(rejected.rejection)
@@ -773,7 +833,24 @@ async def _custom_connection(
             disconnected(message.get("code", 1000), message.get("reason") or "")
         return message
 
-    websocket.send, websocket.receive = send, receive
+    async def observed_socket() -> WebSocket:
+        nonlocal connection
+        observed = WebSocket(websocket.scope, receive=receive, send=send)
+        observed.client_state = websocket.client_state
+        observed.application_state = websocket.application_state
+        state.socket = FastApiSocket(observed)
+        if (
+            websocket.application_state is WebSocketState.CONNECTED
+            and state.scope.connection is None
+        ):
+            connection = RpcConnection._create(state.scope.endpoint, state.socket)
+            connection._accepted = True
+            state.scope.connection = connection
+            state.accepted_at = time.perf_counter()
+            await notify_activity(state.activity, "connection_opened", connection)
+        return observed
+
+    websocket.scope[_OBSERVED_SOCKET_KEY] = observed_socket
     try:
         yield
     except WebSocketDisconnect as error:
@@ -791,6 +868,6 @@ async def _custom_connection(
             )
         raise
     finally:
-        websocket.send, websocket.receive = original_send, original_receive
+        websocket.scope.pop(_OBSERVED_SOCKET_KEY, None)
         if connection is not None:
             connection._closed = True

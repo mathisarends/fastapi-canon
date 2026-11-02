@@ -9,7 +9,7 @@ from typing import Annotated, Any
 from uuid import UUID
 
 import pytest
-from fastapi import APIRouter, Depends, FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.testclient import TestClient
 from fastapi.websockets import WebSocketState
 from fastapi_canon.integrations.websockets import (
@@ -24,17 +24,18 @@ from fastapi_canon.integrations.websockets import (
     RpcReject,
     RpcRejection,
     RpcRejections,
-    RpcService,
     RpcSocket,
 )
 from fastapi_canon.integrations.websockets.adapters.fastapi import (
     FastApiSocket,
-    RpcRoutes,
-    create_router,
+    RpcRouter,
     serve_websocket,
 )
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from pydantic import BaseModel
 from starlette.testclient import WebSocketDenialResponse
+
+from tests.fixtures.websockets import router_for
 
 
 class EchoParams(BaseModel):
@@ -43,7 +44,7 @@ class EchoParams(BaseModel):
 
 def create_service(
     *, path: str = "/rpc", connections: list[RpcConnection] | None = None
-) -> RpcService:
+) -> RpcDefinition:
     channel = RpcChannel("demo")
 
     @channel.method()
@@ -52,7 +53,7 @@ def create_service(
             connections.append(connection)
         return params
 
-    service = RpcService()
+    service = RpcDefinition()
     service.socket(path, channels=(channel,))
     return service
 
@@ -66,7 +67,7 @@ def test_router_serves_websocket_with_fastapi_options() -> None:
 
     web = FastAPI()
     web.include_router(
-        create_router(create_service(path="/rpc/{endpoint}", connections=handshakes)),
+        router_for(create_service(path="/rpc/{endpoint}", connections=handshakes)),
         prefix="/api",
         dependencies=[Depends(dependency)],
     )
@@ -106,7 +107,7 @@ def test_router_serves_websocket_with_fastapi_options() -> None:
 
 def test_repeated_test_client_disconnects_do_not_leak_cancellation() -> None:
     web = FastAPI()
-    web.include_router(create_router(create_service()))
+    web.include_router(router_for(create_service()))
 
     with TestClient(web) as client:
         for value in range(200):
@@ -129,10 +130,10 @@ def test_router_serves_binary_stream() -> None:
     async def frames() -> AsyncIterator[bytes]:
         yield b"frame"
 
-    service = RpcService()
+    service = RpcDefinition()
     service.stream("/frames", frames)
     web = FastAPI()
-    web.include_router(create_router(service))
+    web.include_router(router_for(service))
 
     with (
         TestClient(web) as client,
@@ -181,10 +182,10 @@ def test_router_serves_bidirectional_streams_without_cancellation_leaks() -> Non
         async for frame in frames:
             await output.send(str(session_id).encode() + b":" + frame)
 
-    service = RpcService()
+    service = RpcDefinition()
     service.stream("/voice/{session_id}/media", media)
     web = FastAPI()
-    web.include_router(create_router(service))
+    web.include_router(router_for(service))
 
     with TestClient(web) as client:
         for session_id in range(200):
@@ -201,10 +202,10 @@ def test_router_rejects_invalid_stream_path_variables_as_not_found() -> None:
     @channel.stream()
     async def media(session_id: int, output: Inject[RpcBinaryOutput]) -> None: ...
 
-    service = RpcService()
+    service = RpcDefinition()
     service.stream("/voice/{session_id}/media", media)
     web = FastAPI()
-    web.include_router(create_router(service))
+    web.include_router(router_for(service))
 
     with (
         TestClient(web) as client,
@@ -232,7 +233,7 @@ def test_before_accept_rejects_with_http_status_and_headers(rejection, status) -
         return None
 
     web = FastAPI()
-    web.include_router(create_router(service, before_accept=authenticate))
+    web.include_router(router_for(service, before_accept=authenticate))
     with (
         TestClient(web) as client,
         pytest.raises(WebSocketDenialResponse) as denied,
@@ -257,10 +258,10 @@ def test_before_accept_supplies_injected_context() -> None:
     async def authenticate(handshake):
         return {Principal: Principal("Ada")}
 
-    service = RpcService()
+    service = RpcDefinition()
     service.socket("/auth", channels=(channel,), before_accept=authenticate)
     web = FastAPI()
-    web.include_router(create_router(service))
+    web.include_router(router_for(service))
     with TestClient(web) as client, client.websocket_connect("/auth") as websocket:
         websocket.send_json({"jsonrpc": "2.0", "id": 1, "method": "auth.who"})
         assert websocket.receive_json()["result"] == "Ada"
@@ -413,7 +414,7 @@ def create_job_service(
     released: list[bool] | None = None,
     *,
     rejects: tuple[RpcErrorBinding[Any], ...] = (),
-) -> RpcService:
+) -> RpcDefinition:
     events = RpcChannel("jobs")
 
     @events.method()
@@ -441,7 +442,7 @@ def create_job_service(
         yield b"first"
         raise JobNotFound("Job was deleted")
 
-    service = RpcService(rejects=rejects)
+    service = RpcDefinition(rejects=rejects)
     service.socket(
         "/jobs/{job_id}/events", channels=(events,), name="events", context=JobSession
     )
@@ -451,7 +452,7 @@ def create_job_service(
 
 
 def create_job_app(
-    service: RpcService,
+    service: RpcDefinition,
     *,
     rejects: tuple[RpcErrorBinding[Any], ...] = (),
     rejections: RpcRejections | None = None,
@@ -459,14 +460,14 @@ def create_job_app(
     async def resolve(dependency: type) -> JobOutput:
         return JobOutput([b"one", b"two"])
 
-    router = APIRouter(prefix="/jobs")
-    routes = RpcRoutes(
-        router,
+    router = RpcRouter(
+        prefix="/jobs",
         context=open_job_session,
         resolver=resolve,
         rejects=rejects,
         rejections=rejections,
     )
+    routes = router
     for name in ("events", "output", "broken"):
         routes.mount(service.endpoint(name))
     web = FastAPI()
@@ -533,7 +534,7 @@ def test_rpc_routes_reject_context_failures_their_contracts_cover() -> None:
 
 def test_rpc_routes_raises_needs_contracts_with_a_rejection() -> None:
     with pytest.raises(ProtocolDefinitionError, match="with a rejection"):
-        RpcRoutes(APIRouter(), rejects=(RpcErrorBinding(JobNotFound),))
+        RpcRouter(rejects=(RpcErrorBinding(JobNotFound),))
 
 
 def test_rpc_routes_reject_raised_rejections_with_their_headers() -> None:
@@ -544,10 +545,8 @@ def test_rpc_routes_reject_raised_rejections_with_their_headers() -> None:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    router = APIRouter(prefix="/jobs")
-    RpcRoutes(router, context=authenticate).mount(
-        create_job_service().endpoint("events")
-    )
+    router = RpcRouter(prefix="/jobs", context=authenticate)
+    router.mount(create_job_service().endpoint("events"))
     web = FastAPI()
     web.include_router(router)
 
@@ -614,10 +613,8 @@ def test_rpc_routes_key_a_subclass_context_by_the_declared_type() -> None:
     async def open_guest_session(job_id: UUID) -> GuestJobSession:
         return GuestJobSession(Job(job_id), Actor("guest"))
 
-    router = APIRouter(prefix="/jobs")
-    RpcRoutes(router, context=open_guest_session).mount(
-        create_job_service().endpoint("events")
-    )
+    router = RpcRouter(prefix="/jobs", context=open_guest_session)
+    router.mount(create_job_service().endpoint("events"))
     web = FastAPI()
     web.include_router(router)
 
@@ -630,8 +627,8 @@ def test_rpc_routes_key_a_subclass_context_by_the_declared_type() -> None:
 
 
 def test_rpc_routes_without_context_mount_endpoints_without_context() -> None:
-    router = APIRouter()
-    RpcRoutes(router).mount(create_service().endpoint("rpc"))
+    router = RpcRouter()
+    router.mount(create_service().endpoint("rpc"))
     web = FastAPI()
     web.include_router(router)
 
@@ -658,10 +655,8 @@ def test_rpc_routes_use_a_fastapi_resolver_per_connection() -> None:
             prepared.append(function.__name__)
             return function
 
-    router = APIRouter(prefix="/jobs")
-    RpcRoutes(router, context=open_job_session, resolver=Resolver()).mount(
-        create_job_service().endpoint("output")
-    )
+    router = RpcRouter(prefix="/jobs", context=open_job_session, resolver=Resolver())
+    router.mount(create_job_service().endpoint("output"))
     web = FastAPI()
     web.include_router(router)
 
@@ -688,27 +683,25 @@ async def open_actor(job_id: UUID) -> Actor:
 
 def test_rpc_routes_reject_invalid_mounts() -> None:
     service = create_job_service()
-    routes = RpcRoutes(APIRouter(prefix="/job"), context=open_job_session)
+    routes = RpcRouter(prefix="/job", context=open_job_session)
 
     with pytest.raises(ValueError, match="outside the router prefix"):
         routes.mount(service.endpoint("events"))
     for context in (untyped_session, any_session):
         with pytest.raises(TypeError, match="needs a concrete class"):
-            RpcRoutes(APIRouter(), context=context)
+            RpcRouter(context=context)
     with pytest.raises(TypeError, match="expects an async function"):
-        RpcRoutes(APIRouter(), context=JobSession)  # type: ignore[arg-type]
+        RpcRouter(context=JobSession)  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="declares context none, but these routes"):
-        RpcRoutes(APIRouter(), context=open_actor).mount(
+        RpcRouter(context=open_actor).mount(
             create_service().endpoint("rpc")  # type: ignore[arg-type]
         )
     with pytest.raises(TypeError, match="declares context JobSession, but these"):
-        RpcRoutes(APIRouter(prefix="/jobs")).mount(service.endpoint("events"))
+        RpcRouter(prefix="/jobs").mount(service.endpoint("events"))
     with pytest.raises(TypeError, match="JobSession, but these routes provide Actor"):
-        RpcRoutes(APIRouter(prefix="/jobs"), context=open_actor).mount(
-            service.endpoint("events")
-        )
+        RpcRouter(prefix="/jobs", context=open_actor).mount(service.endpoint("events"))
 
-    routes = RpcRoutes(APIRouter(prefix="/jobs"), context=open_job_session)
+    routes = RpcRouter(prefix="/jobs", context=open_job_session)
     routes.mount(service.endpoint("events"))
     with pytest.raises(ValueError, match="already mounted"):
         routes.mount(service.endpoint("events"))
@@ -745,9 +738,9 @@ def test_custom_handlers_receive_context_and_dependencies_at_the_declared_route(
         await socket.send_bytes(output.frames[0])
         await socket.close()
 
-    router = APIRouter(prefix="/jobs")
+    router = RpcRouter(prefix="/jobs", context=open_job_session, resolver=resolve)
     endpoint = service.endpoint(endpoint_name)
-    routes = RpcRoutes(router, context=open_job_session, resolver=resolve)
+    routes = router
     routes.mount(endpoint, handler=serve_job)
     app = FastAPI()
     app.include_router(router, prefix="/api")
@@ -814,8 +807,8 @@ def test_custom_handlers_reject_failures_before_acceptance(stage: str) -> None:
         if stage == "handler":
             raise JobNotFound("Unavailable")
 
-    router = APIRouter(prefix="/jobs")
-    routes = RpcRoutes(router, context=context, resolver=Resolver())
+    router = RpcRouter(prefix="/jobs", context=context, resolver=Resolver())
+    routes = router
     routes.mount(
         create_job_service(rejects=(job_not_found,)).endpoint("events"), handler=handler
     )
@@ -853,7 +846,7 @@ def test_custom_handlers_use_rejection_precedence_after_acceptance(policy: str) 
         JobNotFound, message="routes", rejection=RpcRejection.FORBIDDEN
     )
     channel = RpcChannel("jobs")
-    service = RpcService(rejects=(service_binding,))
+    service = RpcDefinition(rejects=(service_binding,))
     endpoint = service.socket(
         "/jobs/{job_id}/events",
         channels=(channel,),
@@ -866,12 +859,12 @@ def test_custom_handlers_use_rejection_precedence_after_acceptance(policy: str) 
         await websocket.send_text("pending")
         raise JobNotFound()
 
-    router = APIRouter(prefix="/jobs")
-    routes = RpcRoutes(
-        router,
+    router = RpcRouter(
+        prefix="/jobs",
         context=open_job_session,
         rejects=(route_binding,) if policy == "routes" else (),
     )
+    routes = router
     routes.mount(endpoint, handler=handler)
     app = FastAPI()
     app.include_router(router)
@@ -898,10 +891,10 @@ def test_custom_handlers_preserve_unknown_failures_and_do_not_close_twice(
             raise JobNotFound("already closed")
         raise RuntimeError("unknown")
 
-    router = APIRouter(prefix="/jobs")
-    RpcRoutes(router, context=open_job_session, rejects=(job_not_found,)).mount(
-        create_job_service().endpoint("events"), handler=handler
+    router = RpcRouter(
+        prefix="/jobs", context=open_job_session, rejects=(job_not_found,)
     )
+    router.mount(create_job_service().endpoint("events"), handler=handler)
     app = FastAPI()
     app.include_router(router)
     with TestClient(app) as client:
@@ -957,10 +950,8 @@ def test_custom_handlers_cancel_pending_work_and_release_the_connection_scope() 
             pending.cancel()
             await asyncio.gather(pending, return_exceptions=True)
 
-    router = APIRouter(prefix="/jobs")
-    RpcRoutes(router, context=open_job_session, resolver=Resolver()).mount(
-        create_job_service().endpoint("events"), handler=handler
-    )
+    router = RpcRouter(prefix="/jobs", context=open_job_session, resolver=Resolver())
+    router.mount(create_job_service().endpoint("events"), handler=handler)
     app = FastAPI()
     app.include_router(router)
     with TestClient(app) as client:
@@ -977,10 +968,10 @@ def test_custom_handlers_authorize_even_without_context_parameters() -> None:
         called.append(True)
         raise RpcReject(RpcRejection.FORBIDDEN, "not accepted")
 
-    router = APIRouter(prefix="/jobs")
-    RpcRoutes(router, context=open_job_session, rejects=(job_not_found,)).mount(
-        create_job_service().endpoint("events"), handler=handler
+    router = RpcRouter(
+        prefix="/jobs", context=open_job_session, rejects=(job_not_found,)
     )
+    router.mount(create_job_service().endpoint("events"), handler=handler)
     app = FastAPI()
     app.include_router(router)
     with TestClient(app) as client:
@@ -995,7 +986,7 @@ def test_custom_handlers_authorize_even_without_context_parameters() -> None:
 
 
 def test_custom_handlers_require_explicit_context_injection() -> None:
-    routes = RpcRoutes(APIRouter(prefix="/jobs"), context=open_job_session)
+    routes = RpcRouter(prefix="/jobs", context=open_job_session)
     endpoint = create_job_service().endpoint("events")
 
     async def unmarked(websocket: WebSocket, task: JobSession) -> None: ...
@@ -1046,10 +1037,10 @@ async def test_custom_handlers_release_the_scope_on_cancellation() -> None:
             finally:
                 calls.append("handler cleanup")
 
-        router = APIRouter(prefix="/jobs")
-        RpcRoutes(router, context=open_job_session, resolver=Resolver()).mount(
-            create_job_service().endpoint("events"), handler=handler
+        router = RpcRouter(
+            prefix="/jobs", context=open_job_session, resolver=Resolver()
         )
+        router.mount(create_job_service().endpoint("events"), handler=handler)
         app = FastAPI()
         app.include_router(router)
 
@@ -1096,10 +1087,8 @@ def test_custom_handlers_without_context_preserve_internal_parameter_names() -> 
         assert _canon_websockets_context == "custom"
         raise RpcReject(RpcRejection.FORBIDDEN, "custom rejection")
 
-    router = APIRouter()
-    RpcRoutes(router, resolver=resolve).mount(
-        create_service().endpoint("rpc"), handler=handler
-    )
+    router = RpcRouter(resolver=resolve)
+    router.mount(create_service().endpoint("rpc"), handler=handler)
     app = FastAPI()
     app.include_router(router)
     with (
@@ -1136,14 +1125,14 @@ def create_socket_app(released: list[bool]) -> FastAPI:
         finally:
             released.append(True)
 
-    service = RpcService()
+    service = RpcDefinition()
     service.socket(
         "/jobs/{job_id}/terminal", terminal, name="terminal", context=JobSession
     )
-    router = APIRouter(prefix="/jobs")
-    RpcRoutes(router, context=open_job_session, rejects=(job_not_found,)).mount(
-        service.endpoint("terminal")
+    router = RpcRouter(
+        prefix="/jobs", context=open_job_session, rejects=(job_not_found,)
     )
+    router.mount(service.endpoint("terminal"))
     web = FastAPI()
     web.include_router(router)
     return web
