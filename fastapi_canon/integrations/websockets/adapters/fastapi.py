@@ -3,6 +3,7 @@ import inspect
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager, nullcontext, suppress
+from types import NoneType
 from typing import (
     Annotated,
     Any,
@@ -14,13 +15,21 @@ from typing import (
     runtime_checkable,
 )
 
-from fastapi import APIRouter, Depends, Response, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    Response,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.websockets import WebSocketState
 from starlette.types import Message
 
 from fastapi_canon.error.catalog import registry_scope
 from fastapi_canon.error.contracts import INSTALLED_REGISTRY_STATE_KEY
 from fastapi_canon.integrations.websockets.activity import notify_activity
+from fastapi_canon.integrations.websockets.channel import RpcChannel
 from fastapi_canon.integrations.websockets.connection import (
     REJECTION_CLOSES,
     RpcBeforeAccept,
@@ -33,6 +42,7 @@ from fastapi_canon.integrations.websockets.connection import (
     RpcRejections,
     chain_rejections,
 )
+from fastapi_canon.integrations.websockets.contract import RpcContract, ServerVariable
 from fastapi_canon.integrations.websockets.dependencies import (
     RpcInjectedParameter,
     RpcResolverLike,
@@ -314,6 +324,43 @@ class FastApiResolver(Protocol):
     def dependency[FunctionT: Callable[..., Any]](
         self, function: FunctionT
     ) -> FunctionT: ...
+
+
+class RpcRouter(APIRouter):
+    """Serve one JSON-RPC WebSocket path and export its OpenRPC contract."""
+
+    def __init__(
+        self,
+        path: str,
+        *,
+        channels: Sequence[RpcChannel],
+        version: int = 1,
+        context: Callable[..., Awaitable[Any]] | None = None,
+        resolver: RpcResolverLike | FastApiResolver | None = None,
+    ) -> None:
+        super().__init__()
+        self._service = RpcService(version=version)
+        context_type = NoneType if context is None else _context_type(context)
+        endpoint = self._service.socket(path, channels=channels, context=context_type)
+        self._service.freeze()
+        RpcRoutes(self, context=context, resolver=resolver).mount(endpoint)
+
+    def contract(
+        self,
+        *,
+        title: str,
+        base_url: str,
+        description: str = "Typed JSON-RPC API.",
+        variables: Mapping[str, ServerVariable] | None = None,
+        app: FastAPI | None = None,
+    ) -> RpcContract:
+        return self._service.contract(
+            title=title,
+            base_url=base_url,
+            description=description,
+            variables=variables,
+            app=app,
+        )
 
 
 class RpcRoutes[ContextT]:

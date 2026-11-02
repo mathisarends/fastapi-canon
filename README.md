@@ -176,9 +176,7 @@ See [Canon stream contracts](docs/streams.md),
 Add a WebSocket method using the same public error definition:
 
 ```python
-from fastapi import APIRouter
-from fastapi_canon.integrations.websockets import RpcChannel, RpcService
-from fastapi_canon.integrations.websockets.adapters.fastapi import RpcRoutes
+from fastapi_canon.integrations.websockets import RpcChannel, RpcRouter
 
 projects = RpcChannel("projects", error_registry=errors)
 
@@ -192,10 +190,7 @@ async def cancel(params: CancelProject) -> None:
     require_project(params.project_id)
 
 
-service = RpcService()
-endpoint = service.socket("/ws", channels=[projects])
-websockets = APIRouter()
-RpcRoutes(websockets).mount(endpoint)
+websockets = RpcRouter("/ws", channels=[projects])
 ```
 
 After all route declarations, replace the original composition block with this
@@ -206,7 +201,9 @@ feature = Feature(name="projects", routers=[http, streams, websockets])
 composition = Composition(features=(feature,))
 app = composition.apply(FastAPI())
 composition.validate(app)
-contract = service.contract(title="Projects", base_url="ws://localhost:8000", app=app)
+contract = websockets.contract(
+    title="Projects", base_url="ws://localhost:8000", app=app
+)
 ```
 
 Install a server and run the application from the project root:

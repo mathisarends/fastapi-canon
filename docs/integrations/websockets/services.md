@@ -14,7 +14,10 @@ Methods are async free functions. Their public input is either absent or one
 Pydantic model, and their return annotation describes the result.
 
 ```python
-from fastapi_canon.integrations.websockets import RpcChannel, RpcModel, RpcService
+from fastapi import FastAPI
+
+from fastapi_canon import Composition, Feature
+from fastapi_canon.integrations.websockets import RpcChannel, RpcModel, RpcRouter
 
 
 class CreateTask(RpcModel):
@@ -39,8 +42,10 @@ async def health() -> None:
     return None
 
 
-app = RpcService(version=1)
-app.socket("/rpc", channels=(tasks,))
+rpc = RpcRouter("/rpc", channels=[tasks])
+feature = Feature(name="tasks", routers=[rpc])
+app = Composition(features=(feature,)).apply(FastAPI())
+contract = rpc.contract(title="Tasks", base_url="wss://api.example.com", app=app)
 ```
 
 The methods are exposed as `tasks.create` and `tasks.health`. Use an explicit
@@ -72,9 +77,23 @@ prefix of another operation when the protocol is materialized.
 
 ## Mount endpoints
 
+Use `RpcRouter` for one JSON-RPC WebSocket path. Define the channel operations
+before constructing the router, which freezes them together for serving and
+OpenRPC export. The router contributes
+their error registries to `Feature`. Pass the composed app to `contract()` to
+export the same problem types served at runtime.
+
+For a per-connection FastAPI dependency, pass its async function as `context=`.
+Its concrete return annotation supplies the type available to handlers through
+`Inject[T]`. Use `resolver=Dishka()` for Dishka dependencies. Use `RpcService`
+and `RpcRoutes` directly for multiple paths in one contract, custom handshake
+rejections, raw sockets, or binary streams.
+
 Mount several channels on one JSON-RPC socket:
 
 ```python
+from fastapi_canon.integrations.websockets import RpcService
+
 app = RpcService(version=2)
 endpoint = app.socket(
     "/projects/{project_id}/rpc",

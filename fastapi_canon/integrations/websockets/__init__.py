@@ -2,6 +2,7 @@ from fastapi_canon._version import __version__
 
 from .adapters.fastapi import (
     FastApiSocket,
+    RpcRouter,
     RpcRoutes,
     create_router,
     serve_websocket,
@@ -84,6 +85,7 @@ from .streams import (
 
 __all__ = [
     "FastApiSocket",
+    "RpcRouter",
     "RpcRoutes",
     "create_router",
     "serve_websocket",

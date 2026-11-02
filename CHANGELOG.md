@@ -22,6 +22,9 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Added
 
+- `RpcRouter(path, channels=[...])` mounts one JSON-RPC WebSocket endpoint
+  as a FastAPI router. Use it in `Feature(routers=[...])` and call its
+  `contract()` method to export OpenRPC for the same channels.
 - `Composition(features=features, request_logging=True)` emits structured completion/abort
   records on `fastapi_canon.access`, including route templates, sent status,
   streaming response duration, Canon problem codes and available server-span IDs.

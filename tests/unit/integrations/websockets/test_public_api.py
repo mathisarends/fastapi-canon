@@ -12,7 +12,6 @@ from fastapi_canon.integrations.websockets import RpcRejection, RpcServer
         "RpcHandler",
         "RpcNotificationDefinition",
         "RpcApp",
-        "RpcRouter",
         "OpenRpcContract",
         "OpenRpcServer",
         "ConnectionRejected",

@@ -59,7 +59,7 @@ represent another PyPI distribution.
 | Application composition and Dishka lifecycle | `fastapi_canon.Composition`, `Feature` | [Composition](composition.md#feature-composition) |
 | HTTP routes and contracts | `fastapi_canon.CanonRouter`, `RouterPolicy`, `Error`, `ErrorRegistry`, `CanonResponse` | [HTTP contracts](composition.md#error-contracts) |
 | SSE with Canon HTTP contracts | `fastapi_canon.integrations.sse.CanonStreamRouter` | [SSE contracts](streams.md) |
-| WebSocket RPC, messages and binary streams | `fastapi_canon.integrations.websockets.RpcChannel`, `RpcService`, `RpcRoutes`, `RpcSocket` | [WebSockets](integrations/websockets/index.md) |
+| WebSocket RPC, messages and binary streams | `fastapi_canon.integrations.websockets.RpcChannel`, `RpcRouter`, `RpcService`, `RpcRoutes`, `RpcSocket` | [WebSockets](integrations/websockets/index.md) |
 | WebRTC with Canon admission errors | `fastapi_canon.integrations.webrtc.CanonWebRtcRouter`, `Session` | [WebRTC admission](webrtc.md) |
 | Telemetry declarations | `fastapi_canon.integrations.opentelemetry.Telemetry`, `instrument` | [Telemetry](telemetry.md) |
 

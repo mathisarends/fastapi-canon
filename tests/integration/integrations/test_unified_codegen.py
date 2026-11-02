@@ -14,7 +14,7 @@ from typing import Any
 import httpx
 import pytest
 
-from examples.canonical_errors.app import app, contract, endpoint
+from examples.canonical_errors.app import app, contract, projects
 from fastapi_canon.cli import main
 from fastapi_canon.codegen.config import (
     Configuration,
@@ -60,7 +60,7 @@ def test_unified_python_calls_streams_and_model_error_identity(tmp_path: Path) -
             client_module = importlib.import_module(
                 "unified_test.internal.control_jsonrpc.client"
             )
-            server = endpoint.create_server()
+            server = projects.create_server()
             queue: asyncio.Queue[str] = asyncio.Queue()
             closed = []
 
