@@ -10,6 +10,14 @@ Python signature metadata belongs to Canon's own handler functions.
 [FastAPI router API](https://fastapi.tiangolo.com/reference/apirouter/),
 [WebSocket API](https://fastapi.tiangolo.com/reference/websockets/).
 
+## Prepared database integration
+
+Unreleased 0.13.0 raises the core minimum to FastAPI 0.121 for function-scoped
+HTTP cleanup. Database tests exercise SQLite/aiosqlite and real PostgreSQL/asyncpg,
+including transactions, SQLModel sessions and Alembic upgrades preserving data.
+The installed-wheel matrix also covers the new optional extras. Historical
+published-version evidence below remains unchanged.
+
 ## Native telemetry bridge
 
 The 0.12.0 bridge is exercised from built wheels on Python 3.12 against

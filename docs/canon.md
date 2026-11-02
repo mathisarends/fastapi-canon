@@ -36,6 +36,10 @@ dependencies, telemetry runtimes or media engines.
 | `aiortc` | Optional reference media engine; use with `webrtc` |
 | `otel` | Native FastAPI telemetry, observed Dishka ports and WebSocket middleware |
 | `codegen` | Template, schema-validation and model dependencies for generators |
+| `database` | Async SQLAlchemy engine and session ownership, without a driver |
+| `sqlite`, `postgres` | Database integration with aiosqlite or asyncpg |
+| `sqlmodel` | SQLModel sessions on the same database integration |
+| `migrations` | Alembic revision generation, upgrades and schema checks |
 
 The root `pyproject.toml` builds `fastapi_canon/` directly. Tests, examples, documentation
 and development tooling are organized by purpose, without retained package
@@ -57,6 +61,7 @@ represent another PyPI distribution.
 | Responsibility | Public imports | Guide |
 | --- | --- | --- |
 | Application composition and Dishka lifecycle | `fastapi_canon.Composition`, `Feature` | [Composition](composition.md#feature-composition) |
+| Database ownership, migrations, locks and short service scopes | `fastapi_canon.Database`, `AlembicMigrations`, `TransactionLocks`, `ServiceScope` | [Databases](database.md) |
 | HTTP routes and contracts | `fastapi_canon.CanonRouter`, `RouterPolicy`, `Error`, `ErrorRegistry`, `CanonResponse` | [HTTP contracts](composition.md#error-contracts) |
 | SSE with Canon HTTP contracts | `fastapi_canon.integrations.sse.CanonStreamRouter` | [SSE contracts](streams.md) |
 | WebSocket RPC, messages and binary streams | `fastapi_canon.integrations.websockets.RpcChannel`, `RpcRouter`, `RpcSocket` | [WebSockets](integrations/websockets/index.md) |

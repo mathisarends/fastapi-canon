@@ -57,6 +57,7 @@ def _main() -> None:
                 assert installed.__version__ == version("fastapi-canon")
         else:
             assert importlib.util.find_spec(module) is not None, module
+    assert not ({"sqlalchemy", "alembic", "aiosqlite", "asyncpg"} & sys.modules.keys())
     app = FastAPI()
     if importlib.util.find_spec("jsonschema") and importlib.util.find_spec("jinja2"):
         _offline_sse_codegen()
@@ -66,6 +67,7 @@ def _main() -> None:
         from fastapi_canon import CanonRouter
 
         _cli("generate")
+        _cli("db")
         _shared_problem_check()
         http = CanonRouter()
 
@@ -78,6 +80,7 @@ def _main() -> None:
         _request_logging_check()
         _observation_check(enabled="--otel" in selected)
         _resource_telemetry_check(selected)
+        _database_check(selected)
     if "sse" in selected:
         from fastapi_canon.integrations.sse import StreamRouter
 
@@ -195,6 +198,60 @@ def _main() -> None:
             )
         assert counter.closed
     print(f"Installed artifact checks passed: {', '.join(sorted(selected))}")
+
+
+def _database_check(selected: set[str]) -> None:
+    if "--database" not in selected:
+        return
+    from fastapi_canon import Database
+
+    options = {}
+    if "--sqlmodel" in selected:
+        from sqlmodel.ext.asyncio.session import AsyncSession
+
+        options["session_class"] = AsyncSession
+    declaration = Database(url="sqlite://", **options)
+    assert declaration.feature.name == "database"
+    if "--sqlite" not in selected:
+        return
+
+    async def exercise() -> None:
+        from dishka import Scope
+        from fastapi_canon import AlembicMigrations, Composition
+        from sqlalchemy import Column, MetaData, String, Table, insert, select
+        from sqlalchemy.ext.asyncio import AsyncSession
+
+        with tempfile.TemporaryDirectory(prefix="canon-db-smoke-") as directory:
+            path = Path(directory)
+            metadata = MetaData()
+            table = Table(
+                "items", metadata, Column("name", String(80), primary_key=True)
+            )
+            migrations = AlembicMigrations(
+                directory=path / "migrations", metadata=metadata
+            )
+            database = Database(
+                url=f"sqlite:///{path / 'test.db'}", migrations=migrations, **options
+            )
+            migrations.initialize()
+            async with database.open_engine() as engine:
+                await migrations.revision(engine, message="initial", autogenerate=True)
+                await migrations.upgrade(engine)
+            app = Composition(features=[database.feature]).apply(FastAPI())
+            async with app.router.lifespan_context(app):
+                async with app.state.dishka_container(scope=Scope.REQUEST) as scope:
+                    session = await scope.get(AsyncSession)
+                    await session.execute(insert(table).values(name="persisted"))
+                async with app.state.dishka_container(scope=Scope.REQUEST) as scope:
+                    session = await scope.get(AsyncSession)
+                    assert (await session.scalars(select(table.c.name))).all() == [
+                        "persisted"
+                    ]
+                async with database.open_engine() as engine:
+                    await migrations.require_current(engine)
+                    await migrations.check(engine)
+
+    asyncio.run(exercise())
 
 
 def _request_logging_check() -> None:
