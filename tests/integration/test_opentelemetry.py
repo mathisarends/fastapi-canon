@@ -101,10 +101,9 @@ def callable_application(options: Telemetry) -> FastAPI:
             name="items",
             providers=[Dependencies],
             routers=[router],
-            instrumentation=[
-                instrument(Repository, expected=(Missing,)),
-                instrument(CallableService, expected=(Missing,)),
-            ],
+            instrumentation=instrument(
+                Repository, CallableService, expected=(Missing,)
+            ),
         ),
         telemetry=options,
     ).apply(FastAPI())
@@ -144,10 +143,9 @@ def application(options: Telemetry | None, *, expected: bool = True) -> FastAPI:
         name="items",
         providers=[Dependencies],
         routers=[router],
-        instrumentation=[
-            instrument(Repository, expected=[Missing] if expected else []),
-            instrument(Service, expected=[Missing] if expected else []),
-        ],
+        instrumentation=instrument(
+            Repository, Service, expected=[Missing] if expected else []
+        ),
     )
     composition = Composition(
         feature,
@@ -332,18 +330,70 @@ def test_disabled_metadata_keeps_original_instances() -> None:
     assert isinstance(app.state.closed[0], MemoryRepository)
 
 
+@pytest.mark.parametrize("ports", [(Repository,), (Repository, Service)])
+def test_instrument_always_returns_a_tuple(ports: tuple[type, ...]) -> None:
+    declarations = instrument(ports[0], *ports[1:])
+
+    assert isinstance(declarations, tuple)
+    assert tuple(spec.port for spec in declarations) == ports
+
+
+def test_instrument_requires_a_positional_port() -> None:
+    with pytest.raises(TypeError, match="port"):
+        instrument()  # type: ignore[call-arg]
+    with pytest.raises(TypeError, match="port"):
+        instrument(port=Repository)  # type: ignore[call-arg]
+
+
+def test_combined_groups_keep_expected_failures_independent() -> None:
+    class Dependencies(Provider):
+        repository = provide(MemoryRepository, provides=Repository, scope=Scope.REQUEST)
+        service = provide(Service, scope=Scope.REQUEST)
+
+    feature = Feature(
+        name="items",
+        providers=[Dependencies],
+        instrumentation=[
+            *instrument(Repository, expected=(Missing,)),
+            *instrument(Service),
+        ],
+    )
+    with SpanCapture() as capture:
+        app = Composition(
+            feature, telemetry=Telemetry(tracer_provider=capture.provider)
+        ).apply(FastAPI())
+
+        async def run() -> None:
+            async with (
+                asyncio.timeout(5),
+                app.router.lifespan_context(app),
+                app.state.dishka_container() as request,
+            ):
+                service = await request.get(Service)
+                with pytest.raises(Missing):
+                    await service.run(uuid4(), fail="expected")
+
+        asyncio.run(run())
+        assert capture.one("Repository.get").status.status_code is StatusCode.UNSET
+        assert capture.one("Service.run").status.status_code is StatusCode.ERROR
+
+
 def test_instrumentation_is_immutable_and_copied_by_feature() -> None:
     expected: list[type[Exception]] = [Missing]
-    spec = instrument(Repository, expected=expected)
-    declarations = [spec]
+    group = instrument(Repository, Service, expected=expected, component="named")
+    declarations = list(group)
     feature = Feature(name="items", instrumentation=declarations)
     expected.clear()
     declarations.clear()
 
-    assert spec.expected == (Missing,)
-    assert feature.instrumentation == (spec,)
+    repository, service = group
+    assert repository.port is Repository
+    assert service.port is Service
+    assert repository.expected == service.expected == (Missing,)
+    assert repository.component == service.component == "named"
+    assert feature.instrumentation == group
     with pytest.raises(FrozenInstanceError):
-        spec.component = "other"  # type: ignore[misc]
+        repository.component = "other"  # type: ignore[misc]
     assert not hasattr(telemetry_api, "observe")
 
 
@@ -352,7 +402,7 @@ def test_feature_reuse_keeps_providers_and_app_telemetry_isolated() -> None:
     provider = Provider()
     provider.provide(lambda: original, provides=Repository, scope=Scope.APP)
     feature = Feature(
-        name="items", providers=[provider], instrumentation=[instrument(Repository)]
+        name="items", providers=[provider], instrumentation=instrument(Repository)
     )
 
     with SpanCapture() as first, SpanCapture() as second:
@@ -519,6 +569,8 @@ def test_invalid_instrumentation() -> None:
 
     with pytest.raises(FeatureConfigurationError, match="public async methods"):
         instrument(SyncPort)
+    with pytest.raises(FeatureConfigurationError, match="public async methods"):
+        instrument(Repository, SyncPort)
     with pytest.raises(FeatureConfigurationError, match="port must be a class"):
         instrument(object())  # type: ignore[arg-type]
     with pytest.raises(FeatureConfigurationError, match="Exception subclasses"):
@@ -538,14 +590,14 @@ def test_duplicate_instrumentation_is_rejected(
 ) -> None:
     features = (
         (
-            Feature(name="first", instrumentation=[instrument(Repository)]),
-            Feature(name="second", instrumentation=[instrument(Repository)]),
+            Feature(name="first", instrumentation=instrument(Repository)),
+            Feature(name="second", instrumentation=instrument(Repository)),
         )
         if across_features
         else (
             Feature(
                 name="duplicate",
-                instrumentation=[instrument(Repository), instrument(Repository)],
+                instrumentation=instrument(Repository, Repository),
             ),
         )
     )
@@ -619,7 +671,7 @@ def test_provider_scopes_caching_and_original_cleanup() -> None:
             Feature(
                 name="app",
                 providers=[Dependencies],
-                instrumentation=[instrument(Repository)],
+                instrumentation=instrument(Repository),
             ),
             telemetry=Telemetry(tracer_provider=capture.provider),
         ).apply(FastAPI())
@@ -752,12 +804,12 @@ def test_named_components_keep_feature_ownership() -> None:
             Feature(
                 name="default",
                 providers=[Dependencies],
-                instrumentation=[instrument(Repository)],
+                instrumentation=instrument(Repository),
             ),
             Feature(
                 name="named",
                 providers=[lambda: Dependencies(component="named")],
-                instrumentation=[instrument(Repository, component="named")],
+                instrumentation=instrument(Repository, component="named"),
             ),
             telemetry=Telemetry(tracer_provider=capture.provider),
         ).apply(FastAPI())
@@ -798,7 +850,7 @@ def test_declarations_and_disabled_composition_import_no_otel_runtime() -> None:
         class Dependencies(Provider):
             port = provide(Port, scope=Scope.REQUEST)
         Composition(Feature(
-            name="test", providers=[Dependencies], instrumentation=[instrument(Port)]
+            name="test", providers=[Dependencies], instrumentation=instrument(Port)
         )).apply(FastAPI())
         assert not any(name.startswith("opentelemetry") for name in sys.modules)
         try:
