@@ -611,6 +611,18 @@ otel = [
     { name = "opentelemetry-api" },
     { name = "opentelemetry-instrumentation" },
 ]
+otel-httpx = [
+    { name = "fastapi" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-instrumentation" },
+    { name = "opentelemetry-instrumentation-httpx" },
+]
+otel-sqlalchemy = [
+    { name = "fastapi" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-instrumentation" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
+]
 sse = [
     { name = "fastapi" },
     { name = "pydantic" },
@@ -660,21 +672,25 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115,<1" },
     { name = "fastapi", marker = "extra == 'otel'", specifier = ">=0.143,<1" },
     { name = "fastapi", marker = "extra == 'sse'", specifier = ">=0.143.3,<1" },
+    { name = "fastapi-canon", extras = ["otel"], marker = "extra == 'otel-httpx'", specifier = "==0.12.0" },
+    { name = "fastapi-canon", extras = ["otel"], marker = "extra == 'otel-sqlalchemy'", specifier = "==0.12.0" },
     { name = "jinja2", marker = "extra == 'codegen'", specifier = ">=3.1,<4" },
     { name = "jsonschema", marker = "extra == 'codegen'", specifier = ">=4.23,<5" },
     { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.40,<2" },
     { name = "opentelemetry-instrumentation", marker = "extra == 'otel'", specifier = ">=0.61b0,<1" },
+    { name = "opentelemetry-instrumentation-httpx", marker = "extra == 'otel-httpx'", specifier = ">=0.65b0,<1" },
     { name = "pydantic", specifier = ">=2.9,<3" },
     { name = "pydantic", marker = "extra == 'codegen'", specifier = ">=2.11.2,<3" },
     { name = "pydantic", marker = "extra == 'sse'", specifier = ">=2.11.2,<3" },
     { name = "pydantic", marker = "extra == 'websockets'", specifier = ">=2.11,<3" },
     { name = "pydantic-core", marker = "extra == 'websockets'", specifier = ">=2.33" },
+    { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'otel-sqlalchemy'", specifier = ">=2.0,<3" },
     { name = "starlette", marker = "extra == 'webrtc'", specifier = ">=0.41" },
     { name = "typing-extensions", marker = "extra == 'codegen'", specifier = ">=4.12.2" },
     { name = "typing-extensions", marker = "extra == 'webrtc'", specifier = ">=4.12" },
     { name = "typing-extensions", marker = "extra == 'websockets'", specifier = ">=4.12.2" },
 ]
-provides-extras = ["otel", "sse", "websockets", "webrtc", "aiortc", "codegen"]
+provides-extras = ["otel", "otel-httpx", "otel-sqlalchemy", "sse", "websockets", "webrtc", "aiortc", "codegen"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -719,11 +735,10 @@ dependencies = [
 
 [package.optional-dependencies]
 otel = [
-    { name = "fastapi-canon", extra = ["otel"] },
+    { name = "fastapi-canon", extra = ["otel-httpx", "otel-sqlalchemy"] },
     { name = "httpx2" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-instrumentation-httpx" },
-    { name = "opentelemetry-instrumentation-sqlalchemy" },
     { name = "opentelemetry-sdk" },
     { name = "sqlalchemy", extra = ["asyncio"] },
 ]
@@ -734,11 +749,10 @@ requires-dist = [
     { name = "dishka", specifier = ">=1.6" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "fastapi-canon", specifier = ">=0.12,<0.13" },
-    { name = "fastapi-canon", extras = ["otel"], marker = "extra == 'otel'", specifier = ">=0.12,<0.13" },
+    { name = "fastapi-canon", extras = ["otel-httpx", "otel-sqlalchemy"], marker = "extra == 'otel'", specifier = ">=0.12,<0.13" },
     { name = "httpx2", marker = "extra == 'otel'", specifier = ">=2.12,<3" },
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'otel'", specifier = ">=1.40,<2" },
     { name = "opentelemetry-instrumentation-httpx", marker = "extra == 'otel'", specifier = ">=0.65b0,<1" },
-    { name = "opentelemetry-instrumentation-sqlalchemy", marker = "extra == 'otel'", specifier = ">=0.61b0,<1" },
     { name = "opentelemetry-sdk", marker = "extra == 'otel'", specifier = ">=1.40,<2" },
     { name = "pydantic-settings", specifier = ">=2.8" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0,<3" },
@@ -750,13 +764,12 @@ provides-extras = ["otel"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "fastapi-canon", extras = ["otel"], specifier = ">=0.12,<0.13" },
+    { name = "fastapi-canon", extras = ["otel-httpx", "otel-sqlalchemy"], specifier = ">=0.12,<0.13" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "httpx2", specifier = ">=2.12,<3" },
     { name = "mypy", specifier = ">=1.15" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.40,<2" },
     { name = "opentelemetry-instrumentation-httpx", specifier = ">=0.65b0,<1" },
-    { name = "opentelemetry-instrumentation-sqlalchemy", specifier = ">=0.61b0,<1" },
     { name = "opentelemetry-sdk", specifier = ">=1.40,<2" },
     { name = "pytest", specifier = ">=8.3" },
     { name = "pytest-asyncio", specifier = ">=0.25" },
@@ -1662,22 +1675,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/de/50/41544799b043d14fdfa6fe62fa2518eaba22793fce03e9abde930b92e671/opentelemetry_instrumentation_httpx-0.66b1.tar.gz", hash = "sha256:5865a72c68098c85955a271ab8744b480a36e3ee492d35b8cadb93c7c4dbb618", size = 26637, upload-time = "2026-10-06T17:36:27.265Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/4f/c6/e5682b1bfb320b32505e88255c34ae1e99fe9fb220cc465c244e91967eac/opentelemetry_instrumentation_httpx-0.66b1-py3-none-any.whl", hash = "sha256:0342a4002c6dbc6c4bf22cc7e698f50f5c8b77f63325c6f40c94ab87e016bf4d", size = 17723, upload-time = "2026-10-06T17:35:36.501Z" },
-]
-
-[[package]]
-name = "opentelemetry-instrumentation-sqlalchemy"
-version = "0.66b1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "opentelemetry-api" },
-    { name = "opentelemetry-instrumentation" },
-    { name = "opentelemetry-semantic-conventions" },
-    { name = "packaging" },
-    { name = "wrapt" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/d4/3e/d69fb08dacc4c248daedf7357732ddca7a0aaff7072a55e311d3da3ea51c/opentelemetry_instrumentation_sqlalchemy-0.66b1.tar.gz", hash = "sha256:a10043953fcba71911bf29a024f8cc337260c1ef0b4fc844b96cae0de0947baa", size = 18181, upload-time = "2026-10-06T17:36:38.111Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/08/05/f8cff0c68a7f9ab8fab01904be5a49c5214435109c2a6b6d173a974c10d9/opentelemetry_instrumentation_sqlalchemy-0.66b1-py3-none-any.whl", hash = "sha256:aa30b10d880d7e91cf94b23a92ac85cec09ffddd8f0d40256d7c510e3dd33971", size = 14425, upload-time = "2026-10-06T17:35:53.436Z" },
 ]
 
 [[package]]

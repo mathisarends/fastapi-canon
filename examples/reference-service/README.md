@@ -66,9 +66,10 @@ local development infrastructure using [Grafana's LGTM image](https://github.com
 The demo owns an explicit SDK provider per service and shuts it down after
 Dishka closes engines/clients. It exports traces only, uses parent-based sampling
 at ratio 1.0 and never sets global providers. Override `NOTIFIER_URL` or
-`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` for other local ports. SQLAlchemy's contrib
-instrumentor also wraps engine factories globally; run each demo application in
-its own process. HTTPX2 instrumentation is scoped to the owned client.
+`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` for other local ports. Infrastructure providers
+receive the application's `Telemetry` from Dishka. Canon's adapters instrument
+only the owned HTTPX2 client and SQLAlchemy engine, without global factory hooks.
+Resources and SDK providers remain application-owned.
 
 Stop the collector with:
 

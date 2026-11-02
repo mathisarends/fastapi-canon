@@ -152,6 +152,103 @@ These downstream suppression guarantees apply to HTTP requests. WebSocket
 exclusion still suppresses native telemetry and Canon ports; RPC-specific
 configuration remains explicit as described below.
 
+### Injecting configuration into infrastructure
+
+Each Composition-owned Dishka container binds the same immutable `Telemetry`
+instance at `Scope.APP`, in every contributed Dishka component. Infrastructure
+providers can depend directly on `Telemetry`. Composition reserves that binding;
+remove custom bindings of the same type rather than overriding it.
+
+With `Composition(..., telemetry=None)`, infrastructure receives
+`Telemetry.disabled()`: tracing, metrics and logs are off, and the adapters below
+leave resources untouched without importing their optional runtimes. This does
+not disable an independently configured FastAPI pipeline. Without contributed
+providers Composition still avoids creating an otherwise unused DI container.
+
+Standalone containers explicitly supply the configuration:
+
+```python
+container = make_async_container(Infrastructure(), options.provider())
+# Or, for uninstrumented standalone use:
+container = make_async_container(Infrastructure(), Telemetry.disabled().provider())
+```
+
+`options.provider(component="billing")` selects a named Dishka component. These
+providers return the borrowed configuration; they never create or close SDKs.
+
+### Explicit resource adapters
+
+Install `fastapi-canon[otel-httpx]` plus the HTTPX or HTTPX2 client library you use,
+and `fastapi-canon[otel-sqlalchemy]` plus your database driver. The SQLAlchemy extra
+includes its asyncio dependencies, including greenlet, for sync/async engine
+support across supported SQLAlchemy versions. The core `otel`
+extra does not install client libraries, SQLAlchemy or the SDK.
+
+```python
+from collections.abc import AsyncIterator
+
+import httpx2
+from dishka import Provider, Scope, provide
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+
+from fastapi_canon.integrations.opentelemetry import Telemetry
+from fastapi_canon.integrations.opentelemetry.httpx import instrument_httpx
+from fastapi_canon.integrations.opentelemetry.sqlalchemy import instrument_sqlalchemy
+
+
+class Infrastructure(Provider):
+    @provide(scope=Scope.APP)
+    async def client(self, telemetry: Telemetry) -> AsyncIterator[httpx2.AsyncClient]:
+        async with httpx2.AsyncClient(timeout=10) as client:
+            with instrument_httpx(client, telemetry):
+                yield client
+
+    @provide(scope=Scope.APP)
+    async def engine(self, telemetry: Telemetry) -> AsyncIterator[AsyncEngine]:
+        engine = create_async_engine("sqlite+aiosqlite:///application.db")
+        try:
+            with instrument_sqlalchemy(engine, telemetry, pool_name="primary"):
+                yield engine
+        finally:
+            await engine.dispose()
+```
+
+Both context managers also support synchronous resources and return the original
+instance. Their scope must outlive in-flight operations. They detach on normal
+exit, failure and cancellation, without closing resources or borrowed providers.
+Tracing and metrics follow their respective application switches independently.
+Both-off configurations are no-ops, including without optional packages installed.
+
+HTTPX uses contrib's public `instrument_client` / `uninstrument_client` API for
+the supplied client only. Already instrumented clients are rejected so another
+owner's instrumentation is not removed. Do not modify or independently instrument
+the same client during the scope. Contrib's client ownership marker is the only
+private client state consulted; integration tests cover rejection and cleanup.
+
+The adapter's HTTP client spans retain method, server address/port, status,
+protocol and error type.
+They omit URL/path/query, headers, payloads, exception messages and stack traces,
+including header capture requested through contrib environment variables.
+`capture_url=True` explicitly permits upstream URL attributes, including query
+strings; apply application redaction if necessary. HTTP metrics use contrib's
+standard duration instruments and labels. No custom request/response hook runs.
+
+SQLAlchemy uses listeners attached to that engine instance, including
+`AsyncEngine.sync_engine`, rather than the global contrib instrumentor. It never
+wraps engine factories or removes foreign listeners. Query spans are named
+`DB query`; spans and `db.client.operation.duration` metrics contain only the
+database system and, for failures, exception type. `capture_statement=True`
+allows SQL text on spans, which may contain literals. Bound parameters, database
+URLs, exception messages and SQL comments are never added by Canon.
+
+When metrics are enabled, `db.client.connection.count` observes used and idle
+connections independently of request suppression. Queue pools use their public
+snapshot methods; pools without those methods report connections observed since
+instrumentation began. Give each engine sharing a meter a unique `pool_name`.
+`pool_metrics=False` omits these observations. Detaching an engine stops only its
+pool observations. The callback registry holds weak references and does not own
+engines or SDK providers. Instrumenting a resource twice concurrently is rejected.
+
 FastAPI currently accepts telemetry configuration only in its constructor.
 Canon bridges that boundary by updating the existing `_telemetry` dictionary,
 guarded by a FastAPI >=0.143 check and integration tests. When problem enrichment
@@ -212,18 +309,15 @@ and application-boundary spans are wanted. See also the
 
 Library instrumentation belongs to the application provider that owns the engine
 or client. The [reference demo](../examples/reference-service/README.md#local-telemetry-demo)
-uses an instrumented HTTPX2 client to propagate W3C context to a second service,
-and SQLAlchemy instrumentation to add database spans below repository spans.
-These packages are application extras, not dependencies of Canon's `otel` extra.
+uses the explicit resource adapters above and injected configuration to propagate
+W3C context through an HTTPX2 client and add SQL query spans below repository spans.
 
 HTTPX2 supports `HTTPX2ClientInstrumentor.instrument_client(client, ...)` and
 `uninstrument_client(client)`. SQLAlchemy's documented
 `SQLAlchemyInstrumentor().instrument(engine=engine.sync_engine, ...)` also wraps
 engine factories process-wide, and `uninstrument()` removes its instrumentation
-globally. The demo owns that setup in its dedicated process; do not interpret
-the engine argument as a guarantee of isolation between applications in one
-process. SQLCommenter stays disabled. Bound SQL parameters are not captured,
-but statement text may contain literals if an application interpolates them.
+globally. Those semantics belong to the direct contrib API, not Canon's
+engine-local adapter. Do not combine them on the same engine.
 
 RPC is explicit because Canon does not own `RpcService` instances:
 

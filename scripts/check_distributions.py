@@ -55,6 +55,8 @@ def _main() -> None:
         for extras in (
             "",
             "otel",
+            "otel-httpx",
+            "otel-sqlalchemy",
             "sse",
             "websockets",
             "webrtc",
@@ -103,13 +105,11 @@ def _main() -> None:
                 *names,
                 *(
                     ["--otel"]
-                    if any(
-                        "otel" in Requirement(item).extras
-                        and Requirement(item).name == "fastapi-canon"
-                        for item in requirements
-                    )
+                    if extras & {"otel", "otel-httpx", "otel-sqlalchemy"}
                     else []
                 ),
+                *(["--httpx"] if "otel-httpx" in extras else []),
+                *(["--sqlalchemy"] if "otel-sqlalchemy" in extras else []),
                 cwd=Path(temporary),
                 timeout=120,
             )

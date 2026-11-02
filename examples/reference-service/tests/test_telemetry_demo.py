@@ -13,7 +13,6 @@ from starlette.types import Lifespan
 from telemetry import SpanCapture
 
 pytest.importorskip("opentelemetry.instrumentation.httpx")
-pytest.importorskip("opentelemetry.instrumentation.sqlalchemy")
 pytest.importorskip("opentelemetry.exporter.otlp.proto.http.trace_exporter")
 
 from opentelemetry.trace import SpanKind  # noqa: E402

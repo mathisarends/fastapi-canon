@@ -70,7 +70,8 @@ architecture:
       may_depend_on: [values, responses, adapters, routing, composition, transport, sse, rpc, rtc, telemetry, generation, analysis]
       third_party:
         default: deny
-        allow: [packaging, fastapi, pydantic, pydantic_core, typing_extensions, starlette, dishka, httpx, httpx2, jsonschema, jinja2, pytest, uvicorn, anyio, aiortc, av, opentelemetry]
+        # Installed-wheel resource smoke checks also exercise SQLAlchemy.
+        allow: [packaging, fastapi, pydantic, pydantic_core, typing_extensions, starlette, dishka, httpx, httpx2, jsonschema, jinja2, pytest, uvicorn, anyio, aiortc, av, opentelemetry, sqlalchemy]
     showcase:
       path: examples
       may_depend_on: [values, responses, adapters, routing, composition, transport, sse, rpc, rtc, telemetry, generation, analysis, application]
@@ -153,7 +154,8 @@ architecture:
       may_depend_on: [values, responses, adapters, routing, rpc]
       third_party:
         default: deny
-        allow: [dishka, fastapi, starlette, pydantic, typing_extensions, pydantic_core, opentelemetry]
+        # The opt-in engine adapter uses SQLAlchemy's instance event API.
+        allow: [dishka, fastapi, starlette, pydantic, typing_extensions, pydantic_core, opentelemetry, sqlalchemy]
     generation:
       path: codegen
       may_depend_on:

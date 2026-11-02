@@ -6,6 +6,12 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Breaking changes
 
+- Composition's Dishka containers now reserve `Telemetry` for the application
+  configuration, in every contributed component. Remove custom `Telemetry`
+  bindings; inject the composition's instance instead. Without composition
+  telemetry, infrastructure receives `Telemetry.disabled()`. In standalone
+  containers, explicitly add `options.provider()` (or
+  `Telemetry.disabled().provider()`). SDK providers remain borrowed.
 - `instrument(Port, OtherPort, ...)` now requires at least one positional port
   and always returns a tuple of immutable declarations, including for a single
   port. Shared `expected` and `component` options apply to every port in the call.
@@ -25,6 +31,23 @@ All notable changes to `fastapi-canon` are documented in this file.
 - Remove `fastapi_canon.testing.telemetry.SpanCapture` from the distribution.
   Applications should maintain their own trace-capture fixture using the
   OpenTelemetry SDK’s in-memory exporter; the repository fixture provides an example.
+
+### Added
+
+- Explicit, lifetime-scoped `instrument_httpx(client, telemetry)` and
+  `instrument_sqlalchemy(engine, telemetry)` adapters in their documented
+  integration modules. Both respect application-local signal settings and
+  request suppression and remove only their own instrumentation. HTTPX/HTTPX2
+  reuse the public contrib per-client API; SQLAlchemy uses engine-local event
+  listeners without wrapping factories or changing global instrumentors.
+- Opt-in `otel-httpx` and `otel-sqlalchemy` extras, including SQLAlchemy's asyncio
+  dependencies for sync/async engine support. Resource and SDK lifecycle
+  remains application-owned. URLs, SQL text and exception messages are omitted
+  by default; `capture_url=True` and `capture_statement=True` explicitly opt into
+  potentially sensitive text. Headers, bodies and SQL parameters are not captured.
+- Engine pool observations independent of query/request suppression, plus
+  installed-wheel FastAPI bridge checks against 0.143.0 and the locked version.
+  Native configuration drift now fails before application installation.
 
 ### Development
 
