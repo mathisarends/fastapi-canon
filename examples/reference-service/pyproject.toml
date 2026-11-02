@@ -21,6 +21,7 @@ otel = [
     "opentelemetry-exporter-otlp-proto-http>=1.40,<2",
     "httpx2>=2.12,<3",
     "opentelemetry-instrumentation-httpx>=0.65b0,<1",
+    "opentelemetry-instrumentation-logging>=0.65b0,<1",
     "sqlalchemy[asyncio]>=2.0,<2.1",
 ]
 
@@ -31,6 +32,7 @@ dev = [
     "opentelemetry-exporter-otlp-proto-http>=1.40,<2",
     "httpx2>=2.12,<3",
     "opentelemetry-instrumentation-httpx>=0.65b0,<1",
+    "opentelemetry-instrumentation-logging>=0.65b0,<1",
     "sqlalchemy[asyncio]>=2.0,<2.1",
     "httpx>=0.28",
     "mypy>=1.15",

@@ -342,6 +342,12 @@ normal HTTP tracing; dedicated SSE event instrumentation is outside this API.
 
 ## Testing, logs and sampling
 
+`Composition(..., request_logging=True)` enables structured HTTP completion and
+abort records on `fastapi_canon.access`, independently of `telemetry` and
+`Telemetry.logs`. Records carry the HTTP server span's IDs when available.
+See [request logging](request-logging.md) for fields, streaming semantics and the
+Uvicorn setup for one traceback per propagated exception.
+
 Applications can test traces with the OpenTelemetry SDK’s in-memory span exporter
 and a dedicated `TracerProvider`. Pass the provider to `Telemetry` and shut it down
 after the test. The repository’s [trace test fixture](../tests/fixtures/telemetry.py)

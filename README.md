@@ -361,6 +361,7 @@ CI options.
 | Build WebSocket RPC, subscriptions or sockets | [WebSocket guide index](docs/integrations/websockets/index.md) |
 | Add WebRTC sessions | [WebRTC contracts](docs/webrtc.md) |
 | Add tracing and metrics | [Telemetry](docs/telemetry.md) |
+| Log HTTP responses and correlate traces | [Request logging](docs/request-logging.md) |
 | Upgrade an existing application | [Package migration](docs/package-migration.md), [RPC migration](docs/integrations/websockets/migration.md) |
 | Run a complete application | [Reference service](examples/reference-service/README.md), [HTTP/SSE/RPC example](examples/stack_service.py) |
 | Contribute or prepare a release | [Contributing](docs/contributing.md), [guardrails](docs/architecture-guardrails.md), [compatibility](docs/compatibility.md), [releases](docs/releases.md) |

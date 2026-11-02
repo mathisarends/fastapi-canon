@@ -2,6 +2,27 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
+## Unreleased
+
+### Breaking changes
+
+- Unhandled HTTP exceptions are diagnosed by the ASGI server after Starlette
+  sends Canon's safe 500 response. Applications relying on the additional
+  `fastapi_canon.error.handlers` traceback should retain `uvicorn.error` and route
+  it through one application log handler. Use `Telemetry(logs=False)` when that
+  server diagnostic should be the only exception log. Internally consumed
+  response-validation and rendering failures still retain their Canon diagnostic.
+
+### Added
+
+- `Composition(..., request_logging=True)` emits structured completion/abort
+  records on `fastapi_canon.access`, including route templates, sent status,
+  streaming response duration, Canon problem codes and available server-span IDs.
+  It defaults to disabled and works without the Canon OTel extra.
+- The reference telemetry demo exports ordinary Python service logs and request
+  records through one OTLP path to Loki, with provisioned Loki/Tempo links in both
+  directions for the distributed tasks-to-notifier request.
+
 ## 0.12.0 - 2026-11-02
 
 ### Breaking changes

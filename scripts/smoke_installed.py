@@ -3,6 +3,7 @@ import faulthandler
 import importlib
 import importlib.util
 import json
+import logging
 import runpy
 import shutil
 import subprocess
@@ -10,6 +11,7 @@ import sys
 import tempfile
 from collections.abc import AsyncIterator
 from importlib.metadata import version
+from logging.handlers import BufferingHandler
 from pathlib import Path
 from typing import Literal
 
@@ -73,6 +75,7 @@ def _main() -> None:
 
         routers.append(http)
         _canon_check()
+        _request_logging_check()
         _observation_check(enabled="--otel" in selected)
         _resource_telemetry_check(selected)
     if "sse" in selected:
@@ -193,6 +196,32 @@ def _main() -> None:
             )
         assert counter.closed
     print(f"Installed artifact checks passed: {', '.join(sorted(selected))}")
+
+
+def _request_logging_check() -> None:
+    """Exercise core-only request records against the actual installed wheel."""
+    from fastapi_canon import Composition
+
+    logger = logging.getLogger("fastapi_canon.access")
+    previous_level = logger.level
+    capture = BufferingHandler(10)
+    logger.setLevel(logging.INFO)
+    logger.addHandler(capture)
+    try:
+        app = Composition(request_logging=True).apply(FastAPI())
+        with TestClient(app) as client:
+            assert client.get("/absent?secret=hidden").status_code == 404
+        assert len(capture.buffer) == 1
+        record = capture.buffer[0]
+        assert record.event == "http.request.completed"
+        assert record.method == "GET" and record.status == 404
+        assert record.route is None and record.duration_ms >= 0
+        assert not hasattr(record, "trace_id")
+        assert "hidden" not in str(vars(record))
+    finally:
+        logger.removeHandler(capture)
+        logger.setLevel(previous_level)
+        capture.close()
 
 
 def _resource_telemetry_check(selected: set[str]) -> None:
