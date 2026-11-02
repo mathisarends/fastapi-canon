@@ -15,8 +15,11 @@ historical runs, tags and assets linked below remain in their original repositor
 Source **0.13.0 is prepared and unreleased**. It makes `Composition.features`
 keyword-only and adds opt-in request logging, SQLite/PostgreSQL integration
 and Alembic migrations. HTTP dependency scopes close before responses are sent.
-Migrate positional features to `Composition(features=[first, second])`; see
-the [0.13.0 breaking changes](../CHANGELOG.md#0130---unreleased).
+WebSocket server composition uses `CanonWebSocketRouter`, and controllers start
+independent traces when messages carry no parent context.
+Migrate positional features to `Composition(features=[first, second])` and apply
+the [0.13.0 upgrade guide](package-migration.md#upgrade-to-0130) and
+[breaking changes](../CHANGELOG.md#0130---unreleased).
 The published release remains 0.12.0 until publication is authorized and verified.
 
 Canon **0.12.0** was published on 2026-11-02 from
@@ -230,7 +233,10 @@ contains all transport modules and their generator resources in one artifact set
 
 After upload, verify hashes and fresh public-index installs. Canon checks core,
 `[otel]`, `[otel-httpx]`, `[otel-sqlalchemy]`, `[sse]`, `[websockets]`, `[webrtc]`
-and combined feature/tool extras.
+and combined feature/tool extras. The twelve installation combinations also
+cover `[database]`, `[sqlite,migrations]`, `[sqlite,migrations,sqlmodel]` and
+`[postgres,migrations]`. SQLite combinations exercise transactions and real
+Alembic upgrades; live PostgreSQL behavior is verified by the CI database job.
 The separate `finish` job then
 creates the package-prefixed tag and central GitHub Release at the verified
 commit, with changelog notes, original wheel/sdist and manifest attached.

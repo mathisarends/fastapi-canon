@@ -18,9 +18,9 @@ For an installed canon checkout or release containing this integration:
 pip install "fastapi-canon[sse]"
 ```
 
-The prepared Canon 0.10.0 release includes the SSE implementation in the same
-wheel. The `sse` extra selects FastAPI >=0.143.3 and Pydantic >=2.11.2;
-base composition keeps its existing lower bounds. No separate Streams package
+Canon includes the SSE implementation in the same wheel since 0.10.0.
+The `sse` extra selects FastAPI >=0.143.3 and Pydantic >=2.11.2;
+base composition requires FastAPI >=0.121 and Pydantic >=2.9. No separate Streams package
 is installed. See the [migration guide](../../docs/package-migration.md).
 
 ## Export and generate clients

@@ -1,7 +1,7 @@
 # Canon WebSockets
 
-This guide documents the integration. The implementation
-now ships in `fastapi-canon[websockets]` (prepared 0.10.0, not yet published).
+This guide documents the integration. The implementation has shipped in
+`fastapi-canon[websockets]` since the published 0.10.0 release.
 See the [public API](../../canon.md#public-namespaces) and
 [package migration guide](../../package-migration.md).
 
@@ -24,14 +24,16 @@ fastapi_canon.integrations.websockets makes the Python definition the single sou
 | an async iterator | server-pushed events and binary streams |
 | nothing else | Python and TypeScript clients, regenerated in CI |
 
-`fastapi-rpckit` is the FastAPI-first WebSocket RPC successor to
+The earlier `fastapi-rpckit` distribution was the FastAPI-first WebSocket RPC successor to
 [`pyrpckit`](https://github.com/mathisarends/pyrpckit), developed in the
 [Canon repository](https://github.com/mathisarends/fastapi_canon). FastAPI is a required
 dependency. This implementation now ships in Canon; SSE uses `fastapi_canon.integrations.sse`.
 The existing dispatch engine, OpenRPC contracts, binary/raw channels, and client
 generators are retained. The old repository remains available.
 
-Upgrade notes for each release are in the [changelog](../../history/fastapi-rpckit.md); moving from
+Current upgrades are covered by the [Canon changelog](../../../CHANGELOG.md),
+including the unreleased 0.13.0 `CanonWebSocketRouter` API. Earlier standalone
+releases have a [historical changelog](../../history/fastapi-rpckit.md); moving from
 `pyrpckit` is covered by the [migration guide](migration.md).
 
 ## The idea

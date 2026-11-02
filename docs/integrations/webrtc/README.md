@@ -1,7 +1,7 @@
 # Canon WebRTC
 
-This guide documents the integration. The implementation
-now ships in `fastapi-canon[webrtc]` (prepared 0.10.0, not yet published).
+This guide documents the integration. The implementation has shipped in
+`fastapi-canon[webrtc]` since the published 0.10.0 release.
 See the [public API](../../canon.md#public-namespaces) and
 [package migration guide](../../package-migration.md).
 

@@ -5,7 +5,7 @@ services and domain classes need no telemetry annotations or imports.
 
 Install `fastapi-canon[otel]`. This extra requires FastAPI >=0.143 and the
 OpenTelemetry API and instrumentation helpers; the SDK and exporters remain
-application dependencies. Core keeps FastAPI >=0.115 and can run without
+application dependencies. Core requires FastAPI >=0.121 and can run without
 OpenTelemetry on older FastAPI versions.
 Recent FastAPI versions themselves depend on the OpenTelemetry API.
 
