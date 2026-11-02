@@ -2,7 +2,7 @@
 
 from collections.abc import AsyncGenerator, Mapping
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Literal
 
 from anyio import CancelScope
 from dishka import Provider, Scope, provide
@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from fastapi_canon import Feature
+from fastapi_canon.integrations.database.locks import TransactionLocks
 from fastapi_canon.integrations.database.migrations import AlembicMigrations
 
 
@@ -34,11 +35,16 @@ class Database:
         session_class: type[AsyncSession] = AsyncSession,
         engine_options: Mapping[str, Any] | None = None,
         migrations: AlembicMigrations | None = None,
+        sqlite_advisory_locks: Literal["error", "ignore"] = "error",
     ) -> None:
         normalized = make_url(url)
         drivers = {
             "sqlite": "sqlite+aiosqlite",
             "postgresql": "postgresql+asyncpg",
+            "postgres": "postgresql+asyncpg",
+            "postgresql+psycopg": "postgresql+asyncpg",
+            "postgresql+psycopg2": "postgresql+asyncpg",
+            "sqlite+pysqlite": "sqlite+aiosqlite",
         }
         normalized = normalized.set(
             drivername=drivers.get(normalized.drivername, normalized.drivername)
@@ -59,9 +65,13 @@ class Database:
                 "Database manages SQLite transaction control; omit isolation_level"
             )
         self._migrations = migrations
+        if sqlite_advisory_locks not in {"error", "ignore"}:
+            raise ValueError("sqlite_advisory_locks must be 'error' or 'ignore'")
         self._feature = Feature(
             name=name,
-            providers=[lambda: _DatabaseProvider(self, session_class)],
+            providers=[
+                lambda: _DatabaseProvider(self, session_class, sqlite_advisory_locks)
+            ],
             lifespan=self._lifespan,
         )
 
@@ -98,13 +108,24 @@ class Database:
 class _DatabaseProvider(Provider):
     scope = Scope.APP
 
-    def __init__(self, database: Database, session_class: type[AsyncSession]) -> None:
+    def __init__(
+        self,
+        database: Database,
+        session_class: type[AsyncSession],
+        sqlite_locks: Literal["error", "ignore"],
+    ) -> None:
         super().__init__()
         self._database = database
         self._session_class = session_class
+        self._sqlite_locks = sqlite_locks
         self.provide(self._session, provides=session_class, scope=Scope.REQUEST)
         if session_class is not AsyncSession:
             self.alias(session_class, provides=AsyncSession)
+            # The configured class is a runtime Dishka key, not a static type alias.
+            self.alias(
+                async_sessionmaker[AsyncSession],
+                provides=async_sessionmaker[session_class],  # type: ignore[valid-type]
+            )
 
     @provide
     async def engine(self) -> AsyncGenerator[AsyncEngine]:
@@ -119,6 +140,10 @@ class _DatabaseProvider(Provider):
             expire_on_commit=False,
             close_resets_only=False,
         )
+
+    @provide(scope=Scope.REQUEST)
+    def transaction_locks(self, session: AsyncSession) -> TransactionLocks:
+        return TransactionLocks(session, sqlite=self._sqlite_locks)
 
     async def _session(
         self, factory: async_sessionmaker[AsyncSession]

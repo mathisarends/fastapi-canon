@@ -8,7 +8,7 @@ from importlib import resources
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Connection, MetaData
+from sqlalchemy import Connection, MetaData, inspect
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 if TYPE_CHECKING:
@@ -52,7 +52,12 @@ class AlembicMigrations:
     async def upgrade(self, engine: AsyncEngine, revision: str = "head") -> None:
         from alembic import command
 
-        await self._run(engine, lambda config: command.upgrade(config, revision))
+        def apply(config: Config) -> None:
+            command.upgrade(config, revision)
+            if revision in {"head", "heads"}:
+                _require_schema(config.attributes["connection"], self.metadata)
+
+        await self._run(engine, apply)
 
     async def revision(
         self, engine: AsyncEngine, *, message: str, autogenerate: bool = False
@@ -85,11 +90,12 @@ class AlembicMigrations:
             actual = await connection.run_sync(
                 lambda sync: set(MigrationContext.configure(sync).get_current_heads())
             )
-        if actual != expected:
-            raise RuntimeError(
-                "Database migrations are pending or incompatible; "
-                "run fastapi-canon db upgrade head before starting the application"
-            )
+            if actual != expected:
+                raise RuntimeError(
+                    "Database migrations are pending or incompatible; "
+                    "run fastapi-canon db upgrade head before starting the application"
+                )
+            await connection.run_sync(_require_schema, self.metadata)
 
     async def _run(
         self, engine: AsyncEngine, operation: Callable[[Config], object]
@@ -178,3 +184,27 @@ def _sqlite_foreign_keys(connection: Connection, enabled: bool) -> None:
         )
     finally:
         cursor.close()
+
+
+def _require_schema(connection: Connection, metadata: MetaData) -> None:
+    inspector = inspect(connection)
+    missing = []
+    for table in metadata.sorted_tables:
+        if not inspector.has_table(table.name, schema=table.schema):
+            missing.append(f"table {table.fullname}")
+            continue
+        actual = {
+            column["name"]
+            for column in inspector.get_columns(table.name, schema=table.schema)
+        }
+        missing.extend(
+            f"column {table.fullname}.{column.name}"
+            for column in table.columns
+            if column.name not in actual
+        )
+    if missing:
+        raise RuntimeError(
+            "Database schema is incomplete: "
+            + ", ".join(sorted(missing))
+            + ". Add a forward repair migration; do not stamp or rewrite migration history."
+        )

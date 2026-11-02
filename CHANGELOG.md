@@ -46,6 +46,10 @@ All notable changes to `fastapi-canon` are documented in this file.
 - Application-owned Alembic revisions through `AlembicMigrations` and
   `fastapi-canon db init|revision|upgrade|check`. The application checks revision
   heads at startup; applying migrations remains an explicit deployment step.
+- Typed custom-session factory aliases and injectable PostgreSQL transaction
+  advisory locks. SQLite rejects unsupported advisory locking unless omission is
+  explicitly configured. Owned table/column presence is checked even behind a
+  current revision; existing schemas are repaired with forward migrations.
 
 ## 0.12.0 - 2026-11-02
 

@@ -6,12 +6,12 @@ from typing import Any
 import pytest
 from dishka import AsyncContainer, Provider, Scope, provide
 from dishka.integrations.fastapi import DishkaRoute, FromDishka, inject
-from fastapi import APIRouter, Depends, FastAPI
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import Table, event, insert, select, text
 from sqlalchemy.exc import IntegrityError, InvalidRequestError
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from sqlmodel import select as model_select
 from sqlmodel.ext.asyncio.session import AsyncSession as ModelSession
 from starlette.types import Message, Receive, Send
@@ -241,6 +241,12 @@ async def test_sqlmodel_and_sqlalchemy_inject_the_same_session(tmp_path: Path) -
         session = await scope.get(ModelSession)
         assert await scope.get(AsyncSession) is session
         assert (await session.exec(model_select(1))).one() == 1
+        factory = await scope.get(async_sessionmaker[ModelSession])
+        assert await scope.get(async_sessionmaker[AsyncSession]) is factory
+        async with factory() as standalone:
+            assert isinstance(standalone, ModelSession)
+            assert not standalone.sync_session.expire_on_commit
+            assert (await standalone.exec(model_select(2))).one() == 2
 
 
 async def test_foreign_keys_are_enforced_on_sqlite(tmp_path: Path) -> None:
@@ -303,3 +309,89 @@ async def test_service_scopes_use_fresh_sessions_and_commit_before_returning(
             ) == ["one", "two"]
     assert len(sessions) == 2
     assert sessions[0] is not sessions[1]
+
+
+async def test_explicit_commit_survives_a_later_http_rejection(
+    database: Database, items: Table
+) -> None:
+    router = APIRouter(route_class=DishkaRoute)
+
+    @router.post("/reject")
+    async def reject(session: FromDishka[AsyncSession]) -> None:
+        await session.execute(insert(items).values(name="durable"))
+        await session.commit()
+        await session.execute(insert(items).values(name="transient"))
+        raise HTTPException(status_code=401)
+
+    app = Composition(
+        features=[database.feature, Feature(name="reject", routers=[router])]
+    ).apply(FastAPI())
+    async with asyncio.timeout(15), app.router.lifespan_context(app):
+        async with AsyncClient(
+            transport=ASGITransport(app), base_url="http://test"
+        ) as client:
+            assert (await client.post("/reject")).status_code == 401
+        async with database.open_engine() as engine, engine.connect() as connection:
+            assert list((await connection.scalars(select(items.c.name))).all()) == [
+                "durable"
+            ]
+
+
+async def test_savepoint_failure_preserves_the_outer_transaction(
+    database: Database, items: Table
+) -> None:
+    app = Composition(features=[database.feature]).apply(FastAPI())
+    async with asyncio.timeout(15), app.router.lifespan_context(app):
+        async with app.state.dishka_container(scope=Scope.REQUEST) as scope:
+            session = await scope.get(AsyncSession)
+            await session.execute(insert(items).values(name="before"))
+            with pytest.raises(IntegrityError):
+                async with session.begin_nested():
+                    await session.execute(insert(items).values(name="before"))
+            await session.execute(insert(items).values(name="after"))
+        async with database.open_engine() as engine, engine.connect() as connection:
+            assert list(
+                (
+                    await connection.scalars(
+                        select(items.c.name).order_by(items.c.name)
+                    )
+                ).all()
+            ) == ["after", "before"]
+
+
+async def test_native_upserts_and_backend_row_locks_remain_available(
+    database: Database, items: Table
+) -> None:
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+    app = Composition(features=[database.feature]).apply(FastAPI())
+    async with asyncio.timeout(15), app.router.lifespan_context(app):
+        engine = await app.state.dishka_container.get(AsyncEngine)
+        postgres = engine.dialect.name == "postgresql"
+        dialect_insert = pg_insert if postgres else sqlite_insert
+        async with app.state.dishka_container(scope=Scope.REQUEST) as scope:
+            session = await scope.get(AsyncSession)
+            statement = (
+                dialect_insert(items)
+                .values(name="one")
+                .on_conflict_do_nothing()
+                .returning(items.c.name)
+            )
+            assert (await session.execute(statement)).scalar_one() == "one"
+            assert (await session.execute(statement)).scalar_one_or_none() is None
+        async with app.state.dishka_container(scope=Scope.REQUEST) as scope:
+            session = await scope.get(AsyncSession)
+            assert await session.scalar(select(items.c.name).with_for_update()) == "one"
+            async with (
+                database.open_engine() as observer,
+                observer.connect() as connection,
+            ):
+                rows = list(
+                    (
+                        await connection.scalars(
+                            select(items.c.name).with_for_update(skip_locked=True)
+                        )
+                    ).all()
+                )
+            assert rows == ([] if postgres else ["one"])

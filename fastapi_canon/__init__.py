@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from .integrations.database import (
         AlembicMigrations,
         Database,
+        TransactionLocks,
         run_alembic_environment,
     )
 
@@ -51,6 +52,7 @@ __all__ = [
     "RouterFactory",
     "RouterPolicy",
     "ServiceScope",
+    "TransactionLocks",
     "__version__",
     "install_openapi_contracts",
     "run_alembic_environment",

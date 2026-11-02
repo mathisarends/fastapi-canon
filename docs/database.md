@@ -32,10 +32,15 @@ in the module that exports it. With SQLModel, use the application's registered
 global registry. Commands import the database declaration without starting the
 FastAPI app; keep that module free of application startup side effects.
 
-Bare `sqlite://` and `postgresql://` URLs select aiosqlite and asyncpg. Explicit
-drivers must be `sqlite+aiosqlite` or `postgresql+asyncpg`. SQLAlchemy `URL`
+Bare `sqlite://` and `postgresql://` URLs select aiosqlite and asyncpg. Canon's
+async drivers are `sqlite+aiosqlite` and `postgresql+asyncpg`. SQLAlchemy `URL`
 objects are also accepted, including `URL.create` for credentials containing
 special characters. Other drivers fail explicitly.
+
+Common synchronous URL aliases (`sqlite+pysqlite`, `postgresql+psycopg`,
+`postgresql+psycopg2` and `postgres`) normalize to the selected async driver.
+Application settings may keep their environment prefix and secret types; pass
+the actual URL value and options such as `echo` at the composition boundary.
 
 ```python
 from fastapi import FastAPI
@@ -88,6 +93,12 @@ For SQLModel, pass `session_class=sqlmodel.ext.asyncio.session.AsyncSession`.
 Both SQLModel and SQLAlchemy session annotations then resolve to that same
 instance. Sessions use `expire_on_commit=False` and are permanently closed at
 scope exit.
+
+`async_sessionmaker[AsyncSession]` is available at APP scope. When configuring a
+custom session class, its typed sessionmaker and the SQLAlchemy base annotation
+resolve to the same factory. Callers that deliberately use this lower-level
+factory own their sessions and transaction boundaries; ordinary services use the
+scoped session or a `ServiceScope` instead.
 
 Composition installs one function-scoped HTTP dependency around existing,
 contributed and subsequently declared FastAPI routes. Successful handler and
@@ -178,9 +189,11 @@ The runner writes no database URL into revision/INI files and disposes its engin
 after each command.
 
 When migrations are configured, startup requires DB revisions to match the
-application's heads. Startup never applies revisions or calls `create_all`.
+application's heads and checks that owned tables and columns exist. Upgrading to
+head repeats this check even when the revision was already current. Startup
+never applies revisions or calls `create_all`.
 Run upgrades once in a deployment migration job before starting workers.
-Revision equality is not complete schema validation: also run `db check` and
+Table/column presence is not complete schema validation: also run `db check` and
 migration tests from an empty DB and from the previous revision with existing data.
 
 Generated table changes use Alembic batch directives for SQLite rebuilds;
@@ -197,3 +210,51 @@ The integration suite runs transaction/migration contracts against both backends
 Set `CANON_TEST_POSTGRES_URL` to an isolated PostgreSQL test database to include
 those cases locally; CI also runs them. See the
 [runnable database example](../examples/database/README.md).
+
+## Transaction locks
+
+Repositories can inject `TransactionLocks` alongside their session:
+
+```python
+from fastapi_canon import TransactionLocks
+
+
+async def reserve(self, allocation_key: int) -> None:
+    await self._transaction_locks.acquire(allocation_key)
+    # Read and update the protected records using the injected session.
+```
+
+PostgreSQL uses transaction advisory locks on the session's current connection.
+They coordinate separate processes and are released by commit or rollback,
+including scope cancellation. Applications choose signed 64-bit keys and must
+preserve their meaning across deployments. Native `FOR UPDATE`, `SKIP LOCKED`,
+savepoints, dialect-specific upserts and `RETURNING` remain available on the
+unwrapped SQLAlchemy/SQLModel session.
+
+SQLite cannot provide equivalent advisory locks. `acquire` raises by default.
+An application whose isolated SQLite execution deliberately omits these
+guarantees can explicitly set `Database(sqlite_advisory_locks="ignore", ...)`.
+This is no concurrency substitute. Keep real PostgreSQL locking tests; retain
+any application-local mutex until the transaction finishes when its workflow
+requires one. Inject the configured lock dependency rather than constructing it
+inside repositories so the explicit backend policy is applied consistently.
+
+## Adopting existing persistence infrastructure
+
+| Existing responsibility | Canonical integration |
+| --- | --- |
+| Engine/pool provider and disposal | `Database.feature` |
+| Session provider and commit/rollback | Shared request-scoped `AsyncSession` |
+| HTTP dependency-scope wrapper | Composition's central function scope |
+| Short worker/socket operation | APP-scoped `ServiceScope[Service]` factory |
+| Typed factory for deliberate standalone work | `async_sessionmaker[SessionClass]` |
+| PostgreSQL advisory transaction locks | Injected `TransactionLocks` |
+| Alembic directory and existing revision graph | `AlembicMigrations`, preserving application revisions |
+| Missing schema behind a current revision | Presence checks at startup and upgrade to head; add a forward repair revision |
+| Readiness | Inject the owned `AsyncEngine` into the application's check |
+| Settings, model base classes and domain/repository mapping | Remain application-owned and consume these standard resources |
+
+Existing repositories keep `get`, `merge`, `flush`, `exec`/`execute`, eager-load
+options and native SQL. Existing migration environments keep the borrowed-
+connection protocol. No Canon entity base class, generic repository, lock-key
+convention, settings prefix or deployment platform is imposed.
