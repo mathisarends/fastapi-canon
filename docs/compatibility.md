@@ -147,7 +147,7 @@ compiles. Chromium scenarios cover the aiortc signaling and media paths. This
 local validation does not replace exact-source CI or establish a publication.
 
 Canon's optional `otel` extra requires FastAPI >=0.143 and
-OpenTelemetry API >=1.40,<2. Canon core retains FastAPI >=0.115; its declarations
+OpenTelemetry API >=1.40,<2. Canon core requires FastAPI >=0.121; its declarations
 and disabled Dishka decorators require no OpenTelemetry imports. Recent FastAPI
 versions have their own OpenTelemetry API dependency. The installed-wheel matrix
 covers API-only `fastapi-canon[otel]` and the reference trace tests with an application
@@ -169,6 +169,10 @@ The installed-wheel matrix covers:
 | `[otel-httpx]` | Explicit per-client HTTPX instrumentation and cleanup |
 | `[otel-sqlalchemy]` | Engine-local sync/async SQLAlchemy instrumentation and pool observations |
 | Canon base | Composition with optional tools and engines absent |
+| `[database]` | Database declarations without a driver or Alembic installed |
+| `[database,sqlite,migrations]` | SQLite transactions, Alembic upgrades and schema checks |
+| `[database,sqlite,migrations,sqlmodel]` | SQLModel sessions on the same transaction lifecycle |
+| `[database,postgres,migrations]` | PostgreSQL driver and migration tooling installation; live database contracts run in CI |
 | `[sse]` | SSE runtime with the required FastAPI/Pydantic bounds |
 | `[websockets]` | RPC and typed/raw/binary sockets |
 | `[webrtc]` | Session declarations, signaling, admission and missing-engine diagnostics |
@@ -177,7 +181,7 @@ The installed-wheel matrix covers:
 | `[sse,codegen]` | SSE contracts and clients |
 | `[websockets,codegen]` | OpenRPC export and client execution/compilation |
 | `[sse,websockets,codegen]` | Shared application state and Dishka cleanup |
-| All feature/tool extras | Combined routing and client generation |
+| `[sse,websockets,webrtc,aiortc,codegen,otel]` | Combined routing and client generation |
 
 Run `scripts/check_distributions.py` through the locked root environment for
 current compatible dependencies. Add `--python 3.12 --dependencies minimum` for

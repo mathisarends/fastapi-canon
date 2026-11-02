@@ -286,11 +286,22 @@ def test_public_verify_plan(  # smelt: ignore[SMT423] -- two seams
     installs = [
         command for command in commands if command[:3] == ["uv", "pip", "install"]
     ]
-    assert len(installs) == 8
+    assert len(installs) == 12
     assert any("fastapi-canon[otel]==0.6.0" in command for command in installs)
     assert any("fastapi-canon[otel-httpx]==0.6.0" in command for command in installs)
     assert any(
         "fastapi-canon[otel-sqlalchemy]==0.6.0" in command for command in installs
+    )
+    assert any("fastapi-canon[database]==0.6.0" in command for command in installs)
+    assert any(
+        "fastapi-canon[sqlite,migrations]==0.6.0" in command for command in installs
+    )
+    assert any(
+        "fastapi-canon[sqlite,migrations,sqlmodel]==0.6.0" in command
+        for command in installs
+    )
+    assert any(
+        "fastapi-canon[postgres,migrations]==0.6.0" in command for command in installs
     )
     assert any("fastapi-canon[websockets]==0.6.0" in command for command in installs)
     assert any(
@@ -303,6 +314,10 @@ def test_public_verify_plan(  # smelt: ignore[SMT423] -- two seams
         ["fastapi-canon", "--otel"],
         ["fastapi-canon", "--otel", "--httpx"],
         ["fastapi-canon", "--otel", "--sqlalchemy"],
+        ["fastapi-canon", "--database"],
+        ["fastapi-canon", "--database", "--sqlite", "--migrations"],
+        ["fastapi-canon", "--database", "--sqlite", "--migrations", "--sqlmodel"],
+        ["fastapi-canon", "--database", "--migrations"],
         ["fastapi-canon", "sse"],
         ["fastapi-canon", "websockets"],
         ["fastapi-canon", "webrtc"],

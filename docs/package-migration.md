@@ -11,6 +11,36 @@ The [repository migration](repository-migration.md) records the
 source history and publishing setup. The repository move does not rename the
 PyPI project or add further Python import changes.
 
+## Upgrade to 0.13.0
+
+Version 0.13.0 is prepared and unreleased. Upgrade from published 0.12.0 with
+these application changes:
+
+1. Replace positional composition arguments with `Composition(features=[first,
+   second])`. All constructor options are keyword-only.
+2. Replace `RpcService`, `RpcRoutes`, `create_router()` and `dishka_router()` with
+   `CanonWebSocketRouter`. Include it directly in `Feature(routers=[router])`,
+   and pass `resolver=Dishka()` for Dishka injection. Replace
+   `Telemetry.rpc_middleware()` with `Telemetry.websocket_middleware()`.
+   Earlier development snapshots named the new router `RpcRouter`; that name
+   is also removed. See the [WebSocket migration guide](integrations/websockets/migration.md).
+3. Require FastAPI >=0.121. HTTP dependency scopes now close after response
+   validation and before sending the response. Open an independent
+   `ServiceScope` for streams, workers and background tasks instead of retaining
+   request-owned resources. See [scope ownership](database.md).
+4. Keep the ASGI server's exception logger enabled for unhandled HTTP failures;
+   Canon no longer emits a second traceback for the same failure. Configure
+   [request logging](request-logging.md) explicitly if completion records are needed.
+5. Update telemetry queries that assumed every call on a WebSocket shared one
+   trace. Calls without message context now start independent traces linked to
+   the connection. Explicit message context still supplies the parent.
+
+The JSON-RPC wire format and generated-client contracts remain unchanged by the
+router and tracing changes. Database integration and request logging are opt-in;
+follow the [database guide](database.md) when adding engines, transactions or
+Alembic migrations. See the [full changelog](../CHANGELOG.md#0130---2026-11-02)
+for the release's migration details.
+
 ## Installation
 
 ```console
@@ -27,7 +57,8 @@ uv add "fastapi-canon[webrtc,aiortc]"
 Every install contains all Python feature modules and generator templates.
 Extras install the dependency versions needed by a feature; they do not install
 another Canon distribution. SSE selects FastAPI >=0.143.3 and Pydantic >=2.11.2,
-while base composition retains FastAPI >=0.115 and Pydantic >=2.9. WebSockets
+while base composition requires FastAPI >=0.121 and Pydantic >=2.9 in 0.13.0.
+The published 0.12.0 base requires FastAPI >=0.115. WebSockets
 selects its Pydantic and typing requirements. WebRTC selects its AnyIO, Starlette
 and typing requirements. `codegen` selects the template/schema tooling and model
 dependencies needed to generate clients from saved contracts. It does not
@@ -53,9 +84,11 @@ dependencies from your application. Replace Canon's former `streams` extra with
 | `fastapi_webrtc` | `fastapi_canon.integrations.webrtc` |
 | `fastapi_canon.integrations.streams` | `fastapi_canon.integrations.sse` (`CanonStreamRouter`) |
 
-Public class names such as `StreamRouter`, `CanonWebSocketRouter`, `RpcSocket`,
-`WebRtcRouter`, `CanonStreamRouter` and `CanonWebRtcRouter` stay available inside
-the integration namespaces. Feature `__version__` exports refer to the single
+Public classes such as `StreamRouter`, `RpcSocket`, `WebRtcRouter`,
+`CanonStreamRouter` and `CanonWebRtcRouter` live inside the integration namespaces.
+In 0.13.0, use `CanonWebSocketRouter` instead of the earlier service and adapter
+factories; follow the [WebSocket migration guide](integrations/websockets/migration.md).
+Feature `__version__` exports refer to the single
 Canon version. The published `fastapi_canon.integrations.webrtc` admission-router
 import remains available and now contains the complete WebRTC integration.
 
@@ -107,7 +140,7 @@ Regenerate clients and follow that guide when adopting the new stream profile.
 
 ## Common codegen workflow
 
-Prepared 0.10.0 adds version-1 `fastapi-canon generate` configuration, shared model/error
+Canon 0.10.0 added version-1 `fastapi-canon generate` configuration, shared model/error
 identity and a domain SDK facade. JSON HTTP calls, SSE, JSON-RPC and sessions can
 contribute to one output per language. Put generation settings in `[codegen]` in
 `fastapi-canon.toml`, or `[tool.fastapi-canon.codegen]` in `pyproject.toml`. Follow the

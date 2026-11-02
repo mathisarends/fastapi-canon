@@ -2,7 +2,7 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
-## 0.13.0 - Unreleased
+## 0.13.0 - 2026-11-02
 
 ### Breaking changes
 
@@ -45,7 +45,6 @@ All notable changes to `fastapi-canon` are documented in this file.
   FastAPI version is now 0.121 for function-scoped dependency cleanup. WebSocket
   session/request scope behavior is unchanged.
 
-
 ### Added
 
 - `CanonWebSocketRouter(path, channels=[...])` mounts one JSON-RPC WebSocket endpoint
@@ -72,6 +71,20 @@ All notable changes to `fastapi-canon` are documented in this file.
   advisory locks. SQLite rejects unsupported advisory locking unless omission is
   explicitly configured. Owned table/column presence is checked even behind a
   current revision; existing schemas are repaired with forward migrations.
+
+### Development
+
+- Extend post-upload public-index verification to the database, SQLite,
+  PostgreSQL, migrations and SQLModel extras, including SQLite transactions and
+  Alembic upgrades, across twelve installation combinations.
+
+### Documentation
+
+- Add a consolidated 0.12-to-0.13 upgrade guide covering composition, WebSocket
+  routing, HTTP scope ownership and telemetry migration.
+- Align current dependency requirements, integration installation guides and
+  the seventeen-combination installed-wheel matrix with the prepared release.
+  Keep published-version records separate from unreleased source APIs.
 
 ## 0.12.0 - 2026-11-02
 

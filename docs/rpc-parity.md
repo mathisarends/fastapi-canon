@@ -1,6 +1,7 @@
 # RPC successor parity and consumer migration
 
-`fastapi-rpckit` is the FastAPI-first successor to pyrpckit. Its initial import
+The earlier `fastapi-rpckit` distribution was the FastAPI-first successor to pyrpckit.
+Its implementation now ships in `fastapi-canon[websockets]`. Its initial import
 preserved the predecessor's runtime, schemas, templates and tests from commit
 `853579eb08903bd95f8ce03f7608a3703ba40add` (pyrpckit 0.11.0), under the
 `fastapi_canon.integrations.websockets` namespace. FastAPI is required. There is no `rpckit` import shim.
@@ -9,7 +10,8 @@ Existing `x-rpckit-*` extensions, `.rpcgen` manifests and `rpckit.*` telemetry
 names are intentional compatibility points. Subsequent releases have source and
 generated-client breaking changes, including the 0.3.0 socket API changes and
 removal of server-to-client RPC. Follow the package [migration guide](integrations/websockets/migration.md)
-and [changelog](history/fastapi-rpckit.md) rather than assuming the
+and [Canon changelog](../CHANGELOG.md), together with the
+[standalone history](history/fastapi-rpckit.md), rather than assuming the
 current API is identical to the imported predecessor.
 
 ## Regression scope

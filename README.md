@@ -1,10 +1,5 @@
 # fastapi-canon
 
-The upcoming 0.13.0 SQLite/PostgreSQL integration provides request-scoped transactions,
-SQLModel support and an Alembic workflow while ordinary handlers inject their
-service directly. See [databases and migrations](docs/database.md) and the
-[runnable example](examples/database/README.md).
-
 The canonical FastAPI API for people and coding agents: declare features, typed
 operations and public errors once, then generate the SDK your consumers use.
 Canon gives recurring application problems a shared solution: feature wiring,
@@ -45,6 +40,12 @@ The generated API follows your domain: `client.projects.get()`,
 The [public API guide](docs/canon.md) maps these responsibilities to imports.
 
 ## Install
+
+This checkout prepares **0.13.0**; the published release is **0.12.0**. The examples
+below use the prepared API. See the [0.13.0 upgrade guide](docs/package-migration.md#upgrade-to-0130)
+for keyword-only composition, `CanonWebSocketRouter`, dependency cleanup and
+tracing changes. Version 0.13.0 also adds [databases and migrations](docs/database.md)
+and [request logging](docs/request-logging.md).
 
 ```console
 uv add fastapi-canon

@@ -1,7 +1,7 @@
 # Canon SSE
 
-This guide documents the integration. The implementation
-now ships in `fastapi-canon[sse]` (prepared 0.10.0, not yet published).
+This guide documents the integration. The implementation has shipped in
+`fastapi-canon[sse]` since the published 0.10.0 release.
 See the [public API](../../canon.md#public-namespaces) and
 [package migration guide](../../package-migration.md).
 
@@ -32,7 +32,7 @@ A CI check catches drift between the Python app, the contract, and generated cod
 
 ## 1. Decorate your FastAPI endpoint
 
-For the prepared 0.10.0 package, select SSE and the optional codegen extra:
+Select SSE and the optional codegen extra:
 
 ```sh
 uv add 'fastapi-canon[sse,codegen]'

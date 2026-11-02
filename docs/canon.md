@@ -35,6 +35,7 @@ dependencies, telemetry runtimes or media engines.
 | `webrtc` | AnyIO, Starlette and typing requirements for session signaling |
 | `aiortc` | Optional reference media engine; use with `webrtc` |
 | `otel` | Native FastAPI telemetry, observed Dishka ports and WebSocket middleware |
+| `otel-httpx`, `otel-sqlalchemy` | Explicit per-client HTTPX and per-engine SQLAlchemy telemetry adapters |
 | `codegen` | Template, schema-validation and model dependencies for generators |
 | `database` | Async SQLAlchemy engine and session ownership, without a driver |
 | `sqlite`, `postgres` | Database integration with aiosqlite or asyncpg |

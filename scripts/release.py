@@ -236,6 +236,10 @@ def verify_published(report: dict[str, Any], root: Path = ROOT) -> None:
             "[otel]",
             "[otel-httpx]",
             "[otel-sqlalchemy]",
+            "[database]",
+            "[sqlite,migrations]",
+            "[sqlite,migrations,sqlmodel]",
+            "[postgres,migrations]",
             "[sse]",
             "[websockets]",
             "[webrtc]",
@@ -270,6 +274,14 @@ def verify_published(report: dict[str, Any], root: Path = ROOT) -> None:
                 selected.append("--httpx")
             if "otel-sqlalchemy" in extras:
                 selected.append("--sqlalchemy")
+            if extras & {"database", "sqlite", "postgres", "sqlmodel", "migrations"}:
+                selected.append("--database")
+            if "sqlite" in extras:
+                selected.append("--sqlite")
+            if "migrations" in extras:
+                selected.append("--migrations")
+            if "sqlmodel" in extras:
+                selected.append("--sqlmodel")
             _run(
                 [
                     str(python),
