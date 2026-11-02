@@ -2,7 +2,7 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
-## 0.12.0 - Unreleased
+## 0.12.0 - 2026-11-02
 
 ### Breaking changes
 
@@ -56,6 +56,9 @@ All notable changes to `fastapi-canon` are documented in this file.
   projects. Run development commands from the root after `uv sync --frozen
   --all-groups` and `pnpm install --frozen-lockfile --ignore-scripts`. Public imports,
   extras and wire contracts are unchanged.
+
+- Public-index release verification also installs the new `otel-httpx` and
+  `otel-sqlalchemy` extras and exercises their resource adapters.
 
 ## 0.11.0 - 2026-11-01
 

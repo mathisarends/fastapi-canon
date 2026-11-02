@@ -12,6 +12,13 @@ historical runs, tags and assets linked below remain in their original repositor
 
 ## Current versions
 
+Canon **0.12.0** is prepared for publication. It adds explicit HTTPX and
+SQLAlchemy telemetry adapters, composition-owned `Telemetry` injection and
+tuple-based `instrument()` declarations. See the
+[0.12.0 migration notes](../CHANGELOG.md#0120---2026-11-02).
+The published version remains 0.11.0 until the new PyPI artifacts, public installs,
+tag and GitHub Release have been verified.
+
 Canon **0.11.0** was published on 2026-11-01 from
 [verified source `2773b56`](https://github.com/mathisarends/fastapi_canon/commit/2773b56498fad05ac9e1f1163ee33241b6d70eff),
 after [exact-source CI](https://github.com/mathisarends/fastapi_canon/actions/runs/41346976457)
@@ -119,8 +126,9 @@ deployed TURN/NAT, database concurrency and proxy validation remain separate wor
 Canon 0.10.0 includes the unpublished 0.9.0 package consolidation and optional
 native OpenTelemetry integration, plus canonical error bindings and common SDK
 generation. See the [migration guide](package-migration.md).
-Only Canon is an active release target; the old feature directories retain
-tests, examples and historical changelogs. Source metadata alone does not establish
+Only Canon is an active release target. Integrations now live under
+`fastapi_canon/integrations/`, tests under `tests/`, examples under `examples/`
+and historical changelogs under `docs/history/`. Source metadata alone does not establish
 a publication; the verified 0.10.0 publication is recorded above.
 
 ## Publisher setup
@@ -203,7 +211,8 @@ files must match the original manifest; conflicting contents fail. Canon also
 contains all transport modules and their generator resources in one artifact set.
 
 After upload, verify hashes and fresh public-index installs. Canon checks core,
-`[otel]`, `[sse]`, `[websockets]`, `[webrtc]` and combined feature/tool extras.
+`[otel]`, `[otel-httpx]`, `[otel-sqlalchemy]`, `[sse]`, `[websockets]`, `[webrtc]`
+and combined feature/tool extras.
 The separate `finish` job then
 creates the package-prefixed tag and central GitHub Release at the verified
 commit, with changelog notes, original wheel/sdist and manifest attached.

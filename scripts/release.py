@@ -234,6 +234,8 @@ def verify_published(report: dict[str, Any], root: Path = ROOT) -> None:
         for extras in (
             "",
             "[otel]",
+            "[otel-httpx]",
+            "[otel-sqlalchemy]",
             "[sse]",
             "[websockets]",
             "[webrtc]",
@@ -260,14 +262,14 @@ def verify_published(report: dict[str, Any], root: Path = ROOT) -> None:
             )
             _run(["uv", "pip", "check", "--python", str(python)])
             selected = [report["package"]]
-            selected.extend(
-                sorted(
-                    Requirement(requirements[0]).extras
-                    & {"sse", "websockets", "webrtc"}
-                )
-            )
-            if "otel" in Requirement(requirements[0]).extras:
+            extras = Requirement(requirements[0]).extras
+            selected.extend(sorted(extras & {"sse", "websockets", "webrtc"}))
+            if extras & {"otel", "otel-httpx", "otel-sqlalchemy"}:
                 selected.append("--otel")
+            if "otel-httpx" in extras:
+                selected.append("--httpx")
+            if "otel-sqlalchemy" in extras:
+                selected.append("--sqlalchemy")
             _run(
                 [
                     str(python),
