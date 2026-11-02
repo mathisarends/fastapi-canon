@@ -27,6 +27,11 @@ from fastapi_canon.integrations.websockets.connection import (
     rejection_for,
 )
 from fastapi_canon.integrations.websockets.constants import LOGGER_NAME
+from fastapi_canon.integrations.websockets.definition import (
+    RpcEndpoint,
+    RpcSocketEndpoint,
+    RpcStreamEndpoint,
+)
 from fastapi_canon.integrations.websockets.dependencies import (
     RpcResolverLike,
     as_resolver,
@@ -64,11 +69,6 @@ from fastapi_canon.integrations.websockets.server import (
     _CLIENT_CANCEL,
     RpcErrorMapper,
     RpcServer,
-)
-from fastapi_canon.integrations.websockets.service import (
-    RpcEndpoint,
-    RpcSocketEndpoint,
-    RpcStreamEndpoint,
 )
 from fastapi_canon.integrations.websockets.sockets import RpcMessageType, RpcSocket
 from fastapi_canon.integrations.websockets.streams import (

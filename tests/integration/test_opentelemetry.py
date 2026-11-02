@@ -28,7 +28,9 @@ from fastapi_canon import (
 )
 from fastapi_canon.error import Error, ErrorRegistry
 from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from tests.fixtures.telemetry import SpanCapture
+from tests.fixtures.websockets import router_for
 
 
 class Missing(Exception):
@@ -614,8 +616,6 @@ def test_duplicate_instrumentation_is_rejected(
 def test_rpc_forwards_providers() -> None:
     from fastapi_canon.integrations.websockets import (
         RpcChannel,
-        RpcService,
-        create_router,
     )
 
     with SpanCapture() as capture:
@@ -626,10 +626,10 @@ def test_rpc_forwards_providers() -> None:
         async def ping() -> str:
             return "pong"
 
-        service = RpcService(middleware=(options.rpc_middleware(),))
+        service = RpcDefinition(middleware=(options.rpc_middleware(),))
         service.socket("/rpc", channels=(channel,))
         app = Composition(
-            features=(Feature(name="rpc", routers=[create_router(service)]),),
+            features=(Feature(name="rpc", routers=[router_for(service)]),),
             telemetry=options,
         ).apply(FastAPI())
         with TestClient(app) as client, client.websocket_connect("/rpc") as websocket:

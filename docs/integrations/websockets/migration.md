@@ -1,5 +1,32 @@
 # Migrate from pyrpckit to fastapi-rpckit
 
+
+## Canon 0.13.0 server composition
+
+`RpcRouter` is the public WebSocket composition API. Replace the separate
+service, adapter factory and mounting objects with a router.
+
+```python
+from fastapi_canon.integrations.websockets import RpcChannel, RpcRouter
+from fastapi_canon.integrations.websockets.adapters.dishka import Dishka
+
+rpc = RpcRouter("/rpc", channels=[tasks], resolver=Dishka())
+feature = Feature(name="tasks", routers=[rpc], providers=[TaskProvider])
+app = Composition(features=[feature]).apply(FastAPI())
+contract = rpc.contract(title="Tasks", base_url="wss://api.example.com", app=app)
+```
+
+For several endpoints, use `RpcRouter()` and its `socket()` and `stream()`
+methods. They register and mount each endpoint together. Configure limits,
+middleware, rejection policies and the async connection-context dependency on
+the router. Its dependency's concrete return type replaces the separate
+endpoint context-type declaration. Custom FastAPI handlers use `serve=`.
+
+`RpcService`, `RpcRoutes`, `create_router` and `dishka_router` are removed.
+The transport-neutral definition is an implementation detail. Use the router
+with `RpcTestClient` or call `router.endpoint(name).create_server()` for tests.
+The existing wire contracts and SDKs continue to use the declared channels.
+
 The successor is developed inside Canon; the original repository remains
 available. Version 0.1.0 is the initial successor release.
 
@@ -27,7 +54,7 @@ from fastapi_canon.integrations.websockets import (
 ```
 
 The existing `fastapi_canon.integrations.websockets.adapters.fastapi` paths also remain valid.
-`RpcChannel`, `RpcService`, endpoint registration, and `Inject` retain their
+`RpcChannel`, `RpcRouter`, endpoint registration, and `Inject` retain their
 behavior. With Canon, put `dishka_router(service)` in a feature's routers; it
 uses Canon's application container, SESSION per connection, and REQUEST per call.
 See the [workspace example](../../../examples/stack_service.py).

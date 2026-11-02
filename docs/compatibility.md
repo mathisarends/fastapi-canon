@@ -1,5 +1,21 @@
 # Compatibility
 
+## WebSocket router boundary
+
+`RpcRouter` registers endpoints with `APIRouter.websocket()` and integrates through
+`include_router()`. Connection dependencies use `Depends`, and handlers use the
+public `WebSocket` constructor, properties and methods. Custom-handler observation
+wraps the public send/receive callables in a separate WebSocket instance.
+Python signature metadata belongs to Canon's own handler functions.
+[FastAPI router API](https://fastapi.tiangolo.com/reference/apirouter/),
+[WebSocket API](https://fastapi.tiangolo.com/reference/websockets/).
+
+The installed-wheel WebSocket smoke passes on Python 3.12 with FastAPI 0.121.0
+and Starlette 0.49.3, and with FastAPI 0.143.3 and Starlette 1.10.0. It exercises
+RPC, typed sockets, connection dependencies and a custom handler with middleware.
+The repository's locked suite additionally covers dependency cleanup, denial
+responses, disconnects, cancellation and telemetry.
+
 ## Prepared database integration
 
 Unreleased 0.13.0 raises the core minimum to FastAPI 0.121 for function-scoped

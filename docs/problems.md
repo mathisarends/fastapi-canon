@@ -109,22 +109,18 @@ there is no second domain-to-RPC mapping to maintain.
 ## Compose the application and export its contracts
 
 ```python
-from fastapi import APIRouter, FastAPI
+from fastapi import FastAPI
 
 from fastapi_canon import Composition, Feature
-from fastapi_canon.integrations.websockets import RpcService
-from fastapi_canon.integrations.websockets.adapters.fastapi import RpcRoutes
+from fastapi_canon.integrations.websockets import RpcRouter
 
-service = RpcService()
-endpoint = service.socket("/ws", channels=[projects])
-websockets = APIRouter()
-RpcRoutes(websockets).mount(endpoint)
+websockets = RpcRouter("/ws", channels=[projects])
 
 app = Composition(
     features=(Feature(name="projects", routers=[http, streams, websockets]),),
 ).apply(FastAPI())
 
-contract = service.contract(
+contract = websockets.contract(
     title="Projects",
     base_url="wss://api.example.com",
     app=app,

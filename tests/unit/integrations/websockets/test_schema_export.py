@@ -21,7 +21,7 @@ def test_contract_reference_resolves() -> None:
 def test_channel_and_service_references_are_rejected() -> None:
     with pytest.raises(ProtocolReferenceError, match="RpcChannel"):
         load_contract_source("tests.unit.integrations.websockets.test_contract:channel")
-    with pytest.raises(ProtocolReferenceError, match="RpcService"):
+    with pytest.raises(ProtocolReferenceError, match="RpcDefinition"):
         load_contract_source("tests.unit.integrations.websockets.test_contract:service")
 
 

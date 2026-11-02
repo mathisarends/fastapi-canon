@@ -6,7 +6,7 @@ from textwrap import dedent
 from typing import Any
 
 import pytest
-from fastapi_canon.integrations.websockets import RpcChannel, RpcService
+from fastapi_canon.integrations.websockets import RpcChannel
 from fastapi_canon.integrations.websockets.codegen import (
     generate_typescript_client,
     render_typescript_client,
@@ -15,6 +15,7 @@ from fastapi_canon.integrations.websockets.codegen.typescript import (
     TypeScriptClientOptions,
 )
 from fastapi_canon.integrations.websockets.codegen.writer import MANIFEST
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 
 
 def options() -> TypeScriptClientOptions:
@@ -499,7 +500,7 @@ def test_contracts_without_models_do_not_export_a_models_module() -> None:
     async def ping() -> str:
         return "pong"
 
-    service = RpcService()
+    service = RpcDefinition()
     service.socket("/rpc", channels=[channel])
     document = service.contract(title="Control", base_url="ws://localhost")
 

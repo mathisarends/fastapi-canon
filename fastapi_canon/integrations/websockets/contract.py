@@ -104,7 +104,7 @@ def contract_from_service(
     description: str,
     variables: Mapping[str, ServerVariable] | None,
 ) -> RpcContract:
-    from fastapi_canon.integrations.websockets.service import (
+    from fastapi_canon.integrations.websockets.definition import (
         RpcEndpoint,
         RpcSocketEndpoint,
         RpcStreamEndpoint,

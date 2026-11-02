@@ -8,7 +8,7 @@ import fastapi_canon.integrations.websockets.middleware as middleware_module
 import fastapi_canon.integrations.websockets.runtime as runtime_module
 import fastapi_canon.integrations.websockets.server as server_module
 import pytest
-from fastapi import APIRouter, FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.testclient import TestClient
 from fastapi_canon.integrations.websockets import (
     RpcChannel,
@@ -17,16 +17,17 @@ from fastapi_canon.integrations.websockets import (
     RpcMiddleware,
     RpcRejection,
     RpcRequestScope,
-    RpcService,
     RpcStreamScope,
 )
 from fastapi_canon.integrations.websockets.adapters.fastapi import (
-    RpcRoutes,
-    create_router,
+    RpcRouter,
     serve_websocket,
 )
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.testing import InMemorySocket, RpcTestClient
 from starlette.testclient import WebSocketDenialResponse
+
+from tests.fixtures.websockets import router_for
 
 request_id: ContextVar[object] = ContextVar("test.request", default=None)
 connection_name: ContextVar[str | None] = ContextVar("test.connection", default=None)
@@ -72,7 +73,7 @@ async def test_unregistered_middleware_allocates_no_operation_scopes(monkeypatch
     assert json.loads(await server.handle_json("{"))["error"]["code"] == -32700
     assert (await server.handle([])).error.code == -32600
 
-    rpc = RpcService()
+    rpc = RpcDefinition()
     rpc.socket("/rpc", channels=[channel])
     rpc.stream("/stream", frames)
     async with RpcTestClient(rpc, "/rpc") as client:
@@ -97,7 +98,7 @@ async def test_nested_uninstrumented_connection_restores_outer_scope():
         assert scope is None
         return "pong"
 
-    child_service = RpcService()
+    child_service = RpcDefinition()
     child_service.socket("/child", channels=[child_channel])
     recorder = Recorder()
     channel = RpcChannel("parent")
@@ -117,7 +118,7 @@ async def test_nested_uninstrumented_connection_restores_outer_scope():
         assert outer.scope.connection is connection
         yield b"frame"
 
-    rpc = RpcService(middleware=[recorder])
+    rpc = RpcDefinition(middleware=[recorder])
     rpc.stream("/parent", frames)
     async with RpcTestClient(rpc, "/parent") as client:
         assert await client.next_frame() == b"frame"
@@ -132,13 +133,13 @@ async def test_uninstrumented_fastapi_rejection_does_not_update_outer_scope():
     async def authenticate() -> str:
         raise ValueError("Access denied")
 
-    child = RpcService().socket("/child", channels=[RpcChannel("child")], context=str)
-    router = APIRouter()
-    RpcRoutes(
-        router,
-        context=authenticate,
-        rejections={ValueError: RpcRejection.FORBIDDEN},
-    ).mount(child)
+    child = RpcDefinition().socket(
+        "/child", channels=[RpcChannel("child")], context=str
+    )
+    router = RpcRouter(
+        context=authenticate, rejections={ValueError: RpcRejection.FORBIDDEN}
+    )
+    router.mount(child)
     web = FastAPI()
     web.include_router(router)
     messages = []
@@ -149,7 +150,7 @@ async def test_uninstrumented_fastapi_rejection_does_not_update_outer_scope():
     async def send(message):
         messages.append(message)
 
-    outer = RpcService(middleware=[Recorder()]).socket(
+    outer = RpcDefinition(middleware=[Recorder()]).socket(
         "/outer", channels=[RpcChannel("outer")]
     )
     # Verify context-variable restoration across nested scopes and cancellation.
@@ -260,7 +261,7 @@ async def test_service_endpoint_and_serving_middleware_compose_once():
             assert connection_name.get() == "rpc"
             return "pong"
 
-        rpc = RpcService(middleware=[service])
+        rpc = RpcDefinition(middleware=[service])
         mounted = rpc.socket("/rpc", channels=[channel], middleware=[endpoint])
         socket = InMemorySocket("/rpc")
         task = asyncio.create_task(mounted.serve(socket, middleware=[adapter]))
@@ -352,7 +353,7 @@ async def test_stream_cleanup_and_cancellation(cancel):
             finally:
                 released.append(True)
 
-        rpc = RpcService(middleware=[recorder])
+        rpc = RpcDefinition(middleware=[recorder])
         endpoint = rpc.stream("/media", frames)
         socket = InMemorySocket("/media")
         task = asyncio.create_task(endpoint.serve(socket))
@@ -378,7 +379,7 @@ async def test_handshake_rejection_is_observed():
     async def frames() -> AsyncIterator[bytes]:
         yield b"unused"
 
-    rpc = RpcService(middleware=[recorder])
+    rpc = RpcDefinition(middleware=[recorder])
     endpoint = rpc.stream("/media", frames, subprotocol="required")
     await endpoint.serve(InMemorySocket("/media"))
     assert not recorder.connections[0].outcome.accepted
@@ -417,20 +418,19 @@ def test_fastapi_observes_context_rejections_and_does_not_enter_twice():
     async def ping() -> str:
         return "pong"
 
-    rpc = RpcService()
+    rpc = RpcDefinition()
     endpoint = rpc.socket("/rpc", channels=[channel], context=str)
 
     async def authenticate() -> str:
         assert connection_name.get() == "rpc"
         raise ValueError("Access denied")
 
-    router = APIRouter()
-    RpcRoutes(
-        router,
+    router = RpcRouter(
         context=authenticate,
         middleware=[recorder],
         rejections={ValueError: RpcRejection.FORBIDDEN},
-    ).mount(endpoint)
+    )
+    router.mount(endpoint)
     web = FastAPI()
     web.include_router(router)
     with (
@@ -446,10 +446,10 @@ def test_fastapi_observes_context_rejections_and_does_not_enter_twice():
     assert isinstance(outcome.error, ValueError)
 
     second = Recorder()
-    other = RpcService(middleware=[second])
+    other = RpcDefinition(middleware=[second])
     other.socket("/rpc", channels=[channel])
     app = FastAPI()
-    app.include_router(create_router(other))
+    app.include_router(router_for(other))
     with TestClient(app) as client, client.websocket_connect("/rpc") as socket:
         socket.send_json({"jsonrpc": "2.0", "id": 1, "method": "demo.ping"})
         assert socket.receive_json()["result"] == "pong"
@@ -473,7 +473,7 @@ async def test_structural_middleware_needs_no_observer_methods():
     async def ping() -> str:
         return "pong"
 
-    rpc = RpcService(middleware=[Structural()])
+    rpc = RpcDefinition(middleware=[Structural()])
     rpc.socket("/rpc", channels=[channel])
     async with RpcTestClient(rpc, "/rpc") as client:
         assert await client.request("demo.ping") == "pong"
@@ -528,7 +528,7 @@ async def test_stream_generator_and_di_cleanup_errors_are_observed():
             finally:
                 cleanup.append("generator")
 
-        rpc = RpcService(middleware=[recorder])
+        rpc = RpcDefinition(middleware=[recorder])
         endpoint = rpc.stream("/media", frames)
         socket = InMemorySocket("/media")
         task = asyncio.create_task(endpoint.serve(socket, resolver=Resolver()))
@@ -543,7 +543,7 @@ async def test_stream_generator_and_di_cleanup_errors_are_observed():
 @pytest.mark.parametrize("peer_disconnect", [False, True])
 def test_custom_handlers_report_accepted_connections_and_close_codes(peer_disconnect):
     recorder = Recorder()
-    endpoint = RpcService(middleware=[recorder]).socket(
+    endpoint = RpcDefinition(middleware=[recorder]).socket(
         "/rpc", channels=[RpcChannel("demo")]
     )
 
@@ -557,8 +557,8 @@ def test_custom_handlers_report_accepted_connections_and_close_codes(peer_discon
         else:
             await websocket.close(4001, "custom close")
 
-    router = APIRouter()
-    RpcRoutes(router).mount(endpoint, handler=handler)
+    router = RpcRouter()
+    router.mount(endpoint, handler=handler)
     web = FastAPI()
     web.include_router(router)
     with TestClient(web) as client, client.websocket_connect("/rpc") as socket:
@@ -594,7 +594,7 @@ def test_custom_handlers_support_activity_callbacks_on_middleware(with_instrumen
             finally:
                 closed.append(scope)
 
-    endpoint = RpcService(
+    endpoint = RpcDefinition(
         middleware=[Instrumentation()] if with_instrumentation else []
     ).socket("/rpc", channels=[RpcChannel("demo")])
 
@@ -608,8 +608,8 @@ def test_custom_handlers_support_activity_callbacks_on_middleware(with_instrumen
         await websocket.accept()
         await websocket.close(4001, "custom close")
 
-    router = APIRouter()
-    RpcRoutes(router).mount(endpoint, handler=handler)
+    router = RpcRouter()
+    router.mount(endpoint, handler=handler)
     web = FastAPI()
     web.include_router(router)
     with TestClient(web) as client, client.websocket_connect("/rpc") as socket:
@@ -633,7 +633,7 @@ def test_custom_handlers_compose_delegated_middleware_once(stream, registered, s
     configured = Recorder("configured", order)
     delegated = configured if shared else Recorder("delegated", order)
     channel = RpcChannel("demo")
-    rpc = RpcService(middleware=[configured] if registered else [])
+    rpc = RpcDefinition(middleware=[configured] if registered else [])
 
     @channel.method()
     async def ping() -> str:
@@ -650,8 +650,8 @@ def test_custom_handlers_compose_delegated_middleware_once(stream, registered, s
     async def handler(websocket: WebSocket) -> None:
         await serve_websocket(endpoint, websocket, middleware=[delegated])
 
-    router = APIRouter()
-    RpcRoutes(router).mount(endpoint, handler=handler)
+    router = RpcRouter()
+    router.mount(endpoint, handler=handler)
     web = FastAPI()
     web.include_router(router)
     with TestClient(web) as client, client.websocket_connect("/rpc") as socket:
@@ -678,7 +678,7 @@ def test_custom_handlers_compose_delegated_middleware_once(stream, registered, s
 async def test_custom_handlers_report_cancellation_and_failed_acceptance(cancel):
     async with asyncio.timeout(10):
         recorder = Recorder()
-        endpoint = RpcService(middleware=[recorder]).socket(
+        endpoint = RpcDefinition(middleware=[recorder]).socket(
             "/rpc", channels=[RpcChannel("demo")]
         )
         accepted = asyncio.Event()
@@ -689,8 +689,8 @@ async def test_custom_handlers_report_cancellation_and_failed_acceptance(cancel)
             accepted.set()
             await asyncio.Event().wait()
 
-        router = APIRouter()
-        RpcRoutes(router).mount(endpoint, handler=handler)
+        router = RpcRouter()
+        router.mount(endpoint, handler=handler)
         web = FastAPI()
         web.include_router(router)
 

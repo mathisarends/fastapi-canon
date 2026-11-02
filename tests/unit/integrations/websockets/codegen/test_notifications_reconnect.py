@@ -3,7 +3,8 @@ import json
 from collections.abc import AsyncIterator
 
 import pytest
-from fastapi_canon.integrations.websockets import RpcChannel, RpcService
+from fastapi_canon.integrations.websockets import RpcChannel
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.testing import InMemorySocketFactory
 from pydantic import BaseModel, TypeAdapter
 
@@ -74,7 +75,7 @@ async def test_passive_events_resume_against_a_real_served_endpoint(client_modul
         while True:
             yield Update(value=await events.get())
 
-    service = RpcService()
+    service = RpcDefinition()
     service.socket("/rpc", channels=[channel])
     service.freeze()
     async with InMemorySocketFactory(service) as factory:

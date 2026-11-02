@@ -16,10 +16,9 @@ from fastapi_canon.integrations.websockets import (
     RpcDisconnect,
     RpcDrain,
     RpcMiddleware,
-    RpcService,
     RpcSocket,
 )
-from fastapi_canon.integrations.websockets.adapters.fastapi import create_router
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.testing import (
     InMemorySocketFactory,
     RpcTestHandshakeRejected,
@@ -27,6 +26,8 @@ from fastapi_canon.integrations.websockets.testing import (
 from pydantic import BaseModel
 from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed, InvalidStatus
+
+from tests.fixtures.websockets import router_for
 
 
 def request(request_id, method="work.slow"):
@@ -46,7 +47,7 @@ def slow_service(*, middleware=()):
         finally:
             cancelled.set()
 
-    service = RpcService(middleware=middleware, strict_errors=True)
+    service = RpcDefinition(middleware=middleware, strict_errors=True)
     service.socket("/rpc", channels=[channel])
     return service, entered, release, cancelled
 
@@ -172,7 +173,7 @@ async def test_drain_stops_event_producer_and_flushes_queued_response():
         async def quick() -> int:
             return 42
 
-        service = RpcService()
+        service = RpcDefinition()
         service.socket("/rpc", channels=[channel])
 
         def configure(socket, _):
@@ -219,7 +220,7 @@ async def test_shutdown_cleans_subscription_while_another_request_is_stuck(drain
         working.set()
         await asyncio.Future()
 
-    service = RpcService()
+    service = RpcDefinition()
     service.socket("/rpc", channels=[channel])
     async with InMemorySocketFactory(service) as factory:
         client = await factory("ws://test/rpc")
@@ -254,7 +255,7 @@ async def test_blocked_flush_is_cancelled_at_grace_expiry(monkeypatch):
         async def quick() -> int:
             return 42
 
-        service = RpcService()
+        service = RpcDefinition()
         service.socket("/rpc", channels=[channel])
         proxy = SimpleNamespace(**vars(asyncio))
         real_wait = asyncio.wait
@@ -298,7 +299,7 @@ async def test_blocked_flush_is_cancelled_at_grace_expiry(monkeypatch):
 async def test_drain_rechecks_handshake_after_authentication_race():
     async with asyncio.timeout(10):
         entered, release = asyncio.Event(), asyncio.Event()
-        service = RpcService()
+        service = RpcDefinition()
 
         async def authenticate(handshake):
             entered.set()
@@ -362,7 +363,7 @@ async def test_long_lived_streams_close_with_restart_at_grace_expiry(kind, monke
             finally:
                 cancelled.set()
 
-        service = RpcService()
+        service = RpcDefinition()
         if kind == "binary":
             service.stream("/stream", frames)
         else:
@@ -406,7 +407,7 @@ async def test_pre_shutdown_drain_with_real_uvicorn_and_lifespan_cleanup():
             lifespan_finished.set()
 
         app = FastAPI(lifespan=lifespan)
-        app.include_router(create_router(service))
+        app.include_router(router_for(service))
 
         @app.post("/drain")
         async def drain():

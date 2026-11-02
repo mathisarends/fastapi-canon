@@ -5,7 +5,7 @@ from fastapi_canon.integrations.websockets import (
     Inject,
     RpcChannel,
     RpcModel,
-    RpcService,
+    RpcRouter,
 )
 
 
@@ -39,7 +39,7 @@ async def job_changes(events: Inject[JobEvents]) -> AsyncIterator[JobUpdate]:
         yield event
 
 
-app = RpcService()
+app = RpcRouter()
 app.socket("/rpc", channels=(router,))
 
 

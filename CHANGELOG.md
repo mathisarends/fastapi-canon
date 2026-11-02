@@ -6,6 +6,15 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Breaking changes
 
+- WebSocket server composition now uses `RpcRouter` exclusively. Replace
+  `RpcService` plus `create_router(service)` or `dishka_router(service)` with
+  `RpcRouter` and include it directly in `Feature(routers=[rpc])` or FastAPI.
+  Replace `RpcRoutes(router, ...).mount(endpoint)` with options on `RpcRouter`
+  and its `socket()` or `stream()` declaration. Use `resolver=Dishka()` for
+  Dishka, `context=async_dependency` for a connection context, and `serve=`
+  for custom FastAPI handlers. The removed names have no compatibility aliases.
+  See the WebSocket migration guide.
+
 - `Composition` now accepts features only through the keyword-only
   `features: Sequence[Feature] = ()` option. Replace `Composition(tasks, notifier)`
   with `Composition(features=(tasks, notifier))`, or pass a list with
@@ -29,6 +38,9 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Added
 
+- `RpcRouter(path, channels=[...])` mounts one JSON-RPC WebSocket endpoint
+  as a FastAPI router. Use it in `Feature(routers=[...])` and call its
+  `contract()` method to export OpenRPC for the same channels.
 - `Composition(features=features, request_logging=True)` emits structured completion/abort
   records on `fastapi_canon.access`, including route templates, sent status,
   streaming response duration, Canon problem codes and available server-span IDs.

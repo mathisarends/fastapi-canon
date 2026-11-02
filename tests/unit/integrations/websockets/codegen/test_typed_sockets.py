@@ -9,7 +9,6 @@ from urllib.parse import urlsplit
 import pytest
 from fastapi_canon.integrations.websockets import (
     RpcChannel,
-    RpcService,
     RpcSocketProtocol,
 )
 from fastapi_canon.integrations.websockets.codegen import (
@@ -23,6 +22,7 @@ from fastapi_canon.integrations.websockets.codegen.ir import (
     UnsupportedSchemaError,
     build_ir,
 )
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from pydantic import Field
 
 from tests.unit.integrations.websockets.codegen.test_bindings import EchoBinding
@@ -48,7 +48,7 @@ async def union(
     return message
 
 
-app = RpcService()
+app = RpcDefinition()
 app.socket("/union", union)
 
 
@@ -90,7 +90,7 @@ async def test_python_union_messages_round_trip(
 async def test_raw_protocol_binding_and_typed_connection_share_a_client(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    mixed = RpcService()
+    mixed = RpcDefinition()
     mixed.socket("/typed", typed_session)
     mixed.socket("/echo", raw_session)
     document = mixed.contract(title="Mixed", base_url="ws://h").to_openrpc()

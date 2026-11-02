@@ -15,7 +15,6 @@ from fastapi_canon.integrations.websockets import (
     RpcChannel,
     RpcError,
     RpcModel,
-    RpcService,
 )
 from fastapi_canon.integrations.websockets.codegen import (
     generate_python_client,
@@ -24,6 +23,7 @@ from fastapi_canon.integrations.websockets.codegen import (
 from fastapi_canon.integrations.websockets.codegen.ir import UnsupportedSchemaError
 from fastapi_canon.integrations.websockets.codegen.python import PythonClientOptions
 from fastapi_canon.integrations.websockets.codegen.writer import MANIFEST
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 
 from tests.unit.integrations.websockets.codegen.conftest import PACKAGE
 
@@ -705,7 +705,7 @@ def _error_document(*, with_errors: bool) -> dict[str, Any]:
 
     else:
         channel = _methods_only()
-    service = RpcService()
+    service = RpcDefinition()
     service.socket("/rpc", channels=[channel])
     return service.contract(title="Example", base_url="ws://localhost").to_openrpc()
 
@@ -768,7 +768,7 @@ def test_generated_python_from_services_is_ruff_clean(
     transport: str | None,
     tmp_path: Path,
 ) -> None:
-    service = RpcService()
+    service = RpcDefinition()
     mounted = channel()
     service.socket("/v1/gateway", channels=[mounted])
     for stream in mounted.streams:

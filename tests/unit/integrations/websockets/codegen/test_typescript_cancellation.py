@@ -6,11 +6,12 @@ from copy import deepcopy
 from textwrap import dedent
 
 import pytest
-from fastapi_canon.integrations.websockets import RpcChannel, RpcDisconnect, RpcService
+from fastapi_canon.integrations.websockets import RpcChannel, RpcDisconnect
 from fastapi_canon.integrations.websockets.codegen import generate_typescript_client
 from fastapi_canon.integrations.websockets.codegen.typescript import (
     TypeScriptClientOptions,
 )
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.testing import InMemorySocketFactory
 
 
@@ -484,7 +485,7 @@ async def test_typescript_abort_and_timeout_cancel_a_real_server(cancellation_sd
         async def ping() -> str:
             return "pong"
 
-        service = RpcService()
+        service = RpcDefinition()
         service.socket("/rpc", channels=[channel])
         before = asyncio.all_tasks()
         process = await asyncio.create_subprocess_exec(

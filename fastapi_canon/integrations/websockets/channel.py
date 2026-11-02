@@ -624,7 +624,7 @@ class RpcChannel:
         if self._protocol is not None:
             raise ProtocolDefinitionError(
                 f"RpcChannel {self.name!r} is frozen because its protocol was "
-                "already materialized (directly or by RpcService)"
+                "already materialized (directly or by RpcDefinition)"
             )
 
 

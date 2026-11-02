@@ -4,7 +4,7 @@ import sys
 from collections.abc import AsyncIterator
 
 import pytest
-from fastapi import APIRouter, FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.testclient import TestClient
 from fastapi_canon.integrations.websockets import (
     Inject,
@@ -14,13 +14,13 @@ from fastapi_canon.integrations.websockets import (
     RpcConnectionClose,
     RpcLimits,
     RpcRequestScope,
-    RpcService,
 )
 from fastapi_canon.integrations.websockets.adapters.fastapi import (
-    RpcRoutes,
+    RpcRouter,
     serve_websocket,
 )
 from fastapi_canon.integrations.websockets.adapters.opentelemetry import OpenTelemetry
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.testing import (
     InMemorySocket,
     RpcTestClient,
@@ -155,7 +155,7 @@ async def test_request_metadata_overrides_handshake_and_links_connection(provide
         async def ping() -> str:
             return "pong"
 
-        service = RpcService(
+        service = RpcDefinition(
             middleware=[
                 OpenTelemetry(
                     tracer_provider=tracer, meter_provider=meter, connection_spans=True
@@ -214,7 +214,7 @@ async def test_remote_handshake_baggage_requires_opt_in(providers, include_bagga
     async def baggage_value() -> str | None:
         return baggage.get_baggage("tenant")
 
-    service = RpcService(
+    service = RpcDefinition(
         middleware=[
             OpenTelemetry(
                 tracer_provider=tracer,
@@ -246,7 +246,7 @@ async def test_subscription_metadata_parents_controls_and_generator(providers):
             yield 1
             await asyncio.Event().wait()
 
-        service = RpcService(
+        service = RpcDefinition(
             middleware=[OpenTelemetry(tracer_provider=tracer, meter_provider=meter)]
         )
         service.socket("/rpc", channels=[channel])
@@ -301,7 +301,7 @@ async def test_stream_tracing_and_metrics_are_live_and_parent_child(providers):
             yield b"one"
         await asyncio.Event().wait()
 
-    rpc = RpcService(middleware=[instrumentation])
+    rpc = RpcDefinition(middleware=[instrumentation])
     rpc.stream("/sessions/{session_id}/media", frames)
     async with RpcTestClient(rpc, "/sessions/secret/media") as client:
         assert await client.next_frame() == b"one"
@@ -334,7 +334,7 @@ async def test_duplex_counts_empty_messages_and_excludes_input_end(providers):
         async for frame in frames:
             await output.send(frame)
 
-    rpc = RpcService(
+    rpc = RpcDefinition(
         middleware=[OpenTelemetry(tracer_provider=tracer, meter_provider=meter)]
     )
     rpc.stream("/voice", echo)
@@ -380,7 +380,7 @@ async def test_stream_failures_preserve_original_exception(
         yield b"first"
         raise ValueError("private error text")
 
-    rpc = RpcService(
+    rpc = RpcDefinition(
         middleware=[
             OpenTelemetry(
                 tracer_provider=tracer,
@@ -445,7 +445,7 @@ async def test_handshake_context_is_extracted_and_unknown_names_are_not_recorded
     async def ping() -> str:
         return "pong"
 
-    rpc = RpcService(
+    rpc = RpcDefinition(
         middleware=[OpenTelemetry(tracer_provider=tracer, meter_provider=meter)]
     )
     rpc.socket("/rpc", channels=[channel])
@@ -503,7 +503,7 @@ async def test_excluded_connections_are_isolated(providers):
         yield b"one"
         await asyncio.Event().wait()
 
-    rpc = RpcService(
+    rpc = RpcDefinition(
         middleware=[
             OpenTelemetry(
                 tracer_provider=tracer,
@@ -542,12 +542,12 @@ def test_fastapi_routes_add_real_rpc_spans_and_clean_up(providers):
     async def ping() -> str:
         return "pong"
 
-    rpc = RpcService()
+    rpc = RpcDefinition()
     endpoint = rpc.socket("/rpc", channels=[channel])
-    router = APIRouter()
-    RpcRoutes(
-        router, middleware=[OpenTelemetry(tracer_provider=tracer, meter_provider=meter)]
-    ).mount(endpoint)
+    router = RpcRouter(
+        middleware=[OpenTelemetry(tracer_provider=tracer, meter_provider=meter)]
+    )
+    router.mount(endpoint)
     web = FastAPI()
     web.include_router(router)
     with TestClient(web) as client, client.websocket_connect("/rpc") as socket:
@@ -596,7 +596,7 @@ async def test_metrics_work_with_trace_sampling_disabled(providers):
     async def frames() -> AsyncIterator[bytes]:
         yield b"one"
 
-    rpc = RpcService(
+    rpc = RpcDefinition(
         middleware=[OpenTelemetry(tracer_provider=tracer, meter_provider=meter)]
     )
     endpoint = rpc.stream("/media", frames)
@@ -617,7 +617,7 @@ async def test_subscription_control_calls_are_instrumented(providers):
         yield 1
         await asyncio.Event().wait()
 
-    rpc = RpcService(
+    rpc = RpcDefinition(
         middleware=[OpenTelemetry(tracer_provider=tracer, meter_provider=meter)]
     )
     rpc.socket("/rpc", channels=[channel])
@@ -653,7 +653,7 @@ async def test_request_exclusion_and_optional_connection_span(providers):
             isinstance(scope, RpcRequestScope) and scope.request.request_id == 1
         ),
     )
-    rpc = RpcService(middleware=[instrumentation])
+    rpc = RpcDefinition(middleware=[instrumentation])
     rpc.socket("/rpc", channels=[channel])
     async with RpcTestClient(rpc, "/rpc") as client:
         assert await client.request("demo.ping") == "pong"
@@ -679,7 +679,7 @@ async def test_failed_sends_and_invalid_input_are_not_counted(providers, failed_
         async def send_bytes(self, data):
             raise RuntimeError("send failed")
 
-    rpc = RpcService(
+    rpc = RpcDefinition(
         middleware=[OpenTelemetry(tracer_provider=tracer, meter_provider=meter)]
     )
     endpoint = rpc.stream("/media", frames, limits=RpcLimits(max_message_bytes=2))
@@ -701,7 +701,7 @@ async def test_failed_sends_and_invalid_input_are_not_counted(providers, failed_
 
 def test_custom_handlers_measure_live_connections_and_accepted_duration(providers):
     tracer, meter, exporter, reader = providers
-    endpoint = RpcService().socket("/rpc", channels=[RpcChannel("demo")])
+    endpoint = RpcDefinition().socket("/rpc", channels=[RpcChannel("demo")])
 
     async def handler(websocket: WebSocket) -> None:
         await websocket.accept()
@@ -709,15 +709,14 @@ def test_custom_handlers_measure_live_connections_and_accepted_duration(provider
         await websocket.receive_text()
         await websocket.close()
 
-    router = APIRouter()
-    RpcRoutes(
-        router,
+    router = RpcRouter(
         middleware=[
             OpenTelemetry(
                 tracer_provider=tracer, meter_provider=meter, connection_spans=True
             )
-        ],
-    ).mount(endpoint, handler=handler)
+        ]
+    )
+    router.mount(endpoint, handler=handler)
     web = FastAPI()
     web.include_router(router)
     with TestClient(web) as client, client.websocket_connect("/rpc") as socket:
@@ -745,13 +744,13 @@ def test_delegated_middleware_records_rpc_and_connection_once(providers):
     async def ping() -> str:
         return "pong"
 
-    endpoint = RpcService().socket("/rpc", channels=[channel])
+    endpoint = RpcDefinition().socket("/rpc", channels=[channel])
 
     async def handler(websocket: WebSocket) -> None:
         await serve_websocket(endpoint, websocket, middleware=[telemetry])
 
-    router = APIRouter()
-    RpcRoutes(router).mount(endpoint, handler=handler)
+    router = RpcRouter()
+    router.mount(endpoint, handler=handler)
     web = FastAPI()
     web.include_router(router)
     with TestClient(web) as client, client.websocket_connect("/rpc") as socket:
@@ -767,22 +766,21 @@ def test_delegated_middleware_records_rpc_and_connection_once(providers):
 
 def test_custom_handler_peer_disconnect_keeps_connection_span_successful(providers):
     tracer, meter, exporter, reader = providers
-    endpoint = RpcService().socket("/rpc", channels=[RpcChannel("demo")])
+    endpoint = RpcDefinition().socket("/rpc", channels=[RpcChannel("demo")])
 
     async def handler(websocket: WebSocket) -> None:
         await websocket.accept()
         await websocket.send_text("ready")
         await websocket.receive_text()
 
-    router = APIRouter()
-    RpcRoutes(
-        router,
+    router = RpcRouter(
         middleware=[
             OpenTelemetry(
                 tracer_provider=tracer, meter_provider=meter, connection_spans=True
             )
-        ],
-    ).mount(endpoint, handler=handler)
+        ]
+    )
+    router.mount(endpoint, handler=handler)
     web = FastAPI()
     web.include_router(router)
     with (

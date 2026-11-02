@@ -22,8 +22,7 @@ from collections.abc import AsyncIterator
 
 from fastapi import FastAPI
 
-from fastapi_canon.integrations.websockets import RpcChannel, RpcService
-from fastapi_canon.integrations.websockets import create_router
+from fastapi_canon.integrations.websockets import RpcChannel, RpcRouter
 from fastapi_canon.integrations.websockets.adapters.opentelemetry import OpenTelemetry
 
 media = RpcChannel("media")
@@ -34,29 +33,17 @@ async def frames() -> AsyncIterator[bytes]:
     yield b"frame"
 
 
-rpc = RpcService(middleware=[OpenTelemetry()])
+rpc = RpcRouter(middleware=[OpenTelemetry()])
 rpc.stream("/media/frames", frames)
 
 web = FastAPI()
-web.include_router(create_router(rpc))
+web.include_router(rpc)
 ```
 
-Configure the integration at one location. For endpoints mounted through
-FastAPI dependencies, it can live on `RpcRoutes` instead:
-
-```python
-routes = RpcRoutes(
-    router,
-    context=open_session,
-    middleware=[OpenTelemetry()],
-)
-routes.mount(session_media)
-```
-
-Here the router, context function, and stream endpoint belong to the application.
-`middleware=` is also accepted by `create_router()`, `serve_websocket()`,
-endpoint `serve()`, service `socket()` and `stream()`, and channel/endpoint
-`create_server()`.
+Configure middleware once on `RpcRouter`. It wraps connection-context
+dependencies, RPC calls and raw or binary endpoints. Endpoint-specific
+`middleware=` extends the router configuration. Low-level `serve_websocket()`
+and channel/endpoint `create_server()` also accept middleware.
 
 ## Configure signals and providers
 
@@ -181,12 +168,12 @@ context-manager variables. Instrumentation failures are logged and isolated,
 and middleware cannot suppress application failures or rewrite responses.
 Cancellation propagates after cleanup.
 
-`RpcRoutes` opens connection middleware before its `context=` dependency and
+`RpcRouter` opens connection middleware before its `context=` dependency and
 closes it after dependency cleanup, including mapped context rejections.
 Earlier FastAPI or router-wide dependencies remain outside that boundary.
 Manual routes start their boundary when they call `serve_websocket()`.
 
-Custom `RpcRoutes.mount(handler=...)` handlers also report acceptance, close
+Custom `socket(serve=...)` and `stream(serve=...)` handlers also report acceptance, close
 codes, and connection lifetime when they use FastAPI's `WebSocket` directly.
 RPC and stream scopes begin when a custom handler delegates to
 `serve_websocket()`. Additional `middleware=` supplied there runs inside the

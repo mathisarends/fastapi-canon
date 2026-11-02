@@ -10,7 +10,7 @@ from fastapi_canon.integrations.websockets import (
     RpcMessageType,
     RpcModel,
     RpcRejection,
-    RpcService,
+    RpcRouter,
     RpcSocket,
     RpcSocketProtocol,
     ServerVariable,
@@ -151,7 +151,7 @@ async def cdp(socket: Inject[RpcSocket]) -> None:
         await socket.send(message)
 
 
-service = RpcService()
+service = RpcRouter()
 service.socket("/automation/rpc", channels=(tasks,), name="production")
 service.socket("/browser/rpc", channels=(tabs,), name="browser")
 service.socket(

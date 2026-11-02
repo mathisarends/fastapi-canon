@@ -14,12 +14,12 @@ from fastapi_canon.integrations.websockets import (
     RpcErrorBinding,
     RpcMessageType,
     RpcRejection,
-    RpcService,
     RpcSocket,
     RpcSocketProtocol,
 )
 from fastapi_canon.integrations.websockets.codegen import generate_python_client
 from fastapi_canon.integrations.websockets.codegen.python import PythonClientOptions
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.websocket import (
     CLOSE_CODES,
     REJECTION_CLOSE_CODES,
@@ -66,7 +66,7 @@ async def tab_cdp(tab_id: str, socket: Inject[RpcSocket]) -> None:
     await socket.send(tab_id)
 
 
-service = RpcService()
+service = RpcDefinition()
 service.socket("/browser/cdp", cdp)
 service.socket("/browser/tabs/{tab_id}/cdp", tab_cdp, name="tab-cdp")
 
@@ -98,7 +98,7 @@ class LoopbackSocket:
     """A raw socket transport served by the real runtime over an in-memory socket."""
 
     def __init__(
-        self, package: ModuleType, path: str, rpc: RpcService = service
+        self, package: ModuleType, path: str, rpc: RpcDefinition = service
     ) -> None:
         self._package = package
         self.socket = InMemorySocket(path)

@@ -17,10 +17,10 @@ from fastapi_canon.integrations.websockets import (
     RpcLimits,
     RpcReject,
     RpcRejection,
-    RpcService,
     RpcStreamClose,
     RpcStreamDirection,
 )
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 
 from tests.unit.integrations.websockets.testing import (
     RpcTestClient,
@@ -53,8 +53,8 @@ class MediaOwners:
                 self._owners.discard(key)
 
 
-def _service(*streams, path: str = "/stream") -> RpcService:
-    service = RpcService()
+def _service(*streams, path: str = "/stream") -> RpcDefinition:
+    service = RpcDefinition()
     for stream in streams:
         service.stream(path, stream)
     return service
@@ -124,7 +124,7 @@ def test_stream_path_parameters_must_be_path_variables() -> None:
     async def upload(session_id: UUID, frames: Inject[RpcBinaryInput]) -> None: ...
 
     with pytest.raises(ProtocolDefinitionError, match="session_id"):
-        RpcService().stream("/uploads/{upload_id}", upload)
+        RpcDefinition().stream("/uploads/{upload_id}", upload)
 
 
 def test_stream_path_parameters_reject_models() -> None:
@@ -148,7 +148,7 @@ def test_contract_describes_direction_and_input_content_type() -> None:
         frames: Inject[RpcBinaryInput], output: Inject[RpcBinaryOutput]
     ) -> None: ...
 
-    service = RpcService()
+    service = RpcDefinition()
     service.stream("/upload", upload)
     service.stream("/talk", talk)
     streams = {
@@ -469,7 +469,7 @@ async def test_stream_error_mapper_maps_close_reason() -> None:
         raise ValueError("missing")
         yield b"never"
 
-    service = RpcService()
+    service = RpcDefinition()
     service.stream(
         "/stream",
         frames,

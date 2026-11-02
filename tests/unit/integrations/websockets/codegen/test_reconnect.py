@@ -3,7 +3,8 @@ import importlib
 from types import SimpleNamespace
 
 import pytest
-from fastapi_canon.integrations.websockets import RpcChannel, RpcService
+from fastapi_canon.integrations.websockets import RpcChannel
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.testing import InMemorySocketFactory
 from pydantic import BaseModel, TypeAdapter
 
@@ -417,7 +418,7 @@ async def test_proactive_recovery_refreshes_headers_or_surfaces_permanent_reject
     async def say(params: Params) -> dict[str, str]:
         return {"text": params.name}
 
-    service = RpcService()
+    service = RpcDefinition()
     service.socket("/rpc", channels=[channel])
     states = asyncio.Queue()
     header_calls = 0

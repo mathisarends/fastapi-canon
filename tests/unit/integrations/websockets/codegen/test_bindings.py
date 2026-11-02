@@ -16,7 +16,6 @@ from fastapi_canon.integrations.websockets import (
     Inject,
     RpcChannel,
     RpcMessageType,
-    RpcService,
     RpcSocket,
     RpcSocketProtocol,
 )
@@ -42,6 +41,7 @@ from fastapi_canon.integrations.websockets.codegen.python import PythonClientOpt
 from fastapi_canon.integrations.websockets.codegen.typescript import (
     TypeScriptClientOptions,
 )
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 
 from tests.unit.integrations.websockets.codegen.test_socket_roundtrip import (
     LoopbackSocket,
@@ -69,7 +69,7 @@ async def raw(socket: Inject[RpcSocket]) -> None:
         await socket.send(message)
 
 
-service = RpcService()
+service = RpcDefinition()
 service.socket("/echo/session", session)
 service.socket("/echo/raw", raw)
 

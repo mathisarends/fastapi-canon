@@ -8,6 +8,7 @@ from typing import Any
 from urllib.parse import unquote, urlsplit
 
 from fastapi_canon.error import Problem
+from fastapi_canon.integrations.websockets.adapters.fastapi import RpcRouter
 from fastapi_canon.integrations.websockets.connection import (
     RpcConnectionClose,
     RpcDisconnect,
@@ -16,13 +17,12 @@ from fastapi_canon.integrations.websockets.connection import (
     RpcRejection,
     RpcRejections,
 )
-from fastapi_canon.integrations.websockets.dependencies import RpcResolverLike
-from fastapi_canon.integrations.websockets.server import RpcErrorMapper
-from fastapi_canon.integrations.websockets.service import (
-    RpcService,
+from fastapi_canon.integrations.websockets.definition import (
     RpcSocketEndpoint,
     RpcStreamEndpoint,
 )
+from fastapi_canon.integrations.websockets.dependencies import RpcResolverLike
+from fastapi_canon.integrations.websockets.server import RpcErrorMapper
 from fastapi_canon.integrations.websockets.streams import RpcInputEndMessage
 from fastapi_canon.integrations.websockets.websocket import (
     CLOSE_CODES,
@@ -308,7 +308,7 @@ class InMemorySocketFactory:
 
     def __init__(
         self,
-        service: RpcService,
+        service: RpcRouter,
         *,
         configure: Callable[[InMemorySocket, int], None] | None = None,
         resolver: RpcResolverLike | None = None,
@@ -424,7 +424,7 @@ class RpcTestConnectionClosed(Exception):
 class RpcTestClient:
     def __init__(
         self,
-        service: RpcService,
+        service: RpcRouter,
         path: str,
         *,
         headers: Mapping[str, str] | None = None,
@@ -608,7 +608,7 @@ class RpcTestClient:
 
 
 class RpcTestStream(RpcTestClient):
-    def __init__(self, service: RpcService, path: str, **kwargs: Any) -> None:
+    def __init__(self, service: RpcRouter, path: str, **kwargs: Any) -> None:
         super().__init__(service, path, **kwargs)
         if not self._stream:
             raise TypeError(f"{path!r} is not a binary stream endpoint")

@@ -3,9 +3,9 @@ from dataclasses import replace
 
 from fastapi_canon.integrations.websockets.channel import RpcChannel
 from fastapi_canon.integrations.websockets.contract import RpcContract
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.protocol import RpcProtocol
 from fastapi_canon.integrations.websockets.schema.openrpc import Server
-from fastapi_canon.integrations.websockets.service import RpcService
 
 
 class ProtocolReferenceError(Exception):
@@ -32,14 +32,14 @@ def load_contract_source(reference: str) -> ContractSource:
         raise ProtocolReferenceError(
             f"{module_name} has no attribute {attribute_name}"
         ) from error
-    if isinstance(source, RpcService):
+    if isinstance(source, RpcDefinition):
         raise ProtocolReferenceError(
-            f"{reference} is an RpcService; export "
+            f"{reference} is an RpcDefinition; export "
             "rpc.contract(title=..., base_url=...) instead"
         )
     if isinstance(source, RpcChannel):
         raise ProtocolReferenceError(
-            f"{reference} is an RpcChannel; add it to an RpcService and export "
+            f"{reference} is an RpcChannel; add it to an RpcDefinition and export "
             "rpc.contract(title=..., base_url=...) instead"
         )
     if not isinstance(source, RpcContract):

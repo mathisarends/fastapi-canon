@@ -64,7 +64,7 @@ represent another PyPI distribution.
 | Database ownership, migrations, locks and short service scopes | `fastapi_canon.Database`, `AlembicMigrations`, `TransactionLocks`, `ServiceScope` | [Databases](database.md) |
 | HTTP routes and contracts | `fastapi_canon.CanonRouter`, `RouterPolicy`, `Error`, `ErrorRegistry`, `CanonResponse` | [HTTP contracts](composition.md#error-contracts) |
 | SSE with Canon HTTP contracts | `fastapi_canon.integrations.sse.CanonStreamRouter` | [SSE contracts](streams.md) |
-| WebSocket RPC, messages and binary streams | `fastapi_canon.integrations.websockets.RpcChannel`, `RpcService`, `RpcRoutes`, `RpcSocket` | [WebSockets](integrations/websockets/index.md) |
+| WebSocket RPC, messages and binary streams | `fastapi_canon.integrations.websockets.RpcChannel`, `RpcRouter`, `RpcSocket` | [WebSockets](integrations/websockets/index.md) |
 | WebRTC with Canon admission errors | `fastapi_canon.integrations.webrtc.CanonWebRtcRouter`, `Session` | [WebRTC admission](webrtc.md) |
 | Telemetry declarations | `fastapi_canon.integrations.opentelemetry.Telemetry`, `instrument` | [Telemetry](telemetry.md) |
 
@@ -74,7 +74,7 @@ Typical application imports are explicit:
 from fastapi_canon import CanonRouter, Composition, Feature
 from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
 from fastapi_canon.integrations.sse import CanonStreamRouter
-from fastapi_canon.integrations.websockets import RpcChannel, RpcRoutes, RpcService
+from fastapi_canon.integrations.websockets import RpcChannel, RpcRouter
 from fastapi_canon.integrations.webrtc import CanonWebRtcRouter, Session
 ```
 

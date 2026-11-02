@@ -13,9 +13,9 @@ from fastapi_canon.integrations.websockets import (
     RpcLimits,
     RpcMiddleware,
     RpcServer,
-    RpcService,
     RpcSuccess,
 )
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from pydantic import BaseModel
 
 from tests.unit.integrations.websockets.conftest import (
@@ -535,7 +535,7 @@ async def test_custom_error_mapper_and_strict_errors() -> None:
             else None
         )
 
-    service = RpcService(error_mapper=mapper, strict_errors=True)
+    service = RpcDefinition(error_mapper=mapper, strict_errors=True)
     endpoint = service.socket("/mapped", channels=(channel,))
     server = endpoint.create_server()
     declared_response = await server.handle(

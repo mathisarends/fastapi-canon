@@ -4,9 +4,8 @@ from fastapi import FastAPI
 from fastapi_canon.integrations.websockets import (
     Inject,
     RpcChannel,
-    RpcService,
+    RpcRouter,
     RpcSocket,
-    create_router,
 )
 from pydantic import BaseModel, ConfigDict
 
@@ -45,10 +44,10 @@ async def session(socket: Inject[PingSocket]) -> None:
         await socket.send(Pong(value=message.value + 1))
 
 
-service = RpcService()
+service = RpcRouter()
 service.socket("/rpc", channels=(messages,))
 service.socket("/messages/ping", ping)
 service.socket("/messages/session", session)
 contract = service.contract(title="Typed Socket", base_url="ws://{host}")
 app = FastAPI()
-app.include_router(create_router(service))
+app.include_router(service)

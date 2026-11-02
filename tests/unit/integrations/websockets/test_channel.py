@@ -7,8 +7,8 @@ from fastapi_canon.integrations.websockets import (
     RpcError,
     RpcModel,
     RpcServer,
-    RpcService,
 )
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 
 
 class SharedError(RpcError):
@@ -187,7 +187,7 @@ def test_dotted_name_cannot_turn_an_operation_into_a_namespace() -> None:
     @channel.method("text.insert")
     async def insert_text() -> None: ...
 
-    service = RpcService()
+    service = RpcDefinition()
     service.socket("/rpc", channels=(channel,))
     with pytest.raises(ProtocolDefinitionError, match="both an operation"):
         service.freeze()

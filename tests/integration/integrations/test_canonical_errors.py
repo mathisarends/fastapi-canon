@@ -18,12 +18,16 @@ from fastapi_canon import Composition, ErrorOptions, ErrorRegistry, Feature
 from fastapi_canon.integrations.sse.codegen.ir import build_ir as stream_ir
 from fastapi_canon.integrations.sse.codegen.openapi import export_schema
 from fastapi_canon.integrations.sse.codegen.python import generate_python
-from fastapi_canon.integrations.websockets import RpcChannel, RpcService
-from fastapi_canon.integrations.websockets.adapters.fastapi import RpcRoutes
+from fastapi_canon.integrations.websockets import (
+    Inject,
+    RpcChannel,
+    RpcRouter,
+)
 from fastapi_canon.integrations.websockets.codegen import (
     PythonClientOptions,
     render_python_client,
 )
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 
 
 def test_empty_catalog_keeps_its_configured_internal_problem_identity() -> None:
@@ -86,8 +90,11 @@ def test_same_domain_error_across_http_stream_and_rpc() -> None:
     assert "errorIds" not in operation["x-canon-stream"]
 
 
-def test_rpc_router_contributes_catalog_and_uses_composition_type_base() -> None:
-    from fastapi import APIRouter, FastAPI
+async def test_rpc_router_contributes_catalog_and_uses_composition_type_base() -> None:
+    from fastapi import FastAPI
+    from websockets.asyncio.client import connect
+
+    from tests.unit.integrations.webrtc.server import serve
 
     local = ErrorRegistry(errors=[project_missing])
     channel = RpcChannel("projects", error_registry=local)
@@ -98,24 +105,101 @@ def test_rpc_router_contributes_catalog_and_uses_composition_type_base() -> None
 
         raise ProjectMissing("secret")
 
-    service = RpcService()
-    endpoint: Any = service.socket("/ws", channels=[channel])
-    router = APIRouter()
-    RpcRoutes(router).mount(endpoint)
+    system = RpcChannel("system")
+
+    async def session(tenant: str) -> str:
+        return tenant
+
+    @system.method()
+    async def whoami(tenant: Inject[str]) -> str:
+        return tenant
+
+    router = RpcRouter("/ws/{tenant}", channels=[channel, system], context=session)
     app = Composition(
         features=(Feature(name="projects", routers=[router]),),
         errors=ErrorOptions(type_base="urn:application:problems"),
     ).apply(FastAPI())
-    with TestClient(app) as client, client.websocket_connect("/ws") as socket:
-        socket.send_json({"jsonrpc": "2.0", "id": 1, "method": "projects.missing"})
-        problem = socket.receive_json()["error"]["data"]["problem"]
+    async with (
+        asyncio.timeout(15),
+        serve(app) as base_url,
+        connect(f"{base_url}/ws/demo") as socket,
+    ):
+        await socket.send(
+            json.dumps({"jsonrpc": "2.0", "id": 1, "method": "system.whoami"})
+        )
+        assert json.loads(await socket.recv()) == {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": "demo",
+        }
+        await socket.send(
+            json.dumps({"jsonrpc": "2.0", "id": 2, "method": "projects.missing"})
+        )
+        problem = json.loads(await socket.recv())["error"]["data"]["problem"]
     assert problem["type"] == "urn:application:problems/project_missing"
-    document = service.contract(
+    document = router.contract(
         title="Composed", base_url="wss://example.test", app=app
     ).to_openrpc()
+    methods = {method["name"]: method for method in document["methods"]}
+    assert set(methods) == {"projects.missing", "system.whoami"}
     assert (
-        document["methods"][0]["errors"][0]["x-canon-problem-type"] == problem["type"]
+        methods["projects.missing"]["errors"][0]["x-canon-problem-type"]
+        == problem["type"]
     )
+    assert document["servers"][0]["url"] == "wss://example.test/ws/{tenant}"
+
+
+async def test_rpc_router_serves_all_endpoint_kinds_with_one_contract() -> None:
+    from fastapi import FastAPI, WebSocket
+    from websockets.asyncio.client import connect
+
+    from fastapi_canon.integrations.websockets import RpcSocket
+    from tests.unit.integrations.webrtc.server import serve
+
+    channel = RpcChannel("demo")
+
+    @channel.method()
+    async def ping() -> str:
+        return "pong"
+
+    @channel.stream()  # type: ignore[arg-type]  # Runtime checks require a free function.
+    async def frames() -> AsyncIterator[bytes]:
+        yield b"frame"
+
+    @channel.socket()  # type: ignore[arg-type]  # Runtime checks require a free function.
+    async def echo(socket: Inject[RpcSocket]) -> None:
+        await socket.send(await socket.receive())
+
+    async def custom(socket: WebSocket) -> None:
+        await socket.accept()
+        await socket.send_text("custom")
+        await socket.close()
+
+    router = RpcRouter(version=2, prefix="/api")
+    router.socket("/rpc", channels=[channel])
+    router.stream("/frames", frames)
+    router.socket("/echo", echo)
+    router.socket("/custom", channels=[RpcChannel("custom")], serve=custom)
+    app = Composition(features=[Feature(name="demo", routers=[router])]).apply(
+        FastAPI()
+    )
+    async with asyncio.timeout(15), serve(app) as base_url:
+        async with connect(f"{base_url}/api/rpc") as socket:
+            await socket.send('{"jsonrpc":"2.0","id":1,"method":"demo.ping"}')
+            assert json.loads(await socket.recv())["result"] == "pong"
+        async with connect(f"{base_url}/api/frames") as socket:
+            assert await socket.recv() == b"frame"
+        async with connect(f"{base_url}/api/echo") as socket:
+            await socket.send("echo")
+            assert await socket.recv() == "echo"
+        async with connect(f"{base_url}/api/custom") as socket:
+            assert await socket.recv() == "custom"
+    document = router.contract(title="Demo", base_url="wss://example.test").to_openrpc()
+    assert document["info"]["version"] == "2.0.0"
+    assert {server["url"] for server in document["servers"]} == {
+        "wss://example.test/api/rpc",
+        "wss://example.test/api/custom",
+    }
 
 
 def test_nested_public_extensions_keep_aliases_and_valid_contract_references() -> None:
@@ -150,7 +234,7 @@ def test_nested_public_extensions_keep_aliases_and_valid_contract_references() -
     async def missing() -> None:
         raise Missing("private")
 
-    service = RpcService()
+    service = RpcDefinition()
     service.socket("/ws", channels=[channel])
     document = service.contract(title="Nested", base_url="wss://test").to_openrpc()
     server = channel.create_server()
@@ -385,11 +469,11 @@ def test_generated_python_rpc_error_uses_type_uri_and_preserves_extensions(
             )
 
         async def request() -> None:
-            from examples.canonical_errors.app import endpoint
+            from examples.canonical_errors.app import projects
 
             transport_module = importlib.import_module("canonical_rpc_sdk.transport")
             queue: asyncio.Queue[str] = asyncio.Queue()
-            server = endpoint.create_server()
+            server = projects.create_server()
 
             class Socket:
                 async def send(self, message: str) -> None:

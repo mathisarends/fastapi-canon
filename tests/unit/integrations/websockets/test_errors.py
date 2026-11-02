@@ -11,8 +11,8 @@ from fastapi_canon.integrations.websockets import (
     RpcInvalidParamsError,
     RpcModel,
     RpcRejection,
-    RpcService,
 )
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.envelopes import RpcFailure
 from pydantic import BaseModel, ValidationError
 
@@ -147,7 +147,7 @@ task_locked = RpcErrorBinding(
 )
 
 
-def _task_service(*, strict_errors: bool = False) -> RpcService:
+def _task_service(*, strict_errors: bool = False) -> RpcDefinition:
     tasks = RpcChannel("tasks", raises=[task_not_found])
 
     @tasks.method(raises=[task_locked])
@@ -160,12 +160,12 @@ def _task_service(*, strict_errors: bool = False) -> RpcService:
     async def lock(params: TaskRef) -> None:
         raise TaskLocked("grace")
 
-    service = RpcService(strict_errors=strict_errors)
+    service = RpcDefinition(strict_errors=strict_errors)
     service.socket("/tasks", channels=(tasks,))
     return service
 
 
-async def _call(service: RpcService, method: str, task_id: int) -> RpcFailure:
+async def _call(service: RpcDefinition, method: str, task_id: int) -> RpcFailure:
     server = service.endpoint("tasks").create_server()
     response = await server.handle(
         {"jsonrpc": "2.0", "id": 1, "method": method, "params": {"task_id": task_id}}
@@ -219,7 +219,7 @@ async def test_a_failing_contract_becomes_an_internal_error(caplog) -> None:
     async def update(params: TaskRef) -> None:
         raise TaskLocked("ada")
 
-    service = RpcService()
+    service = RpcDefinition()
     service.socket("/tasks", channels=(tasks,))
 
     with caplog.at_level(logging.ERROR):
@@ -264,7 +264,7 @@ async def test_an_exception_can_have_different_bindings_per_method() -> None:
     async def delete() -> None:
         raise TaskNotFound(1)
 
-    service = RpcService()
+    service = RpcDefinition()
     service.socket("/tasks", channels=(tasks,))
     service.freeze()
     server = service.endpoint("tasks").create_server()
@@ -291,7 +291,7 @@ async def test_method_binding_overrides_channel_default() -> None:
     server = channel.create_server()
     assert server.protocol.method("tasks.read").raises == (gone.error_type,)
     assert server.protocol.method("tasks.lookup").raises == (task_not_found.error_type,)
-    service = RpcService()
+    service = RpcDefinition()
     service.socket("/tasks", channels=[channel])
     document = service.contract(title="Tasks", base_url="ws://localhost").to_openrpc()
     read_document = next(
@@ -378,7 +378,7 @@ async def test_child_channel_overrides_defaults_without_changing_parent() -> Non
         HTTPTimeoutError,
         child_binding.error_type,
     )
-    service = RpcService()
+    service = RpcDefinition()
     endpoint = service.socket("/rpc", channels=[root])
     server = endpoint.create_server()
     for method, code in [
@@ -489,7 +489,7 @@ async def test_failing_error_mapper_is_logged_and_contained(
 
 
 async def test_channels_can_bind_permission_error_differently() -> None:
-    service = RpcService()
+    service = RpcDefinition()
     channels = []
     for name, code in [("tasks", "task_denied"), ("users", "user_denied")]:
         channel = RpcChannel(name, raises=[RpcErrorBinding(PermissionError, code=code)])
@@ -552,7 +552,7 @@ def test_invalid_contracts_are_rejected(arguments) -> None:
 
 def test_legacy_errors_mapping_is_removed() -> None:
     with pytest.raises(TypeError, match="errors"):
-        RpcService(errors={TaskNotFound: HTTPTimeoutError})
+        RpcDefinition(errors={TaskNotFound: HTTPTimeoutError})
     with pytest.raises(TypeError, match="errors"):
         RpcChannel("tasks").create_server(errors={TaskNotFound: HTTPTimeoutError})
-    assert not hasattr(RpcService(), "errors")
+    assert not hasattr(RpcDefinition(), "errors")

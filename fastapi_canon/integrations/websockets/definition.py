@@ -49,7 +49,7 @@ from fastapi_canon.integrations.websockets.server import (
 
 @dataclass(frozen=True, slots=True, eq=False)
 class RpcEndpoint[ContextT]:
-    service: "RpcService"
+    service: "RpcDefinition"
     name: str
     path: str
     channels: tuple[RpcChannel, ...]
@@ -146,7 +146,7 @@ class RpcEndpoint[ContextT]:
 
 @dataclass(frozen=True, slots=True, eq=False)
 class RpcStreamEndpoint[ContextT]:
-    service: "RpcService"
+    service: "RpcDefinition"
     name: str
     path: str
     stream: RpcStreamDefinition
@@ -192,7 +192,7 @@ class RpcStreamEndpoint[ContextT]:
 
 @dataclass(frozen=True, slots=True, eq=False)
 class RpcSocketEndpoint[ContextT]:
-    service: "RpcService"
+    service: "RpcDefinition"
     name: str
     path: str
     socket: RpcSocketDefinition
@@ -236,7 +236,7 @@ class RpcSocketEndpoint[ContextT]:
 type RpcAnyEndpoint = RpcEndpoint[Any] | RpcStreamEndpoint[Any] | RpcSocketEndpoint[Any]
 
 
-class RpcService:
+class RpcDefinition:
     def __init__(
         self,
         *,
@@ -258,7 +258,7 @@ class RpcService:
         self._limits = limits or RpcLimits()
         self._strict_errors = strict_errors
         self.drain = drain or RpcDrain()
-        self._rejects = rejecting_contracts(rejects, "RpcService")
+        self._rejects = rejecting_contracts(rejects, "RpcDefinition")
         self._endpoints: list[RpcAnyEndpoint] = []
         self._channels: set[RpcChannel] = set()
         self._mounted_streams: set[FunctionType] = set()
@@ -769,7 +769,7 @@ class RpcService:
     def _ensure_mutable(self) -> None:
         if self._protocol is not None:
             raise ProtocolDefinitionError(
-                "RpcService is frozen because its protocol was already materialized"
+                "RpcDefinition is frozen because its protocol was already materialized"
             )
 
 

@@ -13,10 +13,10 @@ from fastapi_canon.integrations.websockets import (
     RpcChannel,
     RpcConnectionClose,
     RpcMessageType,
-    RpcService,
     RpcSocket,
     RpcSocketProtocol,
 )
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from pydantic import BaseModel
 
 from tests.unit.integrations.websockets.test_typed_sockets import Ping, Pong
@@ -41,8 +41,8 @@ async def session(socket: Inject[SessionSocket]) -> None:
         await socket.send(Pong(value=message.value + 1))
 
 
-def service() -> RpcService:
-    app = RpcService()
+def service() -> RpcDefinition:
+    app = RpcDefinition()
     app.socket("/session", session)
     return app
 
@@ -83,7 +83,7 @@ async def test_typed_connection_revalidates_mutated_output_and_releases_handler(
         finally:
             released.set()
 
-    app = RpcService()
+    app = RpcDefinition()
     app.socket("/invalid", invalid)
     async with RpcTestClient(app, "/invalid") as client:
         assert await client.closed() == (
@@ -121,7 +121,7 @@ async def test_typed_connection_keeps_one_scope_and_releases_it_on_disconnect() 
         finally:
             cancelled.set()
 
-    app = RpcService()
+    app = RpcDefinition()
     app.socket("/scoped/{multiplier}", scoped)
     async with RpcTestClient(app, "/scoped/3", context=Offset()) as client:
         for value in (1, 2):

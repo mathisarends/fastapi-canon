@@ -15,10 +15,10 @@ from fastapi_canon.integrations.websockets import (
     RpcConnection,
     RpcConnectionClose,
     RpcDisconnect,
-    RpcService,
 )
 from fastapi_canon.integrations.websockets.codegen import generate_python_client
 from fastapi_canon.integrations.websockets.codegen.python import PythonClientOptions
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.websocket import (
     CLOSE_CODES,
     REJECTION_CLOSE_CODES,
@@ -72,7 +72,7 @@ async def media(
     await output.send(b"bye")
 
 
-service = RpcService()
+service = RpcDefinition()
 service.stream("/uploads/audio", upload_audio)
 service.stream("/voice/{voice_session_id}/media", media)
 

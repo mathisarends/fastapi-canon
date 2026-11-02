@@ -15,9 +15,9 @@ from fastapi_canon.integrations.websockets import (
     RpcErrorBinding,
     RpcMessageType,
     RpcRejection,
-    RpcService,
     RpcSocketProtocol,
 )
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 from tests.unit.integrations.websockets.testing import RpcTestClient
@@ -43,8 +43,8 @@ async def ping(message: Ping) -> Pong:
     return Pong(value=message.value + 1)
 
 
-def service() -> RpcService:
-    result = RpcService()
+def service() -> RpcDefinition:
+    result = RpcDefinition()
     result.socket("/ping", ping)
     return result
 
@@ -85,7 +85,7 @@ async def test_message_calls_are_sequential_with_paths_and_invocation_scopes() -
             await proceed.wait()
         return Pong(value=payload.value * multiplier + offset.value)
 
-    app = RpcService()
+    app = RpcDefinition()
     app.socket("/messages/{multiplier}", handle)
     async with RpcTestClient(app, "/messages/3", context=Offset()) as client:
         await client.send_message('{"value":1}')
@@ -120,7 +120,7 @@ async def test_disconnect_cancels_a_message_call_and_releases_its_scope() -> Non
         await asyncio.Future()
         return Pong(value=0)
 
-    app = RpcService()
+    app = RpcDefinition()
     app.socket("/cancel", handle)
     async with RpcTestClient(app, "/cancel") as client:
         await client.send_message('{"value":1}')
@@ -144,7 +144,7 @@ async def test_message_handler_exceptions_use_declared_close_bindings() -> None:
     async def handle(message: Ping) -> Pong:
         raise Denied("secret")
 
-    app = RpcService()
+    app = RpcDefinition()
     app.socket("/denied", handle)
     async with RpcTestClient(app, "/denied") as client:
         await client.send_message('{"value":1}')
@@ -172,7 +172,7 @@ async def test_invalid_queued_input_cancels_an_active_invocation_and_its_scope()
         await asyncio.Future()
         return Pong(value=0)
 
-    app = RpcService()
+    app = RpcDefinition()
     app.socket("/invalid", handle)
     async with RpcTestClient(app, "/invalid") as client:
         await client.send_message('{"value":1}')
@@ -192,7 +192,7 @@ async def test_none_response_is_json_null() -> None:
     async def handle(message: Ping) -> None:
         pass
 
-    app = RpcService()
+    app = RpcDefinition()
     app.socket("/null", handle)
     async with RpcTestClient(app, "/null") as client:
         await client.send_message('{"value":1}')
@@ -227,7 +227,7 @@ async def test_invalid_outgoing_models_cannot_bypass_validation() -> None:
         response.value = "secret"  # type: ignore[assignment]
         return response
 
-    app = RpcService()
+    app = RpcDefinition()
     app.socket("/broken", invalid)
     async with RpcTestClient(app, "/broken") as client:
         await client.send_message('{"value":1}')
@@ -263,7 +263,7 @@ async def test_discriminated_unions_are_preserved() -> None:
         received.append(message)
         return Pong(value=5)
 
-    app = RpcService()
+    app = RpcDefinition()
     app.socket("/union", handle)
     async with RpcTestClient(app, "/union") as client:
         await client.send_message('{"type":"pong","value":4}')
@@ -286,7 +286,7 @@ async def test_serialization_aliases_and_serializers_define_the_output() -> None
     async def handle(message: Ping) -> AliasedOutput:
         return AliasedOutput(value=3)
 
-    app = RpcService()
+    app = RpcDefinition()
     app.socket("/aliases", handle)
     document = app.contract(title="Aliases", base_url="ws://h").to_openrpc()
     assert (
@@ -335,7 +335,7 @@ def test_message_handler_annotations_and_parameters_are_required() -> None:
         async def positional(message: Ping, /) -> Pong: ...
 
     with pytest.raises(ProtocolDefinitionError, match="also be a path variable"):
-        RpcService().socket("/messages/{message}", ping)
+        RpcDefinition().socket("/messages/{message}", ping)
 
 
 def test_message_handler_signature_preserves_both_directions(tmp_path: Path) -> None:

@@ -45,7 +45,7 @@ from fastapi_canon.integrations.websockets.request_metadata import (
 )
 
 if TYPE_CHECKING:
-    from fastapi_canon.integrations.websockets.service import RpcEndpoint
+    from fastapi_canon.integrations.websockets.definition import RpcEndpoint
 
 type RpcErrorMapper = Callable[[Exception], RpcError | None]
 type RpcResponse = RpcSuccess | RpcFailure

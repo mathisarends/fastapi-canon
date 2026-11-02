@@ -6,13 +6,14 @@ from contextlib import asynccontextmanager
 from copy import deepcopy
 
 import pytest
-from fastapi_canon.integrations.websockets import RpcChannel, RpcService
+from fastapi_canon.integrations.websockets import RpcChannel
 from fastapi_canon.integrations.websockets.adapters.opentelemetry import (
     OpenTelemetry,
     trace_metadata,
 )
 from fastapi_canon.integrations.websockets.codegen import generate_python_client
 from fastapi_canon.integrations.websockets.codegen.python import PythonClientOptions
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.testing import InMemorySocketFactory
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -49,7 +50,7 @@ async def test_python_middleware_injects_active_trace_into_real_no_params_call(
     async def ping() -> str:
         return "pong"
 
-    service = RpcService(
+    service = RpcDefinition(
         middleware=[OpenTelemetry(tracer_provider=provider, metrics=False)]
     )
     service.socket("/rpc", channels=[channel])

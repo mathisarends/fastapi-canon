@@ -3,16 +3,20 @@ import importlib.util
 import fastapi_canon.integrations.websockets
 import pytest
 from fastapi_canon.integrations.websockets import RpcRejection, RpcServer
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 
 
 @pytest.mark.parametrize(
     "name",
     (
+        "RpcService",
+        "RpcDefinition",
+        "RpcRoutes",
+        "create_router",
         "RpcFeatureDefinition",
         "RpcHandler",
         "RpcNotificationDefinition",
         "RpcApp",
-        "RpcRouter",
         "OpenRpcContract",
         "OpenRpcServer",
         "ConnectionRejected",
@@ -81,13 +85,13 @@ def test_observer_module_is_removed():
 
 @pytest.mark.parametrize("factory", ["service", "channel", "endpoint"])
 def test_observer_registration_is_removed(factory):
-    from fastapi_canon.integrations.websockets import RpcChannel, RpcService
+    from fastapi_canon.integrations.websockets import RpcChannel
 
     channel = RpcChannel("test")
     with pytest.raises(TypeError, match="observer"):
         if factory == "service":
-            RpcService(observer=object())
+            RpcDefinition(observer=object())
         elif factory == "channel":
             channel.create_server(observer=object())
         else:
-            RpcService().socket("/rpc", channels=[channel], observer=object())
+            RpcDefinition().socket("/rpc", channels=[channel], observer=object())

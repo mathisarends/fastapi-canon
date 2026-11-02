@@ -1,12 +1,11 @@
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, Depends, FastAPI
+from fastapi import Depends, FastAPI
 from pydantic import BaseModel
 
 from fastapi_canon import CanonRouter, Composition, Error, ErrorRegistry, Feature
 from fastapi_canon.integrations.sse import CanonStreamRouter
-from fastapi_canon.integrations.websockets import RpcChannel, RpcService
-from fastapi_canon.integrations.websockets.adapters.fastapi import RpcRoutes
+from fastapi_canon.integrations.websockets import RpcChannel, RpcRouter
 
 
 class ProjectMissing(Exception):
@@ -81,10 +80,7 @@ async def cancel(params: CancelProject) -> None:
     require_project(params.project_id)
 
 
-service = RpcService()
-endpoint = service.socket("/ws", channels=[projects])
-websockets = APIRouter()
-RpcRoutes(websockets).mount(endpoint)
+websockets = RpcRouter("/ws", channels=[projects])
 feature = Feature(name="projects", routers=[http, streams, websockets])
 
 
@@ -93,4 +89,6 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
-contract = service.contract(title="Projects", base_url="wss://api.example.com", app=app)
+contract = websockets.contract(
+    title="Projects", base_url="wss://api.example.com", app=app
+)
