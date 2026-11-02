@@ -15,7 +15,7 @@ from logging.handlers import BufferingHandler
 from pathlib import Path
 from typing import Literal
 
-from fastapi import Depends, FastAPI, Header
+from fastapi import Depends, FastAPI, Header, WebSocket
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, ConfigDict
 from starlette.websockets import WebSocketDisconnect
@@ -101,6 +101,7 @@ def _main() -> None:
         from fastapi_canon.integrations.websockets import (
             Inject,
             RpcChannel,
+            RpcMiddleware,
             RpcRouter,
             RpcSocket,
         )
@@ -128,6 +129,18 @@ def _main() -> None:
 
         rpc.socket("/session", session)
         routers.append(rpc)
+
+        async def connection_label() -> str:
+            return "ready"
+
+        async def custom(socket: WebSocket, label: Inject[str]) -> None:
+            await socket.accept()
+            await socket.send_text(label)
+            await socket.close()
+
+        custom_rpc = RpcRouter(context=connection_label, middleware=[RpcMiddleware()])
+        custom_rpc.socket("/custom", channels=[RpcChannel("custom")], serve=custom)
+        routers.append(custom_rpc)
         _cli("websockets")
     if "webrtc" in selected:
         engine = _RecordingEngine()
@@ -169,6 +182,8 @@ def _main() -> None:
                 assert websocket.receive_json() == {"value": 0}
                 websocket.send_json({"value": 41})
                 assert websocket.receive_json() == {"value": 42}
+            with client.websocket_connect("/custom") as websocket:
+                assert websocket.receive_text() == "ready"
         if "webrtc" in selected:
             _webrtc_sessions(client, engine, canon="fastapi-canon" in selected)
     assert app.openapi()["openapi"]
