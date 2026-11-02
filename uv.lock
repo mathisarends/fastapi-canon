@@ -609,6 +609,7 @@ codegen = [
 otel = [
     { name = "fastapi" },
     { name = "opentelemetry-api" },
+    { name = "opentelemetry-instrumentation" },
 ]
 sse = [
     { name = "fastapi" },
@@ -662,6 +663,7 @@ requires-dist = [
     { name = "jinja2", marker = "extra == 'codegen'", specifier = ">=3.1,<4" },
     { name = "jsonschema", marker = "extra == 'codegen'", specifier = ">=4.23,<5" },
     { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.40,<2" },
+    { name = "opentelemetry-instrumentation", marker = "extra == 'otel'", specifier = ">=0.61b0,<1" },
     { name = "pydantic", specifier = ">=2.9,<3" },
     { name = "pydantic", marker = "extra == 'codegen'", specifier = ">=2.11.2,<3" },
     { name = "pydantic", marker = "extra == 'sse'", specifier = ">=2.11.2,<3" },

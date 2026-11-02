@@ -6,6 +6,14 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Breaking changes
 
+- HTTP requests excluded by `Telemetry.exclude` now also suppress participating
+  downstream OpenTelemetry instrumentation, such as HTTPX, for the request's
+  execution context. Remove application middleware that duplicates this
+  suppression or re-evaluates the same exclusion predicate. Native HTTP telemetry
+  and Canon ports also respect inherited OpenTelemetry suppression; HTTP-only
+  suppression leaves port instrumentation enabled. WebSocket/RPC exclusion
+  configuration is unchanged. The `otel` extra now includes the OpenTelemetry
+  instrumentation package for its public suppression helpers.
 - Remove `fastapi_canon.testing.telemetry.SpanCapture` from the distribution.
   Applications should maintain their own trace-capture fixture using the
   OpenTelemetry SDK’s in-memory exporter; the repository fixture provides an example.

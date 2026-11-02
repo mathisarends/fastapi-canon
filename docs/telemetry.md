@@ -4,8 +4,9 @@ Canon adds port spans to FastAPI's native HTTP telemetry. Endpoints, application
 services and domain classes need no telemetry annotations or imports.
 
 Install `fastapi-canon[otel]`. This extra requires FastAPI >=0.143 and the
-OpenTelemetry API; the SDK and exporters remain application dependencies. Core
-keeps FastAPI >=0.115 and can run without OpenTelemetry on older FastAPI versions.
+OpenTelemetry API and instrumentation helpers; the SDK and exporters remain
+application dependencies. Core keeps FastAPI >=0.115 and can run without
+OpenTelemetry on older FastAPI versions.
 Recent FastAPI versions themselves depend on the OpenTelemetry API.
 
 ## Developer-facing API
@@ -95,7 +96,7 @@ SDK configuration and ownership remain unchanged.
 | `port_spans` | `True` | Instrument declared coroutine methods and async `__call__` |
 | `port_metrics` | `False` | Record `canon.port.duration` in seconds, independently of port spans |
 | `problem_details` | `True` | Enrich the native HTTP server span with handled Problem Details outcomes |
-| `exclude` | `None` | ASGI scope predicate; suppress native telemetry and port instrumentation for that request/connection |
+| `exclude` | `None` | ASGI scope predicate; suppress native telemetry and ports, and participating downstream instrumentation for HTTP requests |
 
 Apply composition before startup. Canon forces FastAPI's `auto_configure=False`,
 including when the environment requests automatic exporters. It never creates
@@ -106,6 +107,27 @@ should be created before composition and shut down by an application lifespan.
 Without a Canon telemetry option, FastAPI keeps its own constructor/environment
 configuration; `telemetry=None` does not disable an independently configured
 FastAPI pipeline.
+
+### HTTP exclusion and suppression
+
+Canon evaluates `exclude` once per ASGI scope. For an excluded HTTP request it
+establishes OpenTelemetry instrumentation suppression for the downstream
+application call, including instrumented services, ports, HTTP clients and other
+instrumentations that honor that context. No additional application suppression
+middleware is needed. Participating spans and metrics are suppressed; manual
+spans, application logs and independently collected metrics are not automatically
+filtered. Sampling is separate from exclusion.
+
+Inherited OpenTelemetry suppression also disables native HTTP telemetry and
+Canon ports, even when `exclude` returns `False`. HTTP-only suppression disables
+native HTTP and participating HTTP client instrumentation while leaving Canon
+port instrumentation enabled. Nested Canon HTTP applications cannot re-enable
+an inherited exclusion. Suppression is restored on completion, exceptions and
+cancellation, and concurrent requests keep independent execution contexts.
+
+These downstream suppression guarantees apply to HTTP requests. WebSocket
+exclusion still suppresses native telemetry and Canon ports; RPC-specific
+configuration remains explicit as described below.
 
 FastAPI currently accepts telemetry configuration only in its constructor.
 Canon bridges that boundary by updating the existing `_telemetry` dictionary,

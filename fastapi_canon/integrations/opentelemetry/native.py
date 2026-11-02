@@ -1,11 +1,17 @@
 """The version-guarded FastAPI configuration bridge and non-owning span adapter."""
 
 from collections.abc import Mapping
+from contextlib import nullcontext
 from importlib.metadata import version
 from typing import Any
 
 from fastapi import FastAPI
 from opentelemetry import trace
+from opentelemetry.instrumentation.utils import (
+    is_http_instrumentation_enabled,
+    is_instrumentation_enabled,
+    suppress_instrumentation,
+)
 from opentelemetry.trace import Span, SpanContext, SpanKind, Status, StatusCode
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -35,7 +41,10 @@ def install(app: FastAPI, options: Telemetry) -> None:
             "metrics": options.metrics,
             "logs": options.logs,
             "operation_spans": options.operation_spans,
-            "exclude": lambda scope: _skip(scope, options),
+            "exclude": lambda scope: (
+                _skip(scope, options)
+                or (scope["type"] == "http" and not is_http_instrumentation_enabled())
+            ),
             "tracer_provider": (
                 _ProblemProvider(options.tracer_provider)
                 if options.problem_details
@@ -64,7 +73,9 @@ def _skip(scope: Scope, options: Telemetry) -> bool:
     key = f"_canon_telemetry_excluded_{id(options)}"
     if key not in scope:
         scope[key] = options.exclude is not None and options.exclude(scope)
-    return bool(scope[key])
+    return bool(scope[key]) or (
+        scope["type"] == "http" and (excluded.get() or not is_instrumentation_enabled())
+    )
 
 
 class _RequestContext:
@@ -78,9 +89,15 @@ class _RequestContext:
             return
         skip = _skip(scope, self.options)
         exclusion = excluded.set(skip)
-        scope["_canon_server_span"] = None if skip else trace.get_current_span()
+        http = scope["type"] == "http"
+        scope["_canon_server_span"] = (
+            None
+            if skip or (http and not is_http_instrumentation_enabled())
+            else trace.get_current_span()
+        )
         try:
-            await self.app(scope, receive, send)
+            with suppress_instrumentation() if http and skip else nullcontext():
+                await self.app(scope, receive, send)
         finally:
             excluded.reset(exclusion)
 
