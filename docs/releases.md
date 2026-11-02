@@ -19,7 +19,7 @@ WebSocket server composition uses `CanonWebSocketRouter`, and controllers start
 independent traces when messages carry no parent context.
 Migrate positional features to `Composition(features=[first, second])` and apply
 the [0.13.0 upgrade guide](package-migration.md#upgrade-to-0130) and
-[breaking changes](../CHANGELOG.md#0130---unreleased).
+[breaking changes](../CHANGELOG.md#0130---2026-11-02).
 The published release remains 0.12.0 until publication is authorized and verified.
 
 Canon **0.12.0** was published on 2026-11-02 from

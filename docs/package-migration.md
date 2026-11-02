@@ -38,7 +38,7 @@ these application changes:
 The JSON-RPC wire format and generated-client contracts remain unchanged by the
 router and tracing changes. Database integration and request logging are opt-in;
 follow the [database guide](database.md) when adding engines, transactions or
-Alembic migrations. See the [full changelog](../CHANGELOG.md#0130---unreleased)
+Alembic migrations. See the [full changelog](../CHANGELOG.md#0130---2026-11-02)
 for the release's migration details.
 
 ## Installation
