@@ -27,8 +27,8 @@ from fastapi_canon.integrations.websockets import (
     RpcSocket,
 )
 from fastapi_canon.integrations.websockets.adapters.fastapi import (
+    CanonWebSocketRouter,
     FastApiSocket,
-    RpcRouter,
     serve_websocket,
 )
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
@@ -460,7 +460,7 @@ def create_job_app(
     async def resolve(dependency: type) -> JobOutput:
         return JobOutput([b"one", b"two"])
 
-    router = RpcRouter(
+    router = CanonWebSocketRouter(
         prefix="/jobs",
         context=open_job_session,
         resolver=resolve,
@@ -534,7 +534,7 @@ def test_rpc_routes_reject_context_failures_their_contracts_cover() -> None:
 
 def test_rpc_routes_raises_needs_contracts_with_a_rejection() -> None:
     with pytest.raises(ProtocolDefinitionError, match="with a rejection"):
-        RpcRouter(rejects=(RpcErrorBinding(JobNotFound),))
+        CanonWebSocketRouter(rejects=(RpcErrorBinding(JobNotFound),))
 
 
 def test_rpc_routes_reject_raised_rejections_with_their_headers() -> None:
@@ -545,7 +545,7 @@ def test_rpc_routes_reject_raised_rejections_with_their_headers() -> None:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    router = RpcRouter(prefix="/jobs", context=authenticate)
+    router = CanonWebSocketRouter(prefix="/jobs", context=authenticate)
     router.mount(create_job_service().endpoint("events"))
     web = FastAPI()
     web.include_router(router)
@@ -613,7 +613,7 @@ def test_rpc_routes_key_a_subclass_context_by_the_declared_type() -> None:
     async def open_guest_session(job_id: UUID) -> GuestJobSession:
         return GuestJobSession(Job(job_id), Actor("guest"))
 
-    router = RpcRouter(prefix="/jobs", context=open_guest_session)
+    router = CanonWebSocketRouter(prefix="/jobs", context=open_guest_session)
     router.mount(create_job_service().endpoint("events"))
     web = FastAPI()
     web.include_router(router)
@@ -627,7 +627,7 @@ def test_rpc_routes_key_a_subclass_context_by_the_declared_type() -> None:
 
 
 def test_rpc_routes_without_context_mount_endpoints_without_context() -> None:
-    router = RpcRouter()
+    router = CanonWebSocketRouter()
     router.mount(create_service().endpoint("rpc"))
     web = FastAPI()
     web.include_router(router)
@@ -655,7 +655,9 @@ def test_rpc_routes_use_a_fastapi_resolver_per_connection() -> None:
             prepared.append(function.__name__)
             return function
 
-    router = RpcRouter(prefix="/jobs", context=open_job_session, resolver=Resolver())
+    router = CanonWebSocketRouter(
+        prefix="/jobs", context=open_job_session, resolver=Resolver()
+    )
     router.mount(create_job_service().endpoint("output"))
     web = FastAPI()
     web.include_router(router)
@@ -683,25 +685,27 @@ async def open_actor(job_id: UUID) -> Actor:
 
 def test_rpc_routes_reject_invalid_mounts() -> None:
     service = create_job_service()
-    routes = RpcRouter(prefix="/job", context=open_job_session)
+    routes = CanonWebSocketRouter(prefix="/job", context=open_job_session)
 
     with pytest.raises(ValueError, match="outside the router prefix"):
         routes.mount(service.endpoint("events"))
     for context in (untyped_session, any_session):
         with pytest.raises(TypeError, match="needs a concrete class"):
-            RpcRouter(context=context)
+            CanonWebSocketRouter(context=context)
     with pytest.raises(TypeError, match="expects an async function"):
-        RpcRouter(context=JobSession)  # type: ignore[arg-type]
+        CanonWebSocketRouter(context=JobSession)  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="declares context none, but these routes"):
-        RpcRouter(context=open_actor).mount(
+        CanonWebSocketRouter(context=open_actor).mount(
             create_service().endpoint("rpc")  # type: ignore[arg-type]
         )
     with pytest.raises(TypeError, match="declares context JobSession, but these"):
-        RpcRouter(prefix="/jobs").mount(service.endpoint("events"))
+        CanonWebSocketRouter(prefix="/jobs").mount(service.endpoint("events"))
     with pytest.raises(TypeError, match="JobSession, but these routes provide Actor"):
-        RpcRouter(prefix="/jobs", context=open_actor).mount(service.endpoint("events"))
+        CanonWebSocketRouter(prefix="/jobs", context=open_actor).mount(
+            service.endpoint("events")
+        )
 
-    routes = RpcRouter(prefix="/jobs", context=open_job_session)
+    routes = CanonWebSocketRouter(prefix="/jobs", context=open_job_session)
     routes.mount(service.endpoint("events"))
     with pytest.raises(ValueError, match="already mounted"):
         routes.mount(service.endpoint("events"))
@@ -738,7 +742,9 @@ def test_custom_handlers_receive_context_and_dependencies_at_the_declared_route(
         await socket.send_bytes(output.frames[0])
         await socket.close()
 
-    router = RpcRouter(prefix="/jobs", context=open_job_session, resolver=resolve)
+    router = CanonWebSocketRouter(
+        prefix="/jobs", context=open_job_session, resolver=resolve
+    )
     endpoint = service.endpoint(endpoint_name)
     routes = router
     routes.mount(endpoint, handler=serve_job)
@@ -807,7 +813,7 @@ def test_custom_handlers_reject_failures_before_acceptance(stage: str) -> None:
         if stage == "handler":
             raise JobNotFound("Unavailable")
 
-    router = RpcRouter(prefix="/jobs", context=context, resolver=Resolver())
+    router = CanonWebSocketRouter(prefix="/jobs", context=context, resolver=Resolver())
     routes = router
     routes.mount(
         create_job_service(rejects=(job_not_found,)).endpoint("events"), handler=handler
@@ -859,7 +865,7 @@ def test_custom_handlers_use_rejection_precedence_after_acceptance(policy: str) 
         await websocket.send_text("pending")
         raise JobNotFound()
 
-    router = RpcRouter(
+    router = CanonWebSocketRouter(
         prefix="/jobs",
         context=open_job_session,
         rejects=(route_binding,) if policy == "routes" else (),
@@ -891,7 +897,7 @@ def test_custom_handlers_preserve_unknown_failures_and_do_not_close_twice(
             raise JobNotFound("already closed")
         raise RuntimeError("unknown")
 
-    router = RpcRouter(
+    router = CanonWebSocketRouter(
         prefix="/jobs", context=open_job_session, rejects=(job_not_found,)
     )
     router.mount(create_job_service().endpoint("events"), handler=handler)
@@ -950,7 +956,9 @@ def test_custom_handlers_cancel_pending_work_and_release_the_connection_scope() 
             pending.cancel()
             await asyncio.gather(pending, return_exceptions=True)
 
-    router = RpcRouter(prefix="/jobs", context=open_job_session, resolver=Resolver())
+    router = CanonWebSocketRouter(
+        prefix="/jobs", context=open_job_session, resolver=Resolver()
+    )
     router.mount(create_job_service().endpoint("events"), handler=handler)
     app = FastAPI()
     app.include_router(router)
@@ -968,7 +976,7 @@ def test_custom_handlers_authorize_even_without_context_parameters() -> None:
         called.append(True)
         raise RpcReject(RpcRejection.FORBIDDEN, "not accepted")
 
-    router = RpcRouter(
+    router = CanonWebSocketRouter(
         prefix="/jobs", context=open_job_session, rejects=(job_not_found,)
     )
     router.mount(create_job_service().endpoint("events"), handler=handler)
@@ -986,7 +994,7 @@ def test_custom_handlers_authorize_even_without_context_parameters() -> None:
 
 
 def test_custom_handlers_require_explicit_context_injection() -> None:
-    routes = RpcRouter(prefix="/jobs", context=open_job_session)
+    routes = CanonWebSocketRouter(prefix="/jobs", context=open_job_session)
     endpoint = create_job_service().endpoint("events")
 
     async def unmarked(websocket: WebSocket, task: JobSession) -> None: ...
@@ -1037,7 +1045,7 @@ async def test_custom_handlers_release_the_scope_on_cancellation() -> None:
             finally:
                 calls.append("handler cleanup")
 
-        router = RpcRouter(
+        router = CanonWebSocketRouter(
             prefix="/jobs", context=open_job_session, resolver=Resolver()
         )
         router.mount(create_job_service().endpoint("events"), handler=handler)
@@ -1087,7 +1095,7 @@ def test_custom_handlers_without_context_preserve_internal_parameter_names() -> 
         assert _canon_websockets_context == "custom"
         raise RpcReject(RpcRejection.FORBIDDEN, "custom rejection")
 
-    router = RpcRouter(resolver=resolve)
+    router = CanonWebSocketRouter(resolver=resolve)
     router.mount(create_service().endpoint("rpc"), handler=handler)
     app = FastAPI()
     app.include_router(router)
@@ -1129,7 +1137,7 @@ def create_socket_app(released: list[bool]) -> FastAPI:
     service.socket(
         "/jobs/{job_id}/terminal", terminal, name="terminal", context=JobSession
     )
-    router = RpcRouter(
+    router = CanonWebSocketRouter(
         prefix="/jobs", context=open_job_session, rejects=(job_not_found,)
     )
     router.mount(service.endpoint("terminal"))

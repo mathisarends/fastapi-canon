@@ -6,10 +6,20 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Breaking changes
 
-- WebSocket server composition now uses `RpcRouter` exclusively. Replace
+- Rename `RpcRouter` to `CanonWebSocketRouter` in imports and constructors, and
+  `Telemetry.rpc_middleware()` to `Telemetry.websocket_middleware()`. The old
+  names are removed without aliases. JSON-RPC channel, wire and generated-client
+  contracts, including the established `rpckit.*` metric names, are unchanged.
+- WebSocket controller calls without per-message trace metadata now start
+  independent traces and link to the connection context instead of inheriting
+  its trace. Explicit message context still parents the call, and handler work
+  remains nested under it. Update trace queries that assumed all calls on one
+  connection shared a trace ID. No client instrumentation is required.
+
+- WebSocket server composition now uses `CanonWebSocketRouter` exclusively. Replace
   `RpcService` plus `create_router(service)` or `dishka_router(service)` with
-  `RpcRouter` and include it directly in `Feature(routers=[rpc])` or FastAPI.
-  Replace `RpcRoutes(router, ...).mount(endpoint)` with options on `RpcRouter`
+  `CanonWebSocketRouter` and include it directly in `Feature(routers=[rpc])` or FastAPI.
+  Replace `RpcRoutes(router, ...).mount(endpoint)` with options on `CanonWebSocketRouter`
   and its `socket()` or `stream()` declaration. Use `resolver=Dishka()` for
   Dishka, `context=async_dependency` for a connection context, and `serve=`
   for custom FastAPI handlers. The removed names have no compatibility aliases.
@@ -38,7 +48,7 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Added
 
-- `RpcRouter(path, channels=[...])` mounts one JSON-RPC WebSocket endpoint
+- `CanonWebSocketRouter(path, channels=[...])` mounts one JSON-RPC WebSocket endpoint
   as a FastAPI router. Use it in `Feature(routers=[...])` and call its
   `contract()` method to export OpenRPC for the same channels.
 - `Composition(features=features, request_logging=True)` emits structured completion/abort

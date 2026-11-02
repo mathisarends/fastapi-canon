@@ -12,7 +12,7 @@ from fastapi_canon.integrations.websockets.adapters.dishka import (
     Dishka,
     DishkaResolver,
 )
-from fastapi_canon.integrations.websockets.adapters.fastapi import RpcRouter
+from fastapi_canon.integrations.websockets.adapters.fastapi import CanonWebSocketRouter
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
 
 from tests.fixtures.websockets import router_for
@@ -161,7 +161,9 @@ def test_dishka_exposes_the_context_to_dishka_providers() -> None:
     endpoint = rpc.socket(
         "/owners/{owner_id}/rpc", channels=(channel,), name="owners", context=Owner
     )
-    router = RpcRouter(prefix="/owners", context=resolve_owner, resolver=Dishka())
+    router = CanonWebSocketRouter(
+        prefix="/owners", context=resolve_owner, resolver=Dishka()
+    )
     router.mount(endpoint)
     app = FastAPI()
     app.state.dishka_container = dishka.make_async_container(Provider())
@@ -222,7 +224,9 @@ def test_dishka_injects_the_context_function(transport_parameter: str) -> None:
             assert _canon_websockets_websocket == "context"
             return Owner(f"{owners.prefix}-{owner_id}")
 
-    router = RpcRouter(prefix="/owners", context=open_owner, resolver=Dishka())
+    router = CanonWebSocketRouter(
+        prefix="/owners", context=open_owner, resolver=Dishka()
+    )
     router.mount(endpoint)
 
     app = FastAPI()
@@ -298,7 +302,9 @@ def test_custom_handlers_resolve_context_and_providers_in_one_session(
     endpoint = service.socket(
         "/owners/{owner_id}/rpc", channels=(RpcChannel("demo"),), context=Owner
     )
-    router = RpcRouter(prefix="/owners", context=open_owner, resolver=Dishka())
+    router = CanonWebSocketRouter(
+        prefix="/owners", context=open_owner, resolver=Dishka()
+    )
     router.mount(endpoint, handler=handler)
     app = FastAPI()
     app.include_router(router)

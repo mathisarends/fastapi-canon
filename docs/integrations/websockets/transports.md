@@ -42,14 +42,14 @@ oversized fragmented messages against the actual backend during deployment.
 
 ## FastAPI
 
-`RpcRouter` defines and mounts WebSocket endpoints. Include it directly in
+`CanonWebSocketRouter` defines and mounts WebSocket endpoints. Include it directly in
 `Feature(routers=[rpc])` or `web.include_router(rpc)`.
 
 ```python
 from fastapi import FastAPI
-from fastapi_canon.integrations.websockets import RpcRouter
+from fastapi_canon.integrations.websockets import CanonWebSocketRouter
 
-rpc = RpcRouter("/rpc", channels=[channel])
+rpc = CanonWebSocketRouter("/rpc", channels=[channel])
 web = FastAPI()
 web.include_router(rpc)
 contract = rpc.contract(title="Control", base_url="wss://api.example.com", app=web)
@@ -60,7 +60,7 @@ register each endpoint. Both methods add the FastAPI route immediately.
 Finish channel declarations before including the router or exporting its contract.
 
 ```python
-rpc = RpcRouter()
+rpc = CanonWebSocketRouter()
 rpc.socket("/rpc", channels=[tasks, projects])
 rpc.stream("/frames", frames)
 rpc.socket("/browser/cdp", cdp)
@@ -68,7 +68,7 @@ web.include_router(rpc)
 ```
 
 Configure RPC limits, middleware, error mapping and handshake rejection defaults
-on `RpcRouter`. Endpoint options override those defaults. A router `prefix=`
+on `CanonWebSocketRouter`. Endpoint options override those defaults. A router `prefix=`
 is included in its endpoint paths and OpenRPC contract. A prefix applied later
 by `include_router()` belongs in the contract's `base_url`.
 
@@ -86,7 +86,7 @@ async def open_job(job_id: str) -> Job:
     return await jobs.require(job_id)
 
 
-rpc = RpcRouter(context=open_job, resolver=Dishka(), rejects=[job_not_found])
+rpc = CanonWebSocketRouter(context=open_job, resolver=Dishka(), rejects=[job_not_found])
 rpc.socket("/jobs/{job_id}/rpc", channels=[job_events])
 rpc.stream("/jobs/{job_id}/output", output)
 web.include_router(rpc)
@@ -273,10 +273,10 @@ pre-stop endpoint and wait for completion before sending the termination signal:
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi_canon.integrations.websockets import RpcDrain, RpcRouter
+from fastapi_canon.integrations.websockets import RpcDrain, CanonWebSocketRouter
 
 drain = RpcDrain()
-rpc = RpcRouter(drain=drain)
+rpc = CanonWebSocketRouter(drain=drain)
 # Register rpc.socket(...) and rpc.stream(...) here.
 
 

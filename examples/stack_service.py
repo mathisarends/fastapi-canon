@@ -8,7 +8,11 @@ from pydantic import BaseModel
 
 from fastapi_canon import CanonRouter, Composition, Feature
 from fastapi_canon.integrations.sse import CanonStreamRouter
-from fastapi_canon.integrations.websockets import Inject, RpcChannel, RpcRouter
+from fastapi_canon.integrations.websockets import (
+    CanonWebSocketRouter,
+    Inject,
+    RpcChannel,
+)
 from fastapi_canon.integrations.websockets.adapters.dishka import Dishka
 
 __all__ = ["app", "create_app"]
@@ -71,7 +75,7 @@ def create_app() -> FastAPI:
     async def increment_rpc(operations: Inject[Operations]) -> IncrementResult:
         return IncrementResult(value=operations.increment())
 
-    rpc = RpcRouter(resolver=Dishka())
+    rpc = CanonWebSocketRouter(resolver=Dishka())
     rpc.socket("/rpc", channels=(channel,))
     feature = Feature(
         name="counter",

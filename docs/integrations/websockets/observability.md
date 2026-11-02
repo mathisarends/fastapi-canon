@@ -8,7 +8,7 @@ and generated-client instrumentation API.
 ## Enable OpenTelemetry
 
 ```bash
-uv add "fastapi-canon[websockets,fastapi,otel]"
+uv add "fastapi-canon[websockets,otel]"
 ```
 
 The extra installs the OpenTelemetry API. Configure the SDK and exporters in
@@ -22,7 +22,7 @@ from collections.abc import AsyncIterator
 
 from fastapi import FastAPI
 
-from fastapi_canon.integrations.websockets import RpcChannel, RpcRouter
+from fastapi_canon.integrations.websockets import RpcChannel, CanonWebSocketRouter
 from fastapi_canon.integrations.websockets.adapters.opentelemetry import OpenTelemetry
 
 media = RpcChannel("media")
@@ -33,14 +33,14 @@ async def frames() -> AsyncIterator[bytes]:
     yield b"frame"
 
 
-rpc = RpcRouter(middleware=[OpenTelemetry()])
+rpc = CanonWebSocketRouter(middleware=[OpenTelemetry()])
 rpc.stream("/media/frames", frames)
 
 web = FastAPI()
 web.include_router(rpc)
 ```
 
-Configure middleware once on `RpcRouter`. It wraps connection-context
+Configure middleware once on `CanonWebSocketRouter`. It wraps connection-context
 dependencies, RPC calls and raw or binary endpoints. Endpoint-specific
 `middleware=` extends the router configuration. Low-level `serve_websocket()`
 and channel/endpoint `create_server()` also accept middleware.
@@ -73,6 +73,18 @@ extracts context from
 case-insensitive handshake headers. `connection_spans=True` adds a connection
 span; the default avoids adding another connection span to FastAPI telemetry.
 
+Each controller call without message metadata starts a new trace and links to
+the available connection context. Its span is exported after the call finishes,
+without waiting for the socket to close. Explicit per-request metadata instead
+continues the caller's trace. Application spans created inside a handler remain
+children of that call. A standalone channel server without a WebSocket connection
+continues to inherit its caller's active context.
+
+For application-owned providers, `Telemetry.websocket_middleware()` creates this
+middleware with the same tracing and metrics configuration as composition. See
+the [controller tracing example](../../telemetry.md#third-party-instrumentation-and-rpc).
+Server-side tracing needs no changes to generated clients or controller signatures.
+
 `exclude` receives `RpcConnectionScope` or `RpcRequestScope`. Return `True` to
 skip that operation. Excluding a connection also excludes its operations and
 frame metrics. Parallel connections have independent exclusion state.
@@ -90,19 +102,19 @@ These are fastapi_canon.integrations.websockets-specific instrument names. Durat
 
 | Instrument | Measurement |
 | --- | --- |
-| `fastapi_canon.integrations.websockets.rpc.calls` | Completed calls, including error and cancellation outcomes |
-| `fastapi_canon.integrations.websockets.rpc.active` | Calls executing now |
-| `fastapi_canon.integrations.websockets.rpc.duration` | Call duration, excluding the concurrency queue and socket delivery |
-| `fastapi_canon.integrations.websockets.connections` | Accepted connections and rejected or failed handshakes |
-| `fastapi_canon.integrations.websockets.connections.active` | Accepted connections currently open |
-| `fastapi_canon.integrations.websockets.connections.duration` | Accepted connection lifetime |
-| `fastapi_canon.integrations.websockets.streams` | Completed binary stream operations by close category |
-| `fastapi_canon.integrations.websockets.streams.active` | Binary streams executing now |
-| `fastapi_canon.integrations.websockets.streams.duration` | Binary stream duration |
-| `fastapi_canon.integrations.websockets.stream.frames` | Binary messages, split by `inbound` and `outbound` |
-| `fastapi_canon.integrations.websockets.stream.bytes` | Binary bytes in each direction |
-| `fastapi_canon.integrations.websockets.notifications` | Outgoing notification count by registered operation |
-| `fastapi_canon.integrations.websockets.slow_consumers` | JSON-RPC slow-consumer closures |
+| `rpckit.rpc.calls` | Completed calls, including error and cancellation outcomes |
+| `rpckit.rpc.active` | Calls executing now |
+| `rpckit.rpc.duration` | Call duration, excluding the concurrency queue and socket delivery |
+| `rpckit.connections` | Accepted connections and rejected or failed handshakes |
+| `rpckit.connections.active` | Accepted connections currently open |
+| `rpckit.connections.duration` | Accepted connection lifetime |
+| `rpckit.streams` | Completed binary stream operations by close category |
+| `rpckit.streams.active` | Binary streams executing now |
+| `rpckit.streams.duration` | Binary stream duration |
+| `rpckit.stream.frames` | Binary messages, split by `inbound` and `outbound` |
+| `rpckit.stream.bytes` | Binary bytes in each direction |
+| `rpckit.notifications` | Outgoing notification count by registered operation |
+| `rpckit.slow_consumers` | JSON-RPC slow-consumer closures |
 
 Frame counters update while a stream is running and work independently of trace
 sampling. They count binary application messages, including empty messages.
@@ -168,7 +180,7 @@ context-manager variables. Instrumentation failures are logged and isolated,
 and middleware cannot suppress application failures or rewrite responses.
 Cancellation propagates after cleanup.
 
-`RpcRouter` opens connection middleware before its `context=` dependency and
+`CanonWebSocketRouter` opens connection middleware before its `context=` dependency and
 closes it after dependency cleanup, including mapped context rejections.
 Earlier FastAPI or router-wide dependencies remain outside that boundary.
 Manual routes start their boundary when they call `serve_websocket()`.
@@ -245,8 +257,8 @@ The server exposes a validated immutable mapping as `scope.metadata` and
 `scope.request.metadata` on `RpcRequestContext`.
 Absent metadata means `None`. With OpenTelemetry, an explicit carrier is extracted
 as **remote W3C context** from a fresh context and parents that request's span.
-When `connection_spans=True`, the request also links to its connection span.
-Without metadata, current/handshake parenting continues as before. An empty
+The request also links to the available connection-setup span.
+Without metadata, calls on a WebSocket start independent traces. An empty
 carrier, or a syntactically invalid `traceparent` inside an otherwise valid
 carrier, starts a new root instead of inheriting the connection trace. Invalid
 `tracestate` follows the OTel W3C propagator's handling. Request context is detached

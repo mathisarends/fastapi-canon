@@ -319,18 +319,35 @@ engine factories process-wide, and `uninstrument()` removes its instrumentation
 globally. Those semantics belong to the direct contrib API, not Canon's
 engine-local adapter. Do not combine them on the same engine.
 
-RPC is explicit because Canon does not own `RpcRouter` instances:
+WebSocket controller tracing is configured explicitly on `CanonWebSocketRouter`:
 
 ```python
+from fastapi import FastAPI
+from fastapi_canon import Composition, Feature
+from fastapi_canon.integrations.opentelemetry import Telemetry
+from fastapi_canon.integrations.websockets import CanonWebSocketRouter
+
 telemetry = Telemetry(tracer_provider=tracer_provider, meter_provider=meter_provider)
-rpc = RpcRouter(middleware=(telemetry.rpc_middleware(),))
-app = Composition(features=(tasks,), telemetry=telemetry).apply(FastAPI())
+router = CanonWebSocketRouter(
+    "/ws",
+    channels=(browser_channel,),
+    middleware=(telemetry.websocket_middleware(),),
+)
+app = Composition(
+    features=(Feature(name="browser", routers=(router,)),),
+    telemetry=telemetry,
+).apply(FastAPI())
 ```
 
 Select `fastapi-canon[websockets,otel]` to enable the bundled middleware. The
 helper forwards providers and the `tracing`/`metrics` switches. It keeps the
-default `connection_spans=False`, so operations inherit FastAPI's active
-WebSocket operation/connection context, and leaves baggage propagation disabled.
+default `connection_spans=False` and leaves remote baggage propagation disabled.
+Each controller call without message metadata starts an independent trace, and
+its span ends when that call completes, even while the WebSocket remains open.
+An available connection-setup span is linked rather than used as
+the call's parent. Explicit per-message W3C context continues the caller's trace.
+Clients need no tracing configuration for server-side controller spans; optional
+client middleware adds client spans and propagates context for end-to-end traces.
 ASGI exclusions do not configure per-operation exclusions; use
 `fastapi_canon.integrations.websockets.adapters.opentelemetry.OpenTelemetry` directly
 for those controls.

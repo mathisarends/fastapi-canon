@@ -8,7 +8,7 @@ from typing import Any
 from urllib.parse import unquote, urlsplit
 
 from fastapi_canon.error import Problem
-from fastapi_canon.integrations.websockets.adapters.fastapi import RpcRouter
+from fastapi_canon.integrations.websockets.adapters.fastapi import CanonWebSocketRouter
 from fastapi_canon.integrations.websockets.connection import (
     RpcConnectionClose,
     RpcDisconnect,
@@ -308,7 +308,7 @@ class InMemorySocketFactory:
 
     def __init__(
         self,
-        service: RpcRouter,
+        service: CanonWebSocketRouter,
         *,
         configure: Callable[[InMemorySocket, int], None] | None = None,
         resolver: RpcResolverLike | None = None,
@@ -424,7 +424,7 @@ class RpcTestConnectionClosed(Exception):
 class RpcTestClient:
     def __init__(
         self,
-        service: RpcRouter,
+        service: CanonWebSocketRouter,
         path: str,
         *,
         headers: Mapping[str, str] | None = None,
@@ -608,7 +608,7 @@ class RpcTestClient:
 
 
 class RpcTestStream(RpcTestClient):
-    def __init__(self, service: RpcRouter, path: str, **kwargs: Any) -> None:
+    def __init__(self, service: CanonWebSocketRouter, path: str, **kwargs: Any) -> None:
         super().__init__(service, path, **kwargs)
         if not self._stream:
             raise TypeError(f"{path!r} is not a binary stream endpoint")

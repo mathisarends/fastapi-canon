@@ -59,7 +59,7 @@ class Resolver:
     async def resolve[T](self, dependency: type[T]) -> T: ...
 ```
 
-Pass it as `resolver=` to `RpcRouter`, `RpcRouter.serve()`, an endpoint,
+Pass it as `resolver=` to `CanonWebSocketRouter`, `CanonWebSocketRouter.serve()`, an endpoint,
 or `create_server()`. A synchronous or asynchronous callable taking the
 requested type is accepted as a lightweight alternative.
 
@@ -102,7 +102,7 @@ container at connection time.
 
 ```python
 from dishka.integrations.fastapi import FromDishka
-from fastapi_canon.integrations.websockets import RpcRouter
+from fastapi_canon.integrations.websockets import CanonWebSocketRouter
 from fastapi_canon.integrations.websockets.adapters.dishka import Dishka
 
 
@@ -114,7 +114,7 @@ async def open_session(
     return await sessions.get_authorized(session_id, actor)
 
 
-rpc = RpcRouter(
+rpc = CanonWebSocketRouter(
     context=open_session,
     resolver=Dishka(),
     rejects=[session_not_found],
@@ -142,7 +142,7 @@ Keep RPC dependencies in the fastapi_canon.integrations.websockets scope and do 
 
 ## Authenticated connections
 
-Use `RpcRouter(context=async_dependency, resolver=Dishka(), rejects=[...])`
+Use `CanonWebSocketRouter(context=async_dependency, resolver=Dishka(), rejects=[...])`
 when authentication needs FastAPI dependencies, cookies, origins or path values.
 The context return annotation supplies its injection type.
 

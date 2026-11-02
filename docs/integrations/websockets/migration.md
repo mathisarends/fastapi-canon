@@ -3,20 +3,23 @@
 
 ## Canon 0.13.0 server composition
 
-`RpcRouter` is the public WebSocket composition API. Replace the separate
+`CanonWebSocketRouter` is the public WebSocket composition API. Replace the separate
 service, adapter factory and mounting objects with a router.
+Replace imports and constructors of `RpcRouter` with `CanonWebSocketRouter`, and
+`Telemetry.rpc_middleware()` with `Telemetry.websocket_middleware()`. Neither
+old name has a compatibility alias.
 
 ```python
-from fastapi_canon.integrations.websockets import RpcChannel, RpcRouter
+from fastapi_canon.integrations.websockets import RpcChannel, CanonWebSocketRouter
 from fastapi_canon.integrations.websockets.adapters.dishka import Dishka
 
-rpc = RpcRouter("/rpc", channels=[tasks], resolver=Dishka())
+rpc = CanonWebSocketRouter("/rpc", channels=[tasks], resolver=Dishka())
 feature = Feature(name="tasks", routers=[rpc], providers=[TaskProvider])
 app = Composition(features=[feature]).apply(FastAPI())
 contract = rpc.contract(title="Tasks", base_url="wss://api.example.com", app=app)
 ```
 
-For several endpoints, use `RpcRouter()` and its `socket()` and `stream()`
+For several endpoints, use `CanonWebSocketRouter()` and its `socket()` and `stream()`
 methods. They register and mount each endpoint together. Configure limits,
 middleware, rejection policies and the async connection-context dependency on
 the router. Its dependency's concrete return type replaces the separate
@@ -42,22 +45,26 @@ Install with `uv add fastapi-canon[websockets]`; retain `[codegen]`,
 `[dishka]`, and `[otel]` only where needed. Update imports throughout application
 code, codegen source modules, monkeypatch targets, and configuration.
 
-The FastAPI mounting APIs are directly available:
+The FastAPI transport APIs are directly available:
 
 ```python
 from fastapi_canon.integrations.websockets import (
+    CanonWebSocketRouter,
     FastApiSocket,
-    RpcRoutes,
-    create_router,
     serve_websocket,
 )
 ```
 
 The existing `fastapi_canon.integrations.websockets.adapters.fastapi` paths also remain valid.
-`RpcChannel`, `RpcRouter`, endpoint registration, and `Inject` retain their
-behavior. With Canon, put `dishka_router(service)` in a feature's routers; it
-uses Canon's application container, SESSION per connection, and REQUEST per call.
+`RpcChannel`, endpoint registration, and `Inject` retain their behavior. With Canon,
+put `CanonWebSocketRouter(..., resolver=Dishka())` in a feature's routers; it uses
+Canon's application container, SESSION per connection, and REQUEST per call.
 See the [workspace example](../../../examples/stack_service.py).
+
+For telemetry, WebSocket calls without message metadata now start separate traces
+and link to the available connection context. Explicit message metadata continues
+the caller's trace. Handler child spans and standalone channel-server parenting
+are unchanged. No client changes are needed for server-side controller tracing.
 
 The JSON-RPC envelopes, method names, control frames, OpenRPC `x-rpckit-*`
 extensions, binary/raw framing, and `.rpcgen` manifest format are deliberately

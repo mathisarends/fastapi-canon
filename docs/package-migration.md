@@ -53,7 +53,7 @@ dependencies from your application. Replace Canon's former `streams` extra with
 | `fastapi_webrtc` | `fastapi_canon.integrations.webrtc` |
 | `fastapi_canon.integrations.streams` | `fastapi_canon.integrations.sse` (`CanonStreamRouter`) |
 
-Public class names such as `StreamRouter`, `RpcRouter`, `RpcSocket`,
+Public class names such as `StreamRouter`, `CanonWebSocketRouter`, `RpcSocket`,
 `WebRtcRouter`, `CanonStreamRouter` and `CanonWebRtcRouter` stay available inside
 the integration namespaces. Feature `__version__` exports refer to the single
 Canon version. The published `fastapi_canon.integrations.webrtc` admission-router

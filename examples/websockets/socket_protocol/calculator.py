@@ -16,10 +16,10 @@ from collections.abc import Callable
 
 from fastapi import FastAPI
 from fastapi_canon.integrations.websockets import (
+    CanonWebSocketRouter,
     Inject,
     RpcChannel,
     RpcMessageType,
-    RpcRouter,
     RpcSocket,
     RpcSocketProtocol,
     ServerVariable,
@@ -56,7 +56,7 @@ async def session(socket: Inject[RpcSocket]) -> None:
         await socket.send(json.dumps(reply))
 
 
-service = RpcRouter()
+service = CanonWebSocketRouter()
 service.socket("/calculator/rpc", channels=(calculator,))
 service.socket("/calculator/session", session)
 

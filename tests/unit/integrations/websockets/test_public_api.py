@@ -10,6 +10,7 @@ from fastapi_canon.integrations.websockets.definition import RpcDefinition
     "name",
     (
         "RpcService",
+        "RpcRouter",
         "RpcDefinition",
         "RpcRoutes",
         "create_router",

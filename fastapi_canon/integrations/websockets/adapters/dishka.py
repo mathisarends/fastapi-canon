@@ -54,7 +54,7 @@ class DishkaResolver:
 
 
 class Dishka:
-    """Resolve ``RpcRouter`` dependencies with the app's root Dishka container.
+    """Resolve ``CanonWebSocketRouter`` dependencies with the app's root container.
 
     The context function may declare ``FromDishka[T]`` parameters without
     ``@inject``; they resolve from the container of Dishka's FastAPI

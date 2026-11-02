@@ -16,7 +16,7 @@ from fastapi_canon.integrations.websockets import (
     RpcRequestScope,
 )
 from fastapi_canon.integrations.websockets.adapters.fastapi import (
-    RpcRouter,
+    CanonWebSocketRouter,
     serve_websocket,
 )
 from fastapi_canon.integrations.websockets.adapters.opentelemetry import OpenTelemetry
@@ -193,9 +193,12 @@ async def test_request_metadata_overrides_handshake_and_links_connection(provide
         assert calls[0].parent.is_remote
         assert calls[0].parent.span_id == int("4" * 16, 16)
         assert calls[0].links[0].context.span_id == connection.context.span_id
-        assert calls[1].context.trace_id == int(handshake_id, 16)
-        assert calls[1].parent.span_id == connection.context.span_id
-        assert not calls[1].links
+        assert calls[1].parent is None
+        assert calls[1].context.trace_id not in {
+            int(handshake_id, 16),
+            int(request_id, 16),
+        }
+        assert calls[1].links[0].context.span_id == connection.context.span_id
         assert calls[2].parent is None
         assert calls[2].context.trace_id not in {
             int(handshake_id, 16),
@@ -435,7 +438,7 @@ async def test_requests_have_separate_spans_with_transport_parent(providers):
     assert total(reader, "rpckit.rpc.active") == 0
 
 
-async def test_handshake_context_is_extracted_and_unknown_names_are_not_recorded(
+async def test_handshake_is_linked_without_parenting_calls_or_recording_unknown_names(
     providers,
 ):
     tracer, meter, exporter, reader = providers
@@ -459,8 +462,10 @@ async def test_handshake_context_is_extracted_and_unknown_names_are_not_recorded
             await client.request("attacker-controlled-private-name")
     calls = exporter.get_finished_spans()
     assert len(calls) == 2
-    assert all(span.context.trace_id == int(trace_id, 16) for span in calls)
-    assert all(span.parent.span_id == int(parent_id, 16) for span in calls)
+    assert all(span.parent is None for span in calls)
+    assert len({span.context.trace_id for span in calls}) == 2
+    assert all(span.context.trace_id != int(trace_id, 16) for span in calls)
+    assert all(span.links[0].context.span_id == int(parent_id, 16) for span in calls)
     unknown = next(span for span in calls if span.name == "RPC")
     assert "rpc.method" not in unknown.attributes
     assert "attacker-controlled" not in str(unknown.attributes)
@@ -544,7 +549,7 @@ def test_fastapi_routes_add_real_rpc_spans_and_clean_up(providers):
 
     rpc = RpcDefinition()
     endpoint = rpc.socket("/rpc", channels=[channel])
-    router = RpcRouter(
+    router = CanonWebSocketRouter(
         middleware=[OpenTelemetry(tracer_provider=tracer, meter_provider=meter)]
     )
     router.mount(endpoint)
@@ -660,7 +665,10 @@ async def test_request_exclusion_and_optional_connection_span(providers):
         assert await client.request("demo.ping") == "pong"
     spans = {span.name: span for span in exporter.get_finished_spans()}
     assert set(spans) == {"WS /rpc", "demo.ping"}
-    assert spans["demo.ping"].parent.span_id == spans["WS /rpc"].context.span_id
+    assert spans["demo.ping"].parent is None
+    assert (
+        spans["demo.ping"].links[0].context.span_id == spans["WS /rpc"].context.span_id
+    )
     assert total(reader, "rpckit.rpc.calls") == 1
 
 
@@ -709,7 +717,7 @@ def test_custom_handlers_measure_live_connections_and_accepted_duration(provider
         await websocket.receive_text()
         await websocket.close()
 
-    router = RpcRouter(
+    router = CanonWebSocketRouter(
         middleware=[
             OpenTelemetry(
                 tracer_provider=tracer, meter_provider=meter, connection_spans=True
@@ -749,7 +757,7 @@ def test_delegated_middleware_records_rpc_and_connection_once(providers):
     async def handler(websocket: WebSocket) -> None:
         await serve_websocket(endpoint, websocket, middleware=[telemetry])
 
-    router = RpcRouter()
+    router = CanonWebSocketRouter()
     router.mount(endpoint, handler=handler)
     web = FastAPI()
     web.include_router(router)
@@ -773,7 +781,7 @@ def test_custom_handler_peer_disconnect_keeps_connection_span_successful(provide
         await websocket.send_text("ready")
         await websocket.receive_text()
 
-    router = RpcRouter(
+    router = CanonWebSocketRouter(
         middleware=[
             OpenTelemetry(
                 tracer_provider=tracer, meter_provider=meter, connection_spans=True

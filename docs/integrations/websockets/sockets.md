@@ -26,7 +26,7 @@ message, in order:
 ```python
 from pydantic import BaseModel, ConfigDict
 
-from fastapi_canon.integrations.websockets import RpcChannel, RpcRouter
+from fastapi_canon.integrations.websockets import RpcChannel, CanonWebSocketRouter
 
 
 class Ping(BaseModel):
@@ -46,7 +46,7 @@ async def ping(message: Ping) -> Pong:
     return Pong(value=message.value + 1)
 
 
-service = RpcRouter()
+service = CanonWebSocketRouter()
 service.socket("/messages/ping", ping)
 ```
 
@@ -178,7 +178,7 @@ from fastapi_canon.integrations.websockets import (
     RpcErrorBinding,
     RpcSocket,
     RpcRejection,
-    RpcRouter,
+    CanonWebSocketRouter,
 )
 
 
@@ -215,7 +215,7 @@ async def cdp(socket: Inject[RpcSocket], browsers: Inject[BrowserService]) -> No
             forwarding.cancel()
 
 
-app = RpcRouter()
+app = CanonWebSocketRouter()
 app.socket("/browser/cdp", cdp)
 ```
 
@@ -225,7 +225,7 @@ mounted path becomes its own WebSocket endpoint. Handler parameters without
 `Inject[...]` are path variables, validated before the handshake is accepted,
 exactly as for [binary streams](streams.md#path-variables).
 
-`RpcRouter.socket()` mounts both kinds of WebSocket endpoint. With
+`CanonWebSocketRouter.socket()` mounts both kinds of WebSocket endpoint. With
 `channels=...` it serves rpckit's managed JSON-RPC protocol. With a handler
 decorated by `@channel.socket()` it serves a socket whose messages belong to
 the handler. JSON-RPC-only options such as `error_mapper=`, `path_model=`, and
@@ -351,18 +351,18 @@ close with `socket.close()` also cancels the handler at its next `await`.
 
 ## FastAPI and dependencies
 
-Socket endpoints register directly on `RpcRouter`. The route's context function, `rejects=`, rejections,
+Socket endpoints register directly on `CanonWebSocketRouter`. The route's context function, `rejects=`, rejections,
 middleware, and a Dishka resolver apply unchanged:
 
 ```python
-router = RpcRouter(context=open_session, resolver=Dishka())
+router = CanonWebSocketRouter(context=open_session, resolver=Dishka())
 router.socket("/browser/cdp", cdp)
 ```
 
 Connection middleware sees sockets as connections. Every
 message increments the `stream_frame_sent` and `stream_frame_received`
-callbacks, so the OpenTelemetry `fastapi_canon.integrations.websockets.stream.frames` and
-`fastapi_canon.integrations.websockets.stream.bytes` counters include them. Sockets do not open a
+callbacks, so the OpenTelemetry `rpckit.stream.frames` and
+`rpckit.stream.bytes` counters include them. Sockets do not open a
 `stream` middleware scope.
 
 To test a socket without a server, use `RpcTestClient` with
