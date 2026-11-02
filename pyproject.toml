@@ -22,7 +22,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-otel = ["fastapi>=0.143,<1", "opentelemetry-api>=1.40,<2"]
+otel = [
+    "fastapi>=0.143,<1",
+    "opentelemetry-api>=1.40,<2",
+    "opentelemetry-instrumentation>=0.61b0,<1",
+]
 sse = ["fastapi>=0.143.3,<1", "pydantic>=2.11.2,<3"]
 websockets = [
     "pydantic>=2.11,<3",

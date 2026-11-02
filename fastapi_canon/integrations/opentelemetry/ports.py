@@ -11,6 +11,7 @@ from dishka import Provider
 
 try:
     from opentelemetry import metrics, trace
+    from opentelemetry.instrumentation.utils import is_instrumentation_enabled
     from opentelemetry.trace import SpanKind, StatusCode
 except ModuleNotFoundError as exc:
     raise ModuleNotFoundError(
@@ -83,7 +84,7 @@ class _Observer:
         @wraps(method)
         async def call(proxy: _InstrumentedProxy, *args: Any, **kwargs: Any) -> Any:
             target = getattr(proxy._instance, name)
-            if excluded.get():
+            if excluded.get() or not is_instrumentation_enabled():
                 return await target(*args, **kwargs)
             attributes = {**registered, "canon.adapter": type(proxy._instance).__name__}
             started = perf_counter()
