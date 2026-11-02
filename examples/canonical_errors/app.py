@@ -89,7 +89,7 @@ feature = Feature(name="projects", routers=[http, streams, websockets])
 
 
 def create_app() -> FastAPI:
-    return Composition(feature).apply(FastAPI())
+    return Composition(features=(feature,)).apply(FastAPI())
 
 
 app = create_app()

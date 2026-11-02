@@ -56,7 +56,7 @@ def test_validate_openapi_contracts_runs_installed_contract_checks() -> None:
 
 def test_composition_validate_requires_and_validates_its_application() -> None:
     composition = Composition(
-        Feature(name="health"),
+        features=(Feature(name="health"),),
         errors=ErrorOptions(type_base="https://example.test/problems"),
     )
     app = FastAPI()

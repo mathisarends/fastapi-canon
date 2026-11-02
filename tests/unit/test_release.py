@@ -95,7 +95,7 @@ def test_release_cli_includes_only_unpublished_predecessor_migrations(
         f"## 0.12.0 - {previous_date}\n\n### Breaking changes\n\n"
         "- Consolidation migration: replace old packages and imports.\n"
         "- [Migration](docs/package-migration.md).\n\n"
-        "## 0.10.0 - 2026-10-25\n\n- Already published changes.\n"
+        "## 0.11.0 - 2026-10-25\n\n- Already published changes.\n"
     )
     changelog.write_text(source, encoding="utf-8")
     report = release_repo / "dist/report/release.json"

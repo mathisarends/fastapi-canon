@@ -82,11 +82,13 @@ async def test_http_request_shares_configuration_exclusions_and_resource_lifetim
     try:
         with SpanCapture() as capture:
             app = Composition(
-                Feature(
-                    name="resources",
-                    providers=[Dependencies],
-                    routers=[router],
-                    instrumentation=instrument(Service),
+                features=(
+                    Feature(
+                        name="resources",
+                        providers=[Dependencies],
+                        routers=[router],
+                        instrumentation=instrument(Service),
+                    ),
                 ),
                 telemetry=Telemetry(
                     tracer_provider=capture.provider,

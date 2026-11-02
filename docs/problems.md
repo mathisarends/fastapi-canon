@@ -121,7 +121,7 @@ websockets = APIRouter()
 RpcRoutes(websockets).mount(endpoint)
 
 app = Composition(
-    Feature(name="projects", routers=[http, streams, websockets]),
+    features=(Feature(name="projects", routers=[http, streams, websockets]),),
 ).apply(FastAPI())
 
 contract = service.contract(
@@ -134,7 +134,7 @@ contract = service.contract(
 HTTP and stream routers contribute their catalogs. Mounted RPC channels also
 contribute theirs to the feature. Composition checks conflicts and installs the
 resolved application catalog. A feature-local registry can omit `type_base` and
-let `Composition(..., errors=ErrorOptions(type_base=...))` supply it. Passing
+let `Composition(features=features, errors=ErrorOptions(type_base=...))` supply it. Passing
 `app=app` when creating the RPC contract uses those same resolved type URIs for
 code generation. A standalone RPC contract can use a fully resolved registry.
 

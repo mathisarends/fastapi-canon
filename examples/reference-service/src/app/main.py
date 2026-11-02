@@ -27,7 +27,7 @@ def create_app(  # smelt: ignore[SMT429] -- external API
     app = FastAPI(title="FastAPI Canon reference service")
     app.include_router(health_router)
     composition = Composition(
-        *FEATURES,
+        features=FEATURES,
         router_factory=lambda: CanonRouter(prefix="/api/v1"),
         errors=ErrorOptions(type_base="https://api.example.test/problems"),
         telemetry=telemetry,

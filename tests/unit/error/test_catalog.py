@@ -95,7 +95,7 @@ def test_application_catalog_reuses_composition_resolution() -> None:
     missing = Error(Missing, status=404, code="item_missing", title="Item missing")
     local = ErrorRegistry(errors=[missing])
     app = Composition(
-        Feature(name="items", errors=local),
+        features=(Feature(name="items", errors=local),),
         errors=ErrorOptions(type_base="https://api.example.test/problems"),
     ).apply(FastAPI())
     registry = app_registry(app)

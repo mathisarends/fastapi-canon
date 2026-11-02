@@ -546,7 +546,7 @@ def test_canonical_names_wire_aliases_and_primitive_results(tmp_path: Path) -> N
     service = RpcService()
     endpoint = service.socket("/ws", channels=[channel])
     application = Composition(
-        Feature(name="records", routers=[http_router, streams])
+        features=(Feature(name="records", routers=[http_router, streams]),)
     ).apply(FastAPI())
     inputs = (
         (
@@ -714,9 +714,9 @@ def test_terminal_only_nested_problem_definitions_share_identity(
     streams.stream(
         "/nested", operation_id="nested", tags=["projects"], stream_raises=[missing]
     )(nested)
-    application = Composition(Feature(name="nested", routers=[streams])).apply(
-        FastAPI()
-    )
+    application = Composition(
+        features=(Feature(name="nested", routers=[streams]),)
+    ).apply(FastAPI())
     plan = build_plan(((SourceConfig("api", "openapi"), export_schema(application)),))
     assert (
         sum(

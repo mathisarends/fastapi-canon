@@ -98,11 +98,13 @@ def _verify() -> None:
             exclude=exclude,
         )
         composition = Composition(
-            Feature(
-                name="compatibility",
-                routers=[router],
-                providers=[provider],
-                instrumentation=instrument(Port),
+            features=(
+                Feature(
+                    name="compatibility",
+                    routers=[router],
+                    providers=[provider],
+                    instrumentation=instrument(Port),
+                ),
             ),
             telemetry=options,
         )

@@ -21,6 +21,7 @@ from fastapi_canon.openapi import (
     validate_openapi_contracts,
 )
 from fastapi_canon.policy import RouterPolicy
+from fastapi_canon.request_logging import install_request_logging
 from fastapi_canon.router import CanonRouter
 from fastapi_canon.scopes import _install_scopes
 
@@ -171,15 +172,20 @@ class Composition:
     router_factory: RouterFactory | None
     router_policy: RouterPolicy | None
     telemetry: Telemetry | None
+    request_logging: bool
 
     def __init__(
         self,
-        *features: Feature,
+        *,
+        features: Sequence[Feature] = (),
         errors: ErrorOptions | None = None,
         router_factory: RouterFactory | None = None,
         router_policy: RouterPolicy | None = None,
         telemetry: Telemetry | None = None,
+        request_logging: bool = False,
     ) -> None:
+        _validate_bool(request_logging, "request_logging")
+        object.__setattr__(self, "request_logging", request_logging)
         if telemetry is not None:
             from fastapi_canon.integrations.opentelemetry import Telemetry
 
@@ -231,6 +237,7 @@ class _Installation:
     router_policy_id: int | None
     telemetry: Telemetry | None = field(compare=False)
     telemetry_id: int | None
+    request_logging: bool
     container: AsyncContainer | None = field(compare=False)
 
 
@@ -246,6 +253,7 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         msg = "app must be a FastAPI instance"
         raise FeatureConfigurationError(msg)
     requested = _Installation(
+        request_logging=composition.request_logging,
         telemetry=composition.telemetry,
         telemetry_id=id(composition.telemetry)
         if composition.telemetry is not None
@@ -275,6 +283,8 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         return
 
     telemetry = composition.telemetry
+    if composition.request_logging and app.middleware_stack is not None:
+        raise FeatureConfigurationError("install request logging before the app starts")
     if telemetry is not None:
         telemetry._prepare(app)
     routers = _flatten_routers(composition.features)
@@ -370,7 +380,11 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
             container,
         )
 
+    if composition.request_logging:
+        install_request_logging(app)
+
     completed = _Installation(
+        request_logging=composition.request_logging,
         telemetry=composition.telemetry,
         telemetry_id=id(composition.telemetry)
         if composition.telemetry is not None
@@ -419,6 +433,7 @@ def _validate_applied_composition(app: object, composition: Composition) -> None
         or installed.telemetry_id
         != (id(composition.telemetry) if composition.telemetry is not None else None)
         or installed.errors != composition.errors
+        or installed.request_logging != composition.request_logging
         or installed.router_factory_id != expected_router_factory_id
         or installed.router_policy_id
         != (

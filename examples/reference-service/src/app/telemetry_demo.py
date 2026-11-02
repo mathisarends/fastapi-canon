@@ -1,5 +1,6 @@
-"""Opt-in, application-owned OTLP tracing for the local two-service demo."""
+"""Opt-in, application-owned OTLP traces and logs for the two-service demo."""
 
+import logging
 import os
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
@@ -13,7 +14,10 @@ from fastapi_canon import CanonRouter, Composition, ErrorOptions, Feature
 from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
 from fastapi_canon.integrations.opentelemetry.httpx import instrument_httpx
 from fastapi_canon.integrations.opentelemetry.sqlalchemy import instrument_sqlalchemy
+from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk._logs import LoggerProvider
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -25,12 +29,27 @@ from app.infrastructure.database.provider import DatabaseProvider
 from app.main import FEATURES
 from app.presentation.health import router as health_router
 from app.settings import DatabaseSettings
+from app.telemetry_logging import export_python_logs
+
+logger = logging.getLogger(__name__)
 
 
 def _telemetry(name: str) -> tuple[Telemetry, Lifespan[FastAPI]]:
+    resource = Resource.create({"service.name": name})
     provider = TracerProvider(
-        resource=Resource.create({"service.name": name}),
+        resource=resource,
         sampler=ParentBased(TraceIdRatioBased(1.0)),
+    )
+    logs = LoggerProvider(resource=resource)
+    logs.add_log_record_processor(
+        BatchLogRecordProcessor(
+            OTLPLogExporter(
+                endpoint=os.getenv(
+                    "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
+                    "http://localhost:4318/v1/logs",
+                )
+            )
+        )
     )
     provider.add_span_processor(
         BatchSpanProcessor(
@@ -45,10 +64,12 @@ def _telemetry(name: str) -> tuple[Telemetry, Lifespan[FastAPI]]:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        try:
-            yield
-        finally:
-            provider.shutdown()
+        with export_python_logs(logs):
+            try:
+                yield
+            finally:
+                provider.shutdown()
+                logs.shutdown()
 
     return (
         Telemetry(
@@ -100,10 +121,13 @@ def create_tasks_app() -> FastAPI:  # smelt: ignore[SMT429] -- external API
     app = FastAPI(title="Canon telemetry: tasks", lifespan=lifecycle)
     app.include_router(health_router)
     Composition(
-        Feature(name="database", providers=(TracedDatabaseProvider,)),
-        *FEATURES[1:],
-        _notification_feature(),
+        features=(
+            Feature(name="database", providers=(TracedDatabaseProvider,)),
+            *FEATURES[1:],
+            _notification_feature(),
+        ),
         telemetry=options,
+        request_logging=True,
         errors=ErrorOptions(type_base="https://api.example.test/problems"),
         router_factory=lambda: CanonRouter(prefix="/api/v1"),
     ).apply(app)
@@ -117,11 +141,13 @@ def create_notifier_app() -> FastAPI:  # smelt: ignore[SMT429] -- external API
 
     @router.post("/notifications")
     async def notify() -> dict[str, str]:
+        logger.info("Notification received")
         return {"status": "received"}
 
     return Composition(
-        Feature(name="notifications", routers=(router,)),
+        features=(Feature(name="notifications", routers=(router,)),),
         telemetry=options,
+        request_logging=True,
     ).apply(FastAPI(title="Canon telemetry: notifier", lifespan=lifecycle))
 
 
@@ -144,6 +170,7 @@ def _notification_feature() -> Feature:
     @router.post("/demo/notify")
     @inject
     async def notify(gateway: FromDishka[NotificationGateway]) -> dict[str, str]:
+        logger.info("Sending notification")
         await gateway.send()
         return {"status": "sent"}
 

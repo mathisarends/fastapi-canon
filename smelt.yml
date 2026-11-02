@@ -48,6 +48,8 @@ architecture:
     fastapi_canon.feature: composition
     fastapi_canon.scopes: composition
     fastapi_canon.integrations.database: persistence
+
+    fastapi_canon.request_logging: composition
     fastapi_canon._version: values
     fastapi_canon.policy: routing
     fastapi_canon.error.catalog: adapters

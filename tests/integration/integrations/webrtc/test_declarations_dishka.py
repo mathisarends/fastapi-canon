@@ -103,9 +103,9 @@ def application() -> tuple[FastAPI, WebRtcRouter, Resources]:
             tracks=[resource.track], on_message={"chat": on_message}, on_close=on_close
         )
 
-    app = Composition(Feature(name="rtc", routers=[rtc], providers=[resources])).apply(
-        FastAPI()
-    )
+    app = Composition(
+        features=(Feature(name="rtc", routers=[rtc], providers=[resources]),)
+    ).apply(FastAPI())
     return app, rtc, resources
 
 

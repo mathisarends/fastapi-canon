@@ -40,7 +40,7 @@ tasks = Feature(
     ),
 )
 app = Composition(
-    tasks,
+    features=(tasks,),
     telemetry=Telemetry(
         tracer_provider=tracer_provider,
         exclude=lambda scope: scope["path"] in {"/health", "/ready"},
@@ -159,7 +159,7 @@ instance at `Scope.APP`, in every contributed Dishka component. Infrastructure
 providers can depend directly on `Telemetry`. Composition reserves that binding;
 remove custom bindings of the same type rather than overriding it.
 
-With `Composition(..., telemetry=None)`, infrastructure receives
+With `Composition(features=features, telemetry=None)`, infrastructure receives
 `Telemetry.disabled()`: tracing, metrics and logs are off, and the adapters below
 leave resources untouched without importing their optional runtimes. This does
 not disable an independently configured FastAPI pipeline. Without contributed
@@ -324,7 +324,7 @@ RPC is explicit because Canon does not own `RpcService` instances:
 ```python
 telemetry = Telemetry(tracer_provider=tracer_provider, meter_provider=meter_provider)
 rpc = RpcService(middleware=(telemetry.rpc_middleware(),))
-app = Composition(tasks, telemetry=telemetry).apply(FastAPI())
+app = Composition(features=(tasks,), telemetry=telemetry).apply(FastAPI())
 ```
 
 Select `fastapi-canon[websockets,otel]` to enable the bundled middleware. The
@@ -341,6 +341,12 @@ does not apply. Prefer one HTTP instrumentation owner. SSE receives FastAPI's
 normal HTTP tracing; dedicated SSE event instrumentation is outside this API.
 
 ## Testing, logs and sampling
+
+`Composition(features=features, request_logging=True)` enables structured HTTP completion and
+abort records on `fastapi_canon.access`, independently of `telemetry` and
+`Telemetry.logs`. Records carry the HTTP server span's IDs when available.
+See [request logging](request-logging.md) for fields, streaming semantics and the
+Uvicorn setup for one traceback per propagated exception.
 
 Applications can test traces with the OpenTelemetry SDK’s in-memory span exporter
 and a dedicated `TracerProvider`. Pass the provider to `Telemetry` and shut it down

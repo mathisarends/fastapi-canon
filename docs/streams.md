@@ -128,7 +128,7 @@ async def events(
 
 
 feature = Feature(name="runs", routers=[router], providers=[RunProvider])
-composition = Composition(feature)
+composition = Composition(features=(feature,))
 app = composition.apply(FastAPI())
 composition.validate(app)
 ```

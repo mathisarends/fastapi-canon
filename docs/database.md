@@ -41,7 +41,7 @@ special characters. Other drivers fail explicitly.
 from fastapi import FastAPI
 from fastapi_canon import Composition
 
-app = Composition(database.feature, orders_feature).apply(FastAPI())
+app = Composition(features=[database.feature, orders_feature]).apply(FastAPI())
 ```
 
 Each application gets its own lazy engine and pool. Composition closes it after

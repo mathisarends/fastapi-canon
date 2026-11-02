@@ -6,6 +6,19 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Breaking changes
 
+- `Composition` now accepts features only through the keyword-only
+  `features: Sequence[Feature] = ()` option. Replace `Composition(tasks, notifier)`
+  with `Composition(features=(tasks, notifier))`, or pass a list with
+  `Composition(features=[tasks, notifier])`. Replace `Composition(*features, ...)`
+  with `Composition(features=features, ...)`. Omission still means no features;
+  declaration order, duplicate checks and the immutable tuple snapshot are
+  preserved. Positional feature arguments now raise `TypeError`.
+- Unhandled HTTP exceptions are diagnosed by the ASGI server after Starlette
+  sends Canon's safe 500 response. Applications relying on the additional
+  `fastapi_canon.error.handlers` traceback should retain `uvicorn.error` and route
+  it through one application log handler. Use `Telemetry(logs=False)` when that
+  server diagnostic should be the only exception log. Internally consumed
+  response-validation and rendering failures still retain their Canon diagnostic.
 - Composition-owned HTTP dependency scopes now end after response validation and
   before the response is sent. Remove application dependencies that duplicate
   this scope management. Streams and background tasks must open their own short
@@ -13,7 +26,16 @@ All notable changes to `fastapi-canon` are documented in this file.
   FastAPI version is now 0.121 for function-scoped dependency cleanup. WebSocket
   session/request scope behavior is unchanged.
 
+
 ### Added
+
+- `Composition(features=features, request_logging=True)` emits structured completion/abort
+  records on `fastapi_canon.access`, including route templates, sent status,
+  streaming response duration, Canon problem codes and available server-span IDs.
+  It defaults to disabled and works without the Canon OTel extra.
+- The reference telemetry demo exports ordinary Python service logs and request
+  records through one OTLP path to Loki, with provisioned Loki/Tempo links in both
+  directions for the distributed tasks-to-notifier request.
 
 - Optional `Database` integration with SQLite/aiosqlite and PostgreSQL/asyncpg,
   app-owned engines, request-owned sessions, commit on successful scope exit,

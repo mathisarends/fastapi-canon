@@ -55,7 +55,7 @@ def application(*, dependency: bool, declared: bool = True) -> FastAPI:
         raise Missing()
 
     return Composition(
-        Feature(name="browser", routers=[router]),
+        features=(Feature(name="browser", routers=[router]),),
         errors=ErrorOptions(type_base="https://example.test/problems"),
     ).apply(FastAPI())
 
@@ -104,7 +104,7 @@ def test_shared_local_contracts_use_composed_registry_and_effective_path() -> No
     with pytest.raises(ErrorConfigurationError, match="resolved problem type"):
         build_contract(nested.routes)
     app = Composition(
-        Feature(name="browser", routers=[parent], errors=feature.errors),
+        features=(Feature(name="browser", routers=[parent], errors=feature.errors),),
         errors=ErrorOptions(type_base="https://example.test/problems"),
     ).apply(FastAPI())
     contract = build_contract(app)
@@ -141,7 +141,7 @@ def test_router_policy_applies_to_webrtc_admission_and_contract() -> None:
         return Session()
 
     app = Composition(
-        Feature(name="video", routers=[router]),
+        features=(Feature(name="video", routers=[router]),),
         errors=ErrorOptions(type_base="https://example.test/problems"),
     ).apply(FastAPI())
     errors = build_contract(app)["sessions"][0]["admission_errors"]
@@ -184,7 +184,7 @@ def test_error_after_accept_uses_protocol_close() -> None:
         return Session()
 
     app = Composition(
-        Feature(name="browser", routers=[router]),
+        features=(Feature(name="browser", routers=[router]),),
         errors=ErrorOptions(type_base="https://example.test/problems"),
     ).apply(FastAPI())
     with TestClient(app) as client, client.websocket_connect("/s") as socket:
@@ -218,7 +218,9 @@ def test_embedded_problem_schema_preserves_nested_extension_references() -> None
     async def video() -> Session:
         return Session()
 
-    app = Composition(Feature(name="browser", routers=[router])).apply(FastAPI())
+    app = Composition(features=(Feature(name="browser", routers=[router]),)).apply(
+        FastAPI()
+    )
     contract = build_contract(app)
     schema = contract["sessions"][0]["admission_errors"][0]["schema"]
     assert schema["$defs"]

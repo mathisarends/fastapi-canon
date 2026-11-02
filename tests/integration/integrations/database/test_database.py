@@ -68,23 +68,25 @@ async def test_http_scope_finishes_before_response_start(
         return [outcome]
 
     app = Composition(
-        database.feature,
-        Feature(
-            name="items",
-            routers=[router],
-            errors=ErrorRegistry(
-                type_base="urn:test:problem",
-                errors=[
-                    Error(
-                        Rejected,
-                        type="urn:test:rejected",
-                        code="rejected",
-                        title="Rejected",
-                        status=409,
-                    )
-                ],
+        features=[
+            database.feature,
+            Feature(
+                name="items",
+                routers=[router],
+                errors=ErrorRegistry(
+                    type_base="urn:test:problem",
+                    errors=[
+                        Error(
+                            Rejected,
+                            type="urn:test:rejected",
+                            code="rejected",
+                            title="Rejected",
+                            status=409,
+                        )
+                    ],
+                ),
             ),
-        ),
+        ],
     ).apply(FastAPI())
     at_response_start: list[list[str]] = []
     checked_out = 0
@@ -147,7 +149,7 @@ async def test_existing_and_future_app_routes_share_the_early_scope(
         await session.execute(insert(items).values(name="before"))
         return "before"
 
-    Composition(database.feature).apply(app)
+    Composition(features=[database.feature]).apply(app)
 
     @app.post("/after")
     @inject
@@ -183,9 +185,9 @@ async def test_cancellation_rolls_back_the_request(
         await session.execute(insert(items).values(name="cancelled"))
         raise asyncio.CancelledError()
 
-    app = Composition(database.feature, Feature(name="cancel", routers=[router])).apply(
-        FastAPI()
-    )
+    app = Composition(
+        features=[database.feature, Feature(name="cancel", routers=[router])]
+    ).apply(FastAPI())
     async with asyncio.timeout(15), app.router.lifespan_context(app):
         async with AsyncClient(
             transport=ASGITransport(app), base_url="http://test"
@@ -213,9 +215,9 @@ async def test_stream_starts_after_the_handler_session_is_closed(
 
         return StreamingResponse(chunks())
 
-    app = Composition(database.feature, Feature(name="stream", routers=[router])).apply(
-        FastAPI()
-    )
+    app = Composition(
+        features=[database.feature, Feature(name="stream", routers=[router])]
+    ).apply(FastAPI())
     async with (
         asyncio.timeout(15),
         app.router.lifespan_context(app),
@@ -230,7 +232,7 @@ async def test_sqlmodel_and_sqlalchemy_inject_the_same_session(tmp_path: Path) -
     database = Database(
         url=f"sqlite:///{tmp_path / 'model.db'}", session_class=ModelSession
     )
-    app = Composition(database.feature).apply(FastAPI())
+    app = Composition(features=[database.feature]).apply(FastAPI())
     async with (
         asyncio.timeout(10),
         app.router.lifespan_context(app),
@@ -275,7 +277,7 @@ async def test_service_scopes_use_fresh_sessions_and_commit_before_returning(
             return ServiceScope(container, Writer)
 
     app = Composition(
-        database.feature, Feature(name="services", providers=[Services])
+        features=[database.feature, Feature(name="services", providers=[Services])]
     ).apply(FastAPI())
     sessions: list[AsyncSession] = []
     async with asyncio.timeout(15), app.router.lifespan_context(app):

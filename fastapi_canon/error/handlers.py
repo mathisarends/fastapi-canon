@@ -174,10 +174,8 @@ def _response_validation_handler(registry: ErrorCatalog) -> ExceptionHandler:
 
 def _unhandled_handler(registry: ErrorCatalog) -> ExceptionHandler:
     async def handler(request: Request, exception: Exception) -> Response:
-        logger.error(
-            "Unhandled application exception",
-            exc_info=(type(exception), exception, exception.__traceback__),
-        )
+        # ServerErrorMiddleware re-raises after sending this response; Uvicorn
+        # owns that traceback. Only exceptions consumed here need a local log.
         return _internal_error_response(registry, request)
 
     return cast(ExceptionHandler, handler)
@@ -231,15 +229,18 @@ def _problem_response(
     *,
     headers: Mapping[str, str] | None = None,
 ) -> Response:
-    enrich = getattr(request.app.state, "_canon_problem_telemetry", None)
-    if enrich is not None:
-        enrich(request.scope, str(payload["code"]), status)
-    return JSONResponse(
+    response = JSONResponse(
         payload,
         status_code=status,
         headers=headers,
         media_type="application/problem+json",
     )
+    request.scope["_canon_problem_code"] = str(payload["code"])
+    request.scope["_canon_problem_status"] = status
+    enrich = getattr(request.app.state, "_canon_problem_telemetry", None)
+    if enrich is not None:
+        enrich(request.scope, str(payload["code"]), status)
+    return response
 
 
 def _ensure_handler_available(app: FastAPI, exception_class: type[Exception]) -> None:

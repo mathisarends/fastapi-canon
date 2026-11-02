@@ -53,6 +53,8 @@ async def create_item(item: Item, item_service: FromDishka[ItemService]) -> Item
 
 
 app = Composition(
-    database.feature,
-    Feature(name="items", routers=[router], providers=[ItemProvider]),
+    features=[
+        database.feature,
+        Feature(name="items", routers=[router], providers=[ItemProvider]),
+    ],
 ).apply(FastAPI())
