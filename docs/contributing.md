@@ -14,6 +14,7 @@ pnpm install --frozen-lockfile --ignore-scripts
 uv run --locked python scripts/check.py all
 uv run --locked python scripts/check_distributions.py
 uv run --locked python scripts/check_distributions.py --python 3.12 --dependencies minimum
+uv run --frozen python scripts/check_telemetry_compatibility.py --python 3.12
 uv run --locked python scripts/check_streams_artifacts.py
 uv run --locked python scripts/check_webrtc_artifacts.py
 ```
@@ -44,7 +45,7 @@ Use `pnpm typecheck` and `pnpm test:coverage` for all TypeScript gates, or
 `pnpm run typecheck:sse` for a focused check. Regenerate committed clients through
 their generators before checking drift; never edit generated clients directly.
 
-`check_distributions.py` builds wheels/sdists and tests eleven feature/tool
+`check_distributions.py` builds wheels/sdists and tests thirteen feature/tool
 combinations of the single Canon wheel in fresh environments without source-tree
 overrides. Current and minimum dependency profiles are separate checks.
 The current profile also installs the development-only reference service and

@@ -1,5 +1,21 @@
 # Compatibility
 
+## Native telemetry bridge
+
+The unreleased 0.12.0 bridge is exercised from built wheels on Python 3.12 against
+FastAPI 0.143.0 and the locked 0.143.3 version, with actual SDK span exporters and
+metric readers. The check covers the shared private configuration dictionary,
+disabled auto-configuration, provider identity, repeated composition, exclusion,
+HTTP and port spans/metrics, and borrowed provider ownership. CI runs the same
+minimum/locked checks; this does not establish support for every future FastAPI
+version. Missing native configuration fields are rejected before installation.
+
+```console
+uv run --frozen python scripts/check_telemetry_compatibility.py --python 3.12
+```
+
+Use `--fastapi VERSION` repeatedly to check additional releases explicitly.
+
 ## Package versions
 
 | Package | Published |

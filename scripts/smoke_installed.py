@@ -74,6 +74,7 @@ def _main() -> None:
         routers.append(http)
         _canon_check()
         _observation_check(enabled="--otel" in selected)
+        _resource_telemetry_check(selected)
     if "sse" in selected:
         from fastapi_canon.integrations.sse import StreamRouter
 
@@ -192,6 +193,43 @@ def _main() -> None:
             )
         assert counter.closed
     print(f"Installed artifact checks passed: {', '.join(sorted(selected))}")
+
+
+def _resource_telemetry_check(selected: set[str]) -> None:
+    from fastapi_canon.integrations.opentelemetry import Telemetry
+
+    if "--httpx" in selected:
+        import httpx
+        from fastapi_canon.integrations.opentelemetry.httpx import instrument_httpx
+
+        def application(environ, start_response):
+            start_response("200 OK", [("Content-Type", "text/plain")])
+            return [b"ok"]
+
+        with httpx.Client(
+            transport=httpx.WSGITransport(app=application), base_url="http://test"
+        ) as client:
+            with instrument_httpx(client, Telemetry()):
+                assert client.get("/").text == "ok"
+            assert not client.is_closed
+            assert client.get("/").status_code == 200
+    if "--sqlalchemy" in selected:
+        from fastapi_canon.integrations.opentelemetry.sqlalchemy import (
+            instrument_sqlalchemy,
+        )
+        from sqlalchemy import create_engine, text
+
+        engine = create_engine("sqlite://")
+        try:
+            with (
+                instrument_sqlalchemy(engine, Telemetry()),
+                engine.connect() as connection,
+            ):
+                assert connection.scalar(text("select 1")) == 1
+            with engine.connect() as connection:
+                assert connection.scalar(text("select 2")) == 2
+        finally:
+            engine.dispose()
 
 
 def _observation_check(*, enabled: bool) -> None:

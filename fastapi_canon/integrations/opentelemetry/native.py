@@ -19,12 +19,30 @@ from fastapi_canon.error.types import FeatureConfigurationError
 from fastapi_canon.integrations.opentelemetry.declarations import Telemetry
 from fastapi_canon.integrations.opentelemetry.ports import excluded
 
+_CONFIGURATION_FIELDS = frozenset(
+    {
+        "auto_configure",
+        "tracing",
+        "metrics",
+        "logs",
+        "operation_spans",
+        "exclude",
+        "tracer_provider",
+        "meter_provider",
+        "logger_provider",
+    }
+)
+
 
 def validate_app(app: FastAPI) -> None:
     installed = tuple(int(part) for part in version("fastapi").split(".")[:2])
     if installed < (0, 143) or not isinstance(getattr(app, "_telemetry", None), dict):
         raise FeatureConfigurationError(
             "Canon telemetry requires FastAPI >=0.143; core still supports FastAPI >=0.115"
+        )
+    if not _CONFIGURATION_FIELDS.issubset(app._telemetry):
+        raise FeatureConfigurationError(
+            "unsupported FastAPI telemetry configuration; the native telemetry fields changed"
         )
     if app.middleware_stack is not None:
         raise FeatureConfigurationError("install telemetry before the app starts")

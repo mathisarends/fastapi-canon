@@ -48,6 +48,9 @@ jobs:
       - run: uv sync --locked --all-groups --python ${{ matrix.python }}
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: uv run --locked python scripts/check.py all
+      - if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
+        name: Native telemetry bridge against minimum and locked FastAPI
+        run: uv run --locked python scripts/check_telemetry_compatibility.py --python 3.12
       - if: matrix.os == 'ubuntu-latest' && matrix.python == '3.14'
         name: WebRTC sessions in Chromium
         run: |

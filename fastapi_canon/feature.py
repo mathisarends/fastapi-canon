@@ -324,7 +324,7 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
             *providers,
             *_instrumentation_providers(instrumentation, telemetry),
         )
-    container = _make_container(providers)
+    container = _make_container(providers, telemetry)
     policy_operations = _validate_error_installation(
         app,
         installed_routers,
@@ -686,9 +686,34 @@ def _merge_errors(
         raise FeatureConfigurationError(msg) from error
 
 
-def _make_container(providers: tuple[Provider, ...]) -> AsyncContainer | None:
+def _make_container(
+    providers: tuple[Provider, ...], telemetry: Telemetry | None
+) -> AsyncContainer | None:
     if not providers:
         return None
+    from fastapi_canon.integrations.opentelemetry import Telemetry
+
+    for provider in providers:
+        if (
+            any(
+                factory.provides.type_hint is Telemetry
+                for factory in provider.factories
+            )
+            or any(alias.provides.type_hint is Telemetry for alias in provider.aliases)
+            or any(
+                variable.provides.type_hint is Telemetry
+                for variable in provider.context_vars
+            )
+        ):
+            raise FeatureConfigurationError(
+                "Telemetry is reserved by Composition; remove the custom binding"
+            )
+    options = telemetry if telemetry is not None else Telemetry.disabled()
+    components = dict.fromkeys(provider.component for provider in providers)
+    providers = (
+        *providers,
+        *(options.provider(component=component) for component in components),
+    )
     try:
         return make_async_container(*providers)
     except DishkaError as error:

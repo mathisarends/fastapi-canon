@@ -107,6 +107,19 @@ class Telemetry:
         if self.exclude is not None and not callable(self.exclude):
             raise FeatureConfigurationError("exclude must be callable or None")
 
+    @classmethod
+    def disabled(cls) -> Telemetry:
+        """Return configuration for uninstrumented infrastructure, without OTEL imports."""
+        return cls(tracing=False, metrics=False, logs=False, port_spans=False)
+
+    def provider(self, *, component: str = "") -> Provider:
+        """Bind this borrowed configuration in a standalone Dishka container."""
+        from dishka import Provider, Scope
+
+        provider = Provider(component=component)
+        provider.provide(lambda: self, provides=Telemetry, scope=Scope.APP)
+        return provider
+
     def rpc_middleware(self) -> OpenTelemetry:
         """Create the WebSocket middleware explicitly, forwarding the same providers.
 

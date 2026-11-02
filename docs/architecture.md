@@ -40,6 +40,12 @@ has its own role and must not import sibling transports or eagerly load optional
 engines. Generators may read protocol contracts. Repository scripts sit outside
 the runtime package and may orchestrate its supported integrations.
 
+Telemetry declarations remain importable without optional runtimes. Resource
+adapters live in explicit `integrations.opentelemetry.httpx` and `.sqlalchemy`
+modules so composition does not transitively depend on resource libraries through
+the declaration facade. The telemetry layer explicitly allows SQLAlchemy for its
+opt-in engine event adapter; core composition stays independent.
+
 The executable dependency map and source inventory live in `smelt.yml`. Read
 [architecture guardrails](architecture-guardrails.md) for the individual rules,
 exceptions and test-quality requirements, and [public namespaces](canon.md) for
