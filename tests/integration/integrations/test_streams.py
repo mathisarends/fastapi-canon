@@ -11,7 +11,7 @@ from typing import Any
 
 import httpx
 import pytest
-from dishka import Provider, Scope, provide
+from dishka import Scope, provide
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from starlette.types import Message, Receive, Send
@@ -266,7 +266,7 @@ def test_http_method_enum_supports_multiple_native_stream_methods() -> None:
 
 
 @pytest.mark.parametrize("method", [HTTPMethod.GET, HTTPMethod.POST])
-def test_dishka_request_service_spans_preconditions_and_stream(
+def test_stream_service_uses_independent_scope_after_http_cleanup(
     method: HTTPMethod,
 ) -> None:
     calls: list[str] = []
@@ -289,8 +289,8 @@ def test_dishka_request_service_spans_preconditions_and_stream(
             assert not self.closed
             calls.append("stream done")
 
-    class TrackedRunProvider(Provider):
-        @provide(scope=Scope.REQUEST)
+    class TrackedRunProvider(RunProvider):
+        @provide(scope=Scope.REQUEST, override=True)
         async def run_service(self) -> AsyncIterator[RunService]:
             service = TrackedRunService()
             calls.append("service open")
@@ -317,11 +317,17 @@ def test_dishka_request_service_spans_preconditions_and_stream(
             method, "/runs/1/events", headers=AUTH, json={"steps": 2}
         )
         assert success.status_code == 200
-        assert calls[:2] == ["service open", "check"]
-        assert calls.count("service open") == 1
-        assert calls.index("check") < calls.index("HTTP 200")
-        assert calls.index("check") < calls.index("stream")
-        assert calls[-2:] == ["stream done", "service close"]
+        assert [call for call in calls if not call.startswith("HTTP ")] == [
+            "service open",
+            "check",
+            "service close",
+            "service open",
+            "stream",
+            "stream done",
+            "service close",
+        ]
+        assert calls.count("HTTP 200") == 1
+        assert calls.index("service close") < calls.index("HTTP 200")
         calls.clear()
         missing = client.request(
             method, "/runs/0/events", headers=AUTH, json={"steps": 2}
@@ -329,7 +335,7 @@ def test_dishka_request_service_spans_preconditions_and_stream(
         assert missing.status_code == 404
         assert missing.headers["content-type"] == "application/problem+json"
         assert missing.json()["code"] == "run_not_found"
-        assert calls == ["service open", "check", "HTTP 404", "service close"]
+        assert calls == ["service open", "check", "service close", "HTTP 404"]
 
 
 def test_compilation_preserves_entire_native_sse_contract() -> None:

@@ -6,6 +6,7 @@ __pycache__/
 .smelt_cache/
 .venv/
 *.db
+*.sqlite3
 .uv-cache/
 dist/
 node_modules/

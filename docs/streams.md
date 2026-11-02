@@ -25,12 +25,19 @@ Save this as `app.py` and run `uvicorn app:app` with Uvicorn installed:
 from collections.abc import AsyncIterator
 from typing import Annotated
 
-from dishka import FromDishka, Provider, Scope, provide
+from dishka import AsyncContainer, FromDishka, Provider, Scope, provide
 from dishka.integrations.fastapi import inject
 from fastapi import Depends, FastAPI, Header
 from pydantic import BaseModel
 
-from fastapi_canon import HTTPMethod, Composition, Error, ErrorRegistry, Feature
+from fastapi_canon import (
+    HTTPMethod,
+    Composition,
+    Error,
+    ErrorRegistry,
+    Feature,
+    ServiceScope,
+)
 from fastapi_canon.integrations.sse import CanonStreamRouter
 
 
@@ -61,6 +68,10 @@ class RunProvider(Provider):
     @provide(scope=Scope.REQUEST)
     def run_service(self) -> RunService:
         return RunService()
+
+    @provide(scope=Scope.APP)
+    def run_scope(self, container: AsyncContainer) -> ServiceScope[RunService]:
+        return ServiceScope(container, RunService)
 
 
 authentication_required = Error(
@@ -107,8 +118,12 @@ router = CanonStreamRouter(
     operation_id="run_events",
 )
 @inject
-async def events(run_id: str, runs: FromDishka[RunService]) -> AsyncIterator[RunEvent]:
-    async for event in runs.events(run_id):
+async def events(
+    run_id: str, runs: FromDishka[ServiceScope[RunService]]
+) -> AsyncIterator[RunEvent]:
+    async with runs() as service:
+        snapshot = [event async for event in service.events(run_id)]
+    for event in snapshot:
         yield event
 
 
@@ -131,10 +146,12 @@ install its FastAPI middleware, and manage shutdown. No separate
 `make_async_container()` or `setup_dishka()` call is needed. Dishka is already
 a canon dependency.
 
-The example injects `RunService` with `FromDishka[RunService]` in both the
-`Depends` precondition and the stream generator. `Scope.REQUEST` gives both
-functions the same service instance for that HTTP request, and keeps it alive
-until the stream finishes. A new request gets a new instance.
+The precondition injects a request-scoped `RunService`. That scope closes before
+the response starts. The generator resolves an APP-scoped `ServiceScope` factory
+and opens a fresh short scope to materialize this finite example's events,
+closing it before yielding frames. For an unbounded stream, fetch short batches
+in separate scopes rather than materializing the entire stream or keeping a
+database session open. APP-scoped services can also be injected directly.
 
 Place `@inject` directly above the function, below `@router.stream(...)`.
 Decorate the dependency function with `@inject` too. Run the resource check in

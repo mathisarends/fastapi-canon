@@ -6,6 +6,11 @@ contracts, exception handlers, and lifespan into one immutable value. The
 application installs an explicitly ordered set of those values at its
 composition root.
 
+Composition closes HTTP dependency scopes after handler/response validation and
+before sending the response. Streams and background work use independent short
+scopes. See [databases and service scopes](database.md) for automatic transactions
+and Alembic migrations.
+
 `CanonRouter` is the canonical API for declaring application routes. It adds
 composable `raises=` and `response=` contracts to FastAPI's familiar route
 decorators. Ordinary `APIRouter` declarations and the lower-level response

@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any
 
 from dishka import AsyncContainer, Provider, make_async_container
 from dishka.exceptions import DishkaError  # type: ignore[attr-defined]  # not exported
-from dishka.integrations.fastapi import setup_dishka
 from fastapi import APIRouter, FastAPI
 from starlette.types import ExceptionHandler, Lifespan
 
@@ -23,6 +22,7 @@ from fastapi_canon.openapi import (
 )
 from fastapi_canon.policy import RouterPolicy
 from fastapi_canon.router import CanonRouter
+from fastapi_canon.scopes import _install_scopes
 
 if TYPE_CHECKING:
     from fastapi_canon.integrations.opentelemetry import Instrumentation, Telemetry
@@ -344,6 +344,8 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
 
         install(app, telemetry)
     original_lifespan = app.router.lifespan_context
+    if container is not None:
+        _install_scopes(app, container)
     for router in installed_routers:
         app.include_router(router)
     for spec in handler_specs:
@@ -359,8 +361,6 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         install_openapi_contracts(app)
     if policy is not None and policy.raises:
         install_policy_contracts(app, policy.raises, policy_operations)
-    if container is not None:
-        setup_dishka(container, app)
     if lifespans or container is not None:
         app.router.lifespan_context = _compose_lifespan(
             original_lifespan,

@@ -12,6 +12,11 @@ historical runs, tags and assets linked below remain in their original repositor
 
 ## Current versions
 
+Source is prepared for **0.13.0**, currently unreleased. It adds optional
+SQLite/PostgreSQL and Alembic integration and closes HTTP dependency scopes
+before sending responses. See [migration steps](../CHANGELOG.md#0130---unreleased).
+The latest published version remains 0.12.0.
+
 Canon **0.12.0** was published on 2026-11-02 from
 [verified source `703fce8`](https://github.com/mathisarends/fastapi_canon/commit/703fce8a769253c604b0e4f1901e69f43aac42b9),
 after [exact-source CI](https://github.com/mathisarends/fastapi_canon/actions/runs/41427274311)
