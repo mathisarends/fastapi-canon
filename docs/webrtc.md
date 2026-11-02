@@ -30,7 +30,7 @@ async def video(browser_id: str) -> Session:
 
 
 app = Composition(
-    Feature(name="browser", routers=[rtc]),
+    features=(Feature(name="browser", routers=[rtc]),),
     errors=ErrorOptions(type_base="https://example.test/problems"),
 ).apply(FastAPI())
 contract = build_contract(app)

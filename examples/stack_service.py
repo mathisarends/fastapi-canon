@@ -78,7 +78,7 @@ def create_app() -> FastAPI:
         routers=[http, streams, dishka_router(rpc)],
         providers=[StackProvider],
     )
-    app = Composition(feature).apply(FastAPI(title="Canon stack example"))
+    app = Composition(features=(feature,)).apply(FastAPI(title="Canon stack example"))
     app.state.rpc_service = rpc
     return app
 

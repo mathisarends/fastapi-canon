@@ -103,7 +103,7 @@ def test_rpc_router_contributes_catalog_and_uses_composition_type_base() -> None
     router = APIRouter()
     RpcRoutes(router).mount(endpoint)
     app = Composition(
-        Feature(name="projects", routers=[router]),
+        features=(Feature(name="projects", routers=[router]),),
         errors=ErrorOptions(type_base="urn:application:problems"),
     ).apply(FastAPI())
     with TestClient(app) as client, client.websocket_connect("/ws") as socket:
@@ -267,7 +267,9 @@ def test_stream_shared_declarations_and_safe_renderer_failures() -> None:
         finally:
             closed.append(True)
 
-    app = Composition(Feature(name="events", routers=[router])).apply(FastAPI())
+    app = Composition(features=(Feature(name="events", routers=[router]),)).apply(
+        FastAPI()
+    )
     response = TestClient(app).get("/events")
     assert closed == [True]
     assert "canon.problem" in response.text and "canon.complete" not in response.text
@@ -295,7 +297,9 @@ async def test_cancelled_server_stream_runs_cleanup_without_terminal_problem() -
         finally:
             closed.append(True)
 
-    app = Composition(Feature(name="events", routers=[router])).apply(FastAPI())
+    app = Composition(features=(Feature(name="events", routers=[router]),)).apply(
+        FastAPI()
+    )
 
     async with asyncio.timeout(15):
         started = asyncio.Event()

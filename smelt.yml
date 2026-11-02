@@ -46,6 +46,7 @@ architecture:
     fastapi_canon.openapi: adapters
     fastapi_canon.router: routing
     fastapi_canon.feature: composition
+    fastapi_canon.request_logging: composition
     fastapi_canon._version: values
     fastapi_canon.policy: routing
     fastapi_canon.error.catalog: adapters

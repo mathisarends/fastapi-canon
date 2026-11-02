@@ -40,6 +40,12 @@ has its own role and must not import sibling transports or eagerly load optional
 engines. Generators may read protocol contracts. Repository scripts sit outside
 the runtime package and may orchestrate its supported integrations.
 
+`request_logging` belongs to composition. It wraps the lazily built middleware
+stack outside the server-error handler, so it can observe the actual 500 response
+and successful streaming sends. HTTP problem handlers publish their code and
+status in the request scope; the logger never parses response bodies. Optional
+trace-context lookup does not load a telemetry SDK or configure process-wide logs.
+
 Telemetry declarations remain importable without optional runtimes. Resource
 adapters live in explicit `integrations.opentelemetry.httpx` and `.sqlalchemy`
 modules so composition does not transitively depend on resource libraries through

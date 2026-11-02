@@ -32,9 +32,13 @@ def test_composition_binds_borrowed_configuration_per_app_and_component() -> Non
         second_options = Telemetry(
             tracer_provider=second.provider, tracing=False, logs=False
         )
-        first_app = Composition(shared, telemetry=first_options).apply(FastAPI())
-        second_app = Composition(shared, telemetry=second_options).apply(FastAPI())
-        disabled = Composition(shared).apply(FastAPI())
+        first_app = Composition(features=(shared,), telemetry=first_options).apply(
+            FastAPI()
+        )
+        second_app = Composition(features=(shared,), telemetry=second_options).apply(
+            FastAPI()
+        )
+        disabled = Composition(features=(shared,)).apply(FastAPI())
 
         async def run() -> None:
             async with (
@@ -84,5 +88,7 @@ def test_standalone_dishka_configuration_is_explicit_and_reusable() -> None:
 def test_composition_rejects_a_second_telemetry_binding() -> None:
     with pytest.raises(FeatureConfigurationError, match="Telemetry is reserved"):
         Composition(
-            Feature(name="duplicate", providers=[Telemetry.disabled().provider()])
+            features=(
+                Feature(name="duplicate", providers=[Telemetry.disabled().provider()]),
+            )
         ).apply(FastAPI())

@@ -106,7 +106,7 @@ async def get_project(project_id: int) -> dict[str, int]:
 
 
 feature = Feature(name="projects", routers=[http])
-composition = Composition(feature)
+composition = Composition(features=(feature,))
 app = composition.apply(FastAPI())
 composition.validate(app)
 ```
@@ -203,7 +203,7 @@ one to install all three routers and expose the OpenRPC source for generation:
 
 ```python
 feature = Feature(name="projects", routers=[http, streams, websockets])
-composition = Composition(feature)
+composition = Composition(features=(feature,))
 app = composition.apply(FastAPI())
 composition.validate(app)
 contract = service.contract(title="Projects", base_url="ws://localhost:8000", app=app)
@@ -361,6 +361,7 @@ CI options.
 | Build WebSocket RPC, subscriptions or sockets | [WebSocket guide index](docs/integrations/websockets/index.md) |
 | Add WebRTC sessions | [WebRTC contracts](docs/webrtc.md) |
 | Add tracing and metrics | [Telemetry](docs/telemetry.md) |
+| Log HTTP responses and correlate traces | [Request logging](docs/request-logging.md) |
 | Upgrade an existing application | [Package migration](docs/package-migration.md), [RPC migration](docs/integrations/websockets/migration.md) |
 | Run a complete application | [Reference service](examples/reference-service/README.md), [HTTP/SSE/RPC example](examples/stack_service.py) |
 | Contribute or prepare a release | [Contributing](docs/contributing.md), [guardrails](docs/architecture-guardrails.md), [compatibility](docs/compatibility.md), [releases](docs/releases.md) |
