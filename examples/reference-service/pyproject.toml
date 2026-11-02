@@ -49,11 +49,12 @@ build-backend = "uv_build"
 module-name = "app"
 
 [tool.pytest.ini_options]
+pythonpath = ["../../tests/fixtures"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 
 [tool.mypy]
-mypy_path = "$MYPY_CONFIG_FILE_DIR/../.."
+mypy_path = "$MYPY_CONFIG_FILE_DIR/../../tests/fixtures"
 python_version = "3.12"
 strict = true
 

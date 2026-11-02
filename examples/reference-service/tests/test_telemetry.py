@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from fastapi_canon.integrations.opentelemetry import Telemetry
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel import SQLModel
-from tests.fixtures.telemetry import SpanCapture
+from telemetry import SpanCapture
 
 import app.features.tasks.infrastructure.models  # noqa: F401
 from app.main import create_app
