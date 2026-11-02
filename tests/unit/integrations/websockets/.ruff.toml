@@ -1,1 +1,1 @@
-extend = "../../../../tooling/websockets.ruff.toml"
+extend = "../../../../fastapi_canon/integrations/websockets/.ruff.toml"

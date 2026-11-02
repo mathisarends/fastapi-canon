@@ -1,1 +1,1 @@
-extend = "../../../../tooling/sse.ruff.toml"
+extend = "../../../../fastapi_canon/integrations/sse/.ruff.toml"

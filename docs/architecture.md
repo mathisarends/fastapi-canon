@@ -10,21 +10,18 @@ fastapi_canon/                  Library and public facades
   integrations/                SSE, WebSockets, WebRTC and telemetry
   codegen/                     Shared SDK planning and generation
   checks/                      Static error-contract analysis
-  testing/                     Public application test support
 tests/
   unit/                        Isolated behavior, including explicit test seams
   integration/                 Real framework and transport interactions
   contract/                    HTTP schemas, protocol contracts and artifacts
-  fixtures/                    Contract snapshots and committed generated SDKs
+  fixtures/                    Shared test support, snapshots and generated SDKs
   typescript/                  Browser SDK runtime and type checks
   browser/                     Real Chromium/WebRTC sessions
 examples/                      Runnable applications and their generated clients
 docs/                          Library, integration and contributor documentation
   integrations/                Detailed transport guides
   history/                     Predecessor changelogs and licenses
-guides/                        Architecture conventions for consuming applications
 scripts/                       Development, distribution and release entrypoints
-tooling/                       Feature-specific static-analysis configurations
 ```
 
 The root owns build metadata, dependency groups, `uv.lock`, the Node tooling
@@ -46,9 +43,7 @@ the runtime package and may orchestrate its supported integrations.
 The executable dependency map and source inventory live in `smelt.yml`. Read
 [architecture guardrails](architecture-guardrails.md) for the individual rules,
 exceptions and test-quality requirements, and [public namespaces](canon.md) for
-consumer imports. Broader design decisions remain in
-[`CANONICALIZATION_DECISIONS.md`](../CANONICALIZATION_DECISIONS.md); verify an API
-exists in this checkout before using it.
+consumer imports.
 
 ## Tests and checks
 
@@ -61,8 +56,8 @@ real collaborators and prohibit mocks. Shared snapshots live under `tests/fixtur
 
 All Python library tests run from the root in one pytest process using importlib
 mode and qualified fixture/example imports. The reference service also has its
-own installed-application test run. Feature-specific type/lint policies remain
-in `tooling/`; this does not create separate package metadata or environments.
+own installed-application test run. Feature-specific type/lint policies live in the root configuration and integration
+directories; this does not create separate package metadata or environments.
 Generated files are updated through their generators and verified for drift.
 
 Run `uv run --frozen smelt context <module-or-path>` before implementation, then

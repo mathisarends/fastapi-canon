@@ -6,7 +6,7 @@ providers, `CanonRouter` declarations, and typed error registries. `Composition`
 owns the Dishka container and its shutdown; the application has no local Feature
 implementation or second container/lifespan manager.
 
-The example defaults to SQLite for convenient local use. Persistent schemas should use Alembic; `app.schema` exists only to bootstrap this disposable example. See [Database migrations](../../guides/migrations.md) for the preferred layout.
+The example defaults to SQLite for convenient local use. Persistent schemas should use Alembic; `app.schema` exists only to bootstrap this disposable example. Use Alembic migrations for persistent deployments.
 
 From the repository root, install the shared environment, then run the example
 from its own directory while explicitly selecting the root project:

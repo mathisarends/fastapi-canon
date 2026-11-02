@@ -163,7 +163,10 @@ def test_union_clients_pass_target_formatting_and_types(
                 "ruff",
                 command,
                 "--config",
-                str(Path(__file__).parents[5] / "tooling/websockets.ruff.toml"),
+                str(
+                    Path(__file__).parents[5]
+                    / "fastapi_canon/integrations/websockets/.ruff.toml"
+                ),
                 *(["--check"] if command == "format" else []),
                 str(python_root),
             ],

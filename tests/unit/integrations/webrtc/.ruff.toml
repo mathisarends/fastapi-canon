@@ -1,1 +1,1 @@
-extend = "../../../../tooling/webrtc.ruff.toml"
+extend = "../../../../fastapi_canon/integrations/webrtc/.ruff.toml"

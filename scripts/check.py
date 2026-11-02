@@ -3,6 +3,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import tomllib
 from pathlib import Path
 
@@ -45,7 +46,10 @@ def _main() -> None:
             _run(_ROOT, "-m", "ruff", "format", "--no-cache", "--check", ".")
             for transport in _TRANSPORTS:
                 source = f"fastapi_canon/integrations/{transport}"
-                config = ("--config", f"tooling/{transport}.ruff.toml")
+                config = (
+                    "--config",
+                    f"fastapi_canon/integrations/{transport}/.ruff.toml",
+                )
                 _run(_ROOT, "-m", "ruff", "check", "--no-cache", *config, source)
                 _run(
                     _ROOT,
@@ -64,7 +68,7 @@ def _main() -> None:
                 "-m",
                 "pyright",
                 "--project",
-                "tooling/sse.pyright.json",
+                "pyproject.toml",
                 "--pythonpath",
                 sys.executable,
             )
@@ -73,7 +77,7 @@ def _main() -> None:
                 "-m",
                 "pylint",
                 "--rcfile",
-                "tooling/sse.toml",
+                "pyproject.toml",
                 "fastapi_canon/integrations/sse",
             )
             _run(_ROOT, "uv", "build", "--out-dir", "dist/typecheck", python=False)
@@ -98,7 +102,7 @@ def _main() -> None:
                 python=False,
             )
             _run(_REFERENCE, "-m", "mypy", "src", "tests")
-            _run(_ROOT, "-m", "mypy", "--config-file", "tooling/webrtc.toml")
+            _check_webrtc_types()
         elif gate == "test":
             _run(
                 _ROOT,
@@ -151,6 +155,38 @@ def _main() -> None:
         elif gate == "browser":
             environment = {**os.environ, "FASTAPI_WEBRTC_PYTHON": sys.executable}
             _run(_ROOT, _pnpm(), "run", "test:browser", python=False, env=environment)
+
+
+def _check_webrtc_types() -> None:
+    # The root mypy profile excludes transport code; this profile checks it.
+    config = """[tool.mypy]
+python_version = "3.12"
+strict = true
+explicit_package_bases = true
+exclude = ["node_modules"]
+pretty = true
+show_error_codes = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = ["av", "av.*"]
+ignore_missing_imports = true
+"""
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "webrtc.toml"
+        path.write_text(config, encoding="utf-8")
+        _run(
+            _ROOT,
+            "-m",
+            "mypy",
+            "--config-file",
+            str(path),
+            "fastapi_canon/integrations/webrtc",
+            "tests/unit/integrations/webrtc",
+            "tests/integration/integrations/webrtc/engine",
+            "tests/contract/integrations/webrtc",
+            "examples/webrtc",
+        )
 
 
 def _pnpm() -> str:

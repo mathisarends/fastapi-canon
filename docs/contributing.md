@@ -31,7 +31,7 @@ uv run --frozen pytest tests/unit/integrations/websockets
 
 `uv run --frozen pytest` runs all unit, integration and contract tests. The
 reference service also runs its own application tests through `check.py test`.
-Feature-specific type/lint settings live under `tooling/`; they do not define
+Feature-specific type/lint settings live in the root and integration directories; they do not define
 additional packages or environments. See [repository architecture](architecture.md)
 for the folder map and dependency boundaries.
 

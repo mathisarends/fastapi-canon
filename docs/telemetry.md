@@ -202,25 +202,10 @@ normal HTTP tracing; dedicated SSE event instrumentation is outside this API.
 
 ## Testing, logs and sampling
 
-Install `opentelemetry-sdk` in the application's test dependencies:
-
-```python
-from fastapi_canon.testing.telemetry import SpanCapture
-
-with SpanCapture() as spans:
-    app = create_app(telemetry=Telemetry(tracer_provider=spans.provider))
-    with TestClient(app) as client:
-        client.post("/tasks/123/completion")
-    spans.assert_tree(
-        "POST /tasks/{task_id}/completion",
-        [("fastapi.endpoint", [("TaskService.complete", ["TaskRepository.save"])])],
-    )
-```
-
-`SpanCapture.one(name)` requires exactly one finished span. `assert_tree` verifies
-direct nesting and sibling order while ignoring unlisted children such as SQL
-spans. `clear()` separates requests; the context manager shuts down only its own
-provider and never changes global state.
+Applications can test traces with the OpenTelemetry SDK’s in-memory span exporter
+and a dedicated `TracerProvider`. Pass the provider to `Telemetry` and shut it down
+after the test. The repository’s [trace test fixture](../tests/fixtures/telemetry.py)
+shows this pattern.
 
 Applications own log correlation via their LoggerProvider/logging handler. Canon
 adds no telemetry log pipeline. FastAPI's exception logs can include messages and

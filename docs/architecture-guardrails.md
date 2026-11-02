@@ -55,7 +55,7 @@ with the error value types rather than depending back on composition.
 
 Use descriptive module names, absolute imports in implementation modules and
 relative imports in package facades, following the
-[import guide](../guides/imports-and-reexports.md). `_version.py` is the explicit
+facade import convention. `_version.py` is the explicit
 exception to the private-module naming rule because release tooling reads that
 file. Internal analysis and socket implementation modules have descriptive names.
 

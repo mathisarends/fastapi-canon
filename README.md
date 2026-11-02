@@ -38,8 +38,6 @@ The generated API follows your domain: `client.projects.get()`,
 | Optional WebRTC and telemetry | Typed media-session contracts and explicit OpenTelemetry instrumentation at the composition boundary. |
 
 The [public API guide](docs/canon.md) maps these responsibilities to imports.
-The [application guides](guides/README.md) give humans and agents the same
-conventions for feature slices, inward dependencies and framework-free domains.
 
 ## Install
 
@@ -354,7 +352,6 @@ CI options.
 | --- | --- |
 | Build a feature with routes, providers and lifespans | [Core API and composition](docs/composition.md) |
 | Choose canonical imports and ownership boundaries | [Public API](docs/canon.md) |
-| Design an application humans and agents can extend | [Architecture](guides/architecture.md), [guide index](guides/README.md) |
 | Map domain errors across HTTP, SSE and RPC | [Shared problems](docs/problems.md) |
 | Check mapping/declaration coverage | [Error checking](docs/error-checking.md) |
 | Generate Python and TypeScript domain SDKs | [Codegen workflow](docs/unified-canon-concept.md) |
@@ -365,7 +362,6 @@ CI options.
 | Upgrade an existing application | [Package migration](docs/package-migration.md), [RPC migration](docs/integrations/websockets/migration.md) |
 | Run a complete application | [Reference service](examples/reference-service/README.md), [HTTP/SSE/RPC example](examples/stack_service.py) |
 | Contribute or prepare a release | [Contributing](docs/contributing.md), [guardrails](docs/architecture-guardrails.md), [compatibility](docs/compatibility.md), [releases](docs/releases.md) |
-| Understand broader design decisions | [Canonicalization record](CANONICALIZATION_DECISIONS.md) |
 
 ## Repository
 
@@ -413,8 +409,7 @@ Node toolchain, without a package workspace.
 | [`tests/`](tests) | Separate unit, integration and contract roots; fixtures, TypeScript and browser suites |
 | [`examples/`](examples) | Runnable applications and their generated clients, including the reference service |
 | [`docs/`](docs) | Library, transport and contributor documentation; predecessor history |
-| [`guides/`](guides) | Architecture conventions for consuming applications |
-| [`scripts/`](scripts), [`tooling/`](tooling) | Development/release entrypoints and scoped analyzer configurations |
+| [`scripts/`](scripts) | Development and release entrypoints |
 
 See [repository architecture](docs/architecture.md) for ownership and dependency
 rules, [contributing](docs/contributing.md) for root commands,

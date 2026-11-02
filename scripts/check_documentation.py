@@ -17,7 +17,7 @@ def _check_documentation(root: Path = _ROOT) -> list[str]:
     ):
         if any(re.split(r"[\[<>=]", value)[0] in legacy for value in dependencies):
             errors.append("Canon dependencies must not install legacy distributions")
-    for folder in ("docs", "examples", "guides"):
+    for folder in ("docs", "examples"):
         for path in (root / folder).rglob("*.md"):
             if (
                 path.name == "CHANGELOG.md"

@@ -28,7 +28,7 @@ from fastapi_canon import (
 )
 from fastapi_canon.error import Error, ErrorRegistry
 from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
-from fastapi_canon.testing.telemetry import SpanCapture
+from tests.fixtures.telemetry import SpanCapture
 
 
 class Missing(Exception):
@@ -710,7 +710,7 @@ def test_globals_set_in_lifespan_are_resolved_lazily() -> None:
         from fastapi.testclient import TestClient
         from fastapi_canon import Composition, Feature
         from fastapi_canon.integrations.opentelemetry import Telemetry
-        from fastapi_canon.testing.telemetry import SpanCapture
+        from tests.fixtures.telemetry import SpanCapture
         from opentelemetry import trace
 
         with SpanCapture() as capture:

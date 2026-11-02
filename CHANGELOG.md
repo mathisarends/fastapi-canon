@@ -4,6 +4,12 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## Unreleased
 
+### Breaking changes
+
+- Remove `fastapi_canon.testing.telemetry.SpanCapture` from the distribution.
+  Applications should maintain their own trace-capture fixture using the
+  OpenTelemetry SDK’s in-memory exporter; the repository fixture provides an example.
+
 ### Development
 
 - Build Canon directly from the repository root. Source lives in `fastapi_canon/`;
