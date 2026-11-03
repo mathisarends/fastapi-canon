@@ -353,6 +353,12 @@ CI options.
 
 ## Documentation
 
+Coding agents building consumer backends can use the repository-local
+[`build-canon-backend` skill](.agents/skills/build-canon-backend/SKILL.md).
+It starts with the essential boundaries and loads focused references for the
+application layout, a complete HTTP feature, resource scopes, transports/SDKs
+and testing as needed.
+
 | Goal | Start here |
 | --- | --- |
 | Build a feature with routes, providers and lifespans | [Core API and composition](docs/composition.md) |
