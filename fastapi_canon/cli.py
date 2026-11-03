@@ -1,7 +1,11 @@
 """Canon commands with lazily loaded transport tools."""
 
 import argparse
+import shutil
+import sys
 from collections.abc import Sequence
+from importlib.resources import as_file, files
+from pathlib import Path
 
 from fastapi_canon._version import __version__
 
@@ -17,10 +21,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         ("check", "Check application contracts without importing application code"),
         ("generate", "Generate one domain SDK from configured application contracts"),
         ("db", "Manage database revisions with Alembic"),
+        ("skill", "Install the bundled backend-building skill in your project"),
     ):
         commands.add_parser(name, help=description, add_help=False)
     args, remaining = parser.parse_known_args(argv)
-    if args.command == "db":
+    if args.command == "skill":
+        return _skill_main(remaining)
+    elif args.command == "db":
         from fastapi_canon.integrations.database.cli import main as database_main
 
         return database_main(remaining)
@@ -49,3 +56,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         from fastapi_canon.check_error_contracts import _main as check_main
 
         return check_main(remaining)
+
+
+def _skill_main(argv: Sequence[str]) -> int:
+    parser = argparse.ArgumentParser(prog="fastapi-canon skill")
+    commands = parser.add_subparsers(dest="command", required=True)
+    install = commands.add_parser("install", help="Copy the bundled skill")
+    install.add_argument(
+        "--destination",
+        type=Path,
+        default=Path(".agents/skills/build-canon-backend"),
+        help="Skill directory to create (must not exist)",
+    )
+    args = parser.parse_args(argv)
+    source = files("fastapi_canon").joinpath("skills", "build-canon-backend")
+    try:
+        with as_file(source) as source_path:
+            shutil.copytree(source_path, args.destination)
+    except OSError as exc:
+        print(f"Could not install skill: {exc}", file=sys.stderr)
+        return 2
+    print(f"Installed build-canon-backend in {args.destination.resolve()}")
+    return 0

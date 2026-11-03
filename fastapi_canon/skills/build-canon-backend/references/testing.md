@@ -2,8 +2,8 @@
 
 Choose the behavior boundary before the filename. Mirror the source separately
 under unit, integration and contract roots, retaining the feature/layer path.
-The repository's `AGENTS.md`, Smelt policy and existing fixtures take precedence
-over illustrative consumer paths.
+The application's instructions, architecture policy and existing fixtures take
+precedence over these illustrative paths.
 
 | Behavior | Boundary | Example path below `backend/tests/` |
 | --- | --- | --- |
@@ -61,11 +61,9 @@ Use the actual consumer source root (for example `backend/src`). The checker
 covers supported direct `CanonRouter` HTTP operations, not every transport or
 dynamic call graph. Abstract Dishka ports can leave analysis incomplete. Inspect
 `CAN001` (missing declaration), `CAN002` (missing mapping) and `CAN003` (unresolved
-analysis) using `docs/error-checking.md`; do not claim complete coverage by
+analysis) using [error-checking.md](https://github.com/mathisarends/fastapi_canon/blob/fastapi-canon-v0.13.0/docs/error-checking.md); do not claim complete coverage by
 dropping the completeness flag or adding broad suppressions.
 
 If contracts generate clients, run `fastapi-canon generate --check --diff` after
-generation. In the Canon repository itself, run the commands required by its root
-`AGENTS.md`, including the full Smelt gate and pre-commit. Report executed checks
-accurately and distinguish an unexecuted browser/target-database suite from a
-passing lint or type check.
+generation. Report executed checks accurately and distinguish an unexecuted
+browser/target-database suite from a passing lint or type check.

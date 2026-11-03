@@ -2,8 +2,6 @@
 
 Use this when creating a consumer backend or deciding where a change belongs.
 The target is feature-first, with inward dependencies inside each feature.
-`fastapi_canon/` itself remains the small library described in
-`docs/architecture.md`; do not apply this application tree to its internals.
 
 ## Target tree
 
@@ -78,9 +76,7 @@ FastAPI, Dishka, Canon and SQLAlchemy out of domain/application behavior.
 Put a port beside the layer that needs it. Prefer `ABC`/`abstractmethod` for
 application-owned injected repositories and gateways, with implementations
 inheriting the port. A domain repository interface can stay in domain when the
-existing aggregate design owns it. Do not move Canon's internal read-only
-`ErrorCatalog` protocol or rewrite existing protocols to enforce an application
-preference.
+existing aggregate design owns it. Preserve existing sound interface contracts.
 
 Keep application services as ordinary classes with explicit typed constructors
 and `_role_name` implementation attributes. Dataclasses suit data records and
@@ -99,4 +95,5 @@ foreign SQL repository or presentation module. Treat `platform` as shared runtim
 adapters and `shared` as a small inward vocabulary, rather than a home for
 unrelated behavior. A new abstraction needs concrete use.
 
-See `examples/reference-service/src/app/` for a complete application in this repo.
+See the [reference service](https://github.com/mathisarends/fastapi_canon/tree/fastapi-canon-v0.13.0/examples/reference-service/src/app)
+for a complete example.

@@ -12,11 +12,6 @@ Shared errors and common generation are documented in `docs/problems.md` and
 
 ## Layout and boundaries
 
-For consumer backend implementation, folder-layout decisions and Canon usage,
-use [.agents/skills/build-canon-backend/SKILL.md](.agents/skills/build-canon-backend/SKILL.md).
-Its references load by task; the application feature/layer tree does not replace
-this library's module boundaries.
-
 - This is one root package: `pyproject.toml` builds `fastapi_canon/`. Do not add a
   coordination project, `packages/` directory or Python/pnpm package workspace.
   Keep one root `uv.lock`, `package.json` and `pnpm-lock.yaml` for development.

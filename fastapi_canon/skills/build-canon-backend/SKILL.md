@@ -1,6 +1,6 @@
 ---
 name: build-canon-backend
-description: Build, extend or review a clean FastAPI application with fastapi-canon. Use for feature slices, backend folder structure, Dishka wiring, typed HTTP/error contracts, resource scopes and generated SDKs. Distinguish application architecture from changes to the Canon library itself.
+description: Build, extend or review an application using the installed fastapi-canon library. Use for backend folder structure, feature slices, Dishka wiring, typed HTTP/error contracts, resource scopes and generated SDKs. Intended for Canon consumers, not library maintenance.
 ---
 
 # Build a Canon backend
@@ -10,16 +10,12 @@ and assemble them explicitly with `Feature` and `Composition`.
 
 ## Start with the actual project
 
-1. Read its `AGENTS.md`, dependency pins and architecture policy. In this
-   repository, read `smelt.yml` and `docs/architecture.md` and run
-   `uv run --frozen smelt context <module-or-path>` before implementation.
-2. Establish whether the task changes a **consumer application** or **Canon
-   itself**. The tree in the layout reference is the application target. Keep
-   the library's existing module boundaries when working on `fastapi_canon/`.
-3. Verify the installed API against `pyproject.toml`, `docs/canon.md` and the
-   relevant guide/source. These examples target the 0.13 API on `origin/main`;
-   a design decision or an older consumer is not evidence of an available API.
-4. Read only the reference needed for the current decision:
+1. Read the application's instructions, dependency pins and architecture policy.
+   Use its architecture tooling when configured; do not assume Smelt is installed.
+2. Check the installed Canon version and use its matching documentation. These
+   examples and linked guides target Canon 0.13.0; verify APIs before using them
+   with another version. The Canon source checkout is not required.
+3. Read only the reference needed for the current decision:
 
 | Task | Load |
 | --- | --- |
@@ -29,8 +25,8 @@ and assemble them explicitly with `Feature` and `Composition`.
 | Add streaming/RPC, SDK generation or telemetry | [Transports and SDKs](references/transports-and-sdk.md) |
 | Choose test boundaries and verify a feature | [Testing and verification](references/testing.md) |
 
-`docs/...` and `examples/...` refer to the Canon repository root; reference links
-are relative to this skill. Elsewhere, use the docs for the pinned Canon version.
+Supporting references are bundled with this skill. Links to detailed Canon
+guides open public documentation for the example version.
 
 ## Keep these boundaries
 
@@ -52,5 +48,5 @@ are relative to this skill. Elsewhere, use the docs for the pinned Canon version
 
 Create only modules with real responsibilities; prefer subject modules over
 technical `services/` and `use_cases/` folders. Verify behavior and exported
-contracts with the project's required gates (`AGENTS.md` here). Regenerate
+contracts with the application's required gates. Regenerate
 clients when contracts change and report the checks actually executed.

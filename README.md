@@ -353,11 +353,17 @@ CI options.
 
 ## Documentation
 
-Coding agents building consumer backends can use the repository-local
-[`build-canon-backend` skill](.agents/skills/build-canon-backend/SKILL.md).
-It starts with the essential boundaries and loads focused references for the
-application layout, a complete HTTP feature, resource scopes, transports/SDKs
-and testing as needed.
+The next release includes a [`build-canon-backend` skill](fastapi_canon/skills/build-canon-backend/SKILL.md)
+for agents working on **your application**. From your backend project, run:
+
+```console
+uv run fastapi-canon skill install
+```
+
+This copies the bundled skill to `.agents/skills/build-canon-backend` in your
+project. Use `--destination <skill-directory>` for another agent's skill location.
+Existing destinations are never overwritten. The skill loads focused references
+for folder structure, HTTP features, resources, transports/SDKs and testing.
 
 | Goal | Start here |
 | --- | --- |
