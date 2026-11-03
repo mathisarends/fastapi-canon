@@ -11,7 +11,7 @@ The [repository migration](repository-migration.md) records the
 source history and publishing setup. The repository move does not rename the
 PyPI project or add further Python import changes.
 
-## Upgrade to 0.14.0 (unreleased)
+## Upgrade to 0.14.0
 
 The database integration remains opt-in. Select the dependencies used by your
 application explicitly:
@@ -50,8 +50,8 @@ When adopting the database integration:
    compatible application code and an explicit deployment validation policy.
 
 See the [database guide](database.md) and
-[breaking changes](../CHANGELOG.md#0140---unreleased) for lifecycle and validation
-semantics. This is an unreleased API change targeting the next minor version.
+[breaking changes](../CHANGELOG.md#0140---2026-11-03) for lifecycle and validation
+semantics.
 
 ## Upgrade to 0.13.0
 
