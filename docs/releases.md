@@ -12,6 +12,26 @@ historical runs, tags and assets linked below remain in their original repositor
 
 ## Current versions
 
+Canon **0.14.0** was published on 2026-11-03 from
+[verified source `8e90a68`](https://github.com/mathisarends/fastapi_canon/commit/8e90a68315dcc311a9ac64a1ab09ea1315d4fc38),
+after [exact-source CI](https://github.com/mathisarends/fastapi_canon/actions/runs/41697444397)
+and the [release dry run](https://github.com/mathisarends/fastapi_canon/actions/runs/41698678199).
+The [publication run](https://github.com/mathisarends/fastapi_canon/actions/runs/41699504831)
+passed both seventeen-combination wheel matrices, installed SSE/WebRTC CLI and
+client checks, and all twelve public-index installation combinations. The
+[GitHub Release](https://github.com/mathisarends/fastapi_canon/releases/tag/fastapi-canon-v0.14.0)
+contains the original wheel, sdist and manifest. Downloaded assets, PyPI file
+hashes, the manifest and release notes agree; the tag points to the verified source.
+Public-index verification resumed on the original run after clearing stale CI
+index caches; no distribution files were rebuilt or replaced.
+
+This release adds configurable startup migration checks, per-engine contexts and
+`SqlAlchemyInstrumentation`, explicit Alembic downgrades and the installable
+`build-canon-backend` skill. Database integration remains opt-in; select its
+required extras explicitly. Follow the
+[0.14.0 upgrade guide](package-migration.md#upgrade-to-0140) and
+[breaking changes](../CHANGELOG.md#0140---2026-11-03).
+
 Canon **0.13.0** was published on 2026-11-02 from
 [verified source `14a723a`](https://github.com/mathisarends/fastapi_canon/commit/14a723ae6bbd07062c72240bb9edd4c6b636f5d2),
 after [exact-source CI](https://github.com/mathisarends/fastapi_canon/actions/runs/41536578334)
@@ -119,7 +139,7 @@ assets are verified.
 
 | Package | Version | Migration |
 | --- | --- | --- |
-| Canon | 0.13.0 | Use keyword-only `Composition(features=...)`, `CanonWebSocketRouter` and independent service scopes for long-lived work. Follow the [0.13.0 upgrade guide](package-migration.md#upgrade-to-0130); earlier upgrades also require the [0.12.0](../CHANGELOG.md#0120---2026-11-02), [0.11.0](../CHANGELOG.md#0110---2026-11-01), [0.10.0](../CHANGELOG.md#0100---2026-11-01) and included [0.9.0 migrations](../CHANGELOG.md#090---unreleased). |
+| Canon | 0.14.0 | Review [0.14.0 database migration controls](package-migration.md#upgrade-to-0140); select database extras explicitly and retain deployment-owned validation when disabling startup checks. Earlier upgrades: use keyword-only `Composition(features=...)`, `CanonWebSocketRouter` and independent service scopes for long-lived work. Follow the [0.13.0 upgrade guide](package-migration.md#upgrade-to-0130); earlier upgrades also require the [0.12.0](../CHANGELOG.md#0120---2026-11-02), [0.11.0](../CHANGELOG.md#0110---2026-11-01), [0.10.0](../CHANGELOG.md#0100---2026-11-01) and included [0.9.0 migrations](../CHANGELOG.md#090---unreleased). |
 | WebRTC | 0.3.0 | Use public enum members, keyword-only engine/channel options and `DescriptionType`; handle lazy type aliases in introspection tools. See the [migration notes](history/fastapi-webrtc.md#030---2026-10-24). |
 | Streams | 0.5.0 | Regenerate clients. SDK-owned generated Python clients bound the connect time to 10 seconds; pass `RequestOptions(timeout=None)` or inject `httpx.AsyncClient(timeout=None)` to keep it unbounded. See the [Streams 0.5.0 notes](history/fastapi-streams.md#050---2026-10-25). |
 | RPCKit | 0.4.1 | None; wire output and generated clients are unchanged apart from the manifest generator version. See the [RPCKit 0.4.1 notes](history/fastapi-rpckit.md#041---2026-10-25). |

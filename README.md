@@ -41,11 +41,11 @@ The [public API guide](docs/canon.md) maps these responsibilities to imports.
 
 ## Install
 
-The current published release is **0.13.0**. See the
-[0.13.0 upgrade guide](docs/package-migration.md#upgrade-to-0130)
-for keyword-only composition, `CanonWebSocketRouter`, dependency cleanup and
-tracing changes. Version 0.13.0 also adds [databases and migrations](docs/database.md)
-and [request logging](docs/request-logging.md).
+The current published release is **0.14.0**. See the
+[0.14.0 upgrade guide](docs/package-migration.md#upgrade-to-0140)
+for database startup checks, engine instrumentation contexts and explicit Alembic
+downgrades. The bundled backend skill is installed with `fastapi-canon skill install`.
+For earlier versions, also follow the preceding migration sections.
 
 ```console
 uv add fastapi-canon
@@ -393,19 +393,19 @@ sequence, publisher setup and historical release locations.
 
 ## Current releases
 
-Canon **0.13.0** is the current published unified distribution.
-It adds database ownership, Alembic migrations, short service scopes and request
-logging. Composition features are keyword-only, WebSocket composition uses
-`CanonWebSocketRouter`, and HTTP scopes close before responses are sent. See the
-[upgrade guide](docs/package-migration.md#upgrade-to-0130),
-[migration notes](CHANGELOG.md#0130---2026-11-02)
+Canon **0.14.0** is the current published unified distribution.
+It adds configurable startup migration checks, engine contexts with declarative
+SQLAlchemy instrumentation, explicit Alembic downgrades and an installable backend
+skill for coding agents. See the
+[upgrade guide](docs/package-migration.md#upgrade-to-0140),
+[migration notes](CHANGELOG.md#0140---2026-11-03)
 and [publication record](docs/releases.md#current-versions).
 The other names below are historical releases from the earlier four-distribution
 layout; use Canon's feature extras for current development.
 
 | Package | Version | GitHub | PyPI |
 | --- | --- | --- | --- |
-| `fastapi-canon` | 0.13.0 | [Release notes and artifacts](https://github.com/mathisarends/fastapi_canon/releases/tag/fastapi-canon-v0.13.0) | [Install](https://pypi.org/project/fastapi-canon/0.13.0/) |
+| `fastapi-canon` | 0.14.0 | [Release notes and artifacts](https://github.com/mathisarends/fastapi_canon/releases/tag/fastapi-canon-v0.14.0) | [Install](https://pypi.org/project/fastapi-canon/0.14.0/) |
 | `fastapi-streams` | 0.5.0 | [Release notes and artifacts](https://github.com/mathisarends/canon/releases/tag/fastapi-streams-v0.5.0) | [Install](https://pypi.org/project/fastapi-streams/0.5.0/) |
 | `fastapi-rpckit` | 0.4.1 | [Release notes and artifacts](https://github.com/mathisarends/canon/releases/tag/fastapi-rpckit-v0.4.1) | [Install](https://pypi.org/project/fastapi-rpckit/0.4.1/) |
 | `fastapi-webrtc` | 0.3.0 | [Release notes and artifacts](https://github.com/mathisarends/canon/releases/tag/fastapi-webrtc-v0.3.0) | [Install](https://pypi.org/project/fastapi-webrtc/0.3.0/) |

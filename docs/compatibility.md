@@ -44,12 +44,21 @@ Use `--fastapi VERSION` repeatedly to check additional releases explicitly.
 
 | Package | Published |
 | --- | --- |
-| `fastapi-canon` | 0.13.0 |
+| `fastapi-canon` | 0.14.0 |
 | `fastapi-streams` | 0.5.0 |
 | `fastapi-rpckit` | 0.4.1 |
 | `fastapi-webrtc` | 0.3.0 |
 
-**Canon 0.13.0** was published on 2026-11-02. The core requires FastAPI >=0.121;
+**Canon 0.14.0** was published on 2026-11-03. Core Python/runtime dependency
+ranges remain unchanged from 0.13.0. Both seventeen-combination installed-wheel
+matrices and all twelve public-index installation combinations passed. Database
+startup validation can be delegated explicitly, engine contexts can own
+instrumentation, and Alembic downgrades require an explicit revision. The bundled
+backend skill installs through the core CLI. See the
+[0.14.0 upgrade guide](package-migration.md#upgrade-to-0140) and
+[verified publication record](releases.md#current-versions).
+
+Canon 0.13.0 was published on 2026-11-02. The core requires FastAPI >=0.121;
 the optional database, SQLite, PostgreSQL, SQLModel and migrations extras add
 resource ownership and Alembic tooling. Migrate to keyword-only
 `Composition(features=...)` and `CanonWebSocketRouter`, use independent service
