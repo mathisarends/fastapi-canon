@@ -232,11 +232,13 @@ def test_disabled_adapters_and_standalone_configuration_import_no_optional_runti
         sys.meta_path.insert(0, BlockOptional())
         from fastapi_canon.integrations.opentelemetry import Telemetry
         from fastapi_canon.integrations.opentelemetry.httpx import instrument_httpx
-        from fastapi_canon.integrations.opentelemetry.sqlalchemy import instrument_sqlalchemy
+        from fastapi_canon.integrations.opentelemetry.sqlalchemy import SqlAlchemyInstrumentation, instrument_sqlalchemy
         options = Telemetry.disabled()
         resource = object()
         with instrument_httpx(resource, options) as client, instrument_sqlalchemy(resource, options) as engine:
             assert client is engine is resource
+        with SqlAlchemyInstrumentation(telemetry=options)(resource) as engine:
+            assert engine is resource
         async def check():
             container = make_async_container(options.provider())
             try:

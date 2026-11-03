@@ -10,8 +10,12 @@ All notable changes to `fastapi-canon` are documented in this file.
   (default `True`) and `engine_context`. Deployments that own migration execution
   and validation can set `check_migrations_on_startup=False` on the same declaration
   used by the CLI. Explicit `db check` remains available and strict. Replace an
-  engine instrumentation Dishka decorator, if desired, with an `engine_context`
-  factory; its context exits before pool disposal, including failed startup.
+  engine instrumentation Dishka decorator, if desired, with
+  `engine_context=SqlAlchemyInstrumentation(telemetry=telemetry,
+  pool_name="backend")`, imported from
+  `fastapi_canon.integrations.opentelemetry.sqlalchemy`. The immutable declaration
+  creates a fresh context for each engine and exits before pool disposal,
+  including failed startup. Custom context factories remain supported.
 - Extend `AlembicMigrations` and `fastapi-canon db` with explicit
   `downgrade(engine, revision)` and `db downgrade <revision>`. Supply the target
   explicitly. Older targets are not compared with current model metadata;

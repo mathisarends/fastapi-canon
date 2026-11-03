@@ -108,21 +108,30 @@ Dishka decorator:
 
 ```python
 from fastapi_canon import Database
-from fastapi_canon.integrations.opentelemetry.sqlalchemy import instrument_sqlalchemy
+from fastapi_canon.integrations.opentelemetry.sqlalchemy import (
+    SqlAlchemyInstrumentation,
+)
 from app.telemetry import telemetry
 
 database = Database(
     url=settings.database_url,
-    engine_context=lambda engine: instrument_sqlalchemy(
-        engine, telemetry, pool_name="backend"
+    engine_context=SqlAlchemyInstrumentation(
+        telemetry=telemetry,
+        pool_name="backend",
     ),
 )
 ```
 
 Install the `otel-sqlalchemy` extra for this telemetry adapter. The hook itself
 has no OpenTelemetry dependency: it accepts any synchronous context-manager
-factory taking the created `AsyncEngine`. Return a fresh context manager for
-each invocation. Its yielded value is ignored; Canon owns the original engine.
+factory taking the created `AsyncEngine`. `SqlAlchemyInstrumentation` is an
+immutable declaration with `telemetry`, `pool_name`, `pool_metrics` and
+`capture_statement` options. It creates a fresh context for each engine and can
+be reused across independent engine lifetimes. Direct `instrument_sqlalchemy`
+context managers remain available for application-owned engines.
+
+Custom factories must return a fresh context manager for each invocation. Its
+yielded value is ignored; Canon owns the original engine.
 
 Canon enters the context before the first use, including startup migration checks,
 and exits it after dependent feature and session cleanup, before pool disposal.

@@ -38,10 +38,11 @@ When adopting the database integration:
    check_migrations_on_startup=False)` and retain `fastapi-canon db check` in that
    deployment. One declaration now serves both runtime and CLI.
 2. An engine instrumentation Dishka decorator can become
-   `engine_context=lambda engine: instrument_sqlalchemy(engine, telemetry,
-   pool_name="backend")`. Select `otel-sqlalchemy` for that adapter. Any synchronous
-   context-manager factory can use the hook without coupling database ownership
-   to telemetry.
+   `engine_context=SqlAlchemyInstrumentation(telemetry=telemetry,
+   pool_name="backend")`. Import the declaration from
+   `fastapi_canon.integrations.opentelemetry.sqlalchemy` and select
+   `otel-sqlalchemy` for that adapter. Any synchronous context-manager factory can
+   use the hook without coupling database ownership to telemetry.
 3. Replace direct Alembic rollback adapters with
    `await migrations.downgrade(engine, revision)` or
    `fastapi-canon db downgrade <revision>`. Supply an explicit target. Current
