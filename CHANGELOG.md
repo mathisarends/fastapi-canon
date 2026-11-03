@@ -2,7 +2,7 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
-## 0.14.0 - Unreleased
+## 0.14.0 - 2026-11-03
 
 ### Breaking changes
 
@@ -33,6 +33,12 @@ All notable changes to `fastapi-canon` are documented in this file.
   code remains in the same wheel. Applications can retain their own providers
   and lifespans; the database integration is opt-in, and `ServiceScope` remains
   independent of SQLAlchemy and Alembic.
+
+### Added
+
+- Bundle the progressive `build-canon-backend` skill with HTTP, resource,
+  telemetry, transport and testing guides. Install it into a consumer project
+  with `fastapi-canon skill install`; use `--destination` for a custom location.
 
 ## 0.13.0 - 2026-11-02
 
