@@ -219,6 +219,31 @@ exit, failure and cancellation, without closing resources or borrowed providers.
 Tracing and metrics follow their respective application switches independently.
 Both-off configurations are no-ops, including without optional packages installed.
 
+For Canon-owned database engines, pass a reusable declaration to the engine
+context hook (0.14.0, unreleased):
+
+```python
+from fastapi_canon import Database
+from fastapi_canon.integrations.opentelemetry.sqlalchemy import (
+    SqlAlchemyInstrumentation,
+)
+
+database = Database(
+    url=settings.database_url,
+    engine_context=SqlAlchemyInstrumentation(
+        telemetry=telemetry,
+        pool_name="backend",
+    ),
+)
+```
+
+`SqlAlchemyInstrumentation` is immutable and accepts the same telemetry options
+as `instrument_sqlalchemy`: `pool_name`, `pool_metrics` and `capture_statement`.
+It creates a fresh context for each engine. Canon detaches the instrumentation
+before disposing its pool, including failed startup and cancellation. Custom
+providers can also use `with instrumentation(engine):` with a configured
+declaration. Engines and SDK providers remain owned by their original owner.
+
 HTTPX uses contrib's public `instrument_client` / `uninstrument_client` API for
 the supplied client only. Already instrumented clients are rejected so another
 owner's instrumentation is not removed. Do not modify or independently instrument

@@ -68,6 +68,7 @@ represent another PyPI distribution.
 | WebSocket RPC, messages and binary streams | `fastapi_canon.integrations.websockets.RpcChannel`, `CanonWebSocketRouter`, `RpcSocket` | [WebSockets](integrations/websockets/index.md) |
 | WebRTC with Canon admission errors | `fastapi_canon.integrations.webrtc.CanonWebRtcRouter`, `Session` | [WebRTC admission](webrtc.md) |
 | Telemetry declarations | `fastapi_canon.integrations.opentelemetry.Telemetry`, `instrument` | [Telemetry](telemetry.md) |
+| SQLAlchemy engine instrumentation declaration | `fastapi_canon.integrations.opentelemetry.sqlalchemy.SqlAlchemyInstrumentation` | [Engine lifetime](database.md#engine-instrumentation-lifetime) |
 
 Typical application imports are explicit:
 

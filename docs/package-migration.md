@@ -11,6 +11,48 @@ The [repository migration](repository-migration.md) records the
 source history and publishing setup. The repository move does not rename the
 PyPI project or add further Python import changes.
 
+## Upgrade to 0.14.0 (unreleased)
+
+The database integration remains opt-in. Select the dependencies used by your
+application explicitly:
+
+| Install | Dependencies added |
+| --- | --- |
+| `fastapi-canon` | Dishka, FastAPI and Pydantic |
+| `fastapi-canon[database]` | Async SQLAlchemy and AnyIO |
+| `fastapi-canon[sqlite]` | Database dependencies and aiosqlite |
+| `fastapi-canon[postgres]` | Database dependencies and asyncpg |
+| Extra `sqlmodel` | Database dependencies and SQLModel |
+| Extra `migrations` | Database dependencies and Alembic |
+
+These dependencies were already optional in 0.13.0. Existing compatible explicit
+dependencies also work; extras provide the corresponding dependency selection.
+All integration code ships in Canon's wheel. PostgreSQL itself is operated
+separately. `ServiceScope` has no database dependency. Keep custom engine/session
+providers and migration lifespans when your application owns those resources.
+
+When adopting the database integration:
+
+1. Keep startup migration validation enabled by default. If deployment owns these
+   checks, set `Database(..., migrations=migrations,
+   check_migrations_on_startup=False)` and retain `fastapi-canon db check` in that
+   deployment. One declaration now serves both runtime and CLI.
+2. An engine instrumentation Dishka decorator can become
+   `engine_context=SqlAlchemyInstrumentation(telemetry=telemetry,
+   pool_name="backend")`. Import the declaration from
+   `fastapi_canon.integrations.opentelemetry.sqlalchemy` and select
+   `otel-sqlalchemy` for that adapter. Any synchronous context-manager factory can
+   use the hook without coupling database ownership to telemetry.
+3. Replace direct Alembic rollback adapters with
+   `await migrations.downgrade(engine, revision)` or
+   `fastapi-canon db downgrade <revision>`. Supply an explicit target. Current
+   application startup and checks still expect its heads; an older schema needs
+   compatible application code and an explicit deployment validation policy.
+
+See the [database guide](database.md) and
+[breaking changes](../CHANGELOG.md#0140---unreleased) for lifecycle and validation
+semantics. This is an unreleased API change targeting the next minor version.
+
 ## Upgrade to 0.13.0
 
 Upgrade from 0.12.0 to 0.13.0 with these application changes:

@@ -1,9 +1,12 @@
 import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, nullcontext
 from threading import Event
 from typing import Any
 
 import pytest
 import sqlalchemy
+from fastapi import FastAPI
 from opentelemetry import trace
 from opentelemetry.instrumentation.utils import suppress_instrumentation
 from opentelemetry.sdk.metrics import MeterProvider
@@ -11,18 +14,23 @@ from opentelemetry.sdk.metrics.export import Gauge, Histogram, InMemoryMetricRea
 from opentelemetry.trace import StatusCode
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import QueuePool
 
-from fastapi_canon import FeatureConfigurationError
+from fastapi_canon import Composition, Database, Feature, FeatureConfigurationError
 from fastapi_canon.integrations.opentelemetry import Telemetry
-from fastapi_canon.integrations.opentelemetry.sqlalchemy import instrument_sqlalchemy
+from fastapi_canon.integrations.opentelemetry.sqlalchemy import (
+    SqlAlchemyInstrumentation,
+    instrument_sqlalchemy,
+)
 from tests.fixtures.telemetry import SpanCapture
 
 
 @pytest.mark.parametrize("capture_statement", [False, True])
+@pytest.mark.parametrize("declarative", [False, True])
 def test_engine_local_queries_privacy_failure_and_cleanup(
     capture_statement: bool,
+    declarative: bool,
 ) -> None:
     factory = sqlalchemy.create_engine
     global_provider = trace.get_tracer_provider()
@@ -33,9 +41,16 @@ def test_engine_local_queries_privacy_failure_and_cleanup(
     try:
         with SpanCapture() as capture:
             options = Telemetry(tracer_provider=capture.provider, meter_provider=meter)
-            with instrument_sqlalchemy(
-                first, options, capture_statement=capture_statement
-            ) as bound:
+            manager = (
+                SqlAlchemyInstrumentation(
+                    telemetry=options, capture_statement=capture_statement
+                )(first)
+                if declarative
+                else instrument_sqlalchemy(
+                    first, options, capture_statement=capture_statement
+                )
+            )
+            with manager as bound:
                 assert bound is first and sqlalchemy.create_engine is factory
                 with other.connect() as connection:
                     assert connection.scalar(text("select 2")) == 2
@@ -128,7 +143,7 @@ async def test_async_engine_independent_signals_and_borrowed_lifetime(
                 metrics=metrics,
             )
             async with asyncio.timeout(5):
-                with instrument_sqlalchemy(engine, options):
+                with SqlAlchemyInstrumentation(telemetry=options)(engine):
                     async with engine.connect() as connection:
                         assert await connection.scalar(text("select 1")) == 1
                         with pytest.raises(OperationalError):
@@ -205,7 +220,7 @@ async def test_async_query_cancellation_finishes_span_and_restores_context() -> 
         with SpanCapture() as capture:
             options = Telemetry(tracer_provider=capture.provider, metrics=False)
             async with asyncio.timeout(5):
-                with instrument_sqlalchemy(engine, options):
+                with SqlAlchemyInstrumentation(telemetry=options)(engine):
 
                     async def query() -> None:
                         async with engine.connect() as connection:
@@ -233,6 +248,115 @@ async def test_async_query_cancellation_finishes_span_and_restores_context() -> 
         release.set()
         event.remove(engine.sync_engine, "connect", connected)
         await engine.dispose()
+
+
+@pytest.mark.parametrize("pool_metrics", [False, True])
+def test_declaration_reuses_configuration_with_fresh_engine_contexts(
+    pool_metrics: bool,
+) -> None:
+    first = create_engine("sqlite://", poolclass=QueuePool)
+    second = create_engine("sqlite://", poolclass=QueuePool)
+    reader = InMemoryMetricReader()
+    meter = MeterProvider(metric_readers=[reader])
+    try:
+        with SpanCapture() as capture:
+            instrumentation = SqlAlchemyInstrumentation(
+                telemetry=Telemetry(
+                    tracer_provider=capture.provider, meter_provider=meter
+                ),
+                pool_name="backend",
+                pool_metrics=pool_metrics,
+            )
+            with instrumentation(first) as bound, first.connect() as connection:
+                assert bound is first
+                assert connection.scalar(text("select 1")) == 1
+                assert _pool_values(reader) == (
+                    {("backend", "used"): 1, ("backend", "idle"): 0}
+                    if pool_metrics
+                    else {}
+                )
+            assert _pool_values(reader) == {}
+            with instrumentation(second) as bound, second.connect() as connection:
+                assert bound is second
+                assert connection.scalar(text("select 2")) == 2
+            assert _pool_values(reader) == {}
+            with instrumentation(first), first.connect() as connection:
+                assert connection.scalar(text("select 3")) == 3
+            with first.connect() as connection:
+                assert connection.scalar(text("select 4")) == 4
+            assert len(capture.spans) == 3
+            assert _query_count(reader) == 3
+            assert _pool_values(reader) == {}
+    finally:
+        first.dispose()
+        second.dispose()
+        meter.shutdown()
+
+
+@pytest.mark.parametrize("fail_startup", [False, True])
+async def test_database_declaration_detaches_before_disposal_and_after_feature_cleanup(
+    fail_startup: bool,
+) -> None:
+    reader = InMemoryMetricReader()
+    meter = MeterProvider(metric_readers=[reader])
+    pool_at_disposal: list[dict[tuple[str, str], int]] = []
+
+    def disposed(engine: object) -> None:
+        pool_at_disposal.append(_pool_values(reader))
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        engine = await app.state.dishka_container.get(AsyncEngine)
+        event.listen(engine.sync_engine, "engine_disposed", disposed)
+        try:
+            async with engine.connect() as connection:
+                assert await connection.scalar(text("select 1")) == 1
+            if fail_startup:
+                raise RuntimeError("feature startup failed")
+            yield
+        finally:
+            async with engine.connect() as connection:
+                assert await connection.scalar(text("select 2")) == 2
+
+    try:
+        with SpanCapture() as capture:
+            database = Database(
+                url="sqlite://",
+                engine_context=SqlAlchemyInstrumentation(
+                    telemetry=Telemetry(
+                        tracer_provider=capture.provider, meter_provider=meter
+                    ),
+                    pool_name="backend",
+                    capture_statement=True,
+                ),
+            )
+            app = Composition(
+                features=[database.feature, Feature(name="consumer", lifespan=lifespan)]
+            ).apply(FastAPI())
+            async with asyncio.timeout(10):
+                with (
+                    pytest.raises(RuntimeError, match="feature startup failed")
+                    if fail_startup
+                    else nullcontext()
+                ):
+                    async with app.router.lifespan_context(app):
+                        assert _pool_values(reader) == {
+                            ("backend", "used"): 0,
+                            ("backend", "idle"): 1,
+                        }
+            statements = [
+                span.attributes.get("db.query.text")
+                for span in capture.spans
+                if span.attributes is not None
+            ]
+            assert statements == ["BEGIN", "select 1", "BEGIN", "select 2"]
+            assert pool_at_disposal == [{}]
+            assert _pool_values(reader) == {}
+            with capture.provider.get_tracer("owner").start_as_current_span("owner"):
+                pass
+            assert capture.one("owner").name == "owner"
+    finally:
+        meter.shutdown()
 
 
 def _query_count(reader: InMemoryMetricReader) -> int:

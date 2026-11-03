@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
+from dataclasses import dataclass
 from threading import Lock
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
@@ -56,6 +57,29 @@ def instrument_sqlalchemy[T](
             yield engine
         finally:
             observer._remove()
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class SqlAlchemyInstrumentation:
+    """Reusable engine-context configuration for SQLAlchemy telemetry.
+
+    Pass this declaration to ``Database(engine_context=...)``. Each engine gets
+    a fresh instrumentation context; engines and SDK providers stay borrowed.
+    """
+
+    telemetry: Telemetry
+    pool_name: str = "default"
+    pool_metrics: bool = True
+    capture_statement: bool = False
+
+    def __call__[T](self, engine: T) -> AbstractContextManager[T]:
+        return instrument_sqlalchemy(
+            engine,
+            self.telemetry,
+            pool_name=self.pool_name,
+            pool_metrics=self.pool_metrics,
+            capture_statement=self.capture_statement,
+        )
 
 
 class _EngineInstrumentation:
