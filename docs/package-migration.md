@@ -13,8 +13,7 @@ PyPI project or add further Python import changes.
 
 ## Upgrade to 0.13.0
 
-Version 0.13.0 is prepared and unreleased. Upgrade from published 0.12.0 with
-these application changes:
+Upgrade from 0.12.0 to 0.13.0 with these application changes:
 
 1. Replace positional composition arguments with `Composition(features=[first,
    second])`. All constructor options are keyword-only.

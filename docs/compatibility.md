@@ -16,9 +16,9 @@ RPC, typed sockets, connection dependencies and a custom handler with middleware
 The repository's locked suite additionally covers dependency cleanup, denial
 responses, disconnects, cancellation and telemetry.
 
-## Prepared database integration
+## Database integration and scope ownership
 
-Unreleased 0.13.0 raises the core minimum to FastAPI 0.121 for function-scoped
+Canon 0.13.0 raises the core minimum to FastAPI 0.121 for function-scoped
 HTTP cleanup. Database tests exercise SQLite/aiosqlite and real PostgreSQL/asyncpg,
 including transactions, SQLModel sessions and Alembic upgrades preserving data.
 The installed-wheel matrix also covers the new optional extras. Historical
@@ -26,7 +26,7 @@ published-version evidence below remains unchanged.
 
 ## Native telemetry bridge
 
-The 0.12.0 bridge is exercised from built wheels on Python 3.12 against
+The native bridge is exercised from built wheels on Python 3.12 against
 FastAPI 0.143.0 and the locked 0.143.3 version, with actual SDK span exporters and
 metric readers. The check covers the shared private configuration dictionary,
 disabled auto-configuration, provider identity, repeated composition, exclusion,
@@ -44,12 +44,20 @@ Use `--fastapi VERSION` repeatedly to check additional releases explicitly.
 
 | Package | Published |
 | --- | --- |
-| `fastapi-canon` | 0.12.0 |
+| `fastapi-canon` | 0.13.0 |
 | `fastapi-streams` | 0.5.0 |
 | `fastapi-rpckit` | 0.4.1 |
 | `fastapi-webrtc` | 0.3.0 |
 
-**Canon 0.12.0** was published on 2026-11-02. Base Python and runtime dependency
+**Canon 0.13.0** was published on 2026-11-02. The core requires FastAPI >=0.121;
+the optional database, SQLite, PostgreSQL, SQLModel and migrations extras add
+resource ownership and Alembic tooling. Migrate to keyword-only
+`Composition(features=...)` and `CanonWebSocketRouter`, use independent service
+scopes for long-lived work, and update WebSocket trace queries. See the
+[0.13.0 upgrade guide](package-migration.md#upgrade-to-0130) and
+[verified publication record](releases.md#current-versions).
+
+Canon 0.12.0 was published on 2026-11-02. Base Python and runtime dependency
 ranges remain unchanged; the new `otel-httpx` and `otel-sqlalchemy` extras add
 explicit resource adapters. Pass `instrument(...)` directly to
 `Feature.instrumentation` and configure `Telemetry` through composition rather
@@ -104,6 +112,16 @@ Canon core, each optional extra and both extras together. A fresh Windows/Python
 HTTP/SSE/RPC/WebRTC routing and generated RPC SDK execution and compilation.
 
 ## Verification scope
+
+The published 0.13.0 source passed exact-commit CI on Linux/Python 3.12–3.14
+and Windows/Python 3.14, including the live PostgreSQL database and migration
+job, scoped types, generated-client drift and Chromium/aiortc scenarios. Its
+original upload wheel passed seventeen combinations with current dependencies
+on Python 3.14 and minimum direct dependencies on Python 3.12, plus installed
+SSE/WebRTC CLI checks. All twelve public-index installation combinations passed,
+including SQLite transactions, SQLModel and Alembic upgrades. PyPI file hashes,
+downloaded GitHub assets, the manifest, release notes and tag source agree; see
+the [publication record](releases.md#current-versions).
 
 The published 0.12.0 source passed exact-commit CI on Linux/Python 3.12–3.14
 and Windows/Python 3.14, including lint, scoped type checks, all library tests

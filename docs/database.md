@@ -1,6 +1,6 @@
 # Databases and migrations
 
-This integration is prepared for unreleased Canon 0.13.0.
+This integration is available in Canon 0.13.0.
 
 Install `fastapi-canon[sqlite,migrations]` or
 `fastapi-canon[postgres,migrations]`. Add `sqlmodel` when using SQLModel sessions.

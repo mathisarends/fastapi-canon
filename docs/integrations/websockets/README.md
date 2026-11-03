@@ -32,7 +32,7 @@ The existing dispatch engine, OpenRPC contracts, binary/raw channels, and client
 generators are retained. The old repository remains available.
 
 Current upgrades are covered by the [Canon changelog](../../../CHANGELOG.md),
-including the unreleased 0.13.0 `CanonWebSocketRouter` API. Earlier standalone
+including the 0.13.0 `CanonWebSocketRouter` API. Earlier standalone
 releases have a [historical changelog](../../history/fastapi-rpckit.md); moving from
 `pyrpckit` is covered by the [migration guide](migration.md).
 
