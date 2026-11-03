@@ -23,6 +23,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     revision.add_argument("-m", "--message", required=True)
     upgrade = commands.add_parser("upgrade", help="Apply Alembic revisions")
     upgrade.add_argument("revision", nargs="?", default="head")
+    downgrade = commands.add_parser(
+        "downgrade", help="Revert Alembic revisions to an explicit target"
+    )
+    downgrade.add_argument("revision")
     commands.add_parser("check", help="Check revisions and model/schema drift")
     args = parser.parse_args(argv)
     original_cwd = Path.cwd()
@@ -54,6 +58,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                     match args.operation:
                         case "upgrade":
                             await migrations.upgrade(engine, args.revision)
+                        case "downgrade":
+                            await migrations.downgrade(engine, args.revision)
                         case "revision":
                             await migrations.revision(
                                 engine,

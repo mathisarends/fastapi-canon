@@ -2,6 +2,34 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
+## 0.14.0 - Unreleased
+
+### Breaking changes
+
+- Extend the public `Database` declaration with `check_migrations_on_startup`
+  (default `True`) and `engine_context`. Deployments that own migration execution
+  and validation can set `check_migrations_on_startup=False` on the same declaration
+  used by the CLI. Explicit `db check` remains available and strict. Replace an
+  engine instrumentation Dishka decorator, if desired, with an `engine_context`
+  factory; its context exits before pool disposal, including failed startup.
+- Extend `AlembicMigrations` and `fastapi-canon db` with explicit
+  `downgrade(engine, revision)` and `db downgrade <revision>`. Supply the target
+  explicitly. Older targets are not compared with current model metadata;
+  `require_current()`, `db check` and default startup validation still require
+  application heads. Keep application-owned Alembic downgrade revisions and use
+  application code compatible with the target schema.
+- Make database installation and adoption requirements explicit in migration
+  documentation: base `fastapi-canon` selects Dishka, FastAPI and Pydantic;
+  `[database]` adds async SQLAlchemy and AnyIO; `[sqlite]` adds aiosqlite;
+  `[postgres]` adds asyncpg; `sqlmodel` and `migrations` add SQLModel and Alembic
+  respectively, on top of database dependencies. Select the extras your
+  application uses, for example `fastapi-canon[postgres,sqlmodel,migrations]`.
+  These dependencies were already optional in 0.13.0; this documents the required
+  installation choices rather than introducing a dependency removal. Integration
+  code remains in the same wheel. Applications can retain their own providers
+  and lifespans; the database integration is opt-in, and `ServiceScope` remains
+  independent of SQLAlchemy and Alembic.
+
 ## 0.13.0 - 2026-11-02
 
 ### Breaking changes

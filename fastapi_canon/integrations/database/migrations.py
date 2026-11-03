@@ -59,6 +59,16 @@ class AlembicMigrations:
 
         await self._run(engine, apply)
 
+    async def downgrade(self, engine: AsyncEngine, revision: str) -> None:
+        """Apply application-owned downgrades to an explicit Alembic target.
+
+        Older targets need not match current model metadata. Startup and check
+        retain their separate requirement that the application is at its heads.
+        """
+        from alembic import command
+
+        await self._run(engine, lambda config: command.downgrade(config, revision))
+
     async def revision(
         self, engine: AsyncEngine, *, message: str, autogenerate: bool = False
     ) -> None:

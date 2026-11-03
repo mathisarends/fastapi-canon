@@ -1,7 +1,7 @@
 """App-owned engines and request-owned SQLAlchemy sessions."""
 
-from collections.abc import AsyncGenerator, Mapping
-from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator, Callable, Mapping
+from contextlib import AbstractContextManager, asynccontextmanager, nullcontext
 from typing import Any, Literal
 
 from anyio import CancelScope
@@ -35,6 +35,9 @@ class Database:
         session_class: type[AsyncSession] = AsyncSession,
         engine_options: Mapping[str, Any] | None = None,
         migrations: AlembicMigrations | None = None,
+        check_migrations_on_startup: bool = True,
+        engine_context: Callable[[AsyncEngine], AbstractContextManager[object]]
+        | None = None,
         sqlite_advisory_locks: Literal["error", "ignore"] = "error",
     ) -> None:
         normalized = make_url(url)
@@ -65,6 +68,8 @@ class Database:
                 "Database manages SQLite transaction control; omit isolation_level"
             )
         self._migrations = migrations
+        self._check_migrations_on_startup = check_migrations_on_startup
+        self._engine_context = engine_context
         if sqlite_advisory_locks not in {"error", "ignore"}:
             raise ValueError("sqlite_advisory_locks must be 'error' or 'ignore'")
         self._feature = Feature(
@@ -86,20 +91,30 @@ class Database:
 
     @asynccontextmanager
     async def open_engine(self) -> AsyncGenerator[AsyncEngine]:
-        """Own a standalone engine, also used by the app provider and CLI."""
+        """Own an engine and its optional context, shared by the app and CLI.
+
+        The context starts before the first use and exits before pool disposal,
+        including when context entry or application startup fails. Its yielded
+        value is ignored; the database retains ownership of the original engine.
+        """
         engine = create_async_engine(self._url, **self._engine_options)
-        if engine.dialect.name == "sqlite":
-            event.listen(engine.sync_engine, "connect", _configure_sqlite)
-            event.listen(engine.sync_engine, "begin", _begin_sqlite)
         try:
-            yield engine
+            if engine.dialect.name == "sqlite":
+                event.listen(engine.sync_engine, "connect", _configure_sqlite)
+                event.listen(engine.sync_engine, "begin", _begin_sqlite)
+            with (
+                self._engine_context(engine)
+                if self._engine_context is not None
+                else nullcontext()
+            ):
+                yield engine
         finally:
             with CancelScope(shield=True):
                 await engine.dispose()
 
     @asynccontextmanager
     async def _lifespan(self, app: FastAPI) -> AsyncGenerator[None]:
-        if self._migrations is not None:
+        if self._migrations is not None and self._check_migrations_on_startup:
             engine = await app.state.dishka_container.get(AsyncEngine)
             await self._migrations.require_current(engine)
         yield

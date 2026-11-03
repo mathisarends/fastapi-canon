@@ -1,11 +1,33 @@
 # Databases and migrations
 
 This integration is available in Canon 0.13.0.
+The startup-check option, engine context and explicit downgrade commands described
+below are planned for 0.14.0 (unreleased).
 
 Install `fastapi-canon[sqlite,migrations]` or
 `fastapi-canon[postgres,migrations]`. Add `sqlmodel` when using SQLModel sessions.
 The `database` extra installs async SQLAlchemy without choosing a driver. Base
 imports and command help do not load SQLAlchemy, Alembic or database drivers.
+
+| Installation | Dependencies selected |
+| --- | --- |
+| `fastapi-canon` | Dishka, FastAPI and Pydantic |
+| `fastapi-canon[database]` | Async SQLAlchemy and AnyIO, without a driver |
+| `fastapi-canon[sqlite]` | Database dependencies and aiosqlite |
+| `fastapi-canon[postgres]` | Database dependencies and asyncpg |
+| Extra `sqlmodel` | Database dependencies and SQLModel |
+| Extra `migrations` | Database dependencies and Alembic |
+
+All integration modules ship in the same Canon distribution; extras select
+third-party dependencies. A PostgreSQL server remains separately operated.
+For a SQLModel application using PostgreSQL and Alembic, install
+`uv add "fastapi-canon[postgres,sqlmodel,migrations]"`; add `sqlite` if needed for
+local development or tests. These dependencies were already optional in 0.13.0.
+
+Database ownership is opt-in through `database.feature`. Applications can keep
+their own Dishka providers and Feature lifespans for engines, sessions and
+migrations. `ServiceScope` belongs to core composition and works with those
+providers without requiring the database integration.
 
 ## Configuration and ownership
 
@@ -54,12 +76,59 @@ feature lifespans finish, including on startup failure. One declaration can be
 reused in independent apps. The first integration supports one database per
 container. Models, repositories, SQL and migration history stay application-owned.
 
+Attaching migrations enables startup revision and table/column validation by
+default. Deployments that run migrations and checks separately can retain one
+declaration and disable only the startup check:
+
+```python
+database = Database(
+    url=settings.database_url,
+    migrations=migrations,
+    check_migrations_on_startup=False,
+)
+```
+
+This leaves `database.migrations` and all explicit migration/check commands
+available. Startup does not resolve the engine or open a connection for migration
+validation. Other startup features, health checks or context hooks that use the
+database can still open connections. Run `fastapi-canon db check` explicitly in
+the deployment when that is the application's validation policy.
+
 `engine_options` passes SQLAlchemy engine options such as `echo`, `pool_pre_ping`,
 `pool_size` and `connect_args`; choose options supported by your pool/driver.
 SQLite enables foreign keys on every connection and uses explicit BEGIN for
 transactional reads, DDL and savepoints. WAL and timeout tuning are explicit
 application choices. Do not combine driver-level autocommit or a custom SQLite
 isolation mode with this transaction handling.
+
+## Engine instrumentation lifetime
+
+Pass `engine_context` to attach engine-local instrumentation without an additional
+Dishka decorator:
+
+```python
+from fastapi_canon import Database
+from fastapi_canon.integrations.opentelemetry.sqlalchemy import instrument_sqlalchemy
+from app.telemetry import telemetry
+
+database = Database(
+    url=settings.database_url,
+    engine_context=lambda engine: instrument_sqlalchemy(
+        engine, telemetry, pool_name="backend"
+    ),
+)
+```
+
+Install the `otel-sqlalchemy` extra for this telemetry adapter. The hook itself
+has no OpenTelemetry dependency: it accepts any synchronous context-manager
+factory taking the created `AsyncEngine`. Return a fresh context manager for
+each invocation. Its yielded value is ignored; Canon owns the original engine.
+
+Canon enters the context before the first use, including startup migration checks,
+and exits it after dependent feature and session cleanup, before pool disposal.
+Application startup failures and cancellation also unwind the context. The pool
+is disposed even if the context factory, entry or cleanup raises. Each app and
+each standalone `open_engine()` or CLI operation gets its own engine context.
 
 ## Ordinary HTTP routes
 
@@ -168,6 +237,7 @@ uv run fastapi-canon db init
 uv run fastapi-canon db revision --autogenerate -m "create orders"
 uv run fastapi-canon db upgrade head
 uv run fastapi-canon db check
+uv run fastapi-canon db downgrade <revision>
 ```
 
 `init` creates `env.py`, Alembic's revision template and `versions/`, refusing to
@@ -182,14 +252,29 @@ changes. Success exits 0; configuration, dependency and migration failures exit 
 operation. Application imports and relative paths resolve from the configuration
 directory, even when invoking the command elsewhere.
 
+`downgrade` requires an explicit Alembic target, such as a revision ID, `-1` or
+`base`; it has no default target. Python callers use
+`await migrations.downgrade(engine, revision)`. It runs the application's ordinary
+`downgrade()` functions through the same connection, transaction and SQLite
+foreign-key handling as upgrades. Revision files remain application-owned.
+
+An explicit older target is not checked against the latest model metadata:
+removed tables or columns may be intentional. Alembic validates the revision
+path, and SQLite foreign-key integrity is still checked before commit. Successful
+downgrade does not establish compatibility with the current application.
+`require_current()`, `db check` and the default startup check still require the
+application's heads and current schema. Use the application version matching the
+target schema, or make the startup-check policy an explicit deployment choice.
+
 Generated environments use the runner-owned connection. Existing Alembic
 environments can consume `config.attributes["connection"]` and
 `config.attributes["target_metadata"]` using Alembic's connection-sharing recipe.
 The runner writes no database URL into revision/INI files and disposes its engine
 after each command.
 
-When migrations are configured, startup requires DB revisions to match the
-application's heads and checks that owned tables and columns exist. Upgrading to
+When migrations are configured and startup validation is enabled, startup requires
+DB revisions to match the application's heads and checks that owned tables and
+columns exist. Upgrading to
 head repeats this check even when the revision was already current. Startup
 never applies revisions or calls `create_all`.
 Run upgrades once in a deployment migration job before starting workers.
