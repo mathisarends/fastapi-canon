@@ -32,7 +32,7 @@ The generated API follows your domain: `client.projects.get()`,
 | `Error` + `ErrorRegistry` + `raises=` | Shared public problem definitions for runtime responses, contracts and generated SDKs. |
 | `CanonRouter` + `CanonResponse` | Familiar FastAPI routes with composable error and success contracts, including JSON, empty and binary responses. |
 | `CanonStreamRouter` | Typed SSE events, declared terminal problems and explicit completion, consumed through async iteration. |
-| `RpcChannel` + `CanonWebSocketRouter` | Typed WebSocket RPC methods, notifications, subscriptions and declared socket/binary sessions. |
+| `RpcChannel` + `CanonWebSocketRouter` | Typed WebSocket RPC methods, notifications, message streams and declared socket/binary sessions. |
 | `fastapi-canon generate` | One domain SDK per target, shared models/errors, internal protocol bindings and drift checks. |
 | `fastapi-canon check errors` | Source analysis for missing error mappings/declarations, with explicit incomplete-analysis diagnostics. |
 | Optional WebRTC and telemetry | Typed media-session contracts and explicit OpenTelemetry instrumentation at the composition boundary. |
@@ -60,7 +60,7 @@ for media sessions, `aiortc` for the reference media engine, or `otel` for
 telemetry. The optional `otel-httpx` and `otel-sqlalchemy` extras enable
 [explicit resource adapters](docs/telemetry.md#explicit-resource-adapters).
 See [installation and migration](docs/package-migration.md).
-Python 3.12–3.14 is supported; see [compatibility](docs/compatibility.md).
+Python 3.12â€“3.14 is supported; see [compatibility](docs/compatibility.md).
 
 ## Core API: routes, errors and composition
 
@@ -224,7 +224,7 @@ Codegen handles request IDs, serialization, response correlation and typed probl
 errors; the consumer calls `client.projects.cancel(...)`. HTTP, SSE and RPC
 share the SDK's public model/error runtime. Protocol bindings stay internal.
 
-WebSockets also support notifications, subscriptions, typed sockets and binary
+WebSockets also support notifications, message streams, typed sockets and binary
 streams, with explicit session lifecycles. See [services and channels](docs/integrations/websockets/services.md),
 [generated clients](docs/integrations/websockets/clients.md) and
 [socket contracts](docs/integrations/websockets/sockets.md).
@@ -373,7 +373,7 @@ for folder structure, HTTP features, resources, transports/SDKs and testing.
 | Check mapping/declaration coverage | [Error checking](docs/error-checking.md) |
 | Generate Python and TypeScript domain SDKs | [Codegen workflow](docs/unified-canon-concept.md) |
 | Build typed SSE streams | [Stream contracts](docs/streams.md), [SSE guide index](docs/integrations/sse/index.md) |
-| Build WebSocket RPC, subscriptions or sockets | [WebSocket guide index](docs/integrations/websockets/index.md) |
+| Build WebSocket RPC, streams or sockets | [WebSocket guide index](docs/integrations/websockets/index.md) |
 | Add WebRTC sessions | [WebRTC contracts](docs/webrtc.md) |
 | Add tracing and metrics | [Telemetry](docs/telemetry.md) |
 | Log HTTP responses and correlate traces | [Request logging](docs/request-logging.md) |

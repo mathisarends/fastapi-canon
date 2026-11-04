@@ -7,6 +7,7 @@ export type { Problem } from "./problem";
 export { CalculatorClient } from "./client";
 export * from "./namespaces";
 export {
+  RpcStream,
   RpcClientError,
   RpcConnectError,
   RpcConnectionLostError,

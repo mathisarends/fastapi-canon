@@ -145,6 +145,8 @@ class _Renderer:
             "array": _array,
             "comment": _comment,
             "compact_notification": self._compact_notification,
+            "message_signature": self._message_stream_signature,
+            "message_call": self._message_stream_call,
             "enum_decl": lambda declaration: isinstance(declaration, EnumDecl),
             "enum_type_alias": _enum_type_alias,
             "identifier": _identifier,
@@ -236,6 +238,8 @@ class _Renderer:
         root = "../"
         nodes = tuple(_walk((root_node,)))
         core_types = ["RpcClientCore"]
+        if any(event.subscription for node in nodes for event in node.notifications):
+            core_types.append("RpcStream")
         if any(node.operations for node in nodes):
             core_types.append("RpcRequestOptions")
         imports = [_type_import(core_types, f"{root}core")]
@@ -334,6 +338,8 @@ class _Renderer:
             "type RpcTransport",
             "type RpcTransportSource",
         ]
+        if any(event.subscription for event in self.root_events):
+            core_imports.append("type RpcStream")
         if self.root_operations:
             core_imports.append("type RpcRequestOptions")
         if self.options.with_transport == "websocket":
@@ -523,6 +529,39 @@ class _Renderer:
         if len(inline) <= _TS_WIDTH:
             return inline
         return f"      (transport, endpoint) =>\n        {open_binding}({create}),"
+
+    def _message_stream_signature(self, event: NotificationDecl) -> str:
+        parameters = []
+        if event.params_model is not None:
+            parameters.append(f"params: {event.params_model}")
+        parameters.append("options?: { readonly signal?: AbortSignal }")
+        name = f"  {_identifier(event.operation_name)}"
+        suffix = f"): Promise<RpcStream<{self._type(event.payload)}>> {{"
+        inline = f"{name}({', '.join(parameters)}{suffix}"
+        if len(inline) <= _TS_WIDTH:
+            return inline
+        return (
+            f"{name}(\n"
+            + "".join(f"    {item},\n" for item in parameters)
+            + f"  {suffix}"
+        )
+
+    def _message_stream_call(self, event: NotificationDecl, root: bool) -> str:
+        receiver = "this.#rpc" if root else "this.rpc"
+        arguments = [
+            f"notifications.{_route_key(event)}",
+            "params" if event.params_model is not None else "undefined",
+            "options?.signal",
+        ]
+        statement = f"    return {receiver}.openMessageStream"
+        inline = f"{statement}({', '.join(arguments)});"
+        if len(inline) <= _TS_WIDTH:
+            return inline
+        return (
+            f"{statement}(\n"
+            + "".join(f"      {item},\n" for item in arguments)
+            + "    );"
+        )
 
     def _operation_signature(self, route: RouteDecl) -> str:
         parameters = []
@@ -1108,6 +1147,7 @@ _RUNTIME_NAMES = frozenset(
         "WebSocketCredentials",
         "WebSocketCredentialsProvider",
         "RpcClientCore",
+        "RpcStream",
         "RpcClientCall",
         "RpcClientCallOutcome",
         "RpcClientMiddleware",

@@ -216,10 +216,10 @@ receive that error distinctly from an internal failure. Cancellation is cooperat
 handlers and dependency scopes must propagate `asyncio.CancelledError`; synchronous
 CPU work cannot be preempted, and cleanup can extend elapsed time beyond the budget.
 
-Subscriptions apply the serving deadline and semaphore to the subscribe or
-unsubscribe handshake, including queueing its acknowledgement. The subscription
+Message streams apply the serving deadline and semaphore to the open or
+cancel handshake, including queueing its acknowledgement. The stream
 iterator and its dependency scope have their own lifetime and continue after a
-successful handshake. End a stream with unsubscribe, not request cancellation.
+successful handshake. End a stream with cancel, not request cancellation.
 
 See [Request cancellation](protocol.md#request-cancellation) for the wire control
 used to stop a queued or executing call. Standalone `handle()` transports can
@@ -331,8 +331,8 @@ Alternatively pass `before_accept=capacity.before_accept` to an endpoint's `serv
 The shared request semaphore limits requests across sockets, while per-connection
 admission bounds requests waiting for that semaphore. Both scopes use `finally`,
 so handler failures, rejected handshakes, disconnects, and cancellation release
-their permits. Long-lived subscription streams and custom raw handlers need
-their own application limits; the request scope covers subscription control
+their permits. Long-lived message streams and custom raw handlers need
+their own application limits; the request scope covers stream control
 calls, not the entire stream lifetime.
 
 This is a worker-local bound for one asyncio event loop. Multiple workers each

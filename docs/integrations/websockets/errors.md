@@ -130,7 +130,7 @@ domain exception becomes a logged `internal_error` even with `strict_errors=Fals
 Different methods and channels can bind the same exception differently; two
 conflicting bindings for the same exception within one declaration are rejected
 immediately, with the channel or operation name in the error. A child channel's
-bindings override its parent's, and a method, event, or subscription's bindings
+bindings override its parent's, and a method, event, or message stream's bindings
 override its channel's. Other inherited errors remain in effect, including
 bindings for more specific exception subclasses. Overrides do not mutate the
 parent channel or affect sibling operations.
@@ -182,7 +182,7 @@ domain exception. Access this class through `task_not_found.error_type`;
 there is no `binding.error` alias. Generated client exception names keep their
 `Error` suffix.
 
-Events and subscriptions also accept `raises=` and inherit channel declarations.
+Events and message streams also accept `raises=` and inherit channel declarations.
 Subscription failures send a terminal notification with `complete: false` and
 an `error` object containing JSON-RPC `code`, `message`, and `data` (application
 code and typed details). Generated Python and TypeScript iterators raise the

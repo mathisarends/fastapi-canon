@@ -305,7 +305,7 @@ async def test_method_binding_overrides_channel_default() -> None:
         assert result.error.data.code == code
 
 
-@pytest.mark.parametrize("kind", ["method", "event", "subscription"])
+@pytest.mark.parametrize("kind", ["method", "event", "stream"])
 def test_ambiguous_bindings_are_rejected_during_registration(kind) -> None:
     channel = RpcChannel("tasks")
     gone = RpcErrorBinding(TaskNotFound, code="gone")
@@ -330,7 +330,7 @@ def test_ambiguous_bindings_are_rejected_during_registration(kind) -> None:
         {
             "method": "methods",
             "event": "notifications",
-            "subscription": "subscriptions",
+            "stream": "subscriptions",
         }[kind],
     )[0]
     assert definition.raises == (gone.error_type,)

@@ -238,15 +238,15 @@ async def test_subscription_control_calls_have_scopes(pool_runtime):
 
     class Adapter(Transport):
         async def request(self, method, params=None, *, metadata=None):
-            if method.endswith(".subscribe"):
+            if method.endswith(".open"):
                 queue.put_nowait(
                     {
                         "jsonrpc": "2.0",
                         "method": "updates",
-                        "params": {"subscriptionId": "s", "payload": {"value": 1}},
+                        "params": {"streamId": "s", "payload": {"value": 1}},
                     }
                 )
-                return {"subscriptionId": "s"}
+                return {"streamId": "s"}
             return None
 
         async def notifications(self):
@@ -261,12 +261,12 @@ async def test_subscription_control_calls_have_scopes(pool_runtime):
         message_adapter=TypeAdapter(dict[str, Any]),
         payload_adapter=TypeAdapter(dict[str, Any]),
     )
-    stream = core.subscribe_remote(notification)
+    stream = core.open_message_stream(notification)
     assert await anext(stream) == {"value": 1}
     await stream.aclose()
     assert [call.route.method for call in calls] == [
-        "updates.subscribe",
-        "updates.unsubscribe",
+        "updates.open",
+        "updates.cancel",
     ]
     assert all(call.outcome.error is None for call in calls)
     assert all(call.transport is not None for call in calls)

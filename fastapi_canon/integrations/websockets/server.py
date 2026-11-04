@@ -92,13 +92,13 @@ class RpcServer:
             else {}
         )
         for subscription in protocol.subscriptions if server._middleware else ():
-            for suffix in ("subscribe", "unsubscribe"):
+            for suffix in ("open", "cancel"):
                 name = f"{subscription.name}.{suffix}"
                 server._scope_methods[name] = RpcMethodDefinition(
                     name=name,
                     handler_name=name,
                     request_name=name,
-                    params=subscription.params if suffix == "subscribe" else None,
+                    params=subscription.params if suffix == "open" else None,
                     result=Any,
                     raises=subscription.raises,
                 )

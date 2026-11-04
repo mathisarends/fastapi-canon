@@ -115,14 +115,14 @@ the mapping does not cover keep their previous behavior.
 
 Notifications use at most once transport delivery: the SDK does not acknowledge
 or durably replay them. Disconnects can lose messages, and a newly started remote
-subscription can emit its own initial state again. Applications that need a
+message stream can emit its own initial state again. Applications that need a
 complete history should use event IDs, cursors, or an application-owned snapshot
 and resync protocol.
 
 With `reconnect=True` / `reconnect: true`, generated typed event iterators and
 low-level notification iterators keep waiting across transient loss and resume on
-the replacement transport. Remote subscriptions acquire a fresh subscription ID.
-Unsubscribe stays on the transport that issued the old ID. Without reconnect,
+the replacement transport. Remote message streams acquire a fresh stream ID.
+Cancellation stays on the transport that issued the old ID. Without reconnect,
 transport errors still end the iterator. Permanent rejection or exhausted recovery
 surfaces the terminal cause instead of waiting forever.
 
@@ -130,10 +130,11 @@ Use the optional [connection state callback](clients.md#lazy-connections-and-mul
 to detect gaps: every `reconnecting` transition means messages may be missing for
 that server, and `connected` is the point to resync. Payload iterators keep their
 existing types; there is no gap marker mixed into the stream. This convention
-applies to both passive events and remote subscriptions.
+applies to both passive events and remote message streams.
 
-The default overflow policy remains `drop_oldest` with one warning per transport
-or logical subscriber. The shared transport queue and each consumer's queue are
+Passive notifications retain the `drop_oldest` overflow policy with one warning
+per transport or logical subscriber. Message streams fail on overflow instead
+of silently returning an incomplete result. The shared transport queue and each consumer's queue are
 bounded separately. `notification_queue_size` / `notificationQueueSize` now
 configures both layers on connected clients; TypeScript also accepts it on clients
 built with custom transports. A slow consumer can lose messages while another
@@ -256,45 +257,16 @@ service rejects the option on a socket whose channels declare no events.
 An event source can also close earlier with `await connection.close()`; the
 notifications it yielded before are still delivered.
 
-## Subscriptions with parameters
+## Message streams with parameters
 
-Declare an async generator when each connection needs its own filtered event
-stream:
+Use `@channel.stream()` with `AsyncIterator[T]` to declare a client-opened
+message stream. Parameters select the source or start its work. Each opening
+owns its own generator; sources can complete naturally or run until cancelled.
+Use [message streams](message-streams.md) for the full server, Python and
+TypeScript API, wire lifecycle, cleanup and recovery contract.
 
-```python
-class TaskFilter(RpcModel):
-    project_id: str
-
-
-@tasks.subscription()
-async def changes(params: TaskFilter) -> AsyncIterator[TaskUpdated]:
-    async for update in task_bus.listen(params.project_id):
-        yield update
-```
-
-The generated Python client exposes `client.tasks.changes(project_id="demo")`
-as an async iterator. Close the iterator promptly when leaving a loop early:
-
-```python
-from contextlib import aclosing
-
-
-async with aclosing(client.tasks.changes(project_id="demo")) as changes:
-    async for update in changes:
-        if update.title == "Done":
-            break
-```
-
-The generated TypeScript client accepts a typed params object. Breaking a
-`for await` loop sends the unsubscribe request automatically.
-
-On the wire, `tasks.changes.subscribe` returns a `subscriptionId`,
-`tasks.changes` notifications carry `{subscriptionId, payload}`, and
-`tasks.changes.unsubscribe` stops that generator. The generator's `finally`
-block runs on unsubscribe and disconnect. `RpcLimits.max_subscriptions`
-limits active subscriptions per connection (default 100). The OpenRPC document
-describes these streams in `x-rpc-subscriptions`. Existing server events remain
-broadcast notifications without subscription parameters.
+`@channel.event()` remains a passive notification source without an individual
+open request. `AsyncIterator[bytes]` selects a [binary stream](streams.md).
 
 ## Instrument requests and connections
 
@@ -385,7 +357,7 @@ New connections are unavailable (WebSocket 1013; adapters may deny the handshake
 with HTTP 503). New ordinary calls on accepted sockets receive the built-in
 `server_shutting_down` error. Pings and cancellation controls remain usable
 while admitted requests finish. Passive event sources stop immediately. Active
-subscriptions and dedicated binary streams and sockets may
+message streams and dedicated binary streams and sockets may
 finish naturally until the grace deadline; unfinished work is cancelled.
 
 The final tenth of the timeout is reserved for cooperative cleanup. Admitted

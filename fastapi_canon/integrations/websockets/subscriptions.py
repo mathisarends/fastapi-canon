@@ -27,9 +27,9 @@ from fastapi_canon.integrations.websockets.server import RpcResponse, RpcServer
 logger: logging.Logger = logging.getLogger(__name__)
 
 
-class RpcSubscriptionLimitError(RpcError):
-    code = "subscription_limit"
-    message = "Too many subscriptions"
+class RpcStreamLimitError(RpcError):
+    code = "stream_limit"
+    message = "Too many message streams"
 
 
 class SubscriptionSession:
@@ -52,7 +52,7 @@ class SubscriptionSession:
         self._methods = frozenset(
             f"{name}.{suffix}"
             for name in self._definitions
-            for suffix in ("subscribe", "unsubscribe")
+            for suffix in ("open", "cancel")
         )
         self._resolver = resolver
         self._send = send
@@ -111,16 +111,16 @@ class SubscriptionSession:
                 request,
                 RpcFailure.from_error(
                     request.id,
-                    RpcInvalidParamsError(message="Subscriptions require named params"),
+                    RpcInvalidParamsError(message="Streams require named params"),
                 ),
             )
             return
         name = request.method
-        if name.endswith(".subscribe"):
-            definition = self._definitions[name[: -len(".subscribe")]]
+        if name.endswith(".open"):
+            definition = self._definitions[name[: -len(".open")]]
             try:
                 if len(self._tasks) + self._pending_subscriptions >= self._limit:
-                    raise RpcSubscriptionLimitError()
+                    raise RpcStreamLimitError()
                 params = _params(definition, request.params)
             except RpcError as error:
                 scope = self._request.get()
@@ -134,9 +134,7 @@ class SubscriptionSession:
             try:
                 await self._respond(
                     request,
-                    RpcSuccess(
-                        id=request.id, result={"subscriptionId": subscription_id}
-                    ),
+                    RpcSuccess(id=request.id, result={"streamId": subscription_id}),
                 )
             finally:
                 self._pending_subscriptions -= 1
@@ -144,17 +142,20 @@ class SubscriptionSession:
             self._tasks[subscription_id] = (definition.name, task)
             task.add_done_callback(lambda _: self._tasks.pop(subscription_id, None))
             return
-        subscription_id = request.params.get("subscriptionId")
+        subscription_id = request.params.get("streamId")
+        if isinstance(subscription_id, str) and subscription_id not in self._tasks:
+            await self._respond(request, RpcSuccess(id=request.id, result=None))
+            return
         if (
             not isinstance(subscription_id, str)
             or subscription_id not in self._tasks
-            or self._tasks[subscription_id][0] != name[: -len(".unsubscribe")]
+            or self._tasks[subscription_id][0] != name[: -len(".cancel")]
         ):
             await self._respond(
                 request,
                 RpcFailure.from_error(
                     request.id,
-                    RpcInvalidParamsError(message="Unknown subscriptionId"),
+                    RpcInvalidParamsError(message="Unknown streamId"),
                 ),
             )
             return
@@ -200,7 +201,7 @@ class SubscriptionSession:
                         RpcNotification(
                             method=definition.name,
                             params={
-                                "subscriptionId": subscription_id,
+                                "streamId": subscription_id,
                                 "payload": adapter(definition.payload).dump_python(
                                     value, mode="json", by_alias=True
                                 ),
@@ -236,7 +237,7 @@ class SubscriptionSession:
                 RpcNotification(
                     method=name,
                     params={
-                        "subscriptionId": subscription_id,
+                        "streamId": subscription_id,
                         "complete": complete,
                         **(
                             {}
@@ -264,7 +265,7 @@ def _params(
 ) -> BaseModel | None:
     if definition.params is None:
         if raw:
-            raise RpcInvalidParamsError(message="Subscription takes no params")
+            raise RpcInvalidParamsError(message="Stream takes no params")
         return None
     try:
         validated = adapter(definition.params).validate_python(raw)

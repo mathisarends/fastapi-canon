@@ -6,6 +6,61 @@ import { ProblemError, TransportError, parseProblem } from "./problem";
 import type { RpcTransport as BaseRpcTransport } from "./transport";
 import type { SocketEndpoint, SocketOpener, SocketTransport } from "./sockets";
 
+const streamOpened = Symbol("stream opened");
+
+export class RpcStream<Payload>
+  implements AsyncIterableIterator<Payload>, AsyncDisposable
+{
+  readonly closed: Promise<void>;
+  #finish!: () => void;
+  #closed = false;
+
+  constructor(
+    private readonly values: AsyncIterator<Payload | typeof streamOpened>,
+  ) {
+    this.closed = new Promise((resolve) => {
+      this.#finish = resolve;
+    });
+  }
+
+  [Symbol.asyncIterator](): AsyncIterableIterator<Payload> {
+    return this;
+  }
+  async next(): Promise<IteratorResult<Payload>> {
+    if (this.#closed) return { value: undefined, done: true };
+    try {
+      const next = (await this.values.next()) as IteratorResult<Payload>;
+      if (next.done) {
+        this.#closed = true;
+        this.#finish();
+      }
+      return next;
+    } catch (error) {
+      this.#closed = true;
+      this.#finish();
+      throw error;
+    }
+  }
+  async return(): Promise<IteratorResult<Payload>> {
+    if (!this.#closed) {
+      this.#closed = true;
+      try {
+        await this.values.return?.();
+      } finally {
+        this.#finish();
+      }
+    }
+    await this.closed;
+    return { value: undefined, done: true };
+  }
+  async close(): Promise<void> {
+    await this.return();
+  }
+  async [Symbol.asyncDispose](): Promise<void> {
+    await this.close();
+  }
+}
+
 export type RpcRequestOptions = {
   readonly signal?: AbortSignal;
   readonly metadata?: Readonly<Record<string, string>>;
@@ -143,6 +198,7 @@ type JsonRpcNotification = {
 
 type Subscriber = {
   readonly method: string;
+  streamId?: string;
   readonly queue: AsyncQueue<JsonRpcNotification>;
 };
 
@@ -736,6 +792,7 @@ export class RpcClientCore {
 
   readonly #hubs = new WeakMap<RpcTransport, NotificationHub>();
   readonly #activeHubs = new Set<NotificationHub>();
+  readonly #messageStreams = new Set<RpcStream<unknown>>();
   readonly #closing = new AbortController();
   readonly #notificationQueueSize: number;
   readonly #onOverflow?: RpcNotificationOverflowHandler;
@@ -1131,13 +1188,13 @@ export class RpcClientCore {
         server,
         validateResult: (result) => {
           if (
-            method.endsWith(".subscribe") &&
+            method.endsWith(".open") &&
             (typeof result !== "object" ||
               result === null ||
-              !("subscriptionId" in result) ||
-              typeof result.subscriptionId !== "string")
+              !("streamId" in result) ||
+              typeof result.streamId !== "string")
           )
-            throw new Error("Invalid subscription response");
+            throw new Error("Invalid stream response");
           return result;
         },
       },
@@ -1158,20 +1215,50 @@ export class RpcClientCore {
     );
   }
 
-  subscribeRemote<Payload>(
+  async openMessageStream<Payload>(
     route: RpcNotificationInfo<Payload>,
     params?: object,
-  ): AsyncIterable<Payload> {
-    return cancellableNotifications((signal) =>
-      this.#remoteValues(route, params, signal),
-    );
+    signal?: AbortSignal,
+  ): Promise<RpcStream<Payload>> {
+    const iterator = cancellableNotifications((closing) =>
+      this.#remoteValues(
+        route,
+        params,
+        AbortSignal.any(
+          signal
+            ? [signal, closing, this.#closing.signal]
+            : [closing, this.#closing.signal],
+        ),
+      ),
+    )[Symbol.asyncIterator]();
+    try {
+      const opened = await iterator.next();
+      if (opened.done || opened.value !== streamOpened)
+        throw new RpcTransportError("Invalid stream opening");
+      const stream = new RpcStream<Payload>(iterator);
+      this.#messageStreams.add(stream);
+      void stream.closed.then(() => this.#messageStreams.delete(stream));
+      if (this.#closed) {
+        await stream.close();
+        throw new RpcConnectionLostError(
+          false,
+          undefined,
+          "The RPC client is closed",
+        );
+      }
+      return stream;
+    } catch (error) {
+      await iterator.return?.();
+      throw error;
+    }
   }
 
   async *#remoteValues<Payload>(
     route: RpcNotificationInfo<Payload>,
     params?: object,
     signal?: AbortSignal,
-  ): AsyncGenerator<Payload> {
+  ): AsyncGenerator<Payload | typeof streamOpened> {
+    let opened = false;
     const overflow = { dropped: 0, warned: false };
     while (!this.#closed && !signal?.aborted) {
       const transport = await this.#notificationTransport(route.server, signal);
@@ -1180,7 +1267,10 @@ export class RpcClientCore {
         method: route.method,
         queue: new AsyncQueue<JsonRpcNotification>(
           this.#notificationQueueSize,
-          () => this.#subscriberOverflow(route.method, overflow),
+          () => {
+            this.#subscriberOverflow(route.method, overflow);
+            throw new RpcTransportError("Stream consumer queue overflowed");
+          },
         ),
       };
       let hub = this.#hubs.get(transport);
@@ -1198,11 +1288,11 @@ export class RpcClientCore {
         hub.pumping = true;
         hub.task = this.#pump(transport, hub);
       }
-      let subscriptionId: string | undefined;
+      let streamId: string | undefined;
       try {
         const result = await this.#controlRequest(
           transport,
-          `${route.method}.subscribe`,
+          `${route.method}.open`,
           params === undefined ? undefined : withoutUndefined(params),
           route.server,
           signal,
@@ -1210,20 +1300,25 @@ export class RpcClientCore {
         if (
           typeof result !== "object" ||
           result === null ||
-          !("subscriptionId" in result) ||
-          typeof result.subscriptionId !== "string"
+          !("streamId" in result) ||
+          typeof result.streamId !== "string"
         ) {
-          throw new RpcTransportError("Invalid subscription response");
+          throw new RpcTransportError("Invalid stream response");
         }
-        subscriptionId = result.subscriptionId;
+        streamId = result.streamId;
+        subscriber.streamId = streamId;
+        if (!opened) {
+          opened = true;
+          yield streamOpened;
+        }
         for await (const message of subscriber.queue.iterate(signal)) {
           if (this.#closed) return;
           const values = message.params;
           if (
             typeof values !== "object" ||
             values === null ||
-            !("subscriptionId" in values) ||
-            values.subscriptionId !== subscriptionId
+            !("streamId" in values) ||
+            values.streamId !== streamId
           )
             continue;
           if ("complete" in values && values.complete === true) return;
@@ -1243,7 +1338,7 @@ export class RpcClientCore {
                 typeof error.data.code !== "string") &&
                 !("problem" in error.data))
             ) {
-              throw new RpcTransportError("Invalid subscription error");
+              throw new RpcTransportError("Invalid stream error");
             }
             const problem =
               "problem" in error.data ? error.data.problem : undefined;
@@ -1267,32 +1362,29 @@ export class RpcClientCore {
             throw new RpcRemoteError(error.code, code, error.message, details);
           }
           if (!("payload" in values)) {
-            throw new RpcTransportError(
-              "Subscription notification has no payload",
-            );
+            throw new RpcTransportError("Stream notification has no payload");
           }
           yield values.payload as Payload;
         }
-        return;
+        if (!this.#closed && !signal?.aborted)
+          throw new RpcTransportError("Stream ended without completion");
       } catch (error) {
         if (this.#closed || signal?.aborted) return;
         if (
           !(this.#source instanceof RpcTransportPool) ||
           !this.#source.reconnect ||
-          this.#closed ||
           !this.#source.isDisconnected(transport)
-        ) {
+        )
           throw error;
-        }
       } finally {
         hub.subscribers.delete(subscriber);
-        if (subscriptionId !== undefined) {
+        if (streamId !== undefined) {
           try {
             await this.#controlRequest(
               transport,
-              `${route.method}.unsubscribe`,
+              `${route.method}.cancel`,
               {
-                subscriptionId,
+                streamId,
               },
               route.server,
             );
@@ -1309,6 +1401,9 @@ export class RpcClientCore {
     this.#closed = true;
     const hubs = [...this.#activeHubs];
     this.#closing.abort();
+    await Promise.allSettled(
+      [...this.#messageStreams].map((stream) => stream.close()),
+    );
     for (const hub of hubs)
       for (const subscriber of hub.subscribers) subscriber.queue.end();
     try {
@@ -1449,8 +1544,20 @@ export class RpcClientCore {
             "The transport returned an invalid JSON-RPC notification",
           );
         for (const subscriber of hub.subscribers) {
-          if (subscriber.method === message.method)
-            subscriber.queue.push(message);
+          if (
+            subscriber.method === message.method &&
+            (subscriber.streamId === undefined ||
+              (typeof message.params === "object" &&
+                message.params !== null &&
+                "streamId" in message.params &&
+                message.params.streamId === subscriber.streamId))
+          ) {
+            try {
+              subscriber.queue.push(message);
+            } catch (error) {
+              subscriber.queue.fail(error);
+            }
+          }
         }
       }
       hub.ended = {};
@@ -1572,6 +1679,7 @@ class AsyncQueue<Value> implements AsyncIterableIterator<Value> {
   }
 
   push(value: Value): void {
+    if (this.#ended) return;
     const waiter = this.#waiters.shift();
     if (waiter !== undefined) {
       waiter.removeAbortListener();
@@ -1600,6 +1708,7 @@ class AsyncQueue<Value> implements AsyncIterableIterator<Value> {
   }
 
   fail(error: unknown): void {
+    this.#values.length = 0;
     this.#failed = true;
     this.#failure = error;
     this.#ended = true;

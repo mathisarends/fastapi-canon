@@ -47,7 +47,7 @@ async def test_generated_python_subscription_errors_are_typed(
         channel = RpcChannel("session", raises=[default] if declared else [])
         binding = RpcErrorBinding(SessionMissing, details=FailureDetails)
 
-        @channel.subscription(raises=[binding] if declared else [])
+        @channel.stream(raises=[binding] if declared else [])
         async def events() -> AsyncIterator[SessionEvent]:
             yield SessionEvent(value="first")
             raise SessionMissing(42)
@@ -119,7 +119,7 @@ async def test_generated_python_subscription_roundtrip(tmp_path: Path) -> None:
         channel = RpcChannel("session")
         stopped = asyncio.Event()
 
-        @channel.subscription()
+        @channel.stream()
         async def events(params: SessionParams) -> AsyncIterator[SessionEvent]:
             try:
                 yield SessionEvent(value=params.session_id)
@@ -181,7 +181,7 @@ async def test_generated_python_subscription_roundtrip(tmp_path: Path) -> None:
 async def test_subscription_resubscribes_after_reconnect(tmp_path: Path) -> None:
     channel = RpcChannel("session")
 
-    @channel.subscription()
+    @channel.stream()
     async def events(params: SessionParams) -> AsyncIterator[SessionEvent]:
         yield SessionEvent(value=params.session_id)
 
@@ -209,19 +209,19 @@ async def test_subscription_resubscribes_after_reconnect(tmp_path: Path) -> None
             method = request["method"]
             self.methods.append(method)
             result: Any = None
-            if method.endswith(".subscribe"):
-                result = {"subscriptionId": "1"}
+            if method.endswith(".open"):
+                result = {"streamId": "1"}
             self.frames.put_nowait(
                 json.dumps({"jsonrpc": "2.0", "id": request["id"], "result": result})
             )
-            if method.endswith(".subscribe"):
+            if method.endswith(".open"):
                 self.frames.put_nowait(
                     json.dumps(
                         {
                             "jsonrpc": "2.0",
                             "method": "session.events",
                             "params": {
-                                "subscriptionId": "1",
+                                "streamId": "1",
                                 "payload": {"value": str(self.generation)},
                             },
                         }
@@ -258,8 +258,8 @@ async def test_subscription_resubscribes_after_reconnect(tmp_path: Path) -> None
                 sockets[0].frames.put_nowait(ConnectionResetError("dropped"))
                 assert (await asyncio.wait_for(anext(stream), 1)).value == "2"
             assert sockets[1].methods == [
-                "session.events.subscribe",
-                "session.events.unsubscribe",
+                "session.events.open",
+                "session.events.cancel",
             ]
     finally:
         sys.path.remove(str(tmp_path))

@@ -608,7 +608,7 @@ class AsyncQueue<Value> implements AsyncIterableIterator<Value> {
         throw new RpcTransportError(
           "The WebSocket notification queue overflowed",
         );
-      this.#values.shift();
+      const dropped = this.#values.shift();
       this.dropped++;
       try {
         const returned: unknown = this.#onOverflow?.(
@@ -620,6 +620,20 @@ class AsyncQueue<Value> implements AsyncIterableIterator<Value> {
           void returned.catch((error) => this.#callbackFailure(error));
       } catch (error) {
         this.#callbackFailure(error);
+      }
+      if (
+        [dropped, value].some(
+          (item) =>
+            typeof item === "object" &&
+            item !== null &&
+            "params" in item &&
+            typeof item.params === "object" &&
+            item.params !== null &&
+            "streamId" in item.params,
+        )
+      ) {
+        this.#values.length = 0;
+        throw new RpcTransportError("The WebSocket stream queue overflowed");
       }
       if (!this.#overflowWarned) {
         console.warn(

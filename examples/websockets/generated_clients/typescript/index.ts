@@ -7,6 +7,7 @@ export type { Problem } from "./problem";
 export { AutomationClient } from "./client";
 export * from "./namespaces";
 export {
+  RpcStream,
   RpcClientError,
   RpcConnectError,
   RpcConnectionLostError,

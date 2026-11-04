@@ -5,9 +5,10 @@
 {% endmacro %}
 
 {% macro notification(event, root) %}{% if event.summary %}  /** {{ event.summary | comment }} */
-{% endif %}  {{ event.operation_name | identifier }}({% if event.subscription and event.params_model is not none %}params: {{ event.params_model }}{% endif %}): AsyncIterable<{{ event.payload | type }}> {
-{% if event.subscription %}    return {{ "this.#rpc" if root else "this.rpc" }}.subscribeRemote(notifications.{{ event | route_key }}{% if event.params_model is not none %}, params{% endif %});
-{% else %}{% if event | compact_notification(root) %}    return {{ "this.#rpc" if root else "this.rpc" }}.notifications(notifications.{{ event | route_key }});
+{% endif %}{% if event.subscription %}{{ event | message_signature }}
+{{ event | message_call(root) }}
+{% else %}  {{ event.operation_name | identifier }}(): AsyncIterable<{{ event.payload | type }}> {
+{% if event | compact_notification(root) %}    return {{ "this.#rpc" if root else "this.rpc" }}.notifications(notifications.{{ event | route_key }});
 {% else %}    return {{ "this.#rpc" if root else "this.rpc" }}.notifications(
       notifications.{{ event | route_key }},
     );

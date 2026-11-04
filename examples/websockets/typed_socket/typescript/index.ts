@@ -7,6 +7,7 @@ export type { Problem } from "./problem";
 export { TypedSocketClient } from "./client";
 export * from "./namespaces";
 export {
+  RpcStream,
   RpcClientError,
   RpcConnectError,
   RpcConnectionLostError,

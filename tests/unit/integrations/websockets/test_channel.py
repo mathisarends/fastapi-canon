@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+from typing import Annotated, Any
 
 import pytest
 from fastapi_canon.integrations.websockets import (
@@ -9,6 +10,7 @@ from fastapi_canon.integrations.websockets import (
     RpcServer,
 )
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
+from pydantic import Field
 
 
 class SharedError(RpcError):
@@ -90,13 +92,15 @@ def test_freeze_prevents_registration() -> None:
         channel.method()
 
 
-def test_invalid_stream_type_is_rejected() -> None:
+def test_string_stream_is_a_message_stream() -> None:
     channel = RpcChannel("files")
-    with pytest.raises(ProtocolDefinitionError, match="must yield bytes"):
 
-        @channel.stream()
-        async def text() -> AsyncIterator[str]:
-            yield "x"
+    @channel.stream()
+    async def text() -> AsyncIterator[str]:
+        yield "x"
+
+    assert channel.subscriptions[0].payload is str
+    assert channel.streams == ()
 
 
 def test_child_channels_inherit_namespace_errors_and_scope() -> None:
@@ -138,7 +142,7 @@ def test_dotted_names_are_relative_to_the_channel_namespace() -> None:
     async def text_changed() -> AsyncIterator[Event]:
         yield Event(value="x")
 
-    @channel.subscription("text.watch")
+    @channel.stream("text.watch")
     async def watch_text() -> AsyncIterator[Event]:
         yield Event(value="x")
 
@@ -221,7 +225,7 @@ def test_channel_decorators_declare_server_operations() -> None:
     async def joined_events() -> AsyncIterator[Event]:
         yield Event(value="x")
 
-    @channel.subscription
+    @channel.stream
     async def members() -> AsyncIterator[Event]:
         yield Event(value="x")
 
@@ -253,3 +257,76 @@ def test_channel_has_no_client_or_server_side() -> None:
 
     assert not hasattr(channel, "client")
     assert not hasattr(channel, "server")
+
+
+def test_binary_stream_return_alias_is_inferred() -> None:
+    channel = RpcChannel("files")
+    type Frames = AsyncIterator[bytes]
+
+    @channel.stream()
+    async def chunks() -> Frames:
+        yield b"frame"
+
+    assert channel.streams[0].content_type == "application/octet-stream"
+    assert channel.subscriptions == ()
+
+
+@pytest.mark.parametrize("payload", [Any, bytes | Event])
+def test_stream_payload_must_choose_one_framing(payload: Any) -> None:
+    channel = RpcChannel("files")
+
+    async def mixed() -> AsyncIterator[Event]:
+        yield Event(value="x")
+
+    mixed.__annotations__["return"] = AsyncIterator[payload]
+    with pytest.raises(ProtocolDefinitionError, match="unambiguously"):
+        channel.stream()(mixed)
+    assert channel.subscriptions == ()
+    assert channel.streams == ()
+
+
+def test_message_stream_retains_payload_validation_metadata() -> None:
+    channel = RpcChannel("values")
+
+    @channel.stream()
+    async def positive() -> AsyncIterator[Annotated[int, Field(gt=0)]]:
+        yield 1
+
+    from pydantic import TypeAdapter
+
+    assert (
+        TypeAdapter(channel.subscriptions[0].payload).json_schema()["exclusiveMinimum"]
+        == 0
+    )
+
+
+def test_message_stream_rejects_binary_content_metadata() -> None:
+    channel = RpcChannel("values")
+
+    with pytest.raises(ProtocolDefinitionError, match="Content types"):
+
+        @channel.stream(content_type="application/json")
+        async def values() -> AsyncIterator[int]:
+            yield 1
+
+    assert channel.subscriptions == ()
+
+
+def test_subscription_decorator_is_removed() -> None:
+    assert not hasattr(RpcChannel("values"), "subscription")
+
+
+@pytest.mark.parametrize("suffix", ["open", "cancel"])
+def test_stream_control_names_cannot_be_shadowed(suffix: str) -> None:
+    channel = RpcChannel("jobs")
+
+    @channel.stream()
+    async def progress() -> AsyncIterator[int]:
+        yield 1
+
+    @channel.method("progress." + suffix)
+    async def conflicting() -> None:
+        pass
+
+    with pytest.raises(ProtocolDefinitionError, match="stream control collides"):
+        channel.freeze()

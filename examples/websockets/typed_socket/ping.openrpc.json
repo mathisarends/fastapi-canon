@@ -203,7 +203,7 @@
     }
   },
   "x-rpc-notifications": [],
-  "x-rpc-subscriptions": [],
+  "x-rpc-streams": [],
   "x-rpc-notification-types": [],
   "x-rpckit-sockets": [
     {

@@ -120,19 +120,24 @@ def render_openrpc(
             )
             for notification in protocol.notifications
         ],
-        "x-rpc-subscriptions": [
+        "x-rpc-streams": [
             described(
                 _with_server(
                     {
                         "name": subscription.name,
-                        "subscribe": f"{subscription.name}.subscribe",
-                        "unsubscribe": f"{subscription.name}.unsubscribe",
+                        "open": f"{subscription.name}.open",
+                        "cancel": f"{subscription.name}.cancel",
+                        "id": "streamId",
+                        "direction": "server-to-client",
+                        "encoding": "json",
+                        "overflow": "error",
+                        "reconnect": {"default": "fail", "optIn": "restart"},
                         "params": (
                             _ref(type_name(subscription.params))
                             if subscription.params is not None
                             else None
                         ),
-                        "payload": _ref(type_name(subscription.payload)),
+                        "payload": _payload_schema(subscription.payload, schemas),
                         **(
                             {"errors": [_error(error) for error in subscription.raises]}
                             if subscription.raises
@@ -285,10 +290,14 @@ def _result_schema(
     method: RpcMethodDefinition,
     components: dict[str, Any],
 ) -> dict[str, Any]:
-    name = getattr(method.result, "__name__", None)
+    return _payload_schema(method.result, components)
+
+
+def _payload_schema(annotation: Any, components: dict[str, Any]) -> dict[str, Any]:
+    name = getattr(annotation, "__name__", None)
     if isinstance(name, str) and name in components:
         return _ref(name)
-    schema = TypeAdapter(method.result).json_schema(
+    schema = TypeAdapter(annotation).json_schema(
         by_alias=True,
         mode="serialization",
     )

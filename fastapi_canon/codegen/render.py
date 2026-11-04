@@ -487,7 +487,9 @@ def _typescript_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
                 ]
                 if not operation.parameters:
                     args = []
-                if operation.interaction == "call":
+                if operation.interaction == "call" or binding.metadata.get(
+                    "subscription"
+                ):
                     args.append("options")
             binding_type = (
                 f"ReturnType<typeof {binding.source}Factory>"
@@ -495,7 +497,11 @@ def _typescript_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
                 else binding_source + "Client"
             )
             invoke = f"(await this.runtime.binding<{binding_type}>({json.dumps(binding_source)})){_access(path)}({', '.join(args)})"
-            if operation.interaction == "stream":
+            if operation.interaction == "stream" and binding.metadata.get(
+                "subscription"
+            ):
+                method = f"({params}, options?: RequestOptions): ReturnType<{backend}> => this.runtime.session(async () => {invoke})"
+            elif operation.interaction == "stream":
                 method = f"({params}, options?: RequestOptions): AsyncIterable<{result}> => this.runtime.stream(async () => {invoke}, options?.signal)"
             elif operation.interaction == "session":
                 method = f"(...args: Parameters<{backend}>): ReturnType<{backend}> => this.runtime.session(async () => (await this.runtime.binding<{binding_source}Client>({json.dumps(binding_source)})){_access(path)}(...args))"
@@ -723,6 +729,19 @@ def _python_method(operation: Operation) -> list[str]:
             + "}, options)",
         ]
     if operation.interaction == "stream":
+        if binding.metadata.get("subscription"):
+            values = (
+                "{"
+                + ", ".join(
+                    f"{binding.metadata['python_arguments'][param.name]!r}: {snake(param.name)}"
+                    for param in operation.parameters
+                )
+                + "}"
+            )
+            return [
+                f"    def {snake(operation.name[-1])}(self{args}) -> AbstractAsyncContextManager[AsyncIterator[{result}]]:",
+                f"        return self._runtime.message_stream({source!r}, {tuple(path)!r}, {values}, {result})",
+            ]
         if binding.protocol == "sse":
             spec = {
                 "path": binding.path,

@@ -6,12 +6,12 @@ See the [public API](../../canon.md#public-namespaces) and
 [package migration guide](../../package-migration.md).
 
 **Define your realtime API once in Python. Get the server, the contract, and
-typed clients for Python and TypeScript — none of which can drift apart.**
+typed clients for Python and TypeScript â€” none of which can drift apart.**
 
 Agents, browser automation, live dashboards and voice need more than
 request/response over HTTP: server-pushed events, binary streams, one
 long-lived connection. So the JSON-RPC envelope gets hand-written, the dispatch
-table grows by hand, and the frontend client is maintained separately — until
+table grows by hand, and the frontend client is maintained separately â€” until
 the two disagree in production.
 
 fastapi_canon.integrations.websockets makes the Python definition the single source of truth:
@@ -58,7 +58,7 @@ One command turns that into an OpenRPC document and clients in both languages:
 fastapi-canon websockets generate --config rpcgen.toml
 ```
 
-And your frontend gets the whole API fully typed — no schema written twice, no
+And your frontend gets the whole API fully typed â€” no schema written twice, no
 client kept in sync by hand, no stringly-typed method names:
 
 ```ts
@@ -80,7 +80,7 @@ uv add "fastapi-canon[websockets,codegen]"  # client generation
 uv add "fastapi-canon[websockets,otel]"     # OpenTelemetry integration
 ```
 
-Python 3.12–3.14. FastAPI, Pydantic and Dishka are Canon base dependencies.
+Python 3.12â€“3.14. FastAPI, Pydantic and Dishka are Canon base dependencies.
 Code generation and OpenTelemetry dependencies remain optional extras.
 
 ## Serve with FastAPI
@@ -169,13 +169,13 @@ async def test_create() -> None:
 ```
 
 `tasks.create` is the wire name, the docstring becomes the contract summary,
-and `Inject[TaskStore]` is resolved on the server — it never appears in the
+and `Inject[TaskStore]` is resolved on the server â€” it never appears in the
 public schema.
 
 Every operation on a channel is implemented by the server: `@tasks.method()`,
-`@tasks.event()`, `@tasks.subscription()`, and `@tasks.stream()` declare the
+`@tasks.event()`, `@tasks.stream()` declare the
 whole API. Clients call methods on the server; the server never calls methods
-on the client. Push data to clients with events or subscriptions instead.
+on the client. Push data to clients with events or message streams instead.
 
 ## Core API
 
@@ -184,7 +184,7 @@ hooks, limits and custom transports.
 
 | Name | Use it for |
 | --- | --- |
-| `RpcChannel` | Group operations under a namespace with `@channel.method()`, `.event()`, `.subscription()` and `.stream()`. |
+| `RpcChannel` | Group operations under a namespace with `@channel.method()`, `.event()` and `.stream()`. |
 | `RpcModel` | Base class for parameter, result and event payloads. |
 | `CanonWebSocketRouter` | Mount channels on a socket path with `service.socket(...)`. |
 | `CanonWebSocketRouter` | Define endpoints and include their routes in FastAPI or a feature. |
@@ -199,19 +199,20 @@ quotas, observability or handshake checks; see the guides below.
 Read the [hardening stack and SDK migration guide](hardening-overview.md) for all
 15 ticket PRs, changed defaults, and integration steps.
 
-- [Services and channels](services.md) — methods, namespaces, parameter
+- [Services and channels](services.md) â€” methods, namespaces, parameter
   styles, sockets, protocol versions
-- [Dependency injection](dependencies.md) — `Inject[T]`, resolvers,
+- [Dependency injection](dependencies.md) â€” `Inject[T]`, resolvers,
   scopes, Dishka
-- [Connections and events](connections-and-events.md) — the `connect`
+- [Connections and events](connections-and-events.md) â€” the `connect`
   hook, rejecting handshakes, server-pushed events, limits
-- [Typed errors](errors.md) — stable codes, typed details, generated
+- [Typed errors](errors.md) â€” stable codes, typed details, generated
   exception classes
-- [Binary streams](streams.md) — upload, download, and bidirectional byte streams beside JSON-RPC
-- [Sockets](sockets.md) — proxy native protocols such as CDP with typed protocol bindings
-- [Contract and clients](clients.md) — `rpcgen.toml`, the CLI, the shape
+- [Message streams](message-streams.md) — typed streaming operations and managed SDK resources
+- [Binary streams](streams.md) â€” upload, download, and bidirectional byte streams beside JSON-RPC
+- [Sockets](sockets.md) â€” proxy native protocols such as CDP with typed protocol bindings
+- [Contract and clients](clients.md) â€” `rpcgen.toml`, the CLI, the shape
   of generated clients
-- [Transports](transports.md) — FastAPI, custom sockets, testing
+- [Transports](transports.md) â€” FastAPI, custom sockets, testing
 
 ## Examples
 

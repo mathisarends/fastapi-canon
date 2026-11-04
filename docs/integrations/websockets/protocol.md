@@ -52,7 +52,7 @@ OpenRPC exports `x-rpc-request-cancellation` with the notification method, param
 schema, and error code. Explicit method budgets appear as
 `x-rpc-request-timeout` in seconds; null disables an inherited serving budget.
 See [Request deadlines](services.md#request-deadlines) for cooperative cancellation
-and subscription handshake semantics. This wire control is implemented by RPC
+and stream handshake semantics. This wire control is implemented by RPC
 socket serving; a custom transport built on `RpcServer.handle()` owns its registry
 and cancellation routing.
 

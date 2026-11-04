@@ -62,7 +62,7 @@ telemetry = OpenTelemetry(
 
 Provider arguments accept the OpenTelemetry API provider interfaces. Omitted
 providers use the global providers. `tracing` and `metrics` operate independently.
-Each RPC call, subscription control call, or incoming notification gets a
+Each RPC call, stream control call, or incoming notification gets a
 `SERVER` span. Each accepted binary stream gets an `INTERNAL` span covering
 dependency resolution, execution, and cleanup. Application spans started in
 handlers inherit the active operation span.
@@ -195,7 +195,7 @@ are reused without entering their scopes twice. Middleware added during
 delegation finishes when delegated serving ends; route middleware also covers
 the surrounding dependency cleanup.
 
-When middleware is not configured, RPC requests and subscriptions bypass
+When middleware is not configured, RPC requests and message streams bypass
 operation scopes, outcome objects, and timing. Connections
 and binary streams also skip middleware scopes, and FastAPI routes omit the
 middleware dependency and custom-handler socket wrappers. To disable telemetry
@@ -219,7 +219,7 @@ for timing, mutation, retry, and cancellation rules.
 
 Outcome errors include remote/domain failures, connection/acquisition failures,
 response validation, timeout, and caller cancellation. Failed attempts and
-subscribe/unsubscribe control calls are observable. Keep tracing/export callbacks
+open/cancel control calls are observable. Keep tracing/export callbacks
 cancellation-aware: the SDK preserves the original operation error if cleanup
 also fails, while cleanup-only failures remain application errors and do not
 retry. Success outcomes contain the validated result returned to the caller.
@@ -327,7 +327,7 @@ class Tracing:
 
 Use a W3C trace-context propagator in the application. Each retry creates a new
 attempt span under the caller's active context, shares the logical call ID, and
-injects fresh metadata. Subscribe/unsubscribe controls run through the same
+injects fresh metadata. Open/cancel controls run through the same
 middleware; passive notification payload delivery does not. Python custom
 transports implement the keyword-only
 `metadata: Mapping[str, str] | None = None` in `request()` and serialize it as

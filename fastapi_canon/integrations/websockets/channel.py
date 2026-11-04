@@ -40,6 +40,7 @@ from fastapi_canon.integrations.websockets.protocol import (
     notification_type_definitions,
     socket_definition,
     stream_definition,
+    stream_payload,
     subscription_definition,
 )
 from fastapi_canon.integrations.websockets.server import (
@@ -49,6 +50,10 @@ from fastapi_canon.integrations.websockets.server import (
 from fastapi_canon.integrations.websockets.sockets import (
     RpcMessageType,
     RpcSocketProtocol,
+)
+from fastapi_canon.integrations.websockets.streams import (
+    RpcBinaryInput,
+    RpcBinaryOutput,
 )
 
 
@@ -72,7 +77,7 @@ class RpcRoute:
 
 
 class RpcChannel:
-    """Methods, events, subscriptions and sockets the server implements."""
+    """Methods, events, streams and sockets the server implements."""
 
     def __init__(
         self,
@@ -303,62 +308,6 @@ class RpcChannel:
         return decorate
 
     @overload
-    def subscription(self, function: FunctionType, /) -> FunctionType: ...
-
-    @overload
-    def subscription(
-        self,
-        name: str | None = None,
-        /,
-        *,
-        summary: str | None = None,
-        raises: Iterable[RpcErrorDeclaration] = (),
-    ) -> Callable[[FunctionType], FunctionType]: ...
-
-    def subscription(
-        self,
-        name: str | FunctionType | None = None,
-        /,
-        *,
-        summary: str | None = None,
-        raises: Iterable[RpcErrorDeclaration] = (),
-    ) -> Any:
-        channel = self
-        channel._ensure_mutable()
-        if isinstance(name, FunctionType):
-            return self.subscription()(name)
-        if name is not None and not isinstance(name, str):
-            raise ProtocolDefinitionError(
-                "RPC subscription decorator expects a function or name"
-            )
-        raises = tuple(raises)
-
-        def decorate(function: FunctionType) -> FunctionType:
-            channel._validate_function(function, "subscription", coroutine=False)
-            wire_name = join_rpc_name(
-                channel.namespace,
-                _name(name or function.__name__, "subscription name"),
-            )
-            merged_raises = merge_error_declarations(
-                channel.raises,
-                raises,
-                registry=channel.error_registry,
-                owner=f"RPC subscription {wire_name}",
-            )
-            definition = subscription_definition(
-                name=wire_name,
-                function=function,
-                summary=summary or _docstring_summary(function),
-                resolver_scope=channel.resolver_scope,
-                raises=merged_raises,
-            )
-            channel._reserve(wire_name)
-            channel._subscriptions.append(definition)
-            return function
-
-        return decorate
-
-    @overload
     def stream(self, function: FunctionType, /) -> FunctionType: ...
 
     @overload
@@ -367,9 +316,10 @@ class RpcChannel:
         name: str | None = None,
         /,
         *,
-        content_type: str = "application/octet-stream",
+        content_type: str | None = None,
         input_content_type: str | None = None,
         summary: str | None = None,
+        raises: Iterable[RpcErrorDeclaration] = (),
     ) -> Callable[[FunctionType], FunctionType]: ...
 
     def stream(
@@ -377,9 +327,10 @@ class RpcChannel:
         name: str | FunctionType | None = None,
         /,
         *,
-        content_type: str = "application/octet-stream",
+        content_type: str | None = None,
         input_content_type: str | None = None,
         summary: str | None = None,
+        raises: Iterable[RpcErrorDeclaration] = (),
     ) -> Any:
         channel = self
         channel._ensure_mutable()
@@ -389,7 +340,9 @@ class RpcChannel:
             raise ProtocolDefinitionError(
                 "RPC stream decorator expects a function or name"
             )
-        if not isinstance(content_type, str) or not content_type:
+        if content_type is not None and (
+            not isinstance(content_type, str) or not content_type
+        ):
             raise ProtocolDefinitionError("RPC stream content_type cannot be empty")
         if input_content_type is not None and (
             not isinstance(input_content_type, str) or not input_content_type
@@ -398,14 +351,51 @@ class RpcChannel:
                 "RPC stream input_content_type cannot be empty"
             )
 
+        raises = tuple(raises)
+
         def decorate(function: FunctionType) -> FunctionType:
             channel._validate_function(function, "stream", coroutine=False)
             local = _name(name or function.__name__, "stream name")
             wire_name = join_rpc_name(channel.namespace, local)
+            if (
+                inspect.isasyncgenfunction(function)
+                and stream_payload(function) is not bytes
+            ):
+                if content_type is not None or input_content_type is not None:
+                    raise ProtocolDefinitionError(
+                        "Content types apply only to binary streams"
+                    )
+                merged_raises = merge_error_declarations(
+                    channel.raises,
+                    raises,
+                    registry=channel.error_registry,
+                    owner=f"RPC stream {wire_name}",
+                )
+                message_stream = subscription_definition(
+                    name=wire_name,
+                    function=function,
+                    summary=summary or _docstring_summary(function),
+                    resolver_scope=channel.resolver_scope,
+                    raises=merged_raises,
+                )
+                if any(
+                    item.dependency in (RpcBinaryInput, RpcBinaryOutput)
+                    for item in message_stream.injected_parameters
+                ):
+                    raise ProtocolDefinitionError(
+                        "Message streams cannot inject binary ports"
+                    )
+                channel._reserve(wire_name)
+                channel._subscriptions.append(message_stream)
+                return function
+            if raises:
+                raise ProtocolDefinitionError(
+                    "Binary stream errors use endpoint rejections, not raises"
+                )
             definition = stream_definition(
                 name=wire_name,
                 function=function,
-                content_type=content_type,
+                content_type=content_type or "application/octet-stream",
                 input_content_type=input_content_type,
                 summary=summary or _docstring_summary(function),
                 resolver_scope=channel.resolver_scope,

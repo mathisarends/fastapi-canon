@@ -206,7 +206,7 @@ async def test_shutdown_cleans_subscription_while_another_request_is_stuck(drain
     subscribed, stopped, working = (asyncio.Event() for _ in range(3))
     channel = RpcChannel("work")
 
-    @channel.subscription()
+    @channel.stream()
     async def events() -> AsyncIterator[int]:
         subscribed.set()
         try:
@@ -224,7 +224,7 @@ async def test_shutdown_cleans_subscription_while_another_request_is_stuck(drain
     service.socket("/rpc", channels=[channel])
     async with InMemorySocketFactory(service) as factory:
         client = await factory("ws://test/rpc")
-        await client.send(request(1, "work.events.subscribe"))
+        await client.send(request(1, "work.events.open"))
         await asyncio.wait_for(subscribed.wait(), 1)
         await client.recv()
         await client.send(request(2))

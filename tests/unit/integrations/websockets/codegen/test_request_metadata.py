@@ -189,15 +189,15 @@ async def test_subscription_controls_each_carry_middleware_metadata(pool_runtime
     class Adapter(Transport):
         async def request(self, method, params=None, *, metadata=None):
             sent.append((method, metadata))
-            if method.endswith(".subscribe"):
-                return {"subscriptionId": "one"}
+            if method.endswith(".open"):
+                return {"streamId": "one"}
             return None
 
         async def notifications(self):
             yield {
                 "jsonrpc": "2.0",
                 "method": "updates",
-                "params": {"subscriptionId": "one", "payload": "ready"},
+                "params": {"streamId": "one", "payload": "ready"},
             }
             await asyncio.Event().wait()
 
@@ -207,11 +207,11 @@ async def test_subscription_controls_each_carry_middleware_metadata(pool_runtime
     notification = pool_runtime.RpcNotificationInfo(
         "updates", TypeAdapter(dict), TypeAdapter(str)
     )
-    stream = core.subscribe_remote(notification)
+    stream = core.open_message_stream(notification)
     assert await anext(stream) == "ready"
     await stream.aclose()
     assert sent == [
-        ("updates.subscribe", {"traceparent": "context"}),
-        ("updates.unsubscribe", {"traceparent": "context"}),
+        ("updates.open", {"traceparent": "context"}),
+        ("updates.cancel", {"traceparent": "context"}),
     ]
     await core.close()

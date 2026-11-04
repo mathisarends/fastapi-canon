@@ -176,6 +176,16 @@ class RpcProtocol:
         )
         self._streams = _unique("stream", ((item.name, item) for item in streams))
         self._sockets = _unique("socket", ((item.name, item) for item in sockets))
+        operation_names = (
+            set(self._methods) | set(self._notifications) | set(self._subscriptions)
+        )
+        for stream in self._subscriptions.values():
+            for suffix in ("open", "cancel"):
+                control = f"{stream.name}.{suffix}"
+                if control in operation_names:
+                    raise ProtocolDefinitionError(
+                        f"RPC stream control collides with an operation: {control}"
+                    )
         for operation in (*self.methods, *self.notifications, *self.subscriptions):
             bind_contracts(
                 (
@@ -406,6 +416,27 @@ def notification_definition(
     )
 
 
+def stream_payload(function: FunctionType) -> Any:
+    annotation = get_type_hints(function, include_extras=True).get("return")
+    annotation = _stream_annotation(annotation)
+    if get_origin(annotation) not in (AsyncIterator, AsyncGenerator) or not get_args(
+        annotation
+    ):
+        raise ProtocolDefinitionError("RPC stream must return AsyncIterator[Payload]")
+    payload = _resolve_alias(get_args(annotation)[0])
+    normalized = _stream_annotation(payload)
+    if normalized is Any or (
+        get_origin(normalized) in (Union, UnionType)
+        and any(
+            _stream_annotation(item) in (bytes, Any) for item in get_args(normalized)
+        )
+    ):
+        raise ProtocolDefinitionError(
+            "Stream payload must unambiguously declare bytes or serializable messages"
+        )
+    return bytes if normalized is bytes else payload
+
+
 def subscription_definition(
     *,
     name: str,
@@ -416,16 +447,10 @@ def subscription_definition(
 ) -> RpcSubscriptionDefinition:
     if not inspect.isasyncgenfunction(function):
         raise ProtocolDefinitionError(
-            f"RPC subscription {function.__qualname__} must be an async generator"
+            f"RPC message stream {function.__qualname__} must be an async generator"
         )
     hints = get_type_hints(function, include_extras=True)
-    result = hints.get("return")
-    if get_origin(result) not in (AsyncIterator, AsyncGenerator):
-        raise ProtocolDefinitionError(
-            f"RPC subscription {function.__qualname__} must return "
-            "AsyncIterator[Payload]"
-        )
-    payload = get_args(result)[0]
+    payload = stream_payload(function)
     TypeAdapter(payload).json_schema()
     params, params_parameter, injected = _router_params_model(function)
     return RpcSubscriptionDefinition(
@@ -466,10 +491,7 @@ def stream_definition(
     has_output = RpcBinaryOutput in counts
     result = hints.get("return")
     if inspect.isasyncgenfunction(function):
-        if (
-            get_origin(result) not in (AsyncIterator, AsyncGenerator)
-            or get_args(result)[0] is not bytes
-        ):
+        if stream_payload(function) is not bytes:
             raise ProtocolDefinitionError(
                 f"RPC binary stream {qualname} must yield bytes and be annotated "
                 "as AsyncIterator[bytes]"
@@ -626,6 +648,16 @@ def socket_definition(
         message_contract=message_contract,
         message_parameter=message_parameter,
     )
+
+
+def _stream_annotation(annotation: Any) -> Any:
+    while True:
+        if isinstance(annotation, TypeAliasType):
+            annotation = annotation.__value__
+        elif get_origin(annotation) is Annotated:
+            annotation = get_args(annotation)[0]
+        else:
+            return annotation
 
 
 def _resolve_alias(annotation: Any) -> Any:

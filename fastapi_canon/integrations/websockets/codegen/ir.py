@@ -317,6 +317,10 @@ class ClientIr:
 
 def build_ir(document: dict[str, Any]) -> ClientIr:
     """Lower an OpenRPC document into the language-neutral client model."""
+    if "x-rpc-subscriptions" in document:
+        raise UnsupportedSchemaError(
+            "Legacy x-rpc-subscriptions contracts must be regenerated as x-rpc-streams"
+        )
     schemas: dict[str, Any] = document.get("components", {}).get("schemas", {})
     methods: list[dict[str, Any]] = document.get("methods", [])
     discriminator_enums, discriminator_fields = _discriminators(schemas)
@@ -666,7 +670,7 @@ def _notifications(
                 ),
             )
         )
-    for subscription in document.get("x-rpc-subscriptions", ()):
+    for subscription in document.get("x-rpc-streams", ()):
         *path, operation_name = subscription["name"].split(".")
         params_schema = subscription.get("params")
         params_model = None if params_schema is None else ref_name(params_schema)
@@ -688,7 +692,7 @@ def _notifications(
                 summary=subscription.get("summary", ""),
                 server=_server_reference(
                     subscription,
-                    owner=f"Subscription {subscription['name']!r}",
+                    owner=f"Stream {subscription['name']!r}",
                 ),
                 subscription=True,
                 errors=tuple(_error(error) for error in subscription.get("errors", ())),

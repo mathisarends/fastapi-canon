@@ -304,7 +304,7 @@ async def _run_rpc_endpoint(
                 endpoint.protocol.subscriptions,
                 scoped,
                 send_outgoing,
-                limit=limits.max_subscriptions,
+                limit=limits.max_streams,
                 server=server,
                 activity=activity,
             )
