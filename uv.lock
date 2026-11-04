@@ -796,6 +796,7 @@ database = [
 ]
 mcp = [
     { name = "fastmcp" },
+    { name = "pydantic" },
 ]
 migrations = [
     { name = "alembic" },
@@ -901,6 +902,7 @@ requires-dist = [
     { name = "opentelemetry-instrumentation-httpx", marker = "extra == 'otel-httpx'", specifier = ">=0.65b0,<1" },
     { name = "pydantic", specifier = ">=2.9,<3" },
     { name = "pydantic", marker = "extra == 'codegen'", specifier = ">=2.11.2,<3" },
+    { name = "pydantic", marker = "extra == 'mcp'", specifier = ">=2.12,<3" },
     { name = "pydantic", marker = "extra == 'sse'", specifier = ">=2.11.2,<3" },
     { name = "pydantic", marker = "extra == 'websockets'", specifier = ">=2.11,<3" },
     { name = "pydantic-core", marker = "extra == 'websockets'", specifier = ">=2.33" },
