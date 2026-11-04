@@ -81,6 +81,7 @@ def _main() -> None:
         _observation_check(enabled="--otel" in selected)
         _resource_telemetry_check(selected)
         _database_check(selected)
+        _mcp_check(selected)
     if "sse" in selected:
         from fastapi_canon.integrations.sse import StreamRouter
 
@@ -215,6 +216,68 @@ def _main() -> None:
             )
         assert counter.closed
     print(f"Installed artifact checks passed: {', '.join(sorted(selected))}")
+
+
+def _mcp_check(selected: set[str]) -> None:
+    from fastapi_canon.integrations.mcp import McpOptions
+
+    assert McpOptions().path == "/mcp"
+    if "--mcp" not in selected:
+        assert "fastmcp" not in sys.modules
+        return
+
+    import httpx2
+    from dishka import Provider, Scope, provide
+    from fastapi_canon import Composition, Feature
+    from fastapi_canon.integrations.mcp import Inject, McpMount, McpServer
+    from fastmcp import Client
+    from fastmcp.client.transports import StreamableHttpTransport
+    from fastmcp.utilities.asgi_transport import StreamingASGITransport
+
+    events: list[str] = []
+
+    class Services(Provider):
+        @provide(scope=Scope.REQUEST)
+        async def label(self) -> AsyncIterator[str]:
+            events.append("open")
+            try:
+                yield "installed"
+            finally:
+                events.append("close")
+
+    server = McpServer("Installed")
+
+    @server.tool
+    async def echo(value: str, label: Inject[str]) -> str:
+        return f"{label}:{value}"
+
+    feature = Feature(
+        name="installed-mcp",
+        providers=[Services],
+        mcp=[McpMount(server=server, namespace="smoke")],
+    )
+    app = Composition(features=[feature], mcp=McpOptions()).apply(FastAPI())
+
+    def factory(**kwargs: object) -> httpx2.AsyncClient:
+        return httpx2.AsyncClient(transport=StreamingASGITransport(app), **kwargs)
+
+    async def exercise() -> None:
+        transport = StreamableHttpTransport(
+            "http://testserver/mcp", httpx_client_factory=factory
+        )
+        async with (
+            asyncio.timeout(10),
+            app.router.lifespan_context(app),
+            Client(transport, timeout=5) as client,
+        ):
+            tools = await client.list_tools()
+            assert [tool.name for tool in tools] == ["smoke_echo"]
+            assert set(tools[0].input_schema["properties"]) == {"value"}
+            result = await client.call_tool("smoke_echo", {"value": "ok"})
+            assert result.data == "installed:ok"
+        assert events == ["open", "close"]
+
+    asyncio.run(exercise())
 
 
 def _database_check(selected: set[str]) -> None:

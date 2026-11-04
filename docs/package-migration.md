@@ -13,6 +13,13 @@ PyPI project or add further Python import changes.
 
 ## Upgrade to 0.15.0
 
+The new MCP integration is opt-in: install `fastapi-canon[mcp]`, contribute
+`McpMount` declarations through `Feature(mcp=[...])`, and activate them with
+`Composition(mcp=McpOptions())`. Core installations do not require FastMCP.
+Mounted routes use FastMCP authentication configured on `McpOptions`, independently
+of FastAPI router dependencies. See the [MCP guide](integrations/mcp/README.md)
+for `Inject[T]`, lifecycle ownership and supported handlers.
+
 Replace `@channel.subscription()` with `@channel.stream()`. Bare `bytes` items
 select binary frames; other supported item types select JSON messages. Uploads
 and duplex binary handlers retain `RpcBinaryInput` and `RpcBinaryOutput`.

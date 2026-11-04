@@ -12,8 +12,11 @@ historical runs, tags and assets linked below remain in their original repositor
 
 ## Prepared source
 
-Canon **0.15.0** is prepared for the unified stream API and has not been published.
-See its [breaking changes](../CHANGELOG.md#0150---unreleased) before upgrading.
+Canon **0.15.0** is prepared for the unified stream API and optional MCP integration
+and has not been published. See the
+[upgrade guide](package-migration.md#upgrade-to-0150),
+[breaking changes](../CHANGELOG.md#0150---2026-11-04) and
+[MCP guide](integrations/mcp/README.md) before upgrading.
 
 ## Current versions
 
@@ -266,8 +269,8 @@ files must match the original manifest; conflicting contents fail. Canon also
 contains all transport modules and their generator resources in one artifact set.
 
 After upload, verify hashes and fresh public-index installs. Canon checks core,
-`[otel]`, `[otel-httpx]`, `[otel-sqlalchemy]`, `[sse]`, `[websockets]`, `[webrtc]`
-and combined feature/tool extras. The twelve installation combinations also
+`[otel]`, `[otel-httpx]`, `[otel-sqlalchemy]`, `[mcp]`, `[sse]`, `[websockets]`, `[webrtc]`
+and combined feature/tool extras. The thirteen installation combinations also
 cover `[database]`, `[sqlite,migrations]`, `[sqlite,migrations,sqlmodel]` and
 `[postgres,migrations]`. SQLite combinations exercise transactions and real
 Alembic upgrades; live PostgreSQL behavior is verified by the CI database job.

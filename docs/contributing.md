@@ -45,9 +45,10 @@ Use `pnpm typecheck` and `pnpm test:coverage` for all TypeScript gates, or
 `pnpm run typecheck:sse` for a focused check. Regenerate committed clients through
 their generators before checking drift; never edit generated clients directly.
 
-`check_distributions.py` builds wheels/sdists and tests seventeen feature/tool
+`check_distributions.py` builds wheels/sdists and tests eighteen feature/tool
 combinations of the single Canon wheel in fresh environments without source-tree
-overrides. Current and minimum dependency profiles are separate checks.
+overrides, including MCP tool execution and injected request-scope cleanup.
+Current and minimum dependency profiles are separate checks.
 The current profile also installs the development-only reference service and
 tests it without transport extras, then installs its optional telemetry
 dependencies and checks SQL/HTTP trace contracts.

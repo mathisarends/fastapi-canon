@@ -66,10 +66,11 @@ def _main() -> None:
             "webrtc",
             "webrtc,aiortc",
             "codegen",
+            "mcp",
             "sse,codegen",
             "websockets,codegen",
             "sse,websockets,codegen",
-            "sse,websockets,webrtc,aiortc,codegen,otel",
+            "sse,websockets,webrtc,aiortc,codegen,otel,mcp",
         )
     )
     for requirements in combinations:
@@ -118,6 +119,7 @@ def _main() -> None:
                 *(["--sqlite"] if "sqlite" in extras else []),
                 *(["--migrations"] if "migrations" in extras else []),
                 *(["--sqlmodel"] if "sqlmodel" in extras else []),
+                *(["--mcp"] if "mcp" in extras else []),
                 cwd=Path(temporary),
                 timeout=120,
             )

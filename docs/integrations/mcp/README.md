@@ -2,7 +2,8 @@
 
 Install `fastapi-canon[mcp]` to expose explicitly selected feature contributions
 through one FastMCP HTTP endpoint. Core imports and `McpOptions` remain usable
-without FastMCP. This integration targets FastMCP 4.1.3 through the latest 4.x.
+without FastMCP. This integration targets FastMCP 4.1.3 through the latest 4.x
+and selects Pydantic >=2.12; core installations retain their Pydantic >=2.9 minimum.
 
 ```python
 from dishka import Provider, Scope, provide

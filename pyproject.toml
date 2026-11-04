@@ -51,6 +51,7 @@ codegen = [
 ]
 mcp = [
     "fastmcp>=4.1.3,<5",
+    "pydantic>=2.12,<3",
 ]
 
 [project.scripts]
