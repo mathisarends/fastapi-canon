@@ -10,15 +10,35 @@ GitHub Releases and Actions retain publication evidence.
 The [repository migration](repository-migration.md) records the cutover. The
 historical runs, tags and assets linked below remain in their original repositories.
 
-## Prepared source
-
-Canon **0.15.0** is prepared for the unified stream API and optional MCP integration
-and has not been published. See the
-[upgrade guide](package-migration.md#upgrade-to-0150),
-[breaking changes](../CHANGELOG.md#0150---2026-11-04) and
-[MCP guide](integrations/mcp/README.md) before upgrading.
-
 ## Current versions
+
+Canon **0.15.0** was published on 2026-11-04 from
+[verified source `e4abb2c`](https://github.com/mathisarends/fastapi_canon/commit/e4abb2c54706854d9ec7b0c4cb668b9cbfa23545),
+after [exact-source CI](https://github.com/mathisarends/fastapi_canon/actions/runs/41883371046)
+and the [release dry run](https://github.com/mathisarends/fastapi_canon/actions/runs/41884977604).
+The [publication run](https://github.com/mathisarends/fastapi_canon/actions/runs/41886079014)
+passed both eighteen-combination wheel matrices and installed SSE/WebRTC CLI and
+client checks, then uploaded its original verified wheel and sdist. Its public-index
+check failed because the runner's package index still omitted the new version.
+Recovery retained the original source, notes, manifest and artifact bytes. The
+documented `verify-pypi` command passed all thirteen public-index installation
+combinations locally on Windows/Python 3.14, including MCP; `finish` created the
+matching tag and GitHub Release from the original run artifacts.
+The [GitHub Release](https://github.com/mathisarends/fastapi_canon/releases/tag/fastapi-canon-v0.15.0)
+contains the original wheel, sdist and manifest. Downloaded GitHub assets, PyPI
+file hashes and both run manifests agree; the release notes match the changelog
+and the tag points to the verified source. Dry-run and publication artifacts
+have identical hashes. Distribution files were neither rebuilt nor replaced.
+A fresh Windows/Python 3.12 public-index installation also passed the combined
+HTTP/SSE/WebSocket/WebRTC/telemetry/MCP smoke.
+
+This release unifies WebSocket message and binary stream declarations and adds
+managed Python/TypeScript SDK stream resources. Regenerate both SDKs and upgrade
+them with the server. Optional MCP feature mounts add FastMCP and Dishka injection
+without changing core dependency requirements. Follow the
+[0.15.0 upgrade guide](package-migration.md#upgrade-to-0150),
+[breaking changes](../CHANGELOG.md#0150---2026-11-04) and
+[MCP guide](integrations/mcp/README.md).
 
 Canon **0.14.0** was published on 2026-11-03 from
 [verified source `8e90a68`](https://github.com/mathisarends/fastapi_canon/commit/8e90a68315dcc311a9ac64a1ab09ea1315d4fc38),
@@ -147,7 +167,7 @@ assets are verified.
 
 | Package | Version | Migration |
 | --- | --- | --- |
-| Canon | 0.14.0 | Review [0.14.0 database migration controls](package-migration.md#upgrade-to-0140); select database extras explicitly and retain deployment-owned validation when disabling startup checks. Earlier upgrades: use keyword-only `Composition(features=...)`, `CanonWebSocketRouter` and independent service scopes for long-lived work. Follow the [0.13.0 upgrade guide](package-migration.md#upgrade-to-0130); earlier upgrades also require the [0.12.0](../CHANGELOG.md#0120---2026-11-02), [0.11.0](../CHANGELOG.md#0110---2026-11-01), [0.10.0](../CHANGELOG.md#0100---2026-11-01) and included [0.9.0 migrations](../CHANGELOG.md#090---unreleased). |
+| Canon | 0.15.0 | Regenerate Python and TypeScript SDKs with the server; replace `subscription()` with `stream()`, `.subscribe`/`.unsubscribe` with `.open`/`.cancel`, and `max_subscriptions` with `max_streams`. Follow the [0.15.0 upgrade guide](package-migration.md#upgrade-to-0150); MCP remains opt-in. Older upgrades also require the [0.14.0 database controls](package-migration.md#upgrade-to-0140), [0.13.0 composition/scope migration](package-migration.md#upgrade-to-0130), [0.12.0](../CHANGELOG.md#0120---2026-11-02), [0.11.0](../CHANGELOG.md#0110---2026-11-01), [0.10.0](../CHANGELOG.md#0100---2026-11-01) and included [0.9.0 migrations](../CHANGELOG.md#090---unreleased). |
 | WebRTC | 0.3.0 | Use public enum members, keyword-only engine/channel options and `DescriptionType`; handle lazy type aliases in introspection tools. See the [migration notes](history/fastapi-webrtc.md#030---2026-10-24). |
 | Streams | 0.5.0 | Regenerate clients. SDK-owned generated Python clients bound the connect time to 10 seconds; pass `RequestOptions(timeout=None)` or inject `httpx.AsyncClient(timeout=None)` to keep it unbounded. See the [Streams 0.5.0 notes](history/fastapi-streams.md#050---2026-10-25). |
 | RPCKit | 0.4.1 | None; wire output and generated clients are unchanged apart from the manifest generator version. See the [RPCKit 0.4.1 notes](history/fastapi-rpckit.md#041---2026-10-25). |

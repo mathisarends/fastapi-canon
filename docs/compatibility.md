@@ -1,5 +1,15 @@
 # Compatibility
 
+## MCP integration
+
+Canon 0.15.0 adds the optional `mcp` extra with FastMCP >=4.1.3,<5 and
+Pydantic >=2.12,<3; core installations retain Pydantic >=2.9. The minimum
+installed-wheel matrix exercises FastMCP 4.1.3 and Pydantic 2.12.0 on Python 3.12.
+Both wheel matrices and public-index verification exercise a mounted HTTP tool,
+injected input schema, tool result and Dishka request-scope cleanup. Core-only
+smokes check that importing MCP declarations does not load FastMCP. See the
+[MCP guide](integrations/mcp/README.md) for supported handlers and auth ownership.
+
 ## WebSocket router boundary
 
 `CanonWebSocketRouter` registers endpoints with `APIRouter.websocket()` and integrates through
@@ -44,12 +54,20 @@ Use `--fastapi VERSION` repeatedly to check additional releases explicitly.
 
 | Package | Published |
 | --- | --- |
-| `fastapi-canon` | 0.14.0 |
+| `fastapi-canon` | 0.15.0 |
 | `fastapi-streams` | 0.5.0 |
 | `fastapi-rpckit` | 0.4.1 |
 | `fastapi-webrtc` | 0.3.0 |
 
-**Canon 0.14.0** was published on 2026-11-03. Core Python/runtime dependency
+**Canon 0.15.0** was published on 2026-11-04. The unified WebSocket stream API
+requires coordinated server/client upgrades and regenerated SDKs; the optional
+MCP integration selects its own FastMCP/Pydantic requirements. Both
+eighteen-combination installed-wheel matrices and all thirteen public-index
+installation combinations passed. See the
+[0.15.0 upgrade guide](package-migration.md#upgrade-to-0150) and
+[verified publication record](releases.md#current-versions).
+
+Canon 0.14.0 was published on 2026-11-03. Core Python/runtime dependency
 ranges remain unchanged from 0.13.0. Both seventeen-combination installed-wheel
 matrices and all twelve public-index installation combinations passed. Database
 startup validation can be delegated explicitly, engine contexts can own
@@ -121,6 +139,16 @@ Canon core, each optional extra and both extras together. A fresh Windows/Python
 HTTP/SSE/RPC/WebRTC routing and generated RPC SDK execution and compilation.
 
 ## Verification scope
+
+The published 0.15.0 source passed exact-commit CI on Linux/Python 3.12–3.14
+and Windows/Python 3.14, including live PostgreSQL, scoped types, generated-client
+drift and Chromium/aiortc scenarios. Its original upload wheel passed eighteen
+combinations with current dependencies on Python 3.14 and minimum direct
+dependencies on Python 3.12, plus installed SSE/WebRTC CLI checks. All thirteen
+public-index installation combinations passed, including MCP and combined extras.
+PyPI hashes, downloaded GitHub assets, both run manifests, changelog-derived
+release notes and the tag source agree. See the
+[publication record](releases.md#current-versions).
 
 The published 0.13.0 source passed exact-commit CI on Linux/Python 3.12–3.14
 and Windows/Python 3.14, including the live PostgreSQL database and migration
