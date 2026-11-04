@@ -243,7 +243,8 @@ def verify_published(report: dict[str, Any], root: Path = ROOT) -> None:
             "[sse]",
             "[websockets]",
             "[webrtc]",
-            "[sse,websockets,webrtc,aiortc,codegen,otel]",
+            "[mcp]",
+            "[sse,websockets,webrtc,aiortc,codegen,otel,mcp]",
         )
     ]
     for requirements in combinations:
@@ -282,6 +283,8 @@ def verify_published(report: dict[str, Any], root: Path = ROOT) -> None:
                 selected.append("--migrations")
             if "sqlmodel" in extras:
                 selected.append("--sqlmodel")
+            if "mcp" in extras:
+                selected.append("--mcp")
             _run(
                 [
                     str(python),

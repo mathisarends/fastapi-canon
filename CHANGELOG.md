@@ -2,7 +2,7 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
-## 0.15.0 - Unreleased
+## 0.15.0 - 2026-11-04
 
 ### Added
 
@@ -10,7 +10,8 @@ All notable changes to `fastapi-canon` are documented in this file.
   application `McpOptions` with `/mcp` and app-title defaults, and FastMCP-backed
   `McpServer` registration with compact Dishka `Inject[T]` annotations. Composition
   owns the MCP lifespan and isolated per-execution dependency cleanup.
-
+- Installed-wheel and public-index smoke checks cover the optional MCP extra,
+  including an HTTP tool call, injected input schemas and request-scope cleanup.
 
 ### Breaking changes
 
