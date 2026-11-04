@@ -60,7 +60,7 @@ for media sessions, `aiortc` for the reference media engine, or `otel` for
 telemetry. The optional `otel-httpx` and `otel-sqlalchemy` extras enable
 [explicit resource adapters](docs/telemetry.md#explicit-resource-adapters).
 See [installation and migration](docs/package-migration.md).
-Python 3.12â€“3.14 is supported; see [compatibility](docs/compatibility.md).
+Python 3.12Ã¢â‚¬â€œ3.14 is supported; see [compatibility](docs/compatibility.md).
 
 ## Core API: routes, errors and composition
 
@@ -439,3 +439,9 @@ rules, [contributing](docs/contributing.md) for root commands,
 The imported repositories remain available in Git history. Current development
 and future releases use `mathisarends/fastapi_canon`; historical releases and
 predecessor repositories are preserved.
+
+### MCP features
+
+Install `fastapi-canon[mcp]` for FastMCP feature mounts with Dishka `Inject[T]`.
+See the [MCP guide](docs/integrations/mcp/README.md) for composition, namespaces,
+endpoint defaults and supported execution lifetimes.

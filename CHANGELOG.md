@@ -4,6 +4,14 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## 0.15.0 - Unreleased
 
+### Added
+
+- Optional `fastapi-canon[mcp]` integration: explicit feature `McpMount` contributions,
+  application `McpOptions` with `/mcp` and app-title defaults, and FastMCP-backed
+  `McpServer` registration with compact Dishka `Inject[T]` annotations. Composition
+  owns the MCP lifespan and isolated per-execution dependency cleanup.
+
+
 ### Breaking changes
 
 - Replace `@channel.subscription()` with `@channel.stream()`. The old decorator
@@ -191,7 +199,7 @@ All notable changes to `fastapi-canon` are documented in this file.
   instrumentation package for its public suppression helpers.
 - Remove `fastapi_canon.testing.telemetry.SpanCapture` from the distribution.
   Applications should maintain their own trace-capture fixture using the
-  OpenTelemetry SDKÃ¢â‚¬â„¢s in-memory exporter; the repository fixture provides an example.
+  OpenTelemetry SDKÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢s in-memory exporter; the repository fixture provides an example.
 
 ### Added
 

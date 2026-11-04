@@ -7,7 +7,7 @@ Optional transports and telemetry ship inside the same distribution and version.
 ```text
 fastapi_canon/                  Library and public facades
   error/                       Error values, catalog and HTTP/OpenAPI adapters
-  integrations/                SSE, WebSockets, WebRTC and telemetry
+  integrations/                SSE, WebSockets, WebRTC, MCP and telemetry
     database/                  Optional SQLAlchemy ownership and Alembic runner
   codegen/                     Shared SDK planning and generation
   checks/                      Static error-contract analysis
@@ -85,3 +85,10 @@ Run `uv run --frozen smelt context <module-or-path>` before implementation, then
 the checks in [contributing](contributing.md). Full Smelt coverage, errors and
 warnings gate both CI and the root pre-commit hook. Wheel and sdist checks install
 actual artifacts in fresh environments, without source-tree fallback.
+
+MCP declarations live in `integrations.mcp`. Composition lazily installs a fresh
+MCP root per application; call middleware borrows the APP container and owns
+REQUEST scopes. The registration adapter translates `Inject[T]` before FastMCP
+schema creation. No sibling transport or concrete error registry is imported.
+Smelt includes the new MCP edges and optional FastMCP dependency transitively
+for layers which already consume composition. Runtime imports remain lazy.
