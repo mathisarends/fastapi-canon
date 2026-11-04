@@ -26,6 +26,7 @@ from fastapi_canon.router import CanonRouter
 from fastapi_canon.scopes import _install_scopes
 
 if TYPE_CHECKING:
+    from fastapi_canon.integrations.mcp import McpMount, McpOptions
     from fastapi_canon.integrations.opentelemetry import Instrumentation, Telemetry
 
 
@@ -67,6 +68,7 @@ class Feature:
     routers: tuple[APIRouter, ...]
     providers: tuple[ProviderSource, ...]
     instrumentation: tuple[Instrumentation, ...]
+    mcp: tuple[McpMount, ...]
     errors: ErrorRegistry | None
     exception_handlers: tuple[ExceptionHandlerSpec, ...]
     lifespan: FeatureLifespan | None
@@ -78,10 +80,17 @@ class Feature:
         routers: Sequence[APIRouter] = (),
         providers: Sequence[ProviderSource] = (),
         instrumentation: Sequence[Instrumentation] = (),
+        mcp: Sequence[McpMount] = (),
         errors: ErrorRegistry | None = None,
         exception_handlers: Sequence[ExceptionHandlerSpec] = (),
         lifespan: FeatureLifespan | None = None,
     ) -> None:
+        normalized_mcp = tuple(mcp)
+        if normalized_mcp:
+            from fastapi_canon.integrations.mcp import McpMount
+
+            normalized_mcp = _unique_instances(normalized_mcp, McpMount, "mcp")
+        object.__setattr__(self, "mcp", normalized_mcp)
         normalized_name = _validate_feature_name(name)
         normalized_routers = _unique_instances(
             routers, APIRouter, f"feature {normalized_name!r} routers"
@@ -173,6 +182,7 @@ class Composition:
     router_policy: RouterPolicy | None
     telemetry: Telemetry | None
     request_logging: bool
+    mcp: McpOptions | None
 
     def __init__(
         self,
@@ -183,7 +193,14 @@ class Composition:
         router_policy: RouterPolicy | None = None,
         telemetry: Telemetry | None = None,
         request_logging: bool = False,
+        mcp: McpOptions | None = None,
     ) -> None:
+        if mcp is not None:
+            from fastapi_canon.integrations.mcp import McpOptions
+
+            if not isinstance(mcp, McpOptions):
+                raise FeatureConfigurationError("mcp must be McpOptions or None")
+        object.__setattr__(self, "mcp", mcp)
         _validate_bool(request_logging, "request_logging")
         object.__setattr__(self, "request_logging", request_logging)
         if telemetry is not None:
@@ -238,6 +255,7 @@ class _Installation:
     telemetry: Telemetry | None = field(compare=False)
     telemetry_id: int | None
     request_logging: bool
+    mcp: McpOptions | None
     container: AsyncContainer | None = field(compare=False)
 
 
@@ -253,6 +271,7 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         msg = "app must be a FastAPI instance"
         raise FeatureConfigurationError(msg)
     requested = _Installation(
+        mcp=composition.mcp,
         request_logging=composition.request_logging,
         telemetry=composition.telemetry,
         telemetry_id=id(composition.telemetry)
@@ -282,6 +301,24 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
             raise FeatureConfigurationError(msg)
         return
 
+    mounts = tuple(mount for feature in composition.features for mount in feature.mcp)
+    if mounts or composition.mcp is not None:
+        try:
+            from fastapi_canon.integrations.mcp.runtime import validate_mounts
+        except ModuleNotFoundError as error:
+            if error.name != "fastmcp":
+                raise
+            raise FeatureConfigurationError(
+                "Install fastapi-canon[mcp] to enable MCP"
+            ) from error
+
+        validate_mounts(mounts, composition.mcp)
+        if app.middleware_stack is not None:
+            raise FeatureConfigurationError("install MCP before the app starts")
+        if composition.mcp is not None and any(
+            getattr(route, "path", None) == composition.mcp.path for route in app.routes
+        ):
+            raise FeatureConfigurationError("MCP path conflicts with an existing route")
     telemetry = composition.telemetry
     if composition.request_logging and app.middleware_stack is not None:
         raise FeatureConfigurationError("install request logging before the app starts")
@@ -371,6 +408,10 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         install_openapi_contracts(app)
     if policy is not None and policy.raises:
         install_policy_contracts(app, policy.raises, policy_operations)
+    if composition.mcp is not None:
+        from fastapi_canon.integrations.mcp.runtime import install_mcp
+
+        lifespans = (*lifespans, install_mcp(app, mounts, composition.mcp, container))
     if lifespans or container is not None:
         app.router.lifespan_context = _compose_lifespan(
             original_lifespan,
@@ -384,6 +425,7 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         install_request_logging(app)
 
     completed = _Installation(
+        mcp=composition.mcp,
         request_logging=composition.request_logging,
         telemetry=composition.telemetry,
         telemetry_id=id(composition.telemetry)
@@ -429,7 +471,9 @@ def _validate_applied_composition(app: object, composition: Composition) -> None
         else None
     )
     if not isinstance(installed, _Installation) or (
-        installed.feature_ids != tuple(id(feature) for feature in composition.features)
+        installed.mcp != composition.mcp
+        or installed.feature_ids
+        != tuple(id(feature) for feature in composition.features)
         or installed.telemetry_id
         != (id(composition.telemetry) if composition.telemetry is not None else None)
         or installed.errors != composition.errors

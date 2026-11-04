@@ -20,7 +20,7 @@ history and records the publisher cutover. Repository names do not change the
 ## Package and dependencies
 
 `fastapi-canon` is the only active library distribution. Its wheel contains
-composition, HTTP contracts, SSE, WebSockets, WebRTC, telemetry declarations,
+composition, HTTP contracts, SSE, WebSockets, WebRTC, MCP, telemetry declarations,
 and the existing generators. They share one Canon version.
 
 Python extras select third-party dependencies, not source modules or additional
@@ -152,3 +152,10 @@ Transport guides live in `docs/integrations/`, examples in `examples/` and suite
 in the shared test roots. Historical changelogs and licenses live in `docs/history/`
 with their original distribution names. Releases use one Canon changelog, version,
 tag and artifact set.
+
+## MCP composition
+
+`fastapi_canon.integrations.mcp` exports `McpServer`, `Inject`, `McpMount`, and
+`McpOptions`. Install `fastapi-canon[mcp]` for the FastMCP runtime. Features
+contribute explicit namespaced mounts; `Composition(mcp=McpOptions())` owns the
+common HTTP endpoint and lifespan. See the [MCP guide](integrations/mcp/README.md).
