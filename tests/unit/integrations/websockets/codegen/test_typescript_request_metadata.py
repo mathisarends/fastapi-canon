@@ -110,7 +110,7 @@ async def test_typescript_middleware_wire_metadata_server_parent_and_controls(
             { other: "x" },
             { traceparent: 1 },
             { baggage: "x".repeat(4096) },
-            { baggage: "é".repeat(2048) },
+            { baggage: "Ã©".repeat(2048) },
             { baggage: "\\ud800" },
           ]) {
             assert.throws(() => validateRequestMetadata(metadata));
@@ -144,15 +144,15 @@ async def test_typescript_middleware_wire_metadata_server_parent_and_controls(
           const adapter = {
             async request(method, params, options) {
               controls.push({ method, metadata: options.metadata });
-              if (method.endsWith(".subscribe")) {
+              if (method.endsWith(".open")) {
                 queueMicrotask(() =>
                   deliver({
                     jsonrpc: "2.0",
                     method: "updates",
-                    params: { subscriptionId: "s", payload: "ready" },
+                    params: { streamId: "s", payload: "ready" },
                   }),
                 );
-                return { subscriptionId: "s" };
+                return { streamId: "s" };
               }
               return null;
             },
@@ -167,14 +167,13 @@ async def test_typescript_middleware_wire_metadata_server_parent_and_controls(
             middleware: [middleware],
             supportsMetadata: true,
           });
-          const stream = core
-            .subscribeRemote(defineNotification({ method: "updates" }))
-            [Symbol.asyncIterator]();
+          const stream = await core
+            .openMessageStream(defineNotification({ method: "updates" }));
           assert.equal((await stream.next()).value, "ready");
           await stream.return();
           assert.deepEqual(
             controls.map((x) => x.method),
-            ["updates.subscribe", "updates.unsubscribe"],
+            ["updates.open", "updates.cancel"],
           );
           assert.ok(controls.every((x) => x.metadata.traceparent === traceparent));
           await core.close();

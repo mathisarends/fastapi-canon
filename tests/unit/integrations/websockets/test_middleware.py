@@ -54,7 +54,7 @@ async def test_unregistered_middleware_allocates_no_operation_scopes(monkeypatch
         assert scope is None
         return "pong"
 
-    @channel.subscription()
+    @channel.stream()
     async def events() -> AsyncIterator[str]:
         yield "event"
 
@@ -78,10 +78,10 @@ async def test_unregistered_middleware_allocates_no_operation_scopes(monkeypatch
     rpc.stream("/stream", frames)
     async with RpcTestClient(rpc, "/rpc") as client:
         assert await client.request("demo.ping") == "pong"
-        subscription = await client.request("demo.events.subscribe")
+        subscription = await client.request("demo.events.open")
         _, event = await client.next_notification(timeout=1)
         assert event == {
-            "subscriptionId": subscription["subscriptionId"],
+            "streamId": subscription["streamId"],
             "payload": "event",
         }
     async with RpcTestClient(rpc, "/stream") as client:

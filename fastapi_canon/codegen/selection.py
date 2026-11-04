@@ -13,7 +13,7 @@ _HTTP_METHODS = {"get", "put", "post", "patch", "delete", "head", "options", "tr
 _RPC_GROUPS = (
     "methods",
     "x-rpc-notifications",
-    "x-rpc-subscriptions",
+    "x-rpc-streams",
     "x-rpckit-binary-streams",
     "x-rpckit-sockets",
 )

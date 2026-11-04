@@ -225,5 +225,5 @@
     "member": "meta",
     "version": 1
   },
-  "x-rpc-subscriptions": []
+  "x-rpc-streams": []
 }

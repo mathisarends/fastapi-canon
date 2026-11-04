@@ -38,9 +38,7 @@ def test_generated_typescript_subscription(tmp_path: Path) -> None:
     default = RpcErrorBinding(SessionMissing, code="session_unavailable")
     channel = RpcChannel("session", raises=[default])
 
-    @channel.subscription(
-        raises=[RpcErrorBinding(SessionMissing, details=SessionParams)]
-    )
+    @channel.stream(raises=[RpcErrorBinding(SessionMissing, details=SessionParams)])
     async def events(params: SessionParams) -> AsyncIterator[SessionEvent]:
         yield SessionEvent(value=params.session_id)
 
@@ -77,16 +75,16 @@ def test_generated_typescript_subscription(tmp_path: Path) -> None:
             let unsubscribed = false;
             const transport = {
               async request(method: string, params?: object): Promise<unknown> {
-                if (method === "session.events.subscribe") {
+                if (method === "session.events.open") {
                   if (JSON.stringify(params) !== '{"sessionId":"abc"}')
                     throw new Error("wrong params");
                   setTimeout(() => notify?.({
                     method: "session.events",
-                    params: { subscriptionId: "1", payload: { value: "abc" } },
+                    params: { streamId: "1", payload: { value: "abc" } },
                   }), 0);
-                  return { subscriptionId: "1" };
+                  return { streamId: "1" };
                 }
-                if (method === "session.events.unsubscribe") {
+                if (method === "session.events.cancel") {
                   unsubscribed = true;
                   return null;
                 }
@@ -102,7 +100,8 @@ def test_generated_typescript_subscription(tmp_path: Path) -> None:
 
             async function main(): Promise<void> {
               const client = SessionClient.withTransports(transport);
-              for await (const event of client.session.events({ sessionId: "abc" })) {
+              await using live = await client.session.events({ sessionId: "abc" });
+              for await (const event of live) {
                 if (event.value !== "abc") throw new Error("wrong payload");
                 break;
               }
@@ -111,14 +110,14 @@ def test_generated_typescript_subscription(tmp_path: Path) -> None:
 
               const failingTransport = {
                 async request(method: string): Promise<unknown> {
-                  return method.endsWith(".subscribe") ? { subscriptionId: "1" } : null;
+                  return method.endsWith(".open") ? { streamId: "1" } : null;
                 },
                 async *notifications(): AsyncIterable<unknown> {
                   await new Promise((resolve) => setTimeout(resolve, 0));
                   yield {
                     method: "session.events",
                     params: {
-                      subscriptionId: "1", complete: false,
+                      streamId: "1", complete: false,
                       error: {
                         code: -32000, message: "Session missing",
                         data: {
@@ -133,7 +132,7 @@ def test_generated_typescript_subscription(tmp_path: Path) -> None:
               const failingClient = SessionClient.withTransports(failingTransport);
               let caught = false;
               try {
-                const stream = failingClient.session.events({ sessionId: "abc" });
+                const stream = await failingClient.session.events({ sessionId: "abc" });
                 for await (const event of stream) {
                   throw new Error(`unexpected event: ${event.value}`);
                 }
@@ -171,14 +170,14 @@ def test_generated_typescript_subscription(tmp_path: Path) -> None:
                   const request = JSON.parse(raw) as { id: number; method: string };
                   this.#emit("message", { data: JSON.stringify({
                     jsonrpc: "2.0", id: request.id,
-                    result: request.method.endsWith(".subscribe")
-                      ? { subscriptionId: "1" } : null,
+                    result: request.method.endsWith(".open")
+                      ? { streamId: "1" } : null,
                   }) });
-                  if (request.method.endsWith(".subscribe")) {
+                  if (request.method.endsWith(".open")) {
                     this.#emit("message", { data: JSON.stringify({
                       jsonrpc: "2.0", method: "session.events",
                       params: {
-                        subscriptionId: "1",
+                        streamId: "1",
                         payload: { value: String(this.generation) },
                       },
                     }) });
@@ -207,9 +206,7 @@ def test_generated_typescript_subscription(tmp_path: Path) -> None:
                   return socket;
                 },
               });
-              const events = reconnecting.session.events({ sessionId: "abc" })[
-                Symbol.asyncIterator
-              ]();
+              const events = await reconnecting.session.events({ sessionId: "abc" });
               if ((await events.next()).value?.value !== "1") {
                 throw new Error("first event missing");
               }

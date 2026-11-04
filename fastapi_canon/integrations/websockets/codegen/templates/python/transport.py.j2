@@ -344,8 +344,19 @@ class WebSocketTransport:
                             raise RpcTransportError(
                                 "The WebSocket notification queue overflowed"
                             ) from error
-                        self._notifications.get_nowait()
+                        dropped = self._notifications.get_nowait()
                         self._overflow()
+                        if any(
+                            isinstance(item, dict)
+                            and isinstance(item.get("params"), dict)
+                            and "streamId" in item["params"]
+                            for item in (dropped, message)
+                        ):
+                            while not self._notifications.empty():
+                                self._notifications.get_nowait()
+                            raise RpcTransportError(
+                                "The WebSocket stream queue overflowed"
+                            ) from error
                         self._notifications.put_nowait(message)
                         if not self._overflow_warned:
                             logging.getLogger(__name__).warning(

@@ -184,7 +184,7 @@ class RpcLimits:
     max_message_bytes: int | None = 1_048_576
     send_timeout: float | None = 10.0
     max_batch_size: int = 32
-    max_subscriptions: int = 100
+    max_streams: int = 100
     # Admitted request/notification items, including executing batch members.
     max_pending_requests: int = 1024
     request_timeout: float | None = None
@@ -205,8 +205,8 @@ class RpcLimits:
             raise ValueError("send_timeout must be positive or None")
         if self.max_batch_size < 0:
             raise ValueError("max_batch_size must be at least 0")
-        if self.max_subscriptions < 1:
-            raise ValueError("max_subscriptions must be at least 1")
+        if self.max_streams < 1:
+            raise ValueError("max_streams must be at least 1")
         if self.max_pending_requests < 1:
             raise ValueError("max_pending_requests must be at least 1")
 

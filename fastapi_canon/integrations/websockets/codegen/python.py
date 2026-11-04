@@ -173,6 +173,7 @@ def _render_runtime_init(ir: ClientIr, options: PythonClientOptions) -> str:
     exported = [
         "UNSET",
         "RpcClientCore",
+        "RpcStream",
         "RpcClientMiddleware",
         "RpcTransportSource",
         "UnsetType",
@@ -194,6 +195,7 @@ def _render_runtime_init(ir: ClientIr, options: PythonClientOptions) -> str:
     imports.add(
         ".core",
         "RpcClientCore",
+        "RpcStream",
         "RpcClientMiddleware",
         "RpcTransportSource",
     )
@@ -501,7 +503,10 @@ def _render_errors(ir: ClientIr, options: PythonClientOptions) -> str:
 def _add_notification_imports(
     event: NotificationDecl, imports: _Imports, options: PythonClientOptions
 ) -> None:
-    imports.add("collections.abc", "AsyncIterator")
+    if event.subscription:
+        imports.add(_runtime_module(options), "RpcStream")
+    else:
+        imports.add("collections.abc", "AsyncIterator")
     imports.add(f"{options.package}.models", *_model_names(event.payload))
     if event.params_model is not None:
         imports.add(f"{options.package}.models", _schema_name(event.params_model))
@@ -687,6 +692,7 @@ def _render_package_init(
     imports = _Imports(relative_to=options.package)
     imports.add(
         _runtime_module(options),
+        "RpcStream",
         "RpcClientError",
         "RpcClientMiddleware",
         "RpcTransport",
@@ -707,6 +713,7 @@ def _render_package_init(
         client_name,
         "RpcClientMiddleware",
         "RpcTransport",
+        "RpcStream",
         "RpcClientError",
         "RpcConnectionState",
         "RpcNotificationOverflowHandler",
@@ -1557,6 +1564,7 @@ _RUNTIME_NAMES = frozenset(
         "TransportError",
         "AsyncIterator",
         "RpcClientCore",
+        "RpcStream",
         "RpcConnectionState",
         "RpcNotificationOverflowHandler",
         "RpcClientCall",

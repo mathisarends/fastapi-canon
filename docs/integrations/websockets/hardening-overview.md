@@ -94,8 +94,8 @@ describe connecting/connected/reconnecting/closed. `client.closed` now describes
 terminal closure and stays pending through recoverable drops. Explicit close
 interrupts opening, backoff, waiting iterators, and SDK-owned cleanup.
 
-Passive notification iterators resume and remote subscriptions obtain fresh
-server subscription IDs. Delivery remains at-most-once: reconnect can lose events,
+Passive notification iterators resume and remote message streams obtain fresh
+server stream IDs. Delivery remains at-most-once: reconnect can lose events,
 and bounded queues can drop the oldest item. Use state transitions to resync your
 application and `on_overflow` / `onOverflow` plus dropped counters to detect local
 loss. Durable replay, sequence numbers, and acknowledgements remain application

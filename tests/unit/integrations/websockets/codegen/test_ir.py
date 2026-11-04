@@ -337,3 +337,14 @@ def test_relative_protocol_schemas_resolve_against_the_contract(
         "https://cdn/js.json",
     )
     assert protocol.resolve_schemas(str(contract)) == protocol.resolve_schemas(contract)
+
+
+def test_legacy_subscription_contract_requires_regeneration(
+    document: dict[str, Any],
+) -> None:
+    legacy = deepcopy(document)
+    legacy["x-rpc-subscriptions"] = [
+        {"name": "jobs.progress", "params": None, "payload": {"type": "integer"}}
+    ]
+    with pytest.raises(UnsupportedSchemaError, match="regenerated as x-rpc-streams"):
+        build_ir(legacy)

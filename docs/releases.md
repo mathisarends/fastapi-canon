@@ -10,6 +10,11 @@ GitHub Releases and Actions retain publication evidence.
 The [repository migration](repository-migration.md) records the cutover. The
 historical runs, tags and assets linked below remain in their original repositories.
 
+## Prepared source
+
+Canon **0.15.0** is prepared for the unified stream API and has not been published.
+See its [breaking changes](../CHANGELOG.md#0150---unreleased) before upgrading.
+
 ## Current versions
 
 Canon **0.14.0** was published on 2026-11-03 from

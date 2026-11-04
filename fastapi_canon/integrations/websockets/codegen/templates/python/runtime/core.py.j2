@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import random
-from collections.abc import AsyncIterator, Iterable, Mapping
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Iterable, Mapping
 from contextlib import AbstractAsyncContextManager, aclosing, nullcontext, suppress
 from copy import deepcopy
 from math import isfinite
@@ -32,6 +32,7 @@ from .metadata import (
 from .transport import RpcTransport, validate_request_metadata
 
 _STREAM_ENDED = object()
+_STREAM_OPENED = object()
 _CLIENT_CLOSED = object()
 
 
@@ -41,6 +42,7 @@ class _RequestState:
         assert self.task is not None
         self.cancelling = self.task.cancelling()
         self.sent = False
+        self.cleanup = False
 
     def normalize(self, error: BaseException) -> BaseException:
         if (
@@ -59,8 +61,12 @@ class _RequestState:
 class _Subscriber:
     """One live notification iterator."""
 
-    def __init__(self, method: str | None, queue_size: int) -> None:
+    def __init__(
+        self, method: str | None, queue_size: int, *, strict: bool = False
+    ) -> None:
         self.method = method
+        self.strict = strict
+        self.stream_id: str | None = None
         self.queue: asyncio.Queue[object] = asyncio.Queue(queue_size)
         self.overflow_warned = False
         self.dropped = 0
@@ -154,8 +160,94 @@ class _AttemptFailure(Exception):
         self.retryable = retryable
 
 
-class _SubscriptionAck(BaseModel):
-    subscription_id: str = Field(alias="subscriptionId")
+class _StreamAck(BaseModel):
+    stream_id: str = Field(alias="streamId")
+
+
+class RpcStream[PayloadT]:
+    """One logical stream, with deterministic cleanup through ``async with``."""
+
+    def __init__(
+        self,
+        values: AsyncGenerator[object, None],
+        *,
+        on_open: Callable[[], None],
+        on_close: Callable[[], None],
+    ) -> None:
+        self._values = values
+        self._opened = False
+        self._closed = False
+        self._entered = False
+        self._pending: asyncio.Task[object] | None = None
+        self._on_open: Callable[[], None] | None = on_open
+        self._on_close: Callable[[], None] | None = on_close
+
+    def __aiter__(self) -> "RpcStream[PayloadT]":
+        return self
+
+    async def __anext__(self) -> PayloadT:
+        if self._closed:
+            raise StopAsyncIteration
+        await self._open()
+        try:
+            return cast(PayloadT, await self._next())
+        except BaseException:
+            self._finish()
+            raise
+
+    async def __aenter__(self) -> "RpcStream[PayloadT]":
+        if self._entered or self._closed:
+            raise RuntimeError("A stream can only be entered once")
+        self._entered = True
+        await self._open()
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        await self.aclose()
+
+    async def aclose(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            pending = self._pending
+            if pending is not None:
+                pending.cancel()
+                await asyncio.gather(pending, return_exceptions=True)
+            await self._values.aclose()
+        finally:
+            self._finish()
+
+    def _finish(self) -> None:
+        self._closed = True
+        self._on_open = None
+        callback = self._on_close
+        self._on_close = None
+        if callback is not None:
+            callback()
+
+    async def _open(self) -> None:
+        if not self._opened:
+            callback = self._on_open
+            self._on_open = None
+            if callback is not None:
+                callback()
+            try:
+                if await self._next() is not _STREAM_OPENED:
+                    raise RpcTransportError("Invalid stream opening")
+                self._opened = True
+            except BaseException:
+                await self.aclose()
+                raise
+
+    async def _next(self) -> object:
+        if self._pending is not None:
+            raise RuntimeError("Concurrent reads on one stream are not supported")
+        self._pending = asyncio.create_task(anext(self._values))
+        try:
+            return await self._pending
+        finally:
+            self._pending = None
 
 
 class RpcClientCore:
@@ -206,6 +298,7 @@ class RpcClientCore:
         self._on_overflow = on_overflow
         self._overflow_callback_failed = False
         self._hubs: dict[int, _NotificationHub] = {}
+        self._message_streams: set[RpcStream[Any]] = set()
         self._notification_queue_size = notification_queue_size
         self._closed_future: asyncio.Future[BaseException | None] | None = None
         self._source_closed: asyncio.Future[BaseException | None] | None = None
@@ -317,9 +410,11 @@ class RpcClientCore:
         transport: RpcTransport | None = None,
         logical_timeout: tuple[asyncio.Timeout, RpcRequestTimeoutError] | None = None,
     ) -> Any:
-        if self._closed:
+        cleanup = transport is not None and route.method.endswith(".cancel")
+        if self._closed and not cleanup:
             raise RpcConnectionLostError(sent=False, reason="The client was closed")
         state = _RequestState()
+        state.cleanup = cleanup
         task = state.task
         self._active_requests.setdefault(task, []).append(state)
         try:
@@ -374,7 +469,7 @@ class RpcClientCore:
                 live = transport or await self._transport_for(
                     route.server if call is None else call.server
                 )
-                if self._closed:
+                if self._closed and not state.cleanup:
                     raise RpcConnectionLostError(
                         sent=False, reason="The client was closed"
                     )
@@ -477,25 +572,33 @@ class RpcClientCore:
     ) -> AsyncIterator[PayloadT]:
         return self._subscribe(notification)
 
-    def subscribe_remote[PayloadT](
+    def open_message_stream[PayloadT](
         self,
         notification: RpcNotificationInfo[PayloadT],
         *,
         params: BaseModel | None = None,
-    ) -> AsyncIterator[PayloadT]:
-        return self._subscribe_remote(notification, params)
+    ) -> RpcStream[PayloadT]:
+        stream: RpcStream[PayloadT] = RpcStream(
+            self._subscribe_remote(notification, params),
+            on_open=lambda: self._message_streams.add(stream),
+            on_close=lambda: self._message_streams.discard(stream),
+        )
+        return stream
 
     async def _subscribe_remote[PayloadT](
         self,
         notification: RpcNotificationInfo[PayloadT],
         params: BaseModel | None,
-    ) -> AsyncIterator[PayloadT]:
+    ) -> AsyncGenerator[object, None]:
         payload = (
             None
             if params is None
             else params.model_dump(mode="json", by_alias=True, exclude_unset=True)
         )
-        subscriber = _Subscriber(notification.method, self._notification_queue_size)
+        subscriber = _Subscriber(
+            notification.method, self._notification_queue_size, strict=True
+        )
+        opened = False
         while not self._closed:
             transport = await self._notification_transport(notification.server)
             if transport is None:
@@ -505,6 +608,7 @@ class RpcClientCore:
                 hub = _NotificationHub(transport)
                 self._hubs[id(transport)] = hub
             subscriber.terminal = None
+            subscriber.stream_id = None
             if hub.terminal is not None:
                 raise RpcTransportError("The notification stream is closed")
             hub.subscribers.append(subscriber)
@@ -517,22 +621,26 @@ class RpcClientCore:
             try:
                 result = await self._request_attempt(
                     RpcRouteInfo(
-                        method=f"{notification.method}.subscribe",
+                        method=f"{notification.method}.open",
                         server=notification.server,
-                        result_adapter=TypeAdapter(_SubscriptionAck),
+                        result_adapter=TypeAdapter(_StreamAck),
                     ),
                     payload,
                     1,
                     str(uuid4()),
                     transport,
                 )
-                subscription_id = result.subscription_id
+                subscription_id = result.stream_id
+                subscriber.stream_id = subscription_id
+                if not opened:
+                    opened = True
+                    yield _STREAM_OPENED
                 while True:
                     item = await subscriber.next()
                     if self._closed:
                         return
                     if item is _STREAM_ENDED:
-                        return
+                        raise RpcTransportError("Stream ended without completion")
                     if isinstance(item, BaseException):
                         if isinstance(item, RpcClientError):
                             raise item
@@ -543,7 +651,7 @@ class RpcClientCore:
                     values = item.get("params")
                     if (
                         not isinstance(values, dict)
-                        or values.get("subscriptionId") != subscription_id
+                        or values.get("streamId") != subscription_id
                     ):
                         continue
                     if values.get("complete") is True:
@@ -555,12 +663,12 @@ class RpcClientCore:
                             or not isinstance(error.get("code"), int)
                             or not isinstance(error.get("message"), str)
                         ):
-                            raise RpcTransportError("Invalid subscription error")
+                            raise RpcTransportError("Invalid stream error")
                         data = error.get("data", {})
                         if not isinstance(data, dict) or not (
                             isinstance(data.get("code"), str) or "problem" in data
                         ):
-                            raise RpcTransportError("Invalid subscription error data")
+                            raise RpcTransportError("Invalid stream error data")
                         factory = notification.error_mapper or remote_error
                         raise factory(
                             error["code"],
@@ -570,9 +678,7 @@ class RpcClientCore:
                             data.get("problem"),
                         )
                     if "payload" not in values:
-                        raise RpcTransportError(
-                            "Subscription notification has no payload"
-                        )
+                        raise RpcTransportError("Stream notification has no payload")
                     try:
                         yield notification.payload_adapter.validate_python(
                             values["payload"]
@@ -600,11 +706,11 @@ class RpcClientCore:
                     with suppress(Exception):
                         await self._request_attempt(
                             RpcRouteInfo(
-                                method=f"{notification.method}.unsubscribe",
+                                method=f"{notification.method}.cancel",
                                 server=notification.server,
                                 result_adapter=TypeAdapter(Any),
                             ),
-                            {"subscriptionId": subscription_id},
+                            {"streamId": subscription_id},
                             1,
                             str(uuid4()),
                             transport,
@@ -709,7 +815,27 @@ class RpcClientCore:
                 message_method = message.get("method")
                 for subscriber in tuple(hub.subscribers):
                     if subscriber.method in (None, message_method):
+                        if subscriber.strict:
+                            values = message.get("params")
+                            if subscriber.terminal is not None or (
+                                subscriber.stream_id is not None
+                                and (
+                                    not isinstance(values, dict)
+                                    or values.get("streamId") != subscriber.stream_id
+                                )
+                            ):
+                                continue
                         if subscriber.queue.full():
+                            if subscriber.strict:
+                                self._overflow(subscriber)
+                                while not subscriber.queue.empty():
+                                    subscriber.queue.get_nowait()
+                                subscriber.finish(
+                                    RpcTransportError(
+                                        "Stream consumer queue overflowed"
+                                    )
+                                )
+                                continue
                             subscriber.queue.get_nowait()
                             self._overflow(subscriber)
                             if not subscriber.overflow_warned:
@@ -744,6 +870,10 @@ class RpcClientCore:
         for task, states in tuple(self._active_requests.items()):
             if task is not current and task.cancelling() == states[-1].cancelling:
                 task.cancel(_CLIENT_CLOSED)
+        await asyncio.gather(
+            *(stream.aclose() for stream in tuple(self._message_streams)),
+            return_exceptions=True,
+        )
         tasks = tuple(hub.task for hub in self._hubs.values() if hub.task is not None)
         for task in tasks:
             task.cancel()

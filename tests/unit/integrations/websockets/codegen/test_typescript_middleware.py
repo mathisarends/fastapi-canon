@@ -201,12 +201,12 @@ def test_client_middleware_outcomes_retry_abort_and_cleanup(cancellation_sdk):
           const controls = [], controlEvents = [], queue = [];
           let waiting;
           const transport = {async request(method, params) {
-            if (method.endsWith(".subscribe")) {
+            if (method.endsWith(".open")) {
               const value = {jsonrpc: "2.0", method: "updates",
-                params: {subscriptionId: "s", payload: {value: 1}}};
+                params: {streamId: "s", payload: {value: 1}}};
               if (waiting) {const resolve = waiting; waiting = undefined;
                 resolve({value, done: false});} else queue.push(value);
-              return {subscriptionId: "s"};
+              return {streamId: "s"};
             }
           }, notifications(signal) {return {[Symbol.asyncIterator]() {return {
             next() {if (queue.length) return Promise.resolve({value: queue.shift(),
@@ -216,12 +216,12 @@ def test_client_middleware_outcomes_retry_abort_and_cleanup(cancellation_sdk):
           };}};}, async close() {}};
           const subscribed = new RpcClientCore(transport, {
             middleware: [record("metrics", controlEvents, controls)]});
-          const stream = subscribed.subscribeRemote(
-            defineNotification({method: "updates"}))[Symbol.asyncIterator]();
+          const stream = await subscribed.openMessageStream(
+            defineNotification({method: "updates"}));
           assert.deepEqual((await stream.next()).value, {value: 1});
           await stream.return();
           assert.deepEqual(controls.map(c => c.route.method),
-            ["updates.subscribe", "updates.unsubscribe"]);
+            ["updates.open", "updates.cancel"]);
           assert(controls.every(c => "result" in c.outcome));
           await subscribed.close(); assert.equal(timers.size, 0);
           console.log("middleware complete");

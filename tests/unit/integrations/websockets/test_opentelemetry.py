@@ -243,7 +243,7 @@ async def test_subscription_metadata_parents_controls_and_generator(providers):
         channel = RpcChannel("updates")
         stream_parent = asyncio.get_running_loop().create_future()
 
-        @channel.subscription()
+        @channel.stream()
         async def values() -> AsyncIterator[int]:
             stream_parent.set_result(trace.get_current_span().get_span_context())
             yield 1
@@ -261,7 +261,7 @@ async def test_subscription_metadata_parents_controls_and_generator(providers):
                     {
                         "jsonrpc": "2.0",
                         "id": 1,
-                        "method": "updates.values.subscribe",
+                        "method": "updates.values.open",
                         "meta": {"traceparent": f"00-{'1' * 32}-{'2' * 16}-01"},
                     }
                 )
@@ -274,7 +274,7 @@ async def test_subscription_metadata_parents_controls_and_generator(providers):
                     {
                         "jsonrpc": "2.0",
                         "id": 2,
-                        "method": "updates.values.unsubscribe",
+                        "method": "updates.values.cancel",
                         "params": ack["result"],
                         "meta": {"traceparent": f"00-{'3' * 32}-{'4' * 16}-01"},
                     }
@@ -285,10 +285,10 @@ async def test_subscription_metadata_parents_controls_and_generator(providers):
             await socket.client_disconnect()
             await serving
         spans = {span.name: span for span in exporter.get_finished_spans()}
-        subscribed = spans["updates.values.subscribe"]
+        subscribed = spans["updates.values.open"]
         assert subscribed.context.trace_id == int("1" * 32, 16)
         assert parent.span_id == subscribed.context.span_id
-        assert spans["updates.values.unsubscribe"].context.trace_id == int("3" * 32, 16)
+        assert spans["updates.values.cancel"].context.trace_id == int("3" * 32, 16)
         assert not trace.get_current_span().get_span_context().is_valid
 
 
@@ -617,7 +617,7 @@ async def test_subscription_control_calls_are_instrumented(providers):
     tracer, meter, exporter, reader = providers
     channel = RpcChannel("updates")
 
-    @channel.subscription()
+    @channel.stream()
     async def values() -> AsyncIterator[int]:
         yield 1
         await asyncio.Event().wait()
@@ -627,15 +627,15 @@ async def test_subscription_control_calls_are_instrumented(providers):
     )
     rpc.socket("/rpc", channels=[channel])
     async with RpcTestClient(rpc, "/rpc") as client:
-        subscription = await client.request("updates.values.subscribe")
+        subscription = await client.request("updates.values.open")
         await client.next_notification()
-        await client.request("updates.values.unsubscribe", subscription)
+        await client.request("updates.values.cancel", subscription)
         with pytest.raises(RpcTestError):
-            await client.request("updates.values.unsubscribe", subscription)
+            await client.request("updates.values.cancel", {"streamId": 1})
     assert [span.name for span in exporter.get_finished_spans()] == [
-        "updates.values.subscribe",
-        "updates.values.unsubscribe",
-        "updates.values.unsubscribe",
+        "updates.values.open",
+        "updates.values.cancel",
+        "updates.values.cancel",
     ]
     assert total(reader, "rpckit.rpc.calls") == 3
     assert total(reader, "rpckit.rpc.calls", **{"rpckit.outcome": "error"}) == 1

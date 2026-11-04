@@ -1,5 +1,6 @@
 import re
 from collections.abc import Iterable
+from enum import Enum
 from types import UnionType
 from typing import Any, TypeAliasType, get_args, get_origin
 
@@ -103,7 +104,7 @@ def _annotations(protocol: RpcProtocol) -> dict[str, Any]:
     for subscription in protocol.subscriptions:
         if subscription.params is not None:
             _add(annotations, subscription.params)
-        _add(annotations, subscription.payload)
+        _add_result_types(annotations, subscription.payload)
     for notification_type in protocol.notification_types:
         _add(annotations, notification_type.payload)
     for method in (
@@ -119,7 +120,7 @@ def _annotations(protocol: RpcProtocol) -> dict[str, Any]:
 
 def _add_result_types(annotations: dict[str, Any], annotation: Any) -> None:
     if isinstance(annotation, TypeAliasType) or (
-        isinstance(annotation, type) and issubclass(annotation, BaseModel)
+        isinstance(annotation, type) and issubclass(annotation, (BaseModel, Enum))
     ):
         _add(annotations, annotation)
         return

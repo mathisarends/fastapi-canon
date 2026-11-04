@@ -368,8 +368,8 @@ Callbacks run in state-transition order per server: initial `connecting`, then
 Keep callbacks quick and synchronous. Callback failures are reported and contained.
 Intentional close also reports `closed`; inspect the server and error arguments
 to distinguish affected endpoints and failures. Every reconnect can imply a notification gap; resync application
-state when connectivity returns. Remote subscriptions reacquire their server
-subscription, and passive event iterators also resume on the replacement socket.
+state when connectivity returns. Remote message streams reacquire their server
+stream, and passive event iterators also resume on the replacement socket.
 See [Notification delivery](connections-and-events.md#notification-delivery-and-reconnects)
 for gap detection and overflow counters.
 
@@ -522,7 +522,7 @@ factory may provide more information. The flag is classification metadata for
 reconnect policy; this change does not add a new retry policy.
 
 Original transport errors are chained as Python `__cause__` or TypeScript `cause`.
-Request failures, notification/subscription iterators, and the WebSocket
+Request failures, notification/message-stream iterators, and the WebSocket
 transport's `closed` result preserve SDK error types. TypeScript now exposes
 `transport.closed`, resolving with the typed failure or `undefined` after explicit
 normal close; Python keeps its existing future, with `None` after normal close.
@@ -579,7 +579,7 @@ When delivery may have occurred (`sent=True`), or an attempt times out, only a
 route with contract-declared idempotency permits retry. Remote/domain errors,
 response validation failures, permanent connect errors, caller cancellation,
 and explicit client close never trigger retry. Unknown delivery is conservatively
-sent. Streams and subscriptions do not enter this loop.
+sent. Streams and message streams do not enter this loop.
 
 One request timeout bounds connection acquisition, wire work, and retry backoff.
 The deadline is never restarted. An optional `retry_attempt_timeout` (seconds) /
@@ -588,7 +588,7 @@ time for another attempt within the overall deadline. Without it, a transport
 timeout can permit retry only while the overall budget remains. Retries reuse
 params and allocate a fresh request ID; connection pools reuse their configured
 initial/max delays and jitter source for retry backoff. Custom sources can expose
-`retry_delay` / `retryDelay`, otherwise the default full jitter is 0.25–5 seconds
+`retry_delay` / `retryDelay`, otherwise the default full jitter is 0.25â€“5 seconds
 (the actual wait ranges from zero to the capped delay).
 
 After ambiguous delivery, the original handler might still be running. Retry can
@@ -640,8 +640,8 @@ than a wire ID. Failed acquisition leaves `transport` unset. After the body,
 the same value. Durations use **seconds in both SDKs**, start after initial JSON
 normalization, and include middleware entry, connection acquisition, send/wait,
 and response validation. They exclude retry backoff and normal teardown. For
-subscription control calls, the iterator has already acquired its transport;
-that acquisition is outside the subscribe/unsubscribe call scope.
+stream control calls, the iterator has already acquired its transport;
+that acquisition is outside the open/cancel call scope.
 
 Caller cancellation keeps `CancelledError` and its message in Python, and the
 exact AbortSignal reason in TypeScript. A whole-call timeout during an attempt
@@ -664,14 +664,14 @@ Keep per-request tracing metadata separate from user params.
 
 Middleware is the only client instrumentation API. Use it for per-attempt metrics,
 errors, and local span state; group attempts by logical ID for logical-call metrics.
-A deadline exhausted during backoff occurs outside an attempt scope. Subscribe and
-unsubscribe scopes are observable but never enter ordinary method retry. Passive
+A deadline exhausted during backoff occurs outside an attempt scope. Open and
+cancel scopes are observable but never enter ordinary method retry. Passive
 notification payload delivery does not create request scopes.
 
 All calls use the same attempt/validation pipeline, including an empty middleware
 chain. Successful outcomes contain the validated result returned to the caller.
-For subscriptions, Python validates the control acknowledgement before reading
-its subscription ID. Regenerate both SDKs and migrate `hooks` to `middleware`;
+For message streams, Python validates the control acknowledgement before reading
+its stream ID. Regenerate both SDKs and migrate `hooks` to `middleware`;
 there are no compatibility callbacks, raw-result wrappers, or deprecated aliases.
 Python and TypeScript SDKs have no dependency on tracing.
 

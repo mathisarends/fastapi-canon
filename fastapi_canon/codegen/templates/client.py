@@ -4,8 +4,8 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
-from collections.abc import AsyncIterator, Callable
-from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator, AsyncIterator, Callable
+from contextlib import aclosing, asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, Literal
 from urllib.parse import quote, urlsplit, urlunsplit
@@ -167,6 +167,19 @@ class Runtime:
                 yield session
             finally:
                 self.sessions.discard(session)
+
+    @asynccontextmanager
+    async def message_stream(
+        self, source: str, path: tuple[str, ...], kwargs: dict[str, Any], result: Any
+    ) -> AsyncIterator[AsyncIterator[Any]]:
+        async with self.session(source, path, kwargs) as stream:
+
+            async def values() -> AsyncGenerator[Any, None]:
+                async for item in stream:
+                    yield self.result(item, result)
+
+            async with aclosing(values()) as converted:
+                yield converted
 
     def prepare(
         self,

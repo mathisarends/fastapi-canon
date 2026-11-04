@@ -2,6 +2,45 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
+## 0.15.0 - Unreleased
+
+### Breaking changes
+
+- Replace `@channel.subscription()` with `@channel.stream()`. The old decorator
+  is removed without an alias. `AsyncIterator[T]` declares JSON message streams;
+  `AsyncIterator[bytes]` declares binary frames. Binary input/output ports retain
+  upload and duplex support. Use `content_type` and `input_content_type` only for
+  binary transfers; message streams keep `raises=` and channel error declarations.
+  Unconstrained `Any` and mixed raw-byte/message payloads fail at registration.
+- Replace message-stream wire controls `<operation>.subscribe` and
+  `<operation>.unsubscribe` with `<operation>.open` and `<operation>.cancel`.
+  Control acknowledgements, data and terminal messages now use `streamId`.
+  OpenRPC describes the operation in `x-rpc-streams`, including framing,
+  direction, overflow and reconnect policy. Old control names and the old
+  `x-rpc-subscriptions` contract are not accepted. Upgrade server and clients
+  together and regenerate both language targets.
+- Rename `RpcLimits.max_subscriptions` to `max_streams`; the default remains 100
+  logical message streams per connection. The limit error code is now
+  `stream_limit`. Binary sockets keep their existing
+  independent lifecycle and limits.
+- Generated Python message operations return an iterable stream resource. Prefer
+  `async with client.jobs.progress(job_id=...) as stream:` followed by `async for`;
+  entering opens the operation before waiting for its first value and leaving
+  cancels it with cleanup. Direct iteration and explicit `aclose()` also work.
+  Generated TypeScript message operations now return `Promise<RpcStream<T>>`:
+  use `await using stream = await client.jobs.progress({ jobId: ... })` and
+  `for await`. `close()` and loop exit stop that stream. Binary receive operations
+  keep the same resource pattern. The common domain SDK also exposes managed
+  resources for JSON-RPC message streams.
+- Message-stream queue overflow is an explicit transport/consumer error rather
+  than silent truncation. Passive notification overflow policies and counters
+  remain available. Reconnect is still opt-in: `reconnect=True` / `reconnect: true`
+  reopens active message streams with fresh IDs, on the replacement transport;
+  old IDs are cancelled only on their issuing transport. Reopening restarts the
+  source and does not guarantee replay or exact continuation. Retry deadlines,
+  credential refresh, connection recovery, scoped errors, drain and binary
+  backpressure remain supported.
+
 ## 0.14.0 - 2026-11-03
 
 ### Breaking changes
@@ -152,7 +191,7 @@ All notable changes to `fastapi-canon` are documented in this file.
   instrumentation package for its public suppression helpers.
 - Remove `fastapi_canon.testing.telemetry.SpanCapture` from the distribution.
   Applications should maintain their own trace-capture fixture using the
-  OpenTelemetry SDK’s in-memory exporter; the repository fixture provides an example.
+  OpenTelemetry SDKÃ¢â‚¬â„¢s in-memory exporter; the repository fixture provides an example.
 
 ### Added
 

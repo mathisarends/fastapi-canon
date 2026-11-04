@@ -42,7 +42,7 @@ async def test_subscription_ack_is_not_followed_by_a_second_response(
             exiting.set()
             await asyncio.Future()
 
-    @channel.subscription()
+    @channel.stream()
     async def events() -> AsyncIterator[int]:
         started.set()
         await release.wait()
@@ -62,7 +62,7 @@ async def test_subscription_ack_is_not_followed_by_a_second_response(
     )
     task = asyncio.create_task(
         session.handle(
-            RpcRequestEnvelope(jsonrpc="2.0", id=1, method="session.events.subscribe")
+            RpcRequestEnvelope(jsonrpc="2.0", id=1, method="session.events.open")
         )
     )
     try:
@@ -71,7 +71,7 @@ async def test_subscription_ack_is_not_followed_by_a_second_response(
             await exiting.wait()
             await started.wait()
             assert responses == [
-                {"jsonrpc": "2.0", "id": 1, "result": {"subscriptionId": "1"}}
+                {"jsonrpc": "2.0", "id": 1, "result": {"streamId": "1"}}
             ]
             if interrupt == "timeout":
                 clock.expire(deadline)
@@ -103,7 +103,7 @@ async def test_deadline_bounds_subscription_handshake_but_does_not_limit_stream(
         entered.set()
         await asyncio.Future()
 
-    @channel.subscription()
+    @channel.stream()
     async def events() -> AsyncIterator[str]:
         stream_started.set()
         try:
@@ -123,9 +123,7 @@ async def test_deadline_bounds_subscription_handshake_but_does_not_limit_stream(
             )
             await entered.wait()
             await socket.client_send(
-                json.dumps(
-                    {"jsonrpc": "2.0", "method": "session.events.subscribe", "id": 2}
-                )
+                json.dumps({"jsonrpc": "2.0", "method": "session.events.open", "id": 2})
             )
             _, handshake_timeout = await clock.next()
             clock.expire(handshake_timeout)
@@ -143,13 +141,11 @@ async def test_deadline_bounds_subscription_handshake_but_does_not_limit_stream(
                 == "request_cancelled"
             )
             await socket.client_send(
-                json.dumps(
-                    {"jsonrpc": "2.0", "method": "session.events.subscribe", "id": 3}
-                )
+                json.dumps({"jsonrpc": "2.0", "method": "session.events.open", "id": 3})
             )
             _, successful_handshake = await clock.next()
             subscription = json.loads(await socket.client_receive())["result"][
-                "subscriptionId"
+                "streamId"
             ]
             await stream_started.wait()
             # A finished timeout has no timer left to affect the subscription task.
@@ -163,7 +159,7 @@ async def test_deadline_bounds_subscription_handshake_but_does_not_limit_stream(
             release_stream.set()
             message = json.loads(await socket.client_receive())
             assert message["params"] == {
-                "subscriptionId": subscription,
+                "streamId": subscription,
                 "payload": "after handshake",
             }
             terminal = json.loads(await socket.client_receive())
@@ -192,7 +188,7 @@ async def test_subscription_failures_use_scoped_bindings(declared, caplog) -> No
     binding = RpcErrorBinding(SessionMissing, details=SessionParams)
     channel = RpcChannel("session")
 
-    @channel.subscription(raises=[binding] if declared else [])
+    @channel.stream(raises=[binding] if declared else [])
     async def events(params: SessionParams) -> AsyncIterator[SessionEvent]:
         yield SessionEvent(value="first")
         raise SessionMissing(params.session_id)
@@ -205,20 +201,18 @@ async def test_subscription_failures_use_scoped_bindings(declared, caplog) -> No
     document = service.contract(
         title="Sessions", base_url="ws://localhost"
     ).to_openrpc()
-    subscription = document["x-rpc-subscriptions"][0]
+    subscription = document["x-rpc-streams"][0]
     assert ("errors" in subscription) is declared
     if declared:
         assert subscription["errors"][0]["x-rpckit-details-schema"] == {
             "$ref": "#/components/schemas/SessionParams"
         }
     async with RpcTestClient(service, "/rpc") as client:
-        response = await client.request(
-            "session.events.subscribe", {"sessionId": "abc"}
-        )
+        response = await client.request("session.events.open", {"sessionId": "abc"})
         _, first = await client.next_notification(timeout=1)
         _, terminal = await client.next_notification(timeout=1)
     assert first["payload"] == {"value": "first"}
-    assert terminal["subscriptionId"] == response["subscriptionId"]
+    assert terminal["streamId"] == response["streamId"]
     assert terminal["complete"] is False
     error = terminal["error"]
     assert error["data"]["code"] == (
@@ -236,7 +230,7 @@ async def test_subscription_params_notifications_and_cleanup() -> None:
         channel = RpcChannel("session")
         stopped = asyncio.Event()
 
-        @channel.subscription()
+        @channel.stream()
         async def events(params: SessionParams) -> AsyncIterator[SessionEvent]:
             try:
                 yield SessionEvent(value=params.session_id)
@@ -254,19 +248,19 @@ async def test_subscription_params_notifications_and_cleanup() -> None:
                 {
                     "jsonrpc": "2.0",
                     "id": 1,
-                    "method": "session.events.subscribe",
+                    "method": "session.events.open",
                     "params": {"sessionId": "abc"},
                 }
             )
         )
         response = json.loads(await asyncio.wait_for(socket.client_receive(), 1))
-        subscription_id = response["result"]["subscriptionId"]
+        subscription_id = response["result"]["streamId"]
         notification = json.loads(await asyncio.wait_for(socket.client_receive(), 1))
         assert notification == {
             "jsonrpc": "2.0",
             "method": "session.events",
             "params": {
-                "subscriptionId": subscription_id,
+                "streamId": subscription_id,
                 "payload": {"value": "abc"},
             },
         }
@@ -275,8 +269,8 @@ async def test_subscription_params_notifications_and_cleanup() -> None:
                 {
                     "jsonrpc": "2.0",
                     "id": 2,
-                    "method": "session.events.unsubscribe",
-                    "params": {"subscriptionId": subscription_id},
+                    "method": "session.events.cancel",
+                    "params": {"streamId": subscription_id},
                 }
             )
         )
@@ -291,7 +285,7 @@ async def test_subscription_params_notifications_and_cleanup() -> None:
                 {
                     "jsonrpc": "2.0",
                     "id": 3,
-                    "method": "session.events.subscribe",
+                    "method": "session.events.open",
                     "params": {"sessionId": "second"},
                 }
             )
@@ -305,11 +299,11 @@ async def test_subscription_params_notifications_and_cleanup() -> None:
         assert stopped.is_set()
 
 
-async def test_subscription_limit_and_contract() -> None:
+async def test_stream_limit_and_contract() -> None:
     async with asyncio.timeout(10):
         channel = RpcChannel("session")
 
-        @channel.subscription()
+        @channel.stream()
         async def events(params: SessionParams) -> AsyncIterator[SessionEvent]:
             await asyncio.Future()
             yield SessionEvent(value=params.session_id)
@@ -319,10 +313,10 @@ async def test_subscription_limit_and_contract() -> None:
         document = service.contract(
             title="Session", base_url="ws://localhost"
         ).to_openrpc()
-        assert document["x-rpc-subscriptions"][0]["name"] == "session.events"
+        assert document["x-rpc-streams"][0]["name"] == "session.events"
         socket = InMemorySocket("/rpc")
         task = asyncio.create_task(
-            service.serve(socket, limits=RpcLimits(max_subscriptions=1))
+            service.serve(socket, limits=RpcLimits(max_streams=1))
         )
         await asyncio.sleep(0)
         for request_id in (1, 2):
@@ -331,7 +325,7 @@ async def test_subscription_limit_and_contract() -> None:
                     {
                         "jsonrpc": "2.0",
                         "id": request_id,
-                        "method": "session.events.subscribe",
+                        "method": "session.events.open",
                         "params": {"sessionId": "abc"},
                     }
                 )
@@ -343,7 +337,7 @@ async def test_subscription_limit_and_contract() -> None:
 
 
 @pytest.mark.parametrize("cancel_handshake", [False, True])
-async def test_subscription_limit_reserves_blocked_handshakes(cancel_handshake):
+async def test_stream_limit_reserves_blocked_handshakes(cancel_handshake):
     async with asyncio.timeout(10):
         from fastapi_canon.integrations.websockets.dependencies import as_resolver
         from fastapi_canon.integrations.websockets.envelopes import RpcRequestEnvelope
@@ -355,7 +349,7 @@ async def test_subscription_limit_reserves_blocked_handshakes(cancel_handshake):
         sending, release = asyncio.Event(), asyncio.Event()
         responses = []
 
-        @channel.subscription()
+        @channel.stream()
         async def events() -> AsyncIterator[int]:
             await asyncio.Future()
             yield 1
@@ -376,25 +370,52 @@ async def test_subscription_limit_reserves_blocked_handshakes(cancel_handshake):
 
         def envelope(request_id):
             return RpcRequestEnvelope(
-                jsonrpc="2.0", id=request_id, method="session.events.subscribe"
+                jsonrpc="2.0", id=request_id, method="session.events.open"
             )
 
         first = asyncio.create_task(session.handle(envelope(1)))
         try:
             await asyncio.wait_for(sending.wait(), 1)
             await session.handle(envelope(2))
-            assert responses[0]["error"]["data"]["code"] == "subscription_limit"
+            assert responses[0]["error"]["data"]["code"] == "stream_limit"
             if cancel_handshake:
                 first.cancel()
                 with pytest.raises(asyncio.CancelledError):
                     await first
                 await session.handle(envelope(3))
-                assert responses[-1]["result"] == {"subscriptionId": "2"}
+                assert responses[-1]["result"] == {"streamId": "2"}
             else:
                 release.set()
                 await first
-                assert responses[-1]["result"] == {"subscriptionId": "1"}
+                assert responses[-1]["result"] == {"streamId": "1"}
         finally:
             first.cancel()
             await asyncio.gather(first, return_exceptions=True)
             await session.close()
+
+
+async def test_stream_cancel_is_idempotent_and_preserves_the_connection() -> None:
+    channel = RpcChannel("jobs")
+    stopped = asyncio.Event()
+
+    @channel.method()
+    async def ping() -> str:
+        return "pong"
+
+    @channel.stream()
+    async def progress() -> AsyncIterator[int]:
+        try:
+            yield 1
+            await asyncio.Event().wait()
+        finally:
+            stopped.set()
+
+    service = RpcDefinition()
+    service.socket("/rpc", channels=[channel])
+    async with asyncio.timeout(5), RpcTestClient(service, "/rpc") as client:
+        opened = await client.request("jobs.progress.open")
+        await client.next_notification()
+        assert await client.request("jobs.progress.cancel", opened) is None
+        assert await client.request("jobs.progress.cancel", opened) is None
+        assert await client.request("jobs.ping") == "pong"
+        assert stopped.is_set()

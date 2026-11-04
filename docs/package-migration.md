@@ -11,6 +11,28 @@ The [repository migration](repository-migration.md) records the
 source history and publishing setup. The repository move does not rename the
 PyPI project or add further Python import changes.
 
+## Upgrade to 0.15.0
+
+Replace `@channel.subscription()` with `@channel.stream()`. Bare `bytes` items
+select binary frames; other supported item types select JSON messages. Uploads
+and duplex binary handlers retain `RpcBinaryInput` and `RpcBinaryOutput`.
+Replace `RpcLimits(max_subscriptions=...)` with `RpcLimits(max_streams=...)`.
+
+Regenerate contracts and both SDKs together with the server upgrade. The new
+wire controls are `.open` / `.cancel`, their identity field is `streamId`, and
+OpenRPC uses `x-rpc-streams`. There are no aliases for the old decorator,
+control names or contract extension. Generated TypeScript stream methods must
+now be awaited; prefer `await using stream = await client.jobs.progress(...)`.
+Python supports `async with client.jobs.progress(...) as stream` and iteration
+inside the block. The common domain SDK uses the same managed resource pattern
+for JSON-RPC message streams. See the [full stream guide](integrations/websockets/message-streams.md).
+
+Reconnect remains opt-in and reopens the source with a fresh ID. It does not
+replay missed data or resume a computation automatically. Existing credential
+refresh, recovery limits, middleware, graceful drain and binary upload/duplex
+APIs remain available. Message-stream overflow now fails explicitly; passive
+notification overflow policies and counters remain configurable.
+
 ## Upgrade to 0.14.0
 
 The database integration remains opt-in. Select the dependencies used by your

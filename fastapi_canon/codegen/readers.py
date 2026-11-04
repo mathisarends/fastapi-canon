@@ -284,7 +284,7 @@ def _openrpc(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
         elif route in ir.notifications:
             kind = "stream"
             subscription = getattr(route, "subscription", False)
-            key = "x-rpc-subscriptions" if subscription else "x-rpc-notifications"
+            key = "x-rpc-streams" if subscription else "x-rpc-notifications"
             raw = next(item for item in document.get(key, []) if item["name"] == name)
             result = raw["payload"]
             metadata["subscription"] = subscription
