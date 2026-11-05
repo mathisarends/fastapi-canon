@@ -53,12 +53,12 @@ connection semantics or HTTP routing.
 
 ## Acceptance criteria
 
-- [ ] Reject duplicates across features and against existing app routes, including equivalent parameter names and nested prefixes.
-- [ ] Report a stable diagnostic naming both features/endpoints; rejection happens before application mutation.
-- [ ] Cover a native WebSocket route colliding with an included JSON-RPC channel.
-- [ ] Allow HTTP and WebSocket endpoints to share a URL because they use different ASGI scope types.
-- [ ] Distinct WebSocket URLs remain valid; explicit channel resolvers and contexts retain their behavior.
-- [ ] Document the newly rejected configurations under Breaking changes with path-migration guidance.
+- [x] Reject duplicates across features and against existing app routes, including equivalent parameter names and nested prefixes.
+- [x] Report a stable diagnostic naming both features/endpoints; rejection happens before application mutation.
+- [x] Cover a native WebSocket route colliding with an included JSON-RPC channel.
+- [x] Allow HTTP and WebSocket endpoints to share a URL because they use different ASGI scope types.
+- [x] Distinct WebSocket URLs remain valid; explicit channel resolvers and contexts retain their behavior.
+- [x] Document the newly rejected configurations under Breaking changes with path-migration guidance.
 
 ## Verification
 
@@ -68,6 +68,18 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
 
 ## Completion
 
-- Implementation or decision PR:
-- Final commit and verification:
-- Remaining follow-ups:
+- Implementation or decision PR: [#83](https://github.com/mathisarends/fastapi-canon/pull/83).
+- Final commit and verification: source fix `91b0c1decc00f94997d4dc80b1942d46446ba959`,
+  based directly on main `d5daf91` (including merged DX-001). Fresh fetch/merge
+  before PR creation confirmed origin/main was already included.
+  The exact ticket repro now rejects with canon.routing.E004. Focused feature,
+  router, introspection and composition suites: 88 passed, including bounded
+  real RPC/native WebSocket and HTTP calls, explicit resolver/context scenarios
+  and unchanged-app assertions. Full root pytest: 2,438 passed, 26 skipped,
+  153 warnings on Windows/Python 3.14; PostgreSQL cases need an external database.
+  Mypy, Ruff lint/format, changed Smelt and full pre-commit including full Smelt
+  passed. Standalone distribution/browser matrices were not run for this
+  routing-preflight change. Status stays In progress until merge.
+- Remaining follow-ups: late WebSocket mutation of an already built application
+  is outside this preflight; broader installed transport descriptions/checks
+  remain a separate DX-029 decision. Mounted apps remain separate boundaries.
