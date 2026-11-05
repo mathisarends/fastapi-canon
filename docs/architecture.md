@@ -66,7 +66,9 @@ OpenAPI copying/promotion lives in the core adapter; optional JSON Schema valida
 stays in generation, keeping root imports free of generator dependencies.
 
 Core `scopes.py` belongs to composition and owns HTTP function scopes plus
-independent `ServiceScope` factories. It has no SQLAlchemy or Alembic dependency.
+independent `ServiceScope` factories. `Scoped` executes one async callable use case
+through a fresh `ServiceScope` per invocation, completing cleanup before returning.
+It has no SQLAlchemy or Alembic dependency.
 The optional database integration sits above composition: it contributes an
 ordinary Feature and its Dishka provider, and owns database-specific session and
 migration behavior. The CLI may consume this integration; core composition does

@@ -239,7 +239,7 @@ def test_report_describes_actual_target_phases_and_stable_schema_content(
     original = report.read_bytes()
     result = json.loads(original)
     generation = result["generation"]
-    manifest_path = tmp_path / "sdk" / ".fastapi-streams.json"
+    manifest_path = tmp_path / "sdk" / ".fastapi-canon-sse.json"
     manifest_bytes = manifest_path.read_bytes()
     assert json.loads(manifest_bytes)["generation"] == generation
     assert generation["generator"] == "fastapi-canon"

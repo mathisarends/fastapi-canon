@@ -8,9 +8,13 @@ from pathlib import Path
 from fastapi_canon.checks.contracts import _check_error_contracts
 
 
-def _main(arguments: Sequence[str] | None = None) -> int:
+def _main(
+    arguments: Sequence[str] | None = None,
+    *,
+    prog: str = "python -m fastapi_canon.check_error_contracts",
+) -> int:
     parser = argparse.ArgumentParser(
-        prog="python -m fastapi_canon.check_error_contracts",
+        prog=prog,
         description="Check explicit application exceptions against CanonRouter raises declarations without importing application code.",
     )
     parser.add_argument(

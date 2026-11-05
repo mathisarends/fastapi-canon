@@ -105,6 +105,47 @@ def test_writer_removes_only_owned_files_and_checks_stale(tmp_path):
     assert not write_files(tmp_path, {"new.ts": "new"}, check=True)
 
 
+@pytest.mark.parametrize("canonical_exists", [False, True])
+def test_writer_migrates_legacy_manifest_and_preserves_unowned_files(
+    tmp_path, canonical_exists
+):
+    legacy = tmp_path / ".fastapi-streams.json"
+    legacy.write_text(json.dumps({"files": ["stale.ts"]}), encoding="utf-8")
+    (tmp_path / "stale.ts").write_text("old", encoding="utf-8")
+    handwritten = tmp_path / "handwritten.ts"
+    handwritten.write_text("keep", encoding="utf-8")
+    if canonical_exists:
+        (tmp_path / MANIFEST).write_text(
+            json.dumps({"files": ["other.ts"]}), encoding="utf-8"
+        )
+        (tmp_path / "other.ts").write_text("old", encoding="utf-8")
+    before = {path.name: path.read_bytes() for path in tmp_path.iterdir()}
+
+    changed = write_files(tmp_path, {"new.ts": "new"}, check=True)
+    assert legacy in changed and tmp_path / "stale.ts" in changed
+    assert {path.name: path.read_bytes() for path in tmp_path.iterdir()} == before
+
+    write_files(tmp_path, {"new.ts": "new"})
+    assert {path.name for path in tmp_path.iterdir()} == {
+        MANIFEST,
+        "new.ts",
+        "handwritten.ts",
+    }
+    assert handwritten.read_text("utf-8") == "keep"
+    assert not write_files(tmp_path, {"new.ts": "new"}, check=True)
+
+
+def test_writer_preflights_unsafe_legacy_manifest_before_migration(tmp_path):
+    legacy = tmp_path / ".fastapi-streams.json"
+    content = json.dumps({"files": ["../outside.ts"]})
+    legacy.write_text(content, encoding="utf-8")
+    with pytest.raises(ValueError, match="Unsafe"):
+        write_files(tmp_path, {"safe.ts": "new"})
+    assert legacy.read_text("utf-8") == content
+    assert not (tmp_path / MANIFEST).exists()
+    assert not (tmp_path / "safe.ts").exists()
+
+
 def test_writer_preflights_unsafe_manifest_before_any_write(tmp_path):
     (tmp_path / MANIFEST).write_text(json.dumps({"files": ["../outside.ts"]}))
     with pytest.raises(ValueError, match="Unsafe"):

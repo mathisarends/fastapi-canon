@@ -23,6 +23,7 @@ from fastapi_canon import (
     Error,
     ErrorRegistry,
     Feature,
+    Scoped,
     ServiceScope,
 )
 
@@ -309,6 +310,68 @@ async def test_service_scopes_use_fresh_sessions_and_commit_before_returning(
             ) == ["one", "two"]
     assert len(sessions) == 2
     assert sessions[0] is not sessions[1]
+
+
+@pytest.mark.parametrize("outcome", ["success", "error", "cancel", "commit-failure"])
+async def test_scoped_use_case_finishes_transaction_before_return(
+    database: Database, items: Table, outcome: str
+) -> None:
+    started = asyncio.Event()
+    sessions: list[AsyncSession] = []
+
+    class Write:
+        def __init__(self, session: AsyncSession) -> None:
+            self.session = session
+
+        async def __call__(self, name: str) -> str:
+            sessions.append(self.session)
+            await self.session.execute(insert(items).values(name=name))
+            started.set()
+            if outcome == "error":
+                raise ValueError("write failed")
+            if outcome == "cancel":
+                await asyncio.Event().wait()
+            if outcome == "commit-failure":
+
+                def reject_commit(session: object) -> None:
+                    raise ValueError("commit failed")
+
+                event.listen(self.session.sync_session, "before_commit", reject_commit)
+            return name
+
+    class Services(Provider):
+        write = provide(Write, scope=Scope.REQUEST)
+
+        @provide(scope=Scope.APP)
+        def scoped_write(self, container: AsyncContainer) -> Scoped[Write]:
+            return Scoped(container, Write)
+
+    app = Composition(
+        features=[database.feature, Feature(name="writers", providers=[Services])]
+    ).apply(FastAPI())
+    async with asyncio.timeout(15), app.router.lifespan_context(app):
+        write = await app.state.dishka_container.get(Scoped[Write])
+        task = asyncio.create_task(write(outcome))
+        await started.wait()
+        if outcome == "success":
+            assert await task == outcome
+        elif outcome == "cancel":
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        elif outcome == "commit-failure":
+            with pytest.raises(ExceptionGroup) as failure:
+                await task
+            assert failure.value.subgroup(ValueError) is not None
+        else:
+            with pytest.raises(ValueError, match="failed"):
+                await task
+        async with database.open_engine() as engine, engine.connect() as connection:
+            names = list((await connection.scalars(select(items.c.name))).all())
+        assert names == ([outcome] if outcome == "success" else [])
+        assert len(sessions) == 1
+        with pytest.raises(InvalidRequestError, match="permanently closed"):
+            await sessions[0].execute(text("SELECT 1"))
 
 
 async def test_explicit_commit_survives_a_later_http_rejection(
