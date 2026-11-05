@@ -57,6 +57,9 @@ architecture:
     fastapi_canon.policy: routing
     fastapi_canon.error.catalog: adapters
     fastapi_canon.codegen: generation
+    fastapi_canon.contracts: composition
+    fastapi_canon.contract_cli: generation
+    fastapi_canon.contract_routes: adapters
     fastapi_canon.integrations: transport
     fastapi_canon.integrations.mcp: mcp
     fastapi_canon.integrations.sse: sse
@@ -111,10 +114,10 @@ architecture:
         allow: [fastapi, starlette, pydantic]
     composition:
       path: feature
-      may_depend_on: [values, responses, adapters, routing, telemetry, rpc, mcp]
+      may_depend_on: [values, responses, adapters, routing, telemetry, rpc, rtc, mcp]
       third_party:
         default: deny
-        allow: [dishka, fastapi, starlette, pydantic, opentelemetry, typing_extensions, pydantic_core, fastmcp]
+        allow: [dishka, fastapi, starlette, pydantic, opentelemetry, typing_extensions, pydantic_core, fastmcp, anyio]
     analysis:
       path: checks
       may_depend_on: []
@@ -123,7 +126,7 @@ architecture:
         allow: []
     persistence:
       path: database
-      may_depend_on: [values, responses, adapters, routing, composition, telemetry, rpc, mcp]
+      may_depend_on: [values, responses, adapters, routing, composition, telemetry, rpc, rtc, mcp]
       third_party:
         default: deny
         allow: [sqlalchemy, alembic, anyio, dishka, fastapi, starlette, pydantic, typing_extensions, pydantic_core, opentelemetry, fastmcp]
@@ -211,7 +214,7 @@ architecture:
         - fastmcp
     application:
       path: application
-      may_depend_on: [values, responses, adapters, routing, composition, telemetry, rpc, persistence, mcp]
+      may_depend_on: [values, responses, adapters, routing, composition, telemetry, rpc, rtc, persistence, mcp]
       third_party:
         default: deny
         allow:

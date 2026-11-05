@@ -41,6 +41,14 @@ has its own role and must not import sibling transports or eagerly load optional
 engines. Generators may read protocol contracts. Repository scripts sit outside
 the runtime package and may orchestrate its supported integrations.
 
+`contracts.py` belongs to composition and coordinates the existing RPC and WebRTC
+contract renderers with native HTTP/SSE OpenAPI. This adds an explicit composition
+dependency on WebRTC and its AnyIO lifecycle types; consumers of the root facade
+inherit that declared direction. No transport imports another transport.
+`contract_routes.py` is an adapter shared by RPC and WebRTC for effective paths.
+OpenAPI copying/promotion lives in the core adapter; optional JSON Schema validation
+stays in generation, keeping root imports free of generator dependencies.
+
 Core `scopes.py` belongs to composition and owns HTTP function scopes plus
 independent `ServiceScope` factories. It has no SQLAlchemy or Alembic dependency.
 The optional database integration sits above composition: it contributes an

@@ -46,6 +46,8 @@ from fastapi_canon.integrations.websockets.server import (
     RpcServer,
 )
 
+ENDPOINT_ATTRIBUTE = "__canon_rpc_endpoint__"
+
 
 @dataclass(frozen=True, slots=True, eq=False)
 class RpcEndpoint[ContextT]:

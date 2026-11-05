@@ -15,6 +15,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
     for name, description in (
+        ("contracts", "Export contracts from the registered application routes"),
         ("sse", "Export SSE contracts and generate Python or TypeScript clients"),
         ("websockets", "Export OpenRPC contracts and generate WebSocket clients"),
         ("webrtc", "Export WebRTC contracts and generate browser clients"),
@@ -26,7 +27,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     ):
         commands.add_parser(name, help=description, add_help=False)
     args, remaining = parser.parse_known_args(argv)
-    if args.command == "inspect":
+    if args.command == "contracts":
+        from fastapi_canon.contract_cli import main as contracts_main
+
+        return contracts_main(remaining)
+    elif args.command == "inspect":
         from fastapi_canon.composition_cli import _main as inspect_main
 
         return inspect_main(remaining, inspect=True)

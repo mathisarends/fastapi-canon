@@ -3,9 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from fastapi_canon.contracts import ContractKind as ContractKind
+
 type Interaction = Literal["call", "stream", "session"]
 type Protocol = Literal["http", "sse", "jsonrpc", "websocket", "webrtc"]
-type ContractKind = Literal["openapi", "openrpc", "webrtc"]
 
 
 class GenerationError(ValueError):

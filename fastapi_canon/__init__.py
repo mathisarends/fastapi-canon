@@ -4,6 +4,7 @@ from http import HTTPMethod
 from typing import TYPE_CHECKING
 
 from ._version import __version__
+from .contracts import Contracts, export_contracts
 from .diagnostics import (
     CheckContext,
     CheckIssue,
@@ -52,6 +53,7 @@ __all__ = [
     "CheckResult",
     "Composition",
     "CompositionInfo",
+    "Contracts",
     "Database",
     "DependencyInfo",
     "Error",
@@ -76,6 +78,7 @@ __all__ = [
     "ServiceScope",
     "TransactionLocks",
     "__version__",
+    "export_contracts",
     "install_openapi_contracts",
     "run_alembic_environment",
     "validate_openapi_contracts",

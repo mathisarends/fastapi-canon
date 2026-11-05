@@ -35,6 +35,7 @@ def generate(
     documents: dict[str, dict[str, Any]] = {}
     writes: dict[Path, str] = {}
     deletes: set[Path] = set()
+    loaded_sources: dict[tuple[str, bool], Any] = {}
     for source in config.sources:
         if source.name not in needed:
             continue
@@ -48,7 +49,11 @@ def generate(
         else:
             assert source.source is not None and source.output is not None
             document = _export(
-                source.source, source.kind, source.factory, config.path.parent
+                source.source,
+                source.kind,
+                source.factory,
+                config.path.parent,
+                loaded_sources,
             )
             writes[source.output] = _json(document)
         if not isinstance(document, dict):
@@ -146,7 +151,13 @@ def generate(
     return bool(changed), report
 
 
-def _export(reference: str, kind: str, factory: bool, root: Path) -> dict[str, Any]:
+def _export(
+    reference: str,
+    kind: str,
+    factory: bool,
+    root: Path,
+    loaded_sources: dict[tuple[str, bool], Any],
+) -> dict[str, Any]:
     module, sep, attribute = reference.partition(":")
     if not sep or not module or not attribute:
         raise GenerationError(
@@ -154,11 +165,33 @@ def _export(reference: str, kind: str, factory: bool, root: Path) -> dict[str, A
         )
     sys.path.insert(0, str(root))
     try:
-        value: Any = importlib.import_module(module)
-        for part in attribute.split("."):
-            value = getattr(value, part)
-        if factory:
-            value = value()
+        key = (reference, factory)
+        if key not in loaded_sources:
+            value: Any = importlib.import_module(module)
+            for part in attribute.split("."):
+                value = getattr(value, part)
+            if factory:
+                value = value()
+            loaded_sources[key] = value
+        value = loaded_sources[key]
+        from fastapi import FastAPI
+
+        if isinstance(value, FastAPI):
+            from fastapi_canon.codegen.ir import ContractKind
+            from fastapi_canon.contracts import export_contracts
+
+            documents = export_contracts(
+                value, kinds=(cast(ContractKind, kind),)
+            ).documents
+            if kind not in documents:
+                raise GenerationError(f"{reference}: no registered {kind} endpoints")
+            if kind == "openapi":
+                from fastapi_canon.integrations.sse.codegen.openapi import (
+                    validate_contract,
+                )
+
+                validate_contract(documents[kind])
+            return documents[kind]
         if kind == "openapi":
             from fastapi_canon.integrations.sse.codegen.openapi import export_schema
 

@@ -21,6 +21,7 @@ from pydantic.json_schema import GenerateJsonSchema, JsonSchemaMode
 from pydantic_core import core_schema
 from starlette.routing import BaseRoute
 
+from fastapi_canon.contract_routes import iter_contract_routes
 from fastapi_canon.integrations.webrtc.declarations import (
     DataChannelSpec,
     SessionDeclaration,
@@ -195,25 +196,11 @@ def _channel(
 def _session_routes(
     routes: Sequence[BaseRoute],
 ) -> Iterator[tuple[str, Any, Dependant | None]]:
-    for path, route in _flatten(routes):
+    for path, route in iter_contract_routes(routes):
         endpoint = getattr(route, "endpoint", None)
         if endpoint is None or not hasattr(endpoint, DECLARATION_ATTRIBUTE):
             continue
         yield path, endpoint, getattr(route, "dependant", None)
-
-
-def _flatten(routes: Sequence[BaseRoute]) -> Iterator[tuple[str, Any]]:
-    try:
-        from fastapi.routing import iter_route_contexts  # FastAPI >= 0.140
-    except ImportError:  # pragma: no cover - depends on the FastAPI version
-        for route in routes:
-            path = getattr(route, "path", None)
-            if path is not None:
-                yield path, route
-        return
-    for context in iter_route_contexts(routes):
-        if context.path is not None:
-            yield context.path, context
 
 
 def _parameters(
