@@ -126,7 +126,7 @@ def _request_container(request: Request) -> AsyncContainer:
     if container is None:
         raise RuntimeError(
             "Inject[...] and FromDishka[...] need a Dishka request container. "
-            "Install the router with Composition(...).apply(app), or call "
+            "Install the router with Composition(...).build(app), or call "
             "dishka.integrations.fastapi.setup_dishka(container, app)."
         )
     return container

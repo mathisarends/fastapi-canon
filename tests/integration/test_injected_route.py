@@ -49,7 +49,7 @@ def compose(router: APIRouter, lifecycle: Lifecycle) -> FastAPI:
         features=[
             Feature(name="tasks", routers=[router], providers=[lifecycle.provider()])
         ]
-    ).apply(FastAPI())
+    ).build(FastAPI())
 
 
 def test_async_endpoints_resolve_both_markers_in_one_request_scope() -> None:
@@ -149,7 +149,7 @@ def test_existing_dishka_declarations_keep_working() -> None:
                 providers=[lifecycle.provider()],
             )
         ]
-    ).apply(FastAPI())
+    ).build(FastAPI())
     with TestClient(app) as client:
         assert client.get("/decorated").json() == 1
         assert client.get("/explicit/route").json() == 2
