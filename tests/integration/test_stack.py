@@ -3,6 +3,8 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from fastapi_canon import export_contracts
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -35,9 +37,8 @@ def test_http_sse_and_rpc_share_application_state_and_close_scopes() -> None:
             "text/event-stream"
             in schema["paths"]["/counter/events"]["get"]["responses"]["200"]["content"]
         )
-        contract = app.state.rpc_service.contract(
-            title="Counter", base_url="ws://testserver"
-        ).to_openrpc()
+        contract = export_contracts(app, base_url="ws://testserver").openrpc
+        assert contract is not None
         assert any(
             method["name"] == "counter.increment" for method in contract["methods"]
         )

@@ -6,13 +6,7 @@ from dishka.integrations.fastapi import inject
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from fastapi_canon import CanonRouter, Composition, Feature
-from fastapi_canon.integrations.sse import CanonStreamRouter
-from fastapi_canon.integrations.websockets import (
-    CanonWebSocketRouter,
-    Inject,
-    RpcChannel,
-)
+from fastapi_canon import APIRouter, Composition, Feature, Inject, RpcChannel
 from fastapi_canon.integrations.websockets.adapters.dishka import Dishka
 
 __all__ = ["app", "create_app"]
@@ -57,16 +51,15 @@ class IncrementResult(BaseModel):
 
 
 def create_app() -> FastAPI:
-    http = CanonRouter()
-    streams = CanonStreamRouter()
+    router = APIRouter()
     channel = RpcChannel("counter")
 
-    @http.post("/counter", operation_id="increment_counter")
+    @router.post("/counter", operation_id="increment_counter")
     @inject
     async def increment_http(operations: FromDishka[Operations]) -> IncrementResult:
         return IncrementResult(value=operations.increment())
 
-    @streams.stream("/counter/events", operation_id="counter_events")
+    @router.sse("/counter/events", operation_id="counter_events")
     @inject
     async def events(counter: FromDishka[Counter]) -> AsyncIterator[CounterEvent]:
         yield CounterEvent(value=counter.value)
@@ -75,16 +68,9 @@ def create_app() -> FastAPI:
     async def increment_rpc(operations: Inject[Operations]) -> IncrementResult:
         return IncrementResult(value=operations.increment())
 
-    rpc = CanonWebSocketRouter(resolver=Dishka())
-    rpc.socket("/rpc", channels=(channel,))
-    feature = Feature(
-        name="counter",
-        routers=[http, streams, rpc],
-        providers=[StackProvider],
-    )
-    app = Composition(features=(feature,)).apply(FastAPI(title="Canon stack example"))
-    app.state.rpc_service = rpc
-    return app
+    router.include_channel(channel, path="/rpc", resolver=Dishka())
+    feature = Feature(name="counter", routers=[router], providers=[StackProvider])
+    return Composition(features=(feature,)).apply(FastAPI(title="Canon stack example"))
 
 
 app = create_app()
