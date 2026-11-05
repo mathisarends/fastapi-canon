@@ -8,7 +8,10 @@ from pydantic import BaseModel
 
 from fastapi_canon import APIRouter, Composition, Feature, Inject, RpcChannel
 
-__all__ = ["app", "create_app"]
+__all__ = [  # smelt: ignore[SMT330] -- Uvicorn loads the module app and factory.
+    "app",
+    "create_app",
+]
 
 
 class Counter:

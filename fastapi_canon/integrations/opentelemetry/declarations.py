@@ -22,7 +22,11 @@ if TYPE_CHECKING:
         OpenTelemetry,
     )
 
-__all__ = ["Instrumentation", "Telemetry", "instrument"]
+__all__ = [  # smelt: ignore[SMT330] -- Preserve the runtime-free declaration API.
+    "Instrumentation",
+    "Telemetry",
+    "instrument",
+]
 
 
 @dataclass(frozen=True, slots=True, init=False)

@@ -4,7 +4,7 @@ import sys
 from collections.abc import Iterator
 from types import ModuleType
 from urllib.parse import urlsplit
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import pytest
 from fastapi_canon.integrations.websockets import (
@@ -241,7 +241,7 @@ async def test_duplex_streams_send_and_receive_concurrently(
 ) -> None:
     opened: list = []
     client = _client(client_package, Recording(), opened)
-    session_id = uuid4()
+    session_id = UUID(int=1)
 
     async with client.voice.media(voice_session_id=str(session_id)) as duplex:
         assert isinstance(duplex, client_package.BinaryChannel)

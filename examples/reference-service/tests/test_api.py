@@ -1,6 +1,6 @@
 from collections.abc import AsyncIterator
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -88,7 +88,7 @@ async def test_tasks_require_authentication(
 async def test_missing_task_has_the_documented_problem_contract(
     client: AsyncClient,
 ) -> None:
-    response = await client.post(f"/api/v1/tasks/{uuid4()}/completion")
+    response = await client.post(f"/api/v1/tasks/{UUID(int=1)}/completion")
     assert response.status_code == 404
     assert response.headers["content-type"] == "application/problem+json"
     problem = response.json()

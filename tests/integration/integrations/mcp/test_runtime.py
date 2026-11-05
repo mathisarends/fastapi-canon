@@ -27,7 +27,8 @@ from fastapi_canon.integrations.mcp import (
 
 class Service:
     def __init__(self) -> None:
-        self.identifier = str(uuid4())
+        # Fresh IDs expose scope reuse across concurrent calls and applications.
+        self.identifier = str(uuid4())  # smelt: ignore[SMT431] -- Scope reuse probe.
 
 
 class Services(Provider):

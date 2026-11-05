@@ -299,6 +299,12 @@ rules:
   internal-static-helper: error
   redundant-str-enum-value: error
   prefer-package-import: error
+  prefer-str-enum-discriminator: hint
+  no-base-class-suffix: error
+  secret-settings-field: warning
+  redundant-dishka-provider: hint
+  caller-before-callee: hint
+  package-only-dunder-all: error
   unnecessary-future-annotations: warning
   prefer-match-type-dispatch: warning
   private-test-access: error
@@ -310,6 +316,7 @@ rules:
   async-mock-without-await-check: error
   test-only-public-function: error
   test-only-public-attribute: warning
+  nondeterministic-test-data: warning
   unused-suppression: error
   resolved-debt: error
 suppressions:

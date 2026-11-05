@@ -20,7 +20,9 @@ from fastapi_canon.integrations.sse.router import (
 from fastapi_canon.policy import normalize_raises
 from fastapi_canon.router import CanonRouter
 
-__all__ = ["CanonStreamRouter"]
+__all__ = [  # smelt: ignore[SMT330] -- Preserve the router module's star imports.
+    "CanonStreamRouter",
+]
 
 logger = logging.getLogger(__name__)
 
