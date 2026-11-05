@@ -117,6 +117,32 @@ Do not inject placeholder secrets or silently disable authentication for export.
 
 ## SDK generation
 
+### Application target rules
+
+Application commands accept `module:attribute`, including dotted attributes such
+as `backend.application:bootstrap.app` or `bootstrap.create_app`. `inspect`,
+`check composition --app` and `contracts export --app` accept a FastAPI instance
+or call a synchronous factory with no required arguments automatically. A FastAPI
+instance is never invoked as an ASGI callable. `inspect --factory` remains an
+accepted compatibility flag. The positional `check composition` target remains
+a `Composition` instance; it is not an application/factory target.
+
+Common SDK sources keep their explicit `factory = true` selector because they
+also accept standalone contract targets. Factory validation is shared: async or
+generator factories, awaitable/generator results and required arguments are
+rejected. Return a constructed app or a materialized supported contract value.
+Use a typed wrapper if a callable cannot expose an inspectable signature.
+One invocation caches each distinct `(source, factory)` result across formats
+and targets. Relative imports during factory execution use the configuration's
+directory; standalone application commands use the working directory.
+
+Loading executes imports and synchronous factory code, but never enters lifespan
+or resolves runtime dependencies. Invalid references, import failures and factory
+failures report the target, failure phase/type and a corrective hint without
+printing exception contents or a traceback. Composition text/JSON modes follow
+the same rule. Keep runtime configuration in lifespan/dependency code; eager
+imports still fail and no placeholder settings are supplied.
+
 Use the same app reference for each live source in `fastapi-canon.toml`:
 
 ```toml
