@@ -1,7 +1,7 @@
 import asyncio
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import pytest
 from fastapi_canon.integrations.websockets import (
@@ -369,7 +369,7 @@ async def test_path_variables_are_validated_and_typed() -> None:
         await output.send(voice_session_id.bytes)
 
     service = _service(media, path="/voice/{voice_session_id}/media")
-    session_id = uuid4()
+    session_id = UUID(int=1)
     async with RpcTestClient(service, f"/voice/{session_id}/media") as client:
         assert await client.next_frame() == session_id.bytes
     assert seen == [session_id]
@@ -408,7 +408,7 @@ async def test_ownership_recipe_refuses_a_second_connection() -> None:
 
     service = _service(media, path="/voice/{voice_session_id}/media")
     owners = MediaOwners()
-    path = f"/voice/{uuid4()}/media"
+    path = f"/voice/{UUID(int=1)}/media"
     async with (
         RpcTestClient(service, path, context=owners) as first,
         RpcTestClient(service, path, context=owners) as second,
