@@ -22,6 +22,12 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- The default `APIRouter` injection supports typed async/sync callable instances,
+  bound methods and `functools.partial`, including module/class future
+  annotations and inherited call methods. `Inject`/`FromDishka` parameters stay
+  out of public schemas, request cleanup and operation names are preserved, and
+  caller-owned objects/functions/partial keywords are not modified.
+
 - `APIRouter`, `CanonRouter` and `CanonStreamRouter` accept `namespace=` for
   automatic `<namespace>.<function_name>` HTTP/SSE operation IDs. Without a
   namespace, omitted IDs use the function name. Explicit IDs and custom FastAPI
@@ -146,6 +152,15 @@ The next release containing the breaking changes below must be 0.16.0.
   declared path instead of failing with an AttributeError.
 
 ### Breaking changes
+
+- Non-function endpoint callables now need inspectable, named parameter
+  signatures. Opaque, variadic and remaining positional-only forms fail during
+  setup with a targeted TypeError. Before adopting 0.16.0, wrap them in a typed
+  named-parameter function, or bind positional-only arguments with a partial.
+  Endpoint constructors needing injection require a function or callable
+  instance. Injection markers in an effective custom signature are now honored;
+  register their providers, or remove the marker when the parameter is public
+  request data. See [typed callable endpoints](docs/routers.md#typed-callable-endpoints).
 
 - Composition preflight validates HTTP/SSE endpoint `Inject[T]` and
   `FromDishka[T]` roots with `canon.providers.E003`. Before adopting 0.16.0,

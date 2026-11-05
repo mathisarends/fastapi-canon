@@ -1,6 +1,6 @@
 # DX-006: Preserve the original SSE callable for operation lookup
 
-- Status: In progress
+- Status: Done
 - Priority: P2
 - Kind: Verified bug
 - Baseline: `a366702` (2026-11-05)
@@ -65,6 +65,6 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
   PostgreSQL cases need an external database. Client gate passed exact generator
   drift, TypeScript typechecks and runtime/coverage checks. Mypy, Ruff, changed
   Smelt and full pre-commit passed. Standalone wheel/browser matrices were not
-  repeated for the metadata-only change. Status stays In progress until merge.
+  repeated for the metadata-only change. Merged into main as `21649f8`.
 - Remaining follow-ups: none in this identity-lookup scope; callable-object
   registration/injection remains DX-007.
