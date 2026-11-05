@@ -6,6 +6,7 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+from dishka import Provider, Scope, provide
 from fastapi import Depends, FastAPI, WebSocket
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
@@ -37,6 +38,92 @@ class MissingProject(Exception):
 
 class ProjectPath(BaseModel):
     project_id: UUID
+
+
+class Store:
+    def __init__(self, identifier: int) -> None:
+        self.identifier = identifier
+
+
+@pytest.mark.parametrize("scope", [Scope.APP, Scope.SESSION, Scope.REQUEST])
+def test_composed_channels_resolve_services_and_close_their_scopes(
+    scope: Scope,
+) -> None:
+    opened: list[int] = []
+    closed: list[int] = []
+
+    class Stores(Provider):
+        @provide(scope=scope)
+        async def store(self) -> AsyncIterator[Store]:
+            identifier = len(opened) + 1
+            opened.append(identifier)
+            try:
+                yield Store(identifier)
+            finally:
+                closed.append(identifier)
+
+    channel = RpcChannel()
+
+    @channel.method("read")
+    async def read(store: Inject[Store]) -> int:
+        return store.identifier
+
+    router = APIRouter()
+    router.include_channel(channel, path="/session")
+    composition = Composition(
+        features=[Feature(name="stores", routers=[router], providers=[Stores()])]
+    )
+    app = FastAPI()
+    assert not composition.check(app).has_errors
+    composition.apply(app)
+
+    async def scenario() -> None:
+        async with app.router.lifespan_context(app):
+            async with _connection(app, "/session") as (incoming, outgoing):
+                await _send(incoming, 1, "read")
+                assert (await _receive(outgoing))["result"] == 1
+                assert closed == ([1] if scope is Scope.REQUEST else [])
+                await _send(incoming, 2, "read")
+                assert (await _receive(outgoing))["result"] == (
+                    2 if scope is Scope.REQUEST else 1
+                )
+            assert closed == ([] if scope is Scope.APP else opened)
+
+    asyncio.run(scenario())
+    assert opened == closed == ([1, 2] if scope is Scope.REQUEST else [1])
+
+
+def test_composed_channels_preserve_an_explicit_resolver() -> None:
+    class Stores(Provider):
+        @provide(scope=Scope.APP)
+        def store(self) -> Store:
+            return Store(1)
+
+    async def resolve(dependency: type[Any]) -> Store:
+        assert dependency is Store
+        return Store(42)
+
+    channel = RpcChannel()
+
+    @channel.method("read")
+    async def read(store: Inject[Store]) -> int:
+        return store.identifier
+
+    router = APIRouter()
+    router.include_channel(channel, path="/session", resolver=resolve)
+    app = Composition(
+        features=[Feature(name="stores", routers=[router], providers=[Stores()])]
+    ).apply(FastAPI())
+
+    async def scenario() -> int:
+        async with (
+            app.router.lifespan_context(app),
+            _connection(app, "/session") as (incoming, outgoing),
+        ):
+            await _send(incoming, 1, "read")
+            return (await _receive(outgoing))["result"]
+
+    assert asyncio.run(scenario()) == 42
 
 
 def test_composed_channels_share_one_connection_and_keep_path_context() -> None:

@@ -37,7 +37,9 @@ class Denied(Exception):
     pass
 
 
-@pytest.mark.parametrize("transport", ["rpc", "stream", "custom", "shared"])
+@pytest.mark.parametrize(
+    "transport", ["rpc", "stream", "custom", "shared", "shared-auto"]
+)
 def test_hooks_share_values_and_close_resources_before_serving(transport: str) -> None:
     events: list[str] = []
     resources: list[Resolver] = []
@@ -94,15 +96,15 @@ def test_hooks_share_values_and_close_resources_before_serving(transport: str) -
         await websocket.close()
 
     router: APIRouter | CanonWebSocketRouter
-    if transport == "shared":
+    if transport in {"shared", "shared-auto"}:
         router = APIRouter(prefix="/projects")
         router.include_channel(
             channel,
             path="/{project_id}",
             context=context,
             hooks=(authorize,),
-            resolver=Dishka(),
             before_accept=before_accept,
+            **({"resolver": Dishka()} if transport == "shared" else {}),
         )
     else:
         router = CanonWebSocketRouter(
@@ -129,7 +131,7 @@ def test_hooks_share_values_and_close_resources_before_serving(transport: str) -
         with client.websocket_connect(
             "/projects/7", headers={"X-Token": "allowed"}
         ) as socket:
-            if transport in ("rpc", "shared"):
+            if transport in ("rpc", "shared", "shared-auto"):
                 socket.send_json(
                     {"jsonrpc": "2.0", "id": 1, "method": "projects.identifier"}
                 )
@@ -141,7 +143,7 @@ def test_hooks_share_values_and_close_resources_before_serving(transport: str) -
         with client.websocket_connect(
             "/projects/8", headers={"X-Token": "allowed"}
         ) as socket:
-            if transport in ("rpc", "shared"):
+            if transport in ("rpc", "shared", "shared-auto"):
                 socket.send_json(
                     {"jsonrpc": "2.0", "id": 2, "method": "projects.identifier"}
                 )

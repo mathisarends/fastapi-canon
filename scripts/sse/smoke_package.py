@@ -135,7 +135,7 @@ def _main() -> None:
             )
             assert len(report["generation"]["schema_sha256"]) == 64
             manifest = json.loads(
-                (working / output / ".fastapi-streams.json").read_text()
+                (working / output / ".fastapi-canon-sse.json").read_text()
             )
             assert manifest["generation"] == report["generation"]
             assert client_file in manifest["files"]
