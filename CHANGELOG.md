@@ -28,6 +28,8 @@ The next release containing the breaking changes below must be 0.16.0.
   ID generators take precedence. Composition and `fastapi-canon check composition`
   reject collisions with `canon.routing.E002`; SDK generation also rejects
   duplicate IDs before writing output, without adding disambiguating suffixes.
+  The bundled `build-canon-backend` skill demonstrates namespace-based HTTP/SSE
+  names, stable explicit overrides and CLI collision diagnostics.
 
 - `fastapi-canon check errors` also checks `APIRouter.sse()` streams,
   `APIRouter.webrtc()` sessions and `RpcChannel` methods against their `raises=`
