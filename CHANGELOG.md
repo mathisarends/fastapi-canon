@@ -8,6 +8,11 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- Public `fastapi_canon.integrations.mcp.McpScope` opens an independent Dishka
+  REQUEST scope for native MCP injection and returns its container. Applications
+  can retain operation-owned resources through shielded execution without
+  importing Canon's implementation helpers.
+
 - The bundled `build-canon-backend` skill explains Canon's components and
   Composition/Dishka wiring through focused references and small examples.
   `fastapi-canon skill install --force` refreshes complete skill trees from the
@@ -49,6 +54,11 @@ The next release containing the breaking changes below must be 0.16.0.
   Python APIs in text or versioned JSON, separately from import-free source checks.
 
 ### Breaking changes
+
+- The MCP facade adds the public `McpScope` API for 0.16.0. Replace custom imports
+  of `integrations.mcp.dependencies.request_scope` and `inject_handler` used to
+  obtain a scoped container with `async with McpScope(app_container)() as scoped`.
+  Normal composed MCP calls retain their existing scope behavior.
 
 - `fastapi-canon skill install` now creates both
   `.agents/skills/build-canon-backend` and `.claude/skills/build-canon-backend`.
