@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import difflib
 import hashlib
-import importlib
 import json
-import sys
 from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
 from fastapi_canon._version import __version__
+from fastapi_canon.application_loading import (
+    _application_path,
+    _load_reference,
+    _resolve_factory,
+)
 from fastapi_canon.codegen.config import Configuration
 from fastapi_canon.codegen.ir import GenerationError
 from fastapi_canon.codegen.planner import build_plan
@@ -158,20 +161,12 @@ def _export(
     root: Path,
     loaded_sources: dict[tuple[str, bool], Any],
 ) -> dict[str, Any]:
-    module, sep, attribute = reference.partition(":")
-    if not sep or not module or not attribute:
-        raise GenerationError(
-            f"Invalid application reference {reference!r}; use module:attribute"
-        )
-    sys.path.insert(0, str(root))
-    try:
+    with _application_path(root):
         key = (reference, factory)
         if key not in loaded_sources:
-            value: Any = importlib.import_module(module)
-            for part in attribute.split("."):
-                value = getattr(value, part)
+            value = _load_reference(reference, root=root)
             if factory:
-                value = value()
+                value = _resolve_factory(value, reference)
             loaded_sources[key] = value
         value = loaded_sources[key]
         from fastapi import FastAPI
@@ -201,8 +196,6 @@ def _export(
         from fastapi_canon.integrations.webrtc.contract import build_contract
 
         return build_contract(value)
-    finally:
-        sys.path.pop(0)
 
 
 def _json(value: Any) -> str:

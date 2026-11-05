@@ -62,6 +62,9 @@ dependency on WebRTC and its AnyIO lifecycle types; consumers of the root facade
 inherit that declared direction. No transport imports another transport.
 `contract_routes.py` is an adapter shared by RPC, WebRTC and HTTP introspection
 for effective paths.
+`application_loading.py` belongs to generation and shares reference/factory
+loading among composition inspection, contract export and common SDK generation.
+It imports FastAPI without generator/media engines and never enters lifespans.
 OpenAPI copying/promotion lives in the core adapter; optional JSON Schema validation
 stays in generation, keeping root imports free of generator dependencies.
 

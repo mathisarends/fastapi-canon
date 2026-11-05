@@ -107,7 +107,9 @@ def test_cli_reports_import_time_configuration_errors_without_placeholder_secret
         timeout=45,
     )
     assert result.returncode == 2
-    assert "JWT_SECRET required at import" in result.stderr
+    assert "Cannot import 'eager:app' (ValueError)" in result.stderr
+    assert "runtime configuration" in result.stderr
+    assert "JWT_SECRET required at import" not in result.stderr
     assert not (tmp_path / "contracts").exists()
 
 
