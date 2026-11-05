@@ -133,12 +133,90 @@ Handlers receive the session as `Inject[Session]` and everything else from
 Dishka. The context also joins Dishka's SESSION context, so providers can
 receive it through `from_context`.
 
-Dishka's FastAPI middleware from `setup_dishka()` still opens its own SESSION
-container for every WebSocket, including RPC sockets. fastapi_canon.integrations.websockets does not use
-that container: RPC handlers resolve from the SESSION scope opened per
-connection above, so session-scoped values are never shared between the two.
-Keep RPC dependencies in the fastapi_canon.integrations.websockets scope and do not rely on
-`websocket.state.dishka_container` in RPC code.
+Dishka's FastAPI middleware from `setup_dishka()` opens its own SESSION container
+for every WebSocket. Context preparation borrows it to open a short child
+REQUEST scope. Accepted RPC handlers resolve from the separate SESSION scope
+opened by the RPC runtime, so SESSION-scoped provider instances are not shared
+between admission and serving. Pass prepared data through the typed context and
+use `Inject[T]` in RPC handlers instead of accessing
+`websocket.state.dishka_container` directly.
+
+## Reusable admission hooks
+
+Use the root `Inject[T]` annotation in context functions as well as handlers.
+Register reusable context hooks once by function; their concrete return
+annotations supply the lookup keys:
+
+```python
+from fastapi_canon import Inject
+from fastapi_canon.integrations.websockets import CanonWebSocketRouter
+from fastapi_canon.integrations.websockets.adapters.dishka import Dishka
+
+
+async def authorized_project(
+    project_id: UUID,
+    user: Inject[CurrentUser],
+    resolver: Inject[ProjectResolver],
+) -> AuthorizedProject:
+    project = await resolver.resolve(
+        project_id=project_id, user_id=user.id, user_role=user.role
+    )
+    return AuthorizedProject(project_id=project.id)
+
+
+async def screencast_connection(
+    session_id: UUID,
+    project: Inject[AuthorizedProject],
+    screencast: Inject[ProjectBrowserScreencast],
+) -> ScreencastConnection:
+    return ScreencastConnection(
+        await screencast.open_required(project.project_id, session_id)
+    )
+
+
+routes = CanonWebSocketRouter(
+    context=screencast_connection,
+    resolver=Dishka(),
+    hooks=(authorized_project,),
+)
+```
+
+The application supplies the domain types and service methods in this example.
+The shared application router forwards the same options for a JSON-RPC channel:
+
+```python
+from fastapi_canon import APIRouter
+
+router = APIRouter(prefix="/projects")
+router.include_channel(
+    session_events,
+    path="/{project_id}/sessions/{session_id}",
+    context=screencast_connection,
+    resolver=Dishka(),
+    hooks=(authorized_project,),
+)
+```
+
+Binary streams and raw sockets retain their specialized WebSocket endpoints.
+Hooks can use normal FastAPI dependencies and path/header/query annotations.
+Their injected dependencies form a graph, independent of tuple order. Each
+reachable hook runs once per context preparation; shared dependencies reuse its
+result. Duplicate hook result types, dependency cycles and generator hooks fail
+at registration. A registered hook takes precedence over DI for its result type;
+its errors propagate without a fallback. Unused hooks are not executed.
+
+`Dishka()` enters a REQUEST scope for the entire context preparation and closes
+it before acceptance, including on failure or cancellation. An existing
+middleware SESSION is borrowed; its container is restored after preparation.
+Application generator providers acquire and clean up resources in that REQUEST
+scope. There is no additional hook scope setting, UnitOfWork abstraction or
+resource decorator. A resource required until disconnect belongs in SESSION.
+
+Context and hook results must remain usable after preparation ends. Handlers
+can inject them by their declared types, including using them as SESSION
+`from_context` inputs. REQUEST-owned objects themselves must not escape through
+these results. The same preparation applies to RPC sockets, binary stream
+endpoints and custom handlers mounted on this router.
 
 ## Authenticated connections
 

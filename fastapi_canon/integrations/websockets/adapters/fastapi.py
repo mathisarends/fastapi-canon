@@ -30,6 +30,7 @@ from starlette.types import Message
 from fastapi_canon.error.catalog import registry_scope
 from fastapi_canon.error.contracts import INSTALLED_REGISTRY_STATE_KEY
 from fastapi_canon.integrations.websockets.activity import notify_activity
+from fastapi_canon.integrations.websockets.adapters.contexts import ContextDependencies
 from fastapi_canon.integrations.websockets.channel import RpcChannel
 from fastapi_canon.integrations.websockets.connection import (
     REJECTION_CLOSES,
@@ -56,8 +57,10 @@ from fastapi_canon.integrations.websockets.definition import (
 )
 from fastapi_canon.integrations.websockets.dependencies import (
     RpcInjectedParameter,
+    RpcResolver,
     RpcResolverLike,
     as_resolver,
+    call_scope,
     connection_scope,
     injected_parameter,
 )
@@ -272,6 +275,7 @@ class CanonWebSocketRouter(APIRouter):
         version: int = 1,
         context: Callable[..., Awaitable[Any]] | None = None,
         resolver: RpcResolverLike | FastApiResolver | None = None,
+        hooks: Sequence[Callable[..., Any]] = (),
         rejects: Sequence[RpcErrorBinding[Any]] = (),
         rejections: RpcRejections | None = None,
         middleware: Sequence[RpcMiddlewareLike] = (),
@@ -302,8 +306,17 @@ class CanonWebSocketRouter(APIRouter):
             self._resolver = resolver
         self._context_type = None if context is None else _context_type(context)
         self._context = context
-        if context is not None and self._websocket_resolver is not None:
-            self._context = self._websocket_resolver.dependency(context)
+        if hooks and context is None:
+            raise ValueError("hooks= requires a context= function")
+        if context is not None:
+            self._context = ContextDependencies(
+                context,
+                hooks,
+                self._preparation_scope,
+                self._websocket_resolver.dependency
+                if self._websocket_resolver is not None
+                else lambda function: function,
+            ).dependency
         self._rejections = chain_rejections(
             rejections,
             contract_rejections(rejecting_contracts(rejects, "CanonWebSocketRouter")),
@@ -536,6 +549,22 @@ class CanonWebSocketRouter(APIRouter):
         self._canon_error_registries = tuple(contributions)  # type: ignore[attr-defined]
         self._mounted.add(endpoint)
 
+    @asynccontextmanager
+    async def _preparation_scope(
+        self, websocket: WebSocket
+    ) -> AsyncGenerator[RpcResolver]:
+        adapter = self._websocket_resolver
+        prepare = getattr(adapter, "preparation_scope", None)
+        if prepare is not None:
+            async with prepare(websocket) as resolver:
+                yield resolver
+            return
+        resolver = as_resolver(
+            adapter.for_websocket(websocket) if adapter is not None else self._resolver
+        )
+        async with call_scope(resolver) as scoped:
+            yield scoped
+
     def _check_context(self, endpoint: RpcAnyEndpoint) -> None:
         declared = endpoint.context
         provided = self._context_type
@@ -558,9 +587,12 @@ class CanonWebSocketRouter(APIRouter):
         return path[len(prefix) :]
 
     def _handler(self, endpoint: RpcAnyEndpoint) -> Callable[..., Awaitable[None]]:
-        context_type = endpoint.context
-
         async def handler(websocket: WebSocket, context: Any = None) -> None:
+            if context is not None and endpoint.context is not None:
+                context = {
+                    **context,
+                    endpoint.context: context[self._context_type],
+                }
             await serve_websocket(
                 endpoint,
                 websocket,
@@ -569,7 +601,7 @@ class CanonWebSocketRouter(APIRouter):
                     if self._websocket_resolver is not None
                     else self._resolver
                 ),
-                context=None if context_type is None else {context_type: context},
+                context=context,
                 error_mapper=None
                 if endpoint.service is self._definition
                 else self._error_mapper,
@@ -680,13 +712,17 @@ class CanonWebSocketRouter(APIRouter):
             if websocket_name not in signature.parameters:
                 arguments.pop(websocket_name)
             context = arguments.pop(context_name, None)
-            values = None if endpoint.context is None else {endpoint.context: context}
+            if context is not None and endpoint.context is not None:
+                context = {
+                    **context,
+                    endpoint.context: context[self._context_type],
+                }
             resolver = as_resolver(
                 self._websocket_resolver.for_websocket(websocket)
                 if self._websocket_resolver is not None
                 else self._resolver
             )
-            async with connection_scope(resolver, values) as scoped:
+            async with connection_scope(resolver, context) as scoped:
                 for parameter in injected:
                     arguments[parameter.name] = await scoped.resolve(
                         parameter.dependency

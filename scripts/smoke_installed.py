@@ -78,6 +78,7 @@ def _main() -> None:
 
         routers.append(http)
         _canon_check()
+        asyncio.run(_scoped_check())
         _request_logging_check()
         _observation_check(enabled="--otel" in selected)
         _resource_telemetry_check(selected)
@@ -899,6 +900,38 @@ def _router_policies() -> None:
         if not direct:
             public = Composition(features=(feature,)).apply(FastAPI())
             assert TestClient(public).get("/policy").status_code == 200
+
+
+async def _scoped_check() -> None:
+    from dishka import Provider, Scope, make_async_container, provide
+    from fastapi_canon import Scoped
+
+    events: list[str] = []
+
+    class Resources(Provider):
+        @provide(scope=Scope.REQUEST)
+        async def number(self) -> AsyncIterator[int]:
+            events.append("open")
+            try:
+                yield 40
+            finally:
+                events.append("close")
+
+    class Add:
+        def __init__(self, number: int) -> None:
+            self._number = number
+
+        async def __call__(self, *, increment: int) -> int:
+            return self._number + increment
+
+    provider = Resources()
+    provider.provide(Add, scope=Scope.REQUEST)
+    async with asyncio.timeout(5), make_async_container(provider) as container:
+        add = Scoped(container, Add)
+        assert await add(increment=2) == 42
+        assert events == ["open", "close"]
+        assert await add(increment=3) == 43
+        assert events == ["open", "close", "open", "close"]
 
 
 def _shared_problem_check() -> None:

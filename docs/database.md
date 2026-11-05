@@ -232,6 +232,85 @@ resolve APP-scoped dependencies and these factories after the HTTP scope exits.
 Resolving a REQUEST dependency at that point is rejected; use the factory to
 open a fresh scope instead.
 
+## Short use-case calls
+
+Available in the next release (currently unreleased), `Scoped[UseCase]` is a
+callable wrapper for one short asynchronous application operation. Each invocation
+opens a fresh `ServiceScope`, resolves the use case, awaits its `__call__`, and
+finishes resource cleanup before returning the result. Positional and keyword
+arguments and the result retain the use case's types.
+
+```python
+from dishka import AsyncContainer, Provider, Scope, provide
+from fastapi_canon import Scoped
+
+
+class PrepareTurn:
+    def __init__(self, turns: TurnRepository) -> None:
+        self._turns = turns
+
+    async def __call__(self, turn_id: str) -> TurnPlan:
+        return await self._turns.prepare(turn_id)
+
+
+class TurnProvider(Provider):
+    prepare_turn = provide(PrepareTurn, scope=Scope.REQUEST)
+
+    @provide(scope=Scope.APP)
+    def prepare(self, container: AsyncContainer) -> Scoped[PrepareTurn]:
+        return Scoped(container, PrepareTurn)
+```
+
+`TurnRepository` and `TurnPlan` are application-owned types. Register the repository
+provider as usual. The application container must be at APP scope; HTTP and socket
+child containers are rejected. Named bindings use
+`Scoped(container, PrepareTurn, component="name")`, just like `ServiceScope`.
+
+Inject the APP-scoped wrapper into a worker, stream or orchestrator. A second
+`Scoped[FinishTurn]` is registered in the same way:
+
+```python
+async def process_turn(
+    turn_id: str,
+    prepare: Scoped[PrepareTurn],
+    finish: Scoped[FinishTurn],
+    engine: TurnEngine,
+) -> TurnResult:
+    plan = await prepare(turn_id)
+    result = await engine.run(plan)
+    return await finish(plan.turn_id, expected_version=plan.version, result=result)
+```
+
+The prepare session closes before `engine.run`; finish opens an independent
+session. With Canon's Database providers each successful call commits, and an
+escaping exception or cancellation rolls back and closes its session. Commit and
+cleanup failures propagate to the caller rather than returning a successful result.
+Concurrent calls use separate scopes. The wrapper never closes the APP container.
+Core `Scoped` itself is database-independent; custom providers own their cleanup
+and transaction behavior. Exceptions caught inside the use case do not trigger
+rollback automatically.
+
+Return fully materialized values that can be used after the scope closes. Do not
+return sessions, repositories, lazy ORM graphs or iterators needing those resources.
+`Scoped` supports coroutine `__call__` methods, including inherited methods; ordinary
+synchronous callables and async generators are rejected. The entire awaited call
+is inside the scope, so keep long external operations in the orchestrator.
+
+Use ordinary dependency injection for the wrapper: for example HTTP currently
+uses `FromDishka[Scoped[PrepareTurn]]` with its usual Dishka route/decorator setup.
+This addition does not change transport injection markers or registration.
+
+For multiple service calls in one atomic step, keep the explicit
+`async with service_scope() as service:` API. Separate `Scoped` calls commit
+independently; a later failure does not undo earlier steps. Application code
+handles version checks, idempotency and recovery between steps. No automatic
+retries are performed.
+
+`Scoped` does not add read-only or consistent-snapshot guarantees. Transaction
+isolation belongs to database configuration; materializing a DTO does not itself
+make several reads a consistent database snapshot. No UnitOfWork base class or
+snapshot-specific inheritance is required.
+
 ## Alembic workflow
 
 Configure the database declaration in `pyproject.toml`:
@@ -340,7 +419,8 @@ inside repositories so the explicit backend policy is applied consistently.
 | Engine/pool provider and disposal | `Database.feature` |
 | Session provider and commit/rollback | Shared request-scoped `AsyncSession` |
 | HTTP dependency-scope wrapper | Composition's central function scope |
-| Short worker/socket operation | APP-scoped `ServiceScope[Service]` factory |
+| One short callable use case | APP-scoped `Scoped[UseCase]` wrapper |
+| Multiple service calls in one short scope | APP-scoped `ServiceScope[Service]` factory |
 | Typed factory for deliberate standalone work | `async_sessionmaker[SessionClass]` |
 | PostgreSQL advisory transaction locks | Injected `TransactionLocks` |
 | Alembic directory and existing revision graph | `AlembicMigrations`, preserving application revisions |
