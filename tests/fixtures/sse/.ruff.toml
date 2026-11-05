@@ -1,0 +1,1 @@
+extend = "../../../fastapi_canon/integrations/sse/.ruff.toml"

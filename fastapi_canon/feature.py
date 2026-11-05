@@ -1,17 +1,31 @@
+from __future__ import annotations
+
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from dishka import AsyncContainer, Provider, make_async_container
 from dishka.exceptions import DishkaError  # type: ignore[attr-defined]  # not exported
-from dishka.integrations.fastapi import setup_dishka
 from fastapi import APIRouter, FastAPI
 from starlette.types import ExceptionHandler, Lifespan
 
 from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
+from fastapi_canon.error.contracts import INSTALLED_REGISTRY_STATE_KEY, iter_operations
+from fastapi_canon.error.openapi import install_policy_contracts
+from fastapi_canon.error.types import (
+    FeatureConfigurationError as FeatureConfigurationError,
+)
 from fastapi_canon.openapi import validate_openapi_contracts
+from fastapi_canon.policy import RouterPolicy
+from fastapi_canon.request_logging import install_request_logging
 from fastapi_canon.router import CanonRouter
+from fastapi_canon.scopes import _install_scopes
+
+if TYPE_CHECKING:
+    from fastapi_canon.integrations.mcp import McpMount, McpOptions
+    from fastapi_canon.integrations.opentelemetry import Instrumentation, Telemetry
+
 
 type FeatureLifespan = Lifespan[FastAPI]
 type ProviderFactory = Callable[[], Provider]
@@ -20,10 +34,6 @@ type RouterFactory = Callable[[], APIRouter]
 
 _INSTALLATION_STATE_KEY = "_fastapi_canon_installation"
 _DEFAULT_TYPE_BASE = "urn:fastapi-canon:problem"
-
-
-class FeatureConfigurationError(ErrorConfigurationError):
-    """Raised when feature contributions cannot be installed coherently."""
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -55,6 +65,8 @@ class Feature:
     name: str
     routers: tuple[APIRouter, ...]
     providers: tuple[ProviderSource, ...]
+    instrumentation: tuple[Instrumentation, ...]
+    mcp: tuple[McpMount, ...]
     errors: ErrorRegistry | None
     exception_handlers: tuple[ExceptionHandlerSpec, ...]
     lifespan: FeatureLifespan | None
@@ -65,10 +77,18 @@ class Feature:
         name: str,
         routers: Sequence[APIRouter] = (),
         providers: Sequence[ProviderSource] = (),
+        instrumentation: Sequence[Instrumentation] = (),
+        mcp: Sequence[McpMount] = (),
         errors: ErrorRegistry | None = None,
         exception_handlers: Sequence[ExceptionHandlerSpec] = (),
         lifespan: FeatureLifespan | None = None,
     ) -> None:
+        normalized_mcp = tuple(mcp)
+        if normalized_mcp:
+            from fastapi_canon.integrations.mcp import McpMount
+
+            normalized_mcp = _unique_instances(normalized_mcp, McpMount, "mcp")
+        object.__setattr__(self, "mcp", normalized_mcp)
         normalized_name = _validate_feature_name(name)
         normalized_routers = _unique_instances(
             routers, APIRouter, f"feature {normalized_name!r} routers"
@@ -76,6 +96,15 @@ class Feature:
         normalized_providers = _unique_provider_sources(
             providers, feature_name=normalized_name
         )
+        normalized_instrumentation = tuple(instrumentation)
+        if normalized_instrumentation:
+            from fastapi_canon.integrations.opentelemetry import Instrumentation
+
+            normalized_instrumentation = _unique_instances(
+                normalized_instrumentation,
+                Instrumentation,
+                f"feature {normalized_name!r} instrumentation",
+            )
         normalized_handlers = _unique_instances(
             exception_handlers,
             ExceptionHandlerSpec,
@@ -91,8 +120,7 @@ class Feature:
             raise FeatureConfigurationError(msg)
 
         router_errors = _collect_router_errors(
-            normalized_routers,
-            feature_name=normalized_name,
+            normalized_routers, feature_name=normalized_name
         )
         resolved_errors = _merge_errors(
             tuple(
@@ -107,6 +135,7 @@ class Feature:
         object.__setattr__(self, "name", normalized_name)
         object.__setattr__(self, "routers", normalized_routers)
         object.__setattr__(self, "providers", normalized_providers)
+        object.__setattr__(self, "instrumentation", normalized_instrumentation)
         object.__setattr__(self, "errors", resolved_errors)
         object.__setattr__(self, "exception_handlers", normalized_handlers)
         object.__setattr__(self, "lifespan", lifespan)
@@ -158,26 +187,58 @@ class Composition:
     features: tuple[Feature, ...]
     errors: ErrorOptions
     router_factory: RouterFactory | None
+    router_policy: RouterPolicy | None
+    telemetry: Telemetry | None
+    request_logging: bool
+    mcp: McpOptions | None
 
     def __init__(
         self,
-        *features: Feature,
+        *,
+        features: Sequence[Feature] = (),
         errors: ErrorOptions | None = None,
         router_factory: RouterFactory | None = None,
+        router_policy: RouterPolicy | None = None,
+        telemetry: Telemetry | None = None,
+        request_logging: bool = False,
+        mcp: McpOptions | None = None,
     ) -> None:
+        if mcp is not None:
+            from fastapi_canon.integrations.mcp import McpOptions
+
+            if not isinstance(mcp, McpOptions):
+                raise FeatureConfigurationError("mcp must be McpOptions or None")
+        object.__setattr__(self, "mcp", mcp)
+        _validate_bool(request_logging, "request_logging")
+        object.__setattr__(self, "request_logging", request_logging)
+        if telemetry is not None:
+            from fastapi_canon.integrations.opentelemetry import Telemetry
+
+            if not isinstance(telemetry, Telemetry):
+                raise FeatureConfigurationError(
+                    "telemetry must be a Telemetry instance or None"
+                )
+        object.__setattr__(self, "telemetry", telemetry)
         normalized_features = _unique_instances(features, Feature, "features")
         _validate_unique_feature_names(normalized_features)
         raw_errors: object = errors
         raw_router_factory: object = router_factory
+        raw_router_policy: object = router_policy
         if raw_errors is not None and not isinstance(raw_errors, ErrorOptions):
             msg = "errors must be an ErrorOptions instance or None"
             raise FeatureConfigurationError(msg)
         if raw_router_factory is not None and not callable(raw_router_factory):
             msg = "router_factory must be callable or None"
             raise FeatureConfigurationError(msg)
+        if raw_router_policy is not None and not isinstance(
+            raw_router_policy, RouterPolicy
+        ):
+            msg = "router_policy must be a RouterPolicy instance or None"
+            raise FeatureConfigurationError(msg)
         object.__setattr__(self, "features", normalized_features)
         object.__setattr__(self, "errors", errors or ErrorOptions())
         object.__setattr__(self, "router_factory", router_factory)
+        object.__setattr__(self, "router_policy", router_policy)
 
     def apply(self, app: FastAPI) -> FastAPI:
         """Apply this composition to *app* exactly once and return the app."""
@@ -197,6 +258,12 @@ class _Installation:
     errors: ErrorOptions
     router_factory: RouterFactory | None = field(compare=False)
     router_factory_id: int | None
+    router_policy: RouterPolicy | None = field(compare=False)
+    router_policy_id: int | None
+    telemetry: Telemetry | None = field(compare=False)
+    telemetry_id: int | None
+    request_logging: bool
+    mcp: McpOptions | None
     container: AsyncContainer | None = field(compare=False)
 
 
@@ -212,6 +279,12 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         msg = "app must be a FastAPI instance"
         raise FeatureConfigurationError(msg)
     requested = _Installation(
+        mcp=composition.mcp,
+        request_logging=composition.request_logging,
+        telemetry=composition.telemetry,
+        telemetry_id=id(composition.telemetry)
+        if composition.telemetry is not None
+        else None,
         features=composition.features,
         feature_ids=tuple(id(feature) for feature in composition.features),
         errors=composition.errors,
@@ -222,6 +295,12 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
             else None
         ),
         container=None,
+        router_policy=composition.router_policy,
+        router_policy_id=(
+            id(composition.router_policy)
+            if composition.router_policy is not None
+            else None
+        ),
     )
     installed = getattr(app.state, _INSTALLATION_STATE_KEY, None)
     if installed is not None:
@@ -230,6 +309,29 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
             raise FeatureConfigurationError(msg)
         return
 
+    mounts = tuple(mount for feature in composition.features for mount in feature.mcp)
+    if mounts or composition.mcp is not None:
+        try:
+            from fastapi_canon.integrations.mcp.runtime import validate_mounts
+        except ModuleNotFoundError as error:
+            if error.name != "fastmcp":
+                raise
+            raise FeatureConfigurationError(
+                "Install fastapi-canon[mcp] to enable MCP"
+            ) from error
+
+        validate_mounts(mounts, composition.mcp)
+        if app.middleware_stack is not None:
+            raise FeatureConfigurationError("install MCP before the app starts")
+        if composition.mcp is not None and any(
+            getattr(route, "path", None) == composition.mcp.path for route in app.routes
+        ):
+            raise FeatureConfigurationError("MCP path conflicts with an existing route")
+    telemetry = composition.telemetry
+    if app.middleware_stack is not None:
+        raise FeatureConfigurationError("install features before the app starts")
+    if telemetry is not None:
+        telemetry._prepare(app)
     routers = _flatten_routers(composition.features)
     provider_sources = _flatten_provider_sources(composition.features)
     handler_specs = _flatten_handlers(composition.features)
@@ -245,29 +347,53 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
     materialized_providers = _materialize_providers(provider_sources)
     _reject_duplicate_materialized_providers(materialized_providers)
     _validate_handlers(app, composition.features)
-    installed_routers = _prepare_routers(routers, composition.router_factory)
+    installed_routers = _prepare_routers(
+        routers, composition.router_factory, composition.router_policy
+    )
 
     registries = tuple(
         (feature.name, feature.errors)
         for feature in composition.features
         if feature.errors is not None
     )
+    policy = composition.router_policy
+    if policy is not None and policy.error_registry is not None:
+        registries = (("router policy", policy.error_registry), *registries)
     registry = _merge_errors(
         registries,
         name=composition.errors.registry_name,
         type_base=composition.errors.type_base,
     )
-    # Normalization belongs to the application, even without domain errors.
-    registry = ErrorRegistry.merge(
-        *((registry,) if registry is not None else ()),
-        name=composition.errors.registry_name,
-        type_base=(
-            composition.errors.type_base
-            or (registry.type_base if registry is not None else None)
-            or _DEFAULT_TYPE_BASE
-        ),
+    installed_registry = getattr(app.state, INSTALLED_REGISTRY_STATE_KEY, None)
+    if registry is None and isinstance(installed_registry, ErrorRegistry):
+        registry = installed_registry
+    else:
+        registry = ErrorRegistry.merge(
+            *((registry,) if registry is not None else ()),
+            name=composition.errors.registry_name,
+            type_base=(
+                composition.errors.type_base
+                or (registry.type_base if registry is not None else None)
+                or _DEFAULT_TYPE_BASE
+            ),
+        )
+    providers = tuple(contribution.provider for contribution in materialized_providers)
+    instrumentation = tuple(
+        (feature.name, spec)
+        for feature in composition.features
+        for spec in feature.instrumentation
     )
-    _validate_error_installation(
+    if instrumentation:
+        from fastapi_canon.integrations.opentelemetry.declarations import (
+            _instrumentation_providers,
+        )
+
+        providers = (
+            *providers,
+            *_instrumentation_providers(instrumentation, telemetry),
+        )
+    container = _make_container(providers, telemetry)
+    policy_operations = _validate_error_installation(
         app,
         installed_routers,
         handler_specs,
@@ -275,14 +401,16 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         include_validation_error=composition.errors.include_validation_error,
         include_http_exceptions=composition.errors.include_http_exceptions,
         include_unhandled_error=composition.errors.include_unhandled_error,
-    )
-    if app.middleware_stack is not None:
-        msg = "features must be installed before the app starts"
-        raise FeatureConfigurationError(msg)
-    container = _make_container(
-        tuple(contribution.provider for contribution in materialized_providers)
+        router_policy=policy,
     )
 
+    if telemetry is not None:
+        from fastapi_canon.integrations.opentelemetry.native import install
+
+        install(app, telemetry)
+    original_lifespan = app.router.lifespan_context
+    if container is not None:
+        _install_scopes(app, container)
     for router in installed_routers:
         app.include_router(router)
     for spec in handler_specs:
@@ -293,20 +421,37 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         include_http_exceptions=composition.errors.include_http_exceptions,
         include_unhandled_error=composition.errors.include_unhandled_error,
     )
-    if container is not None:
-        setup_dishka(container, app)
+    if policy is not None and policy.raises:
+        install_policy_contracts(app, policy.raises, policy_operations)
+    if composition.mcp is not None:
+        from fastapi_canon.integrations.mcp.runtime import install_mcp
+
+        lifespans = (*lifespans, install_mcp(app, mounts, composition.mcp, container))
     app.router.lifespan_context = _compose_lifespan(
-        app.router.lifespan_context,
-        lifespans,
+        original_lifespan,
+        # include_router merged these into the app context after we captured
+        # original_lifespan. Retain them inside the dependency lifetime.
+        (*lifespans, *_router_lifespans(original_lifespan, installed_routers)),
         container,
     )
 
+    if composition.request_logging:
+        install_request_logging(app)
+
     completed = _Installation(
+        mcp=composition.mcp,
+        request_logging=composition.request_logging,
+        telemetry=composition.telemetry,
+        telemetry_id=id(composition.telemetry)
+        if composition.telemetry is not None
+        else None,
         features=composition.features,
         feature_ids=requested.feature_ids,
         errors=composition.errors,
         router_factory=composition.router_factory,
         router_factory_id=requested.router_factory_id,
+        router_policy=policy,
+        router_policy_id=requested.router_policy_id,
         container=container,
     )
     setattr(app.state, _INSTALLATION_STATE_KEY, completed)
@@ -340,9 +485,20 @@ def _validate_applied_composition(app: object, composition: Composition) -> None
         else None
     )
     if not isinstance(installed, _Installation) or (
-        installed.feature_ids != tuple(id(feature) for feature in composition.features)
+        installed.mcp != composition.mcp
+        or installed.feature_ids
+        != tuple(id(feature) for feature in composition.features)
+        or installed.telemetry_id
+        != (id(composition.telemetry) if composition.telemetry is not None else None)
         or installed.errors != composition.errors
+        or installed.request_logging != composition.request_logging
         or installed.router_factory_id != expected_router_factory_id
+        or installed.router_policy_id
+        != (
+            id(composition.router_policy)
+            if composition.router_policy is not None
+            else None
+        )
     ):
         msg = "composition must be applied to the application before validation"
         raise FeatureConfigurationError(msg)
@@ -354,9 +510,10 @@ def _collect_router_errors(
     registries: list[tuple[str, ErrorRegistry]] = []
     seen: set[int] = set()
     for router in routers:
-        if not isinstance(router, CanonRouter):
-            continue
-        for registry in router.error_registries:
+        contributions = list(getattr(router, "_canon_error_registries", ()))
+        if isinstance(router, CanonRouter):
+            contributions.extend(router.error_registries)
+        for registry in contributions:
             if id(registry) in seen:
                 continue
             seen.add(id(registry))
@@ -366,6 +523,12 @@ def _collect_router_errors(
         name=f"{feature_name}-routers" if len(registries) > 1 else None,
         type_base=None,
     )
+
+
+def _validate_optional_string(value: object, parameter: str) -> None:
+    if value is not None and not isinstance(value, str):
+        msg = f"{parameter} must be a string or None"
+        raise FeatureConfigurationError(msg)
 
 
 def _validate_feature_name(value: object) -> str:
@@ -502,6 +665,20 @@ def _reject_duplicate_materialized_providers(
 
 
 def _prepare_routers(
+    routers: tuple[APIRouter, ...],
+    router_factory: RouterFactory | None,
+    router_policy: RouterPolicy | None,
+) -> tuple[APIRouter, ...]:
+    prepared = _prepare_application_router(routers, router_factory)
+    if router_policy is None or not router_policy.dependencies:
+        return prepared
+    wrapper = APIRouter(dependencies=list(router_policy.dependencies))
+    for router in prepared:
+        wrapper.include_router(router)
+    return (wrapper,)
+
+
+def _prepare_application_router(
     routers: tuple[APIRouter, ...], router_factory: RouterFactory | None
 ) -> tuple[APIRouter, ...]:
     if router_factory is None:
@@ -582,9 +759,34 @@ def _merge_errors(
         raise FeatureConfigurationError(msg) from error
 
 
-def _make_container(providers: tuple[Provider, ...]) -> AsyncContainer | None:
+def _make_container(
+    providers: tuple[Provider, ...], telemetry: Telemetry | None
+) -> AsyncContainer | None:
     if not providers:
         return None
+    from fastapi_canon.integrations.opentelemetry import Telemetry
+
+    for provider in providers:
+        if (
+            any(
+                factory.provides.type_hint is Telemetry
+                for factory in provider.factories
+            )
+            or any(alias.provides.type_hint is Telemetry for alias in provider.aliases)
+            or any(
+                variable.provides.type_hint is Telemetry
+                for variable in provider.context_vars
+            )
+        ):
+            raise FeatureConfigurationError(
+                "Telemetry is reserved by Composition; remove the custom binding"
+            )
+    options = telemetry if telemetry is not None else Telemetry.disabled()
+    components = dict.fromkeys(provider.component for provider in providers)
+    providers = (
+        *providers,
+        *(options.provider(component=component) for component in components),
+    )
     try:
         return make_async_container(*providers)
     except DishkaError as error:
@@ -601,18 +803,42 @@ def _validate_error_installation(
     include_validation_error: bool,
     include_http_exceptions: bool,
     include_unhandled_error: bool,
-) -> None:
+    router_policy: RouterPolicy | None,
+) -> frozenset[str]:
     if app.openapi_schema is not None:
         msg = "install features before generating or caching OpenAPI"
         raise FeatureConfigurationError(msg)
     if registry is None:
-        return
+        return frozenset()
     validation_app = FastAPI()
+    installed_registry = getattr(app.state, INSTALLED_REGISTRY_STATE_KEY, None)
+    if isinstance(installed_registry, ErrorRegistry) and installed_registry is registry:
+        try:
+            registry.install(
+                app,
+                include_validation_error=include_validation_error,
+                include_http_exceptions=include_http_exceptions,
+                include_unhandled_error=include_unhandled_error,
+            )
+            registry.install(
+                validation_app,
+                include_validation_error=include_validation_error,
+                include_http_exceptions=include_http_exceptions,
+                include_unhandled_error=include_unhandled_error,
+            )
+        except ErrorConfigurationError as error:
+            raise FeatureConfigurationError(str(error)) from error
     validation_app.exception_handlers.update(app.exception_handlers)
     for router in routers:
         validation_app.include_router(router)
     for spec in handler_specs:
         validation_app.add_exception_handler(spec.exception, spec.handler)
+    operations: frozenset[str] = frozenset()
+    if router_policy is not None and router_policy.raises:
+        operations = frozenset(
+            path for path, _ in iter_operations(validation_app.openapi())
+        )
+        validation_app.openapi_schema = None
     try:
         registry.install(
             validation_app,
@@ -620,8 +846,32 @@ def _validate_error_installation(
             include_http_exceptions=include_http_exceptions,
             include_unhandled_error=include_unhandled_error,
         )
+        if router_policy is not None and router_policy.raises:
+            install_policy_contracts(validation_app, router_policy.raises, operations)
+            validation_app.openapi()
     except ErrorConfigurationError as error:
         raise FeatureConfigurationError(str(error)) from error
+    return operations
+
+
+def _router_lifespans(
+    original: FeatureLifespan, routers: tuple[APIRouter, ...]
+) -> tuple[FeatureLifespan, ...]:
+    """Return router lifespans that the composed app lifespan must run.
+
+    A router without ``lifespan=`` gets a default lifespan that runs its
+    ``on_startup``/``on_shutdown`` handlers. ``include_router`` also copies those
+    handlers to the app, whose own default lifespan runs them. Keep the router's
+    default lifespan only when the app's lifespan does not, so each handler runs
+    exactly once.
+    """
+    default = type(APIRouter().lifespan_context)
+    app_runs_handlers = isinstance(original, default)
+    return tuple(
+        router.lifespan_context
+        for router in routers
+        if not (app_runs_handlers and isinstance(router.lifespan_context, default))
+    )
 
 
 def _compose_lifespan(

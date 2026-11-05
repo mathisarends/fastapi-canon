@@ -6,11 +6,16 @@ from typing import Any
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse, Response
 
-from fastapi_canon.error.contracts import SUCCESS_EXTENSION
-from fastapi_canon.error.error import Error
-from fastapi_canon.error.registry import AnyError, ErrorRegistry
-from fastapi_canon.error.types import ErrorConfigurationError, OpenAPIResponses
+from fastapi_canon.error import Error, ErrorConfigurationError, ErrorRegistry
+from fastapi_canon.error.contracts import SUCCESS_EXTENSION, AnyError
+from fastapi_canon.error.types import OpenAPIResponses
 from fastapi_canon.error.validation import unique_instances
+from fastapi_canon.policy import (
+    RouterPolicy,
+    merge_policy_registry,
+    validate_policy,
+    validate_registry,
+)
 from fastapi_canon.response import CanonResponse, ResponseConfigurationError
 
 
@@ -23,14 +28,13 @@ class CanonRouter(APIRouter):
         error_registry: ErrorRegistry | None = None,
         raises: Sequence[AnyError] = (),
         http_statuses: Sequence[int] = (),
+        policy: RouterPolicy | None = None,
         **kwargs: Any,
     ) -> None:
-        raw_error_registry: object = error_registry
-        if raw_error_registry is not None and not isinstance(
-            raw_error_registry, ErrorRegistry
-        ):
-            msg = "error_registry must be an ErrorRegistry instance or None"
-            raise ErrorConfigurationError(msg)
+        validate_registry(error_registry)
+        validate_policy(policy)
+        error_registry = merge_policy_registry(error_registry, policy)
+        self.policy = policy
         self.error_registry = error_registry
         self._included_error_registries: list[ErrorRegistry] = []
         self.raises = _normalize_raises(
@@ -39,14 +43,22 @@ class CanonRouter(APIRouter):
             parameter="raises",
         )
         self.http_statuses = _normalize_http_statuses(http_statuses)
+        if policy is not None:
+            self.raises = _distinct((*policy.raises, *self.raises))
+            kwargs["dependencies"] = [
+                *policy.dependencies,
+                *(kwargs.get("dependencies") or ()),
+            ]
         super().__init__(**kwargs)
 
     @property
     def error_registries(self) -> tuple[ErrorRegistry, ...]:
         """Registries owned by this router and its included Canon routers."""
         registries = (
-            () if self.error_registry is None else (self.error_registry,)
-        ) + tuple(self._included_error_registries)
+            (() if self.error_registry is None else (self.error_registry,))
+            + tuple(self._included_error_registries)
+            + tuple(getattr(self, "_canon_error_registries", ()))
+        )
         return tuple({id(registry): registry for registry in registries}.values())
 
     def include_router(self, router: APIRouter, **kwargs: Any) -> None:

@@ -5,8 +5,10 @@ from examples.showcase.features.status import feature as status_feature
 from fastapi_canon import Composition, ErrorOptions
 
 composition = Composition(
-    status_feature,
-    catalog_feature,
+    features=(
+        status_feature,
+        catalog_feature,
+    ),
     errors=ErrorOptions(type_base="https://api.example.test/problems"),
 )
 

@@ -1,0 +1,323 @@
+# yaml-language-server: $schema=.smelt.schema.json
+# Canon package guardrails; rationale: docs/architecture-guardrails.md.
+# Run: uv run --locked smelt check --fail-on warning
+version: 1
+project:
+  root_packages: [fastapi_canon, app, scripts, examples]
+  source_roots: [., examples/reference-service/src]
+  test_roots: [tests/unit, tests/integration, tests/contract, tests/fixtures,
+    tests/browser, examples/reference-service/tests]
+  coverage: strict
+  exclude:
+  - path: build/**
+    reason: Existing local build output and disposable compatibility worktrees, outside the maintained package.
+  - path: tests/__init__.py
+    reason: Empty pytest package marker; test modules and fixtures are checked through their declared test roots.
+  - path: '**/codegen/templates/**'
+    reason: Generated SDK runtime assets; checked by generator drift, consumer and client-runtime
+      suites.
+  - path: examples/canonical_errors/**
+    reason: Runnable demos and generated SDKs; checked by lint, consumer and installed-artifact suites.
+  - path: examples/showcase/**
+    reason: Runnable demos and generated SDKs; checked by lint, consumer and installed-artifact suites.
+  - path: examples/streams/**
+    reason: Runnable demos and generated SDKs; checked by lint, consumer and installed-artifact suites.
+  - path: examples/sse/**
+    reason: Runnable demos and generated SDKs; checked by lint, consumer and installed-artifact suites.
+  - path: examples/websockets/**
+    reason: Runnable demos and generated SDKs; checked by lint, consumer and installed-artifact suites.
+  - path: examples/webrtc/**
+    reason: Runnable demos and generated SDKs; checked by lint, consumer and installed-artifact suites.
+  - path: '**/dist/**'
+    reason: Build outputs and disposable validation environments.
+architecture:
+  modules:
+    scripts: tooling
+    examples: showcase
+    fastapi_canon.exceptions: values
+    fastapi_canon.error: adapters
+    fastapi_canon.error.types: values
+    fastapi_canon.error.error: values
+    fastapi_canon.error.problem: values
+    fastapi_canon.error.validation: values
+    fastapi_canon.error.rendering: values
+    fastapi_canon.response: responses
+    fastapi_canon.error.contracts: values
+    fastapi_canon.error.openapi: adapters
+    fastapi_canon.error.handlers: adapters
+    fastapi_canon.error.registry: adapters
+    fastapi_canon.openapi: adapters
+    fastapi_canon.router: routing
+    fastapi_canon.feature: composition
+    fastapi_canon.scopes: composition
+    fastapi_canon.integrations.database: persistence
+
+    fastapi_canon.request_logging: composition
+    fastapi_canon._version: values
+    fastapi_canon.policy: routing
+    fastapi_canon.error.catalog: adapters
+    fastapi_canon.codegen: generation
+    fastapi_canon.contracts: composition
+    fastapi_canon.contract_cli: generation
+    fastapi_canon.contract_routes: adapters
+    fastapi_canon.integrations: transport
+    fastapi_canon.integrations.mcp: mcp
+    fastapi_canon.integrations.sse: sse
+    fastapi_canon.integrations.websockets: rpc
+    fastapi_canon.integrations.webrtc: rtc
+    fastapi_canon.integrations.opentelemetry: telemetry
+    app: application
+    fastapi_canon.checks: analysis
+    fastapi_canon.check_error_contracts: analysis
+    fastapi_canon.cli: generation
+    fastapi_canon.__main__: generation
+    fastapi_canon.integrations.sse.codegen: generation
+    fastapi_canon.integrations.websockets.codegen: generation
+    fastapi_canon.integrations.webrtc.codegen: generation
+    fastapi_canon.integrations.websockets.adapters.opentelemetry: telemetry
+  layers:
+    tooling:
+      path: scripts
+      may_depend_on: [values, responses, adapters, routing, composition, transport, sse, rpc, rtc, telemetry, generation, analysis, persistence, mcp]
+      third_party:
+        default: deny
+        # Installed-wheel resource smoke checks also exercise SQLAlchemy.
+        allow: [packaging, fastapi, pydantic, pydantic_core, typing_extensions, starlette, dishka, httpx, httpx2, jsonschema, jinja2, pytest, uvicorn, anyio, aiortc, av, opentelemetry, sqlalchemy, sqlmodel, alembic, fastmcp]
+    showcase:
+      path: examples
+      may_depend_on: [values, responses, adapters, routing, composition, transport, sse, rpc, rtc, telemetry, generation, analysis, application, persistence, mcp]
+      third_party:
+        default: deny
+        allow: [fastapi, pydantic, pydantic_core, typing_extensions, starlette, dishka, opentelemetry, httpx, httpx2, sqlmodel, sqlalchemy, pydantic_settings, uvicorn, anyio, alembic, fastmcp]
+    values:
+      path: values
+      third_party:
+        default: deny
+        allow: [pydantic]
+    responses:
+      path: response
+      may_depend_on: [values]
+      third_party:
+        default: deny
+        allow: [pydantic]
+    adapters:
+      path: error
+      may_depend_on: [values, responses]
+      third_party:
+        default: deny
+        allow: [fastapi, starlette, pydantic]
+    routing:
+      path: router
+      may_depend_on: [values, responses, adapters]
+      third_party:
+        default: deny
+        allow: [fastapi, starlette, pydantic]
+    composition:
+      path: feature
+      may_depend_on: [values, responses, adapters, routing, telemetry, rpc, rtc, mcp]
+      third_party:
+        default: deny
+        allow: [dishka, fastapi, starlette, pydantic, opentelemetry, typing_extensions, pydantic_core, fastmcp, anyio]
+    analysis:
+      path: checks
+      may_depend_on: []
+      third_party:
+        default: deny
+        allow: []
+    persistence:
+      path: database
+      may_depend_on: [values, responses, adapters, routing, composition, telemetry, rpc, rtc, mcp]
+      third_party:
+        default: deny
+        allow: [sqlalchemy, alembic, anyio, dishka, fastapi, starlette, pydantic, typing_extensions, pydantic_core, opentelemetry, fastmcp]
+    transport:
+      path: integrations
+      may_depend_on: [values, responses, adapters, routing]
+      third_party:
+        default: deny
+        allow: [dishka, fastapi, starlette, pydantic, typing_extensions, pydantic_core]
+    mcp:
+      path: mcp
+      may_depend_on: [values, responses, adapters, routing]
+      third_party:
+        default: deny
+        allow: [dishka, fastapi, starlette, pydantic, fastmcp]
+    sse:
+      path: sse
+      may_depend_on: [values, responses, adapters, routing]
+      third_party:
+        default: deny
+        allow: [dishka, fastapi, starlette, pydantic, typing_extensions, pydantic_core, jsonschema,
+          jinja2]
+    rpc:
+      path: websockets
+      may_depend_on: [values, responses, adapters, routing]
+      third_party:
+        default: deny
+        allow: [dishka, fastapi, starlette, pydantic, typing_extensions, pydantic_core, jinja2,
+          opentelemetry]
+    rtc:
+      path: webrtc
+      may_depend_on: [values, responses, adapters, routing]
+      third_party:
+        default: deny
+        allow:
+        - dishka
+        - fastapi
+        - starlette
+        - pydantic
+        - typing_extensions
+        - pydantic_core
+        - anyio
+        - aiortc
+        - av
+        - jinja2
+    telemetry:
+      path: opentelemetry
+      may_depend_on: [values, responses, adapters, routing, rpc]
+      third_party:
+        default: deny
+        # The opt-in engine adapter uses SQLAlchemy's instance event API.
+        allow: [dishka, fastapi, starlette, pydantic, typing_extensions, pydantic_core, opentelemetry, sqlalchemy]
+    generation:
+      path: codegen
+      may_depend_on:
+      - values
+      - responses
+      - adapters
+      - routing
+      - sse
+      - rpc
+      - rtc
+      - composition
+      - telemetry
+      - analysis
+      - persistence
+      - mcp
+      third_party:
+        default: deny
+        allow:
+        - dishka
+        - fastapi
+        - starlette
+        - pydantic
+        - typing_extensions
+        - pydantic_core
+        - jsonschema
+        - jinja2
+        - anyio
+        - aiortc
+        - av
+        - opentelemetry
+        - sqlalchemy
+        - alembic
+        - fastmcp
+    application:
+      path: application
+      may_depend_on: [values, responses, adapters, routing, composition, telemetry, rpc, rtc, persistence, mcp]
+      third_party:
+        default: deny
+        allow:
+        - dishka
+        - fastapi
+        - starlette
+        - pydantic
+        - typing_extensions
+        - pydantic_core
+        - opentelemetry
+        - httpx
+        - httpx2
+        - sqlmodel
+        - sqlalchemy
+        - pydantic_settings
+        # Applications may consume the optional Database root exports; their
+        # transitive implementation owns Alembic and shielded async cleanup.
+        - alembic
+        - fastmcp
+        - anyio
+  imports:
+    transitive: true
+    type_checking: include
+    cycles: [layers, siblings]
+structure:
+  forbidden_names: [utils, helpers, common, misc]
+  contracts:
+    canon:
+      match: fastapi_canon
+      export_at: 3
+      required: [error, feature, openapi, response, router]
+      public: [., error, integrations.**, check_error_contracts]
+      imports:
+        style: absolute
+      private_modules: forbid
+      future_annotations: when-needed
+      type_dispatch:
+        style: match
+        min_branches: 3
+      ordering:
+        constants_exempt: true
+    error-models:
+      match: fastapi_canon.error
+      export_at: 3
+      required: [error, problem, registry, rendering, handlers, openapi, types]
+      module_docstrings: forbid
+    integration-facades:
+      match: fastapi_canon.integrations.*
+      export_at: 3
+tests:
+  layout: mirror
+  mirror: '{path}/test_{module}.py'
+  mirror_suffixes: true
+  forbid_mocks_in: [tests/integration/**, tests/contract/**, tests/unit/error/**]
+  max_patches_per_test: 1
+  # Retain focused protocol/scenario suites while core tests mirror their modules.
+  unmirrored: [tests/unit/integrations/**, tests/integration/integrations/**,
+    tests/contract/integrations/**, tests/integration/test_opentelemetry.py,
+    tests/integration/test_optional_streams.py, tests/integration/codegen/**,
+    tests/integration/test_stack.py, tests/unit/test_release.py,
+    examples/reference-service/tests/**]
+rules:
+  import-cycle: error
+  unclassified-module: error
+  public-definitions-first: error
+  bundled-instance-assignment: error
+  internal-public-member: error
+  internal-public-module-symbol: warning
+  internal-static-helper: error
+  redundant-str-enum-value: error
+  prefer-package-import: error
+  unnecessary-future-annotations: warning
+  prefer-match-type-dispatch: warning
+  private-test-access: error
+  string-patch-target: error
+  test-without-outcome-check: error
+  test-only-checks-possibly-empty-data: error
+  unbounded-test-wait: error
+  independent-test-case-loop: warning
+  async-mock-without-await-check: error
+  test-only-public-function: error
+  test-only-public-attribute: warning
+  unused-suppression: error
+  resolved-debt: error
+suppressions:
+  require_reason: true
+ignore:
+- rule: import-style
+  paths: ['**/__init__.py']
+  reason: Package facades deliberately use relative imports; ordinary Canon modules use absolute
+    imports.
+- rule: unknown-layer
+  modules: [app.**]
+  reason: The reference application uses its own feature topology, not the library layer directory
+    names; architecture.modules still classifies its complete source inventory.
+- rule: unknown-layer
+  modules: [examples.**]
+  reason: Runnable examples use application and transport names, not library layer directories; architecture.modules classifies their checked source.
+- rule: no-private-modules
+  paths: [fastapi_canon/_version.py]
+  reason: The version literal is the documented input to release.toml and the build/release
+    tooling, not a hidden implementation module.
+- rule: prefer-package-import
+  paths: [examples/reference-service/src/app/features/tasks/infrastructure/repository.py]
+  reason: Concrete repository implementations deliberately import their owned ABC from its
+    definition for nominal conformance and IDE navigation.

@@ -1,0 +1,20 @@
+{
+  "files": [
+    "agent-runs/api.ts",
+    "agent-runs/index.ts",
+    "client.ts",
+    "index.ts",
+    "transport/errors.ts",
+    "transport/problem.ts",
+    "transport/sse.ts",
+    "types.ts"
+  ],
+  "generation": {
+    "generator": "fastapi-canon",
+    "generator_version": "0.15.0",
+    "python_http_client": null,
+    "schema_hash_encoding": "canonical-json-v1",
+    "schema_sha256": "f23def53557e9d381bada00de07054f0a105eceaefdf5f47eb3168a0e8a05c7f",
+    "target": "typescript"
+  }
+}

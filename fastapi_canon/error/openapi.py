@@ -13,6 +13,8 @@ from fastapi_canon.error.contracts import (
     HTTP_STATUSES_EXTENSION,
     INSTALLED_OPENAPI_STATE_KEY,
     SUCCESS_EXTENSION,
+    AnyError,
+    ErrorCatalog,
     contracts_from_responses,
     iter_operations,
 )
@@ -26,7 +28,6 @@ from fastapi_canon.error.types import (
 )
 
 if TYPE_CHECKING:
-    from fastapi_canon.error.registry import AnyError, ErrorRegistry
     from fastapi_canon.response import CanonResponse
 
 _PROBLEM_MEDIA_TYPE = "application/problem+json"
@@ -34,7 +35,7 @@ _MISSING = object()
 
 
 def install_openapi(
-    registry: ErrorRegistry | None,
+    registry: ErrorCatalog | None,
     app: FastAPI,
     *,
     include_validation_error: bool,
@@ -74,12 +75,14 @@ def install_openapi(
         # uncompiled schema if compilation fails.
         app.openapi_schema = None
         current = installation.configuration
-        compiled = compile_document(
+        compiled = _compile_document(
             current.registry,
             document,
             include_validation_error=current.include_validation_error,
             include_http_exceptions=current.include_http_exceptions,
             include_internal_error=current.include_internal_error,
+            policy_errors=installation.policy_errors,
+            policy_operations=installation.policy_operations,
         )
         app.openapi_schema = compiled
         return compiled
@@ -90,7 +93,7 @@ def install_openapi(
 
 @dataclass(frozen=True, slots=True)
 class _OpenAPIConfiguration:
-    registry: ErrorRegistry | None
+    registry: ErrorCatalog | None
     include_validation_error: bool
     include_http_exceptions: bool
     include_internal_error: bool
@@ -99,15 +102,34 @@ class _OpenAPIConfiguration:
 @dataclass(slots=True)
 class _OpenAPIInstallation:
     configuration: _OpenAPIConfiguration
+    policy_errors: tuple[AnyError, ...] = ()
+    policy_operations: frozenset[str] = frozenset()
 
 
-def compile_document(
-    registry: ErrorRegistry | None,
+def install_policy_contracts(
+    app: FastAPI, errors: tuple[AnyError, ...], operations: frozenset[str]
+) -> None:
+    """Scope composition contracts using operation names from generated OpenAPI."""
+    installed = getattr(app.state, INSTALLED_OPENAPI_STATE_KEY, None)
+    if not isinstance(installed, _OpenAPIInstallation):
+        raise ErrorConfigurationError(
+            "install the OpenAPI compiler before router policy"
+        )
+    if app.openapi_schema is not None:
+        raise ErrorConfigurationError("install router policy before caching OpenAPI")
+    installed.policy_errors = errors
+    installed.policy_operations = operations
+
+
+def _compile_document(
+    registry: ErrorCatalog | None,
     document: dict[str, Any],
     *,
     include_validation_error: bool,
     include_http_exceptions: bool,
     include_internal_error: bool = False,
+    policy_errors: tuple[AnyError, ...] = (),
+    policy_operations: frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
     result = copy.deepcopy(document)
     components = result.setdefault("components", {}).setdefault("schemas", {})
@@ -118,7 +140,7 @@ def compile_document(
             _add_component(
                 components,
                 error.effective_schema_name,
-                compile_error_schema(registry, error),
+                _compile_error_schema(registry, error),
             )
 
     if include_validation_error:
@@ -155,10 +177,48 @@ def compile_document(
                     "declare a unique operation_id for each operation"
                 )
             operation_ids[operation_id] = path
+
+        stream = operation.get("x-canon-stream")
+        if stream is not None:
+            if stream.get("version") != 1:
+                raise ErrorConfigurationError(
+                    "Canon streams require an installed error registry"
+                )
+            identities = stream.pop("errorIds", [])
+            lookup = (
+                {str(id(error)): error for error in registry.errors}
+                if registry is not None
+                else {}
+            )
+            if any(identity not in lookup for identity in identities):
+                raise ErrorConfigurationError("Canon stream declares an unknown error")
+            stream["problemEvent"] = "canon.problem"
+            stream["completeEvent"] = "canon.complete"
+            stream["problems"] = []
+            for identity in identities:
+                assert registry is not None
+                error = lookup[identity]
+                name = error.effective_schema_name + "Embedded"
+                schema = compile_problem_schema(registry, error, include_status=False)
+                _add_component(
+                    components, name, _rewrite_local_definitions(schema, name)
+                )
+                stream["problems"].append({"$ref": f"#/components/schemas/{name}"})
         responses = operation.setdefault("responses", {})
+        if stream is not None:
+            _compile_stream_contract(stream, responses, components, registry)
+
         _errors, http_statuses, _success = contracts_from_responses(
             path, responses, registry
         )
+        if path in policy_operations and policy_errors:
+            if registry is None:
+                raise ErrorConfigurationError(
+                    "router policy requires an error registry"
+                )
+            _compose_policy_responses(
+                path, responses, registry, policy_errors, _errors, http_statuses
+            )
         if http_statuses and not include_http_exceptions:
             msg = (
                 f"route {path!r} declares normalized HTTP responses, "
@@ -171,6 +231,8 @@ def compile_document(
             )
         for response in responses.values():
             if isinstance(response, dict):
+                if ERRORS_EXTENSION in response or HTTP_STATUSES_EXTENSION in response:
+                    _identify_problem_types(path, response, components)
                 response.pop(ERRORS_EXTENSION, None)
                 response.pop(HTTP_STATUSES_EXTENSION, None)
                 success_media_type = response.pop(SUCCESS_EXTENSION, _MISSING)
@@ -201,7 +263,7 @@ def compile_document(
 
 
 def compile_responses(
-    registry: ErrorRegistry,
+    registry: ErrorCatalog,
     errors: Sequence[AnyError],
     *,
     http_statuses: Sequence[int] = (),
@@ -258,24 +320,13 @@ def compile_responses(
     return result
 
 
-def _retain_success_content(response: dict[str, Any], media_type: object) -> None:
-    if media_type is None or media_type == "":
-        response.pop("content", None)
-        return
-    if not isinstance(media_type, str):
-        msg = "compiled success response contains invalid media type metadata"
-        raise ErrorConfigurationError(msg)
-    content = response.get("content")
-    if not isinstance(content, dict) or media_type not in content:
-        msg = f"compiled success response is missing media type {media_type!r}"
-        raise ErrorConfigurationError(msg)
-    response["content"] = {media_type: content[media_type]}
-
-
-def compile_error_schema(
-    registry: ErrorRegistry,
+def compile_problem_schema(
+    registry: ErrorCatalog,
     error: AnyError,
+    *,
+    include_status: bool,
 ) -> dict[str, Any]:
+    """Compile one standalone problem schema for any documented binding."""
     type_uri = registry.type_uri_for(error)
     if type_uri is None:
         msg = f"error {error.code!r} has no resolved problem type URI"
@@ -293,18 +344,26 @@ def compile_error_schema(
     )
 
     required = cast(list[str], schema["required"])
+    if not include_status:
+        properties.pop("status")
+        required.remove("status")
     if error.extensions_model is not None:
         extension_schema = error.extensions_model.model_json_schema(
             mode="serialization", by_alias=True
-        )
-        extension_schema = _rewrite_local_definitions(
-            extension_schema, error.effective_schema_name
         )
         extension_properties = extension_schema.get("properties", {})
         properties.update(extension_properties)
         required.extend(extension_schema.get("required", []))
         if "$defs" in extension_schema:
-            schema["$defs"] = extension_schema["$defs"]
+            schema["$defs"] = copy.deepcopy(extension_schema["$defs"])
+            for name, definition in schema["$defs"].items():
+                if isinstance(definition, dict):
+                    definition.setdefault(
+                        "x-canon-model-id", f"{type_uri}#/$defs/{name}"
+                    )
+                    definition.setdefault(
+                        "x-canon-model-name", error.effective_schema_name + name
+                    )
     elif isinstance(error.extensions, Mapping):
         for name, value in error.extensions.items():
             properties[name] = _schema_for_static_value(value)
@@ -313,8 +372,64 @@ def compile_error_schema(
     if error.example is not None:
         example = _thaw(error.example)
         _validate_example(error, type_uri, example)
+        if not include_status:
+            example.pop("status", None)
         schema["examples"] = [example]
     return schema
+
+
+def _compile_error_schema(
+    registry: ErrorCatalog,
+    error: AnyError,
+) -> dict[str, Any]:
+    """Adapt the shared problem schema to OpenAPI component references."""
+    return cast(
+        dict[str, Any],
+        _rewrite_local_definitions(
+            compile_problem_schema(registry, error, include_status=True),
+            error.effective_schema_name,
+        ),
+    )
+
+
+def _compose_policy_responses(
+    path: str,
+    responses: dict[str, Any],
+    registry: ErrorCatalog,
+    shared: tuple[AnyError, ...],
+    local: tuple[AnyError, ...],
+    http_statuses: tuple[int, ...],
+) -> None:
+    declared = tuple({id(error): error for error in (*shared, *local)}.values())
+    generated = compile_responses(registry, declared, http_statuses=http_statuses)
+    for status in dict.fromkeys(error.status for error in shared):
+        key = str(status)
+        existing = responses.get(key)
+        if existing is not None and not (
+            ERRORS_EXTENSION in existing
+            or HTTP_STATUSES_EXTENSION in existing
+            or (status == 422 and _is_default_validation_response(existing))
+        ):
+            msg = (
+                f"route {path!r} router policy response status {status} "
+                "conflicts with a FastAPI responses declaration"
+            )
+            raise ErrorConfigurationError(msg)
+        responses[key] = generated[status]
+
+
+def _retain_success_content(response: dict[str, Any], media_type: object) -> None:
+    if media_type is None or media_type == "":
+        response.pop("content", None)
+        return
+    if not isinstance(media_type, str):
+        msg = "compiled success response contains invalid media type metadata"
+        raise ErrorConfigurationError(msg)
+    content = response.get("content")
+    if not isinstance(content, dict) or media_type not in content:
+        msg = f"compiled success response is missing media type {media_type!r}"
+        raise ErrorConfigurationError(msg)
+    response["content"] = {media_type: content[media_type]}
 
 
 def _base_problem_schema() -> dict[str, Any]:
@@ -327,8 +442,8 @@ def _base_problem_schema() -> dict[str, Any]:
             "title": {"type": "string"},
             "status": {"type": "integer", "minimum": 100, "maximum": 599},
             "code": {"type": "string", "pattern": "^[a-z][a-z0-9_]{2,}$"},
-            "detail": {"type": ["string", "null"]},
-            "instance": {"type": ["string", "null"], "format": "uri-reference"},
+            "detail": {"type": "string"},
+            "instance": {"type": "string", "format": "uri-reference"},
         },
         "required": ["type", "title", "status", "code"],
         "additionalProperties": True,
@@ -392,6 +507,27 @@ def _http_component_name(status: int) -> str:
     return f"Http{status}Problem"
 
 
+def _identify_problem_types(
+    path: str, response: dict[str, Any], components: dict[str, Any]
+) -> None:
+    """Resolve identities after composition has supplied all problem type URIs."""
+    schema = response["content"][_PROBLEM_MEDIA_TYPE]["schema"]
+    variants = schema.get("oneOf")
+    if not isinstance(variants, list):
+        return
+    mapping: dict[str, str] = {}
+    for variant in variants:
+        reference = variant["$ref"]
+        component = components[reference.removeprefix("#/components/schemas/")]
+        type_uri = component["properties"]["type"]["const"]
+        if type_uri in mapping:
+            raise ErrorConfigurationError(
+                f"route {path!r} has ambiguous problem type {type_uri!r}"
+            )
+        mapping[type_uri] = reference
+    schema["discriminator"] = {"propertyName": "type", "mapping": mapping}
+
+
 def _http_problem_schema(status: int) -> dict[str, Any]:
     schema = _base_problem_schema()
     schema["title"] = _http_component_name(status)
@@ -445,17 +581,9 @@ def _merge_response_members(
 
 def _replace_default_validation_response(responses: dict[str, Any]) -> None:
     response = responses.get("422")
-    if not isinstance(response, dict):
+    if not isinstance(response, dict) or not _is_default_validation_response(response):
         return
-    content = response.get("content")
-    if not isinstance(content, dict):
-        return
-    application_json = content.get("application/json")
-    if not isinstance(application_json, dict):
-        return
-    schema = application_json.get("schema")
-    if schema != {"$ref": "#/components/schemas/HTTPValidationError"}:
-        return
+    content = response["content"]
     content.pop("application/json")
     content[_PROBLEM_MEDIA_TYPE] = {
         "schema": {"$ref": "#/components/schemas/RequestValidationProblem"}
@@ -463,7 +591,20 @@ def _replace_default_validation_response(responses: dict[str, Any]) -> None:
     response["description"] = "Request validation failed"
 
 
-def _request_validation_schema(registry: ErrorRegistry) -> dict[str, Any]:
+def _is_default_validation_response(response: Any) -> bool:
+    if not isinstance(response, dict):
+        return False
+    content = response.get("content")
+    if not isinstance(content, dict):
+        return False
+    application_json = content.get("application/json")
+    if not isinstance(application_json, dict):
+        return False
+    schema = application_json.get("schema")
+    return schema == {"$ref": "#/components/schemas/HTTPValidationError"}
+
+
+def _request_validation_schema(registry: ErrorCatalog) -> dict[str, Any]:
     if registry.type_base is None:
         msg = "type_base is required for the request validation schema"
         raise ErrorConfigurationError(msg)
@@ -502,73 +643,6 @@ def _request_validation_schema(registry: ErrorRegistry) -> dict[str, Any]:
     cast(list[str], schema["required"]).append("errors")
     schema["title"] = "RequestValidationProblem"
     return schema
-
-
-def _internal_error_schema(registry: ErrorRegistry) -> dict[str, Any]:
-    schema = _base_problem_schema()
-    schema["title"] = "InternalServerProblem"
-    schema["properties"].update(
-        {
-            "type": {
-                "type": "string",
-                "const": f"{registry.type_base}/internal_server_error",
-            },
-            "title": {"type": "string", "const": "Internal Server Error"},
-            "status": {"type": "integer", "const": 500},
-            "code": {"type": "string", "const": "internal_server_error"},
-        }
-    )
-    return schema
-
-
-def _add_builtin_response(
-    components: dict[str, Any],
-    responses: dict[str, Any],
-    status: int,
-    code: str,
-    component: str,
-    title: str,
-) -> None:
-    """Include framework failures in the same union as declared domain failures."""
-    reference = f"#/components/schemas/{component}"
-    response = responses.setdefault(str(status), {"description": title})
-    # Explicit manual response references remain application-owned.
-    if "$ref" in response:
-        return
-    content = response.setdefault("content", {})
-    problem = content.setdefault(_PROBLEM_MEDIA_TYPE, {"schema": {"$ref": reference}})
-    schema = problem["schema"]
-    if schema == {"$ref": reference}:
-        return
-    mapping = schema.get("discriminator", {}).get("mapping", {})
-    if "$ref" in schema:
-        existing_reference = schema["$ref"]
-        existing_component = components.get(existing_reference.rsplit("/", 1)[-1], {})
-        existing_code = (
-            existing_component.get("properties", {}).get("code", {}).get("const")
-        )
-        if not isinstance(existing_code, str):
-            return
-        if existing_code == code:
-            raise ErrorConfigurationError(
-                f"problem code {code!r} conflicts with normalization"
-            )
-        problem["schema"] = {
-            "oneOf": [{"$ref": existing_reference}, {"$ref": reference}],
-            "discriminator": {
-                "propertyName": "code",
-                "mapping": {existing_code: existing_reference, code: reference},
-            },
-        }
-    elif "oneOf" in schema and mapping:
-        if code in mapping:
-            if mapping[code] != reference:
-                raise ErrorConfigurationError(
-                    f"problem code {code!r} conflicts with normalization"
-                )
-            return
-        schema["oneOf"].append({"$ref": reference})
-        mapping[code] = reference
 
 
 def _add_component(
@@ -656,3 +730,129 @@ def _thaw(value: Any) -> Any:
     if isinstance(value, tuple):
         return [_thaw(item) for item in value]
     return value
+
+
+def _compile_stream_contract(
+    profile: dict[str, Any],
+    responses: dict[str, Any],
+    components: dict[str, Any],
+    registry: ErrorCatalog | None,
+) -> None:
+    base = registry.type_base if registry is not None else None
+    internal_type = (
+        f"{base}/internal_server_error"
+        if base
+        else "urn:fastapi-canon:internal_server_error"
+    )
+    internal = _base_problem_schema()
+    internal["properties"].pop("status")
+    internal["required"].remove("status")
+    internal["properties"]["type"]["const"] = internal_type
+    internal["properties"]["title"]["const"] = "Internal Server Error"
+    internal["properties"]["code"]["const"] = "internal_server_error"
+    name = "CanonInternalServerErrorEmbedded"
+    _add_component(components, name, internal)
+    problems = [*profile["problems"], {"$ref": f"#/components/schemas/{name}"}]
+    for status, response in responses.items():
+        media = response.get("content", {}).get("text/event-stream")
+        if not str(status).startswith("2") or not isinstance(media, dict):
+            continue
+        business = copy.deepcopy(media.get("itemSchema"))
+        if not isinstance(business, dict):
+            raise ErrorConfigurationError(
+                "Canon streams require a typed SSE item schema"
+            )
+        profile["businessItemSchema"] = copy.deepcopy(business)
+        business.setdefault("properties", {}).setdefault("event", {}).update(
+            {"not": {"pattern": "^canon\\."}}
+        )
+
+        def control(event: str, data: dict[str, Any]) -> dict[str, Any]:
+            return {
+                "type": "object",
+                "properties": {
+                    "event": {"type": "string", "const": event},
+                    "data": {
+                        "type": "string",
+                        "contentMediaType": "application/json",
+                        "contentSchema": data,
+                    },
+                },
+                "required": ["event", "data"],
+            }
+
+        media["itemSchema"] = {
+            "oneOf": [
+                business,
+                control("canon.problem", {"anyOf": problems}),
+                control("canon.complete", {"type": "object", "maxProperties": 0}),
+            ]
+        }
+
+
+def _add_builtin_response(
+    components: dict[str, Any],
+    responses: dict[str, Any],
+    status: int,
+    code: str,
+    component: str,
+    title: str,
+) -> None:
+    """Include framework failures in the same union as declared domain failures."""
+    reference = f"#/components/schemas/{component}"
+    response = responses.setdefault(str(status), {"description": title})
+    # Explicit manual response references remain application-owned.
+    if "$ref" in response:
+        return
+    content = response.setdefault("content", {})
+    problem = content.setdefault(_PROBLEM_MEDIA_TYPE, {"schema": {"$ref": reference}})
+    schema = problem["schema"]
+    if schema == {"$ref": reference}:
+        return
+    mapping = schema.get("discriminator", {}).get("mapping", {})
+    if "$ref" in schema:
+        existing_reference = schema["$ref"]
+        existing_component = components.get(existing_reference.rsplit("/", 1)[-1], {})
+        existing_code = (
+            existing_component.get("properties", {}).get("code", {}).get("const")
+        )
+        if not isinstance(existing_code, str):
+            return
+        if existing_code == code:
+            raise ErrorConfigurationError(
+                f"problem code {code!r} conflicts with normalization"
+            )
+        problem["schema"] = {
+            "oneOf": [{"$ref": existing_reference}, {"$ref": reference}],
+            "discriminator": {
+                "propertyName": "code",
+                "mapping": {existing_code: existing_reference, code: reference},
+            },
+        }
+    elif "oneOf" in schema and mapping:
+        if code in mapping:
+            if mapping[code] != reference:
+                raise ErrorConfigurationError(
+                    f"problem code {code!r} conflicts with normalization"
+                )
+            return
+        schema["oneOf"].append({"$ref": reference})
+        mapping[code] = reference
+
+
+def _internal_error_schema(registry: ErrorCatalog) -> dict[str, Any]:
+    schema = _base_problem_schema()
+    schema["title"] = "InternalServerProblem"
+    schema["properties"].update(
+        {
+            "type": {
+                "type": "string",
+                "format": "uri-reference",
+                "const": f"{registry.type_base}/internal_server_error",
+            },
+            "title": {"type": "string", "const": "Internal Server Error"},
+            "status": {"type": "integer", "const": 500},
+            "code": {"type": "string", "const": "internal_server_error"},
+        }
+    )
+    return schema

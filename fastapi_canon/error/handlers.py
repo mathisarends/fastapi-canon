@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket
 from fastapi.exception_handlers import (
     http_exception_handler,
     request_validation_exception_handler,
@@ -14,11 +14,12 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 from starlette.responses import Response
 from starlette.types import ExceptionHandler
-from starlette.websockets import WebSocket, WebSocketState
+from starlette.websockets import WebSocketState
 
 from fastapi_canon.error.contracts import (
     INSTALLED_HANDLERS_STATE_KEY,
     INSTALLED_REGISTRY_STATE_KEY,
+    ErrorCatalog,
 )
 from fastapi_canon.error.openapi import install_openapi
 from fastapi_canon.error.rendering import render_problem
@@ -28,14 +29,11 @@ from fastapi_canon.error.types import (
     http_problem_title,
 )
 
-if TYPE_CHECKING:
-    from fastapi_canon.error.registry import ErrorRegistry
-
 logger = logging.getLogger(__name__)
 
 
 def install_handlers(
-    registry: ErrorRegistry,
+    registry: ErrorCatalog,
     app: FastAPI,
     *,
     include_validation_error: bool,
@@ -154,7 +152,7 @@ def install_handlers(
     setattr(app.state, INSTALLED_HANDLERS_STATE_KEY, options)
 
 
-def _domain_handler(registry: ErrorRegistry) -> ExceptionHandler:
+def _domain_handler(registry: ErrorCatalog) -> ExceptionHandler:
     async def handler(
         connection: Request | WebSocket, exception: Exception
     ) -> Response | None:
@@ -177,12 +175,14 @@ def _domain_handler(registry: ErrorRegistry) -> ExceptionHandler:
             )
             return await _connection_response(
                 connection,
-                _internal_error_response(registry),
+                _internal_error_response(registry, connection),
                 code="internal_server_error",
             )
         return await _connection_response(
             connection,
-            _problem_response(problem.as_dict(), error.status, headers=headers),
+            _problem_response(
+                connection, problem.as_dict(), error.status, headers=headers
+            ),
             code=error.code,
         )
 
@@ -207,35 +207,13 @@ async def _http_exception_handler(
         payload["detail"] = detail
     return await _connection_response(
         request,
-        _problem_response(payload, status, headers=exception.headers),
+        _problem_response(request, payload, status, headers=exception.headers),
         code=f"http_{status}",
     )
 
 
-async def _connection_response(
-    connection: Request | WebSocket, response: Response, *, code: str
-) -> Response | None:
-    if not isinstance(connection, WebSocket):
-        return response
-    if connection.application_state == WebSocketState.DISCONNECTED:
-        return None
-    if (
-        connection.application_state == WebSocketState.CONNECTING
-        and "websocket.http.response" in connection.scope.get("extensions", {})
-    ):
-        await connection.send_denial_response(response)
-    else:
-        # A WebSocket close is a different transport from an HTTP response.
-        # Preserve the stable problem code without inventing an application frame.
-        await connection.close(
-            code=1011 if response.status_code >= 500 else 1008, reason=code[:123]
-        )
-    return None
-
-
-def _request_validation_handler(registry: ErrorRegistry) -> ExceptionHandler:
-    async def handler(request: Request, exception: Exception) -> Response:
-        del request
+def _request_validation_handler(registry: ErrorCatalog) -> ExceptionHandler:
+    async def handler(request: Request | WebSocket, exception: Exception) -> Response:
         if not isinstance(exception, RequestValidationError):
             raise exception
         errors: list[JsonValue] = []
@@ -248,33 +226,29 @@ def _request_validation_handler(registry: ErrorRegistry) -> ExceptionHandler:
             "code": "request_validation_error",
             "errors": errors,
         }
-        return _problem_response(payload, 422)
+        return _problem_response(request, payload, 422)
 
     return cast(ExceptionHandler, handler)
 
 
-def _response_validation_handler(registry: ErrorRegistry) -> ExceptionHandler:
-    async def handler(request: Request, exception: Exception) -> Response:
-        del request
+def _response_validation_handler(registry: ErrorCatalog) -> ExceptionHandler:
+    async def handler(request: Request | WebSocket, exception: Exception) -> Response:
         if not isinstance(exception, ResponseValidationError):
             raise exception
         logger.error(
             "FastAPI response validation failed",
             exc_info=(type(exception), exception, exception.__traceback__),
         )
-        return _internal_error_response(registry)
+        return _internal_error_response(registry, request)
 
     return cast(ExceptionHandler, handler)
 
 
-def _unhandled_handler(registry: ErrorRegistry) -> ExceptionHandler:
-    async def handler(request: Request, exception: Exception) -> Response:
-        del request
-        logger.error(
-            "Unhandled application exception",
-            exc_info=(type(exception), exception, exception.__traceback__),
-        )
-        return _internal_error_response(registry)
+def _unhandled_handler(registry: ErrorCatalog) -> ExceptionHandler:
+    async def handler(request: Request | WebSocket, exception: Exception) -> Response:
+        # ServerErrorMiddleware re-raises after sending this response; Uvicorn
+        # owns that traceback. Only exceptions consumed here need a local log.
+        return _internal_error_response(registry, request)
 
     return cast(ExceptionHandler, handler)
 
@@ -300,8 +274,11 @@ def _escape_pointer(value: object) -> str:
     return str(value).replace("~", "~0").replace("/", "~1")
 
 
-def _internal_error_response(registry: ErrorRegistry) -> Response:
+def _internal_error_response(
+    registry: ErrorCatalog, request: Request | WebSocket
+) -> Response:
     return _problem_response(
+        request,
         {
             "type": _builtin_type(registry, "internal_server_error"),
             "title": "Internal Server Error",
@@ -312,7 +289,7 @@ def _internal_error_response(registry: ErrorRegistry) -> Response:
     )
 
 
-def _builtin_type(registry: ErrorRegistry, code: str) -> str:
+def _builtin_type(registry: ErrorCatalog, code: str) -> str:
     if registry.type_base is None:
         msg = f"type_base is required to render built-in problem {code!r}"
         raise ErrorConfigurationError(msg)
@@ -320,17 +297,24 @@ def _builtin_type(registry: ErrorRegistry, code: str) -> str:
 
 
 def _problem_response(
+    request: Request | WebSocket,
     payload: dict[str, JsonValue],
     status: int,
     *,
     headers: Mapping[str, str] | None = None,
 ) -> Response:
-    return JSONResponse(
+    response = JSONResponse(
         payload,
         status_code=status,
         headers=headers,
         media_type="application/problem+json",
     )
+    request.scope["_canon_problem_code"] = str(payload["code"])
+    request.scope["_canon_problem_status"] = status
+    enrich = getattr(request.app.state, "_canon_problem_telemetry", None)
+    if enrich is not None:
+        enrich(request.scope, str(payload["code"]), status)
+    return response
 
 
 def _ensure_handler_available(app: FastAPI, exception_class: type[Exception]) -> None:
@@ -354,3 +338,24 @@ def _ensure_default_or_available(
             f"{exception_class.__qualname__}"
         )
         raise ErrorConfigurationError(msg)
+
+
+async def _connection_response(
+    connection: Request | WebSocket, response: Response, *, code: str
+) -> Response | None:
+    if not isinstance(connection, WebSocket):
+        return response
+    if connection.application_state == WebSocketState.DISCONNECTED:
+        return None
+    if (
+        connection.application_state == WebSocketState.CONNECTING
+        and "websocket.http.response" in connection.scope.get("extensions", {})
+    ):
+        await connection.send_denial_response(response)
+    else:
+        # A WebSocket close is a different transport from an HTTP response.
+        # Preserve the stable problem code without inventing an application frame.
+        await connection.close(
+            code=1011 if response.status_code >= 500 else 1008, reason=code[:123]
+        )
+    return None
