@@ -36,7 +36,7 @@ from .policy import RouterPolicy
 from .public_exports import __getattr__ as __getattr__
 from .response import CanonResponse, ResponseConfigurationError, ResponseHeaders
 from .router import CanonRouter
-from .scopes import ServiceScope
+from .scopes import Scoped, ServiceScope
 
 if TYPE_CHECKING:
     from .integrations.database import (
@@ -83,6 +83,7 @@ __all__ = [
     "RouterFactory",
     "RouterPolicy",
     "RpcChannel",
+    "Scoped",
     "ServiceScope",
     "TransactionLocks",
     "__version__",
