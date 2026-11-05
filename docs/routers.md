@@ -16,6 +16,72 @@ or `webrtc` extra for the transports you use. `aiortc` selects the reference
 WebRTC engine. Core router imports do not load these optional runtimes or SDK
 generators. Existing specialized routers remain supported.
 
+## Automatic HTTP and SSE operation names
+
+Declare a stable namespace once per router. Canon derives an omitted
+`operation_id` from the endpoint function name:
+
+```python
+from collections.abc import AsyncIterator
+
+from fastapi_canon import APIRouter
+
+
+router = APIRouter(namespace="projects", prefix="/projects")
+
+
+@router.get("/{project_id}")
+async def get(project_id: int) -> int:
+    return project_id
+
+
+@router.sse("/{project_id}/events")
+async def events(project_id: int) -> AsyncIterator[int]:
+    yield project_id
+```
+
+These operations export as `projects.get` and `projects.events`, producing
+`client.projects.get(...)` and `client.projects.events(...)` in the common SDK.
+The same rule applies to `CanonRouter` and `CanonStreamRouter`.
+
+- An explicit `operation_id=` always wins and is never prefixed.
+- Otherwise the ID is `<namespace>.<function_name>`, or just `<function_name>`
+  when `namespace=None` (the default). Namespaces may be dotted public identifiers,
+  such as `organization.projects`; empty or private segments are rejected.
+- URL prefixes, HTTP methods, route `name=`, parameter names, model names and
+  `Feature.name` do not contribute to automatic IDs. Included Canon routers keep
+  their own naming policy; a parent namespace does not replace a child's.
+  Native FastAPI routes with the default naming policy inherit the Canon parent's
+  generator according to FastAPI's inclusion rules.
+- A custom FastAPI `generate_unique_id_function=` replaces Canon's default rule.
+  `APIRouter.sse()` uses the same generator as the owning router.
+
+Renaming an endpoint function changes its automatic ID and generated SDK member.
+Pin `operation_id="projects.events"` when that public name must survive a Python
+refactor. Use explicit IDs for anonymous or wrapped callables without a stable
+function name; normal wrappers using `functools.wraps` retain that name. Callable
+objects without `__name__` use their class name.
+
+Operation IDs must be unique across all schema-visible HTTP and SSE operations.
+Canon never appends numbers or method/path suffixes to resolve a collision.
+Composition preflight rejects duplicates before installing routes, handlers or
+providers. This includes reused endpoints, routers mounted under multiple URL
+prefixes, and a single declaration selecting multiple HTTP methods. Give distinct
+operations separate declarations and explicit IDs or distinct router namespaces.
+
+Check the same policy from the CLI:
+
+```console
+fastapi-canon check composition app:composition --format json
+```
+
+The command exits with status 1 for collisions and reports `canon.routing.E002`,
+the duplicate ID, owning features, both effective method/path locations and a
+hint to set distinct `operation_id` values. `--require-complete` exits with status
+2 when dependent checks were skipped. `fastapi-canon generate` also rejects
+duplicate IDs and SDK naming conflicts before writing contracts or clients,
+including generation from saved OpenAPI documents.
+
 ## Compose channels before choosing their URL
 
 Channels describe operations. The router decides where clients connect.
