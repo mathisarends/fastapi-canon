@@ -218,11 +218,14 @@ documented by `Composition` by default.
 Use [`fastapi-canon generate`](unified-canon-concept.md) for a
 domain SDK that combines HTTP, SSE and WebSocket RPC with shared public models
 and errors. SSE uses the same OpenAPI source as HTTP; annotate the event type
-and choose an explicit name such as `operation_id="projects.events"` to generate
+and set `namespace="projects"` on the router with a function named `events`, or
+choose an explicit name such as `operation_id="projects.events"`, to generate
 `client.projects.events(...)`. Python and TypeScript consumers use async
 iteration. The binding handles framing, decoding, terminal problems and
 completion. The [README walkthrough](../README.md#streams-typed-events-from-server-to-sdk)
 shows the server declaration, configuration and both client languages.
+See [automatic operation names](routers.md#automatic-http-and-sse-operation-names)
+for naming precedence, stable SDK names and collision checks in the Canon CLI.
 
 The exported OpenAPI 3.2 document keeps the complete native `itemSchema` and
 JSON `contentSchema`, including referenced models and event discriminators, and

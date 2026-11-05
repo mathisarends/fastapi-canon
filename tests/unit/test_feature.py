@@ -549,8 +549,8 @@ def test_shared_error_definition_is_registered_once_across_features() -> None:
     )
     first = CanonRouter()
     second = CanonRouter()
-    first.get("/first", raises=[error])(lambda: None)
-    second.get("/second", raises=[error])(lambda: None)
+    first.get("/first", operation_id="first.get", raises=[error])(lambda: None)
+    second.get("/second", operation_id="second.get", raises=[error])(lambda: None)
 
     app = Composition(
         features=(

@@ -48,7 +48,7 @@ def _openapi(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
         raise GenerationError(f"{config.name}: OpenAPI 3.1 or 3.2 is required")
     operations = []
     interaction: Interaction
-    ids: set[str] = set()
+    ids: dict[str, str] = {}
     for path, raw_path in sorted(document.get("paths", {}).items()):
         path_item = resolve_ref(document, raw_path)
         for method in (
@@ -65,11 +65,17 @@ def _openapi(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
                 continue
             raw = path_item[method]
             identity = raw.get("operationId")
-            if not isinstance(identity, str) or not identity or identity in ids:
+            if not isinstance(identity, str) or not identity:
                 raise GenerationError(
                     f"{config.name}: operations require unique operationId values ({method.upper()} {path})"
                 )
-            ids.add(identity)
+            location = f"{method.upper()} {path}"
+            if identity in ids:
+                raise GenerationError(
+                    f"{config.name}: duplicate operationId {identity!r} on "
+                    f"{ids[identity]} and {location}; declare distinct operation_id values"
+                )
+            ids[identity] = location
             default = (
                 identity
                 if "." in identity

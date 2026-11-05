@@ -22,6 +22,13 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- `APIRouter`, `CanonRouter` and `CanonStreamRouter` accept `namespace=` for
+  automatic `<namespace>.<function_name>` HTTP/SSE operation IDs. Without a
+  namespace, omitted IDs use the function name. Explicit IDs and custom FastAPI
+  ID generators take precedence. Composition and `fastapi-canon check composition`
+  reject collisions with `canon.routing.E002`; SDK generation also rejects
+  duplicate IDs before writing output, without adding disambiguating suffixes.
+
 - `McpOptions(auth_factory=..., middleware_factory=...)` builds app-specific
   FastMCP adapters from the borrowed Dishka APP container. Synchronous factories
   are validated during composition preflight before application mutation.
@@ -92,6 +99,19 @@ The next release containing the breaking changes below must be 0.16.0.
   Python APIs in text or versioned JSON, separately from import-free source checks.
 
 ### Breaking changes
+
+- Automatic HTTP/SSE operation IDs now use the endpoint function name, optionally
+  prefixed by the declaring router's `namespace`, instead of FastAPI's default
+  function/path/method combination. This changes exported OpenAPI and generated
+  SDK members and belongs to 0.16.0. Preserve existing public names by copying
+  their previous OpenAPI `operationId` into explicit `operation_id=` declarations,
+  or keep the legacy naming policy with
+  `generate_unique_id_function=fastapi.utils.generate_unique_id` on the router.
+  When adopting the new names, update operation mappings and regenerate SDKs.
+  Rename colliding functions, use distinct namespaces, or set distinct explicit
+  IDs; reused handlers and multiple-method routes no longer receive automatic
+  path/method suffixes. Declare separately named operations for separate mounts
+  or HTTP methods. See [operation naming](docs/routers.md#automatic-http-and-sse-operation-names).
 
 - SSE removes `stream_raises=` from `CanonStreamRouter` and its stream decorators,
   including `APIRouter.sse()`. Merge previous `raises` and `stream_raises` values

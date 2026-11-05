@@ -6,11 +6,14 @@ from typing import Any
 from fastapi import APIRouter
 from fastapi.params import Depends
 from fastapi.responses import JSONResponse, Response
+from fastapi.routing import APIRoute
+from starlette.routing import get_name
 
 from fastapi_canon.error import Error, ErrorConfigurationError, ErrorRegistry
 from fastapi_canon.error.contracts import SUCCESS_EXTENSION, AnyError
 from fastapi_canon.error.types import OpenAPIResponses
 from fastapi_canon.error.validation import unique_instances
+from fastapi_canon.exceptions import ConfigurationError
 from fastapi_canon.policy import (
     RouterPolicy,
     merge_policy_registry,
@@ -22,17 +25,29 @@ from fastapi_canon.response import CanonResponse, ResponseConfigurationError
 
 
 class CanonRouter(APIRouter):
-    """An APIRouter that composes shared and operation response contracts."""
+    """Compose response contracts and name operations from their endpoint functions."""
 
     def __init__(
         self,
         *,
+        namespace: str | None = None,
         error_registry: ErrorRegistry | None = None,
         raises: Sequence[AnyError] = (),
         http_statuses: Sequence[int] = (),
         policy: RouterPolicy | None = None,
         **kwargs: Any,
     ) -> None:
+        if namespace is not None and (
+            not isinstance(namespace, str)
+            or any(
+                not part.isidentifier() or part.startswith("_")
+                for part in namespace.split(".")
+            )
+        ):
+            raise ConfigurationError(
+                "namespace must be a dotted public identifier or None"
+            )
+        self.namespace = namespace
         validate_registry(error_registry)
         validate_policy(policy)
         error_registry = merge_policy_registry(error_registry, policy)
@@ -48,7 +63,12 @@ class CanonRouter(APIRouter):
                 *(kwargs.get("dependencies") or ()),
             ]
         self._register_errors(self.raises)
+        generate_id = kwargs.pop(
+            "generate_unique_id_function", self._generate_operation_id
+        )
         super().__init__(**kwargs)
+        # Specialized transport constructors need not accept HTTP naming options.
+        self.generate_unique_id_function = generate_id
 
     @property
     def error_registries(self) -> tuple[ErrorRegistry, ...]:
@@ -250,6 +270,10 @@ class CanonRouter(APIRouter):
         return self._method_route(
             "TRACE", path, raises, http_statuses, response, kwargs
         )
+
+    def _generate_operation_id(self, route: APIRoute) -> str:
+        name = get_name(route.endpoint)
+        return f"{self.namespace}.{name}" if self.namespace is not None else name
 
     def _register_errors(self, errors: Sequence[AnyError]) -> None:
         registry = self.error_registry

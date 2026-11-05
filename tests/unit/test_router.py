@@ -6,11 +6,13 @@ from fastapi import APIRouter, FastAPI
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
+from fastapi.utils import generate_unique_id
 
 from fastapi_canon import (
     CanonResponse,
     CanonRouter,
     Composition,
+    ConfigurationError,
     Error,
     ErrorConfigurationError,
     ErrorRegistry,
@@ -50,6 +52,17 @@ SESSION_ERRORS = ErrorRegistry(
     errors=[AUTHENTICATION_REQUIRED, SESSION_NOT_FOUND, PLAYLIST_EMPTY],
     type_base="https://example.test/problems",
 )
+
+
+@pytest.mark.parametrize(
+    "namespace",
+    ["", "projects..tasks", "projects/tasks", "_private", "projects._tasks", 42],
+)
+def test_router_rejects_invalid_namespaces(namespace: object) -> None:
+    with pytest.raises(
+        ConfigurationError, match="namespace must be a dotted public identifier"
+    ):
+        CanonRouter(namespace=namespace)  # type: ignore[arg-type]  # Verify invalid runtime declarations.
 
 
 def test_router_composes_shared_and_operation_contracts() -> None:
@@ -99,8 +112,10 @@ def test_auto_registration_preserves_inheritance_and_operation_local_errors(
             else None
         ),
     )
-    router.get("/tasks")(lambda: [])
-    router.post("/tasks/completion", raises=[SESSION_NOT_FOUND])(lambda: None)
+    router.get("/tasks", operation_id="tasks.list")(lambda: [])
+    router.post(
+        "/tasks/completion", operation_id="tasks.complete", raises=[SESSION_NOT_FOUND]
+    )(lambda: None)
     app = Composition(features=[Feature(name="tasks", routers=[router])]).apply(
         FastAPI()
     )
@@ -269,6 +284,7 @@ def test_canon_contract_rejects_conflicting_fastapi_response() -> None:
 
 def test_nested_reused_router_preserves_contracts_and_streaming_runtime() -> None:
     router = CanonRouter(
+        generate_unique_id_function=generate_unique_id,
         error_registry=SESSION_ERRORS,
         raises=[SESSION_NOT_FOUND],
     )

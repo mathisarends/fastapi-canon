@@ -131,6 +131,8 @@ class APIRouter(CanonRouter):
         from fastapi_canon.integrations.sse import CanonStreamRouter
 
         adapter = CanonStreamRouter(
+            namespace=self.namespace,
+            generate_unique_id_function=self.generate_unique_id_function,
             error_registry=self.error_registry,
             raises=self.raises,
             http_statuses=self.http_statuses,
