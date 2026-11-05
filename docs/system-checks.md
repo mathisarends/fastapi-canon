@@ -86,12 +86,14 @@ application behavior. Independent failures can appear together.
 | `canon.errors.E001` | Incompatible feature/policy error catalogs. |
 | `canon.providers.E001` | Provider sources, instrumentation declarations or the Dishka graph are invalid. |
 | `canon.providers.E002` | A mounted JSON-RPC method has a missing service root or unreadable dependency declarations. |
+| `canon.providers.E003` | An HTTP/SSE endpoint root is unavailable at its execution scope, or its declarations are unreadable. |
 | `canon.description.E001` | HTTP metadata cannot be described against the composed catalog. |
 | `canon.contracts.E001` | HTTP/OpenAPI response contracts cannot be compiled. |
 | `canon.checks.E001` | A feature check failed to return valid findings. |
 
-Built-in checks validate composition configuration, the provider graph, HTTP
-contracts and registered WebSocket path uniqueness during preflight. They do not
+Built-in checks validate composition configuration, the provider graph, selected
+HTTP/SSE and RPC endpoint roots, HTTP contracts and registered WebSocket path
+uniqueness during preflight. They do not
 infer whether a dependency enforces authentication, require
 authentication on every route, prove exception coverage, or validate the runtime
 behavior of RPC, SSE event bodies, WebRTC, MCP or application services. An SSE
@@ -123,6 +125,39 @@ WebSocket routes use another ASGI scope and do not collide with HTTP routes.
 Mounted subapplications retain their separate ownership boundary. Resolve an
 `E003` finding by changing a path/method or removing the duplicate registration;
 distinct operation IDs and schema visibility do not change request dispatch.
+
+## HTTP and SSE endpoint dependency preflight
+
+Preflight reads endpoint `Inject[T]` and `FromDishka[T]` roots for Canon's default
+`InjectedRoute`, native `DishkaRoute` and recognized Dishka-decorated HTTP routes.
+`canon.providers.E003` identifies the feature, effective method/path, service and
+component when the prepared graph cannot supply a root at its execution scope.
+Both a missing container and an unrelated valid provider graph are diagnosed.
+Missing service bindings reject `build()` before installing routes or scopes;
+unreadable annotations produce an incomplete error without exposing exception
+details. Checking does not resolve providers, enter lifespans or open resources.
+
+HTTP async/sync handlers can use bindings through REQUEST scope, including APP
+and SESSION parents. Typed Canon SSE bodies run after HTTP REQUEST cleanup:
+their injected services must be available at APP scope. This applies to both
+async and sync generators; resolving an argument earlier does not extend its
+resource lifetime. Use an APP service, or inject an APP-scoped `ServiceScope`
+factory and open short independent REQUEST scopes inside stream work. Canon
+does not retain the closed HTTP scope until disconnect. Missing or REQUEST-only
+stream bindings now fail preflight instead of becoming terminal problems or
+closed-resource access during iteration.
+
+`http.endpoint_dependencies:<feature>:<methods>:<path>` records each supported
+check. Arbitrary custom route classes and externally installed containers retain
+their ownership and are `skipped`, without resolving their services or replacing
+their container. Such reports are incomplete for `--require-complete`.
+FastAPI `Depends`/`Security` functions are outside this profile, including sync
+functions already transformed by Dishka into `Depends` declarations. Existing
+async `@inject` wrappers retain inspectable original annotations. Successful
+checks do not prove runtime context availability or activation conditions.
+Ordinary request parameters and schemas are unchanged; injected roots stay out
+of OpenAPI. This is preflight coverage; installed snapshots keep their existing
+HTTP contract/path checks.
 
 ## RPC method dependency preflight
 

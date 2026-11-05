@@ -10,7 +10,10 @@ from typing import TYPE_CHECKING, Any
 from dishka import AsyncContainer, Provider, Scope, make_async_container
 from dishka.entities.key import DependencyKey
 from dishka.exceptions import DishkaError  # type: ignore[attr-defined]  # not exported
+from dishka.integrations.base import is_dishka_injected
+from dishka.integrations.fastapi import DishkaRoute
 from fastapi import APIRouter, FastAPI
+from fastapi.routing import APIRoute
 from starlette.routing import Match, Route, WebSocketRoute, compile_path
 from starlette.types import ExceptionHandler, Lifespan
 from starlette.types import Scope as ASGIScope
@@ -31,7 +34,13 @@ from fastapi_canon.error.openapi import install_policy_contracts
 from fastapi_canon.error.types import (
     FeatureConfigurationError as FeatureConfigurationError,
 )
-from fastapi_canon.introspection import _describe, _operation_headers, _qualified_name
+from fastapi_canon.injected_route import InjectedRoute, _endpoint_dependencies
+from fastapi_canon.introspection import (
+    _describe,
+    _http_routes,
+    _operation_headers,
+    _qualified_name,
+)
 from fastapi_canon.openapi import (
     install_openapi_contracts,
     validate_openapi_contracts,
@@ -636,6 +645,12 @@ def _prepare_composition(app: FastAPI, composition: Composition) -> _Preparation
             _check_http_paths(
                 app.router, routers, composition.features, (), issues, checks
             )
+            if container_ok:
+                _check_http_dependencies(
+                    app, composition.features, description, container, issues, checks
+                )
+            else:
+                checks.append(CheckResult("http.endpoint_dependencies", "skipped"))
         if not any(
             issue.code in {"canon.routing.E002", "canon.routing.E003"}
             for issue in issues
@@ -907,7 +922,9 @@ def _check_rpc_dependencies(
             missing = [
                 dependency
                 for dependency in dependencies
-                if not _rpc_dependency_available(container, dependency)
+                if not _dependency_available(
+                    container, DependencyKey(dependency, ""), Scope.REQUEST
+                )
             ]
             for dependency in missing:
                 qualified = _qualified_name(dependency)
@@ -923,25 +940,104 @@ def _check_rpc_dependencies(
             checks.append(CheckResult(name, "failed" if missing else "passed"))
 
 
-def _rpc_dependency_available(
-    container: AsyncContainer | None, dependency: type[Any]
+def _dependency_available(
+    container: AsyncContainer | None, key: DependencyKey, through_scope: Scope
 ) -> bool:
     if container is None:
         return False
-    key = DependencyKey(dependency, "")
     parent: AsyncContainer | None = container
     while parent is not None:
         if parent.registry.get_factory(key) is not None:
             return True
         parent = parent.parent_container
+    if container.scope is through_scope:
+        return False
     registry = container.registry.child_registry
     while registry is not None:
         if registry.get_factory(key) is not None:
             return True
-        if registry.scope is Scope.REQUEST:
+        if registry.scope is through_scope:
             break
         registry = registry.child_registry
     return False
+
+
+def _check_http_dependencies(
+    app: FastAPI,
+    features: tuple[Feature, ...],
+    description: CompositionInfo,
+    container: AsyncContainer | None,
+    issues: list[CheckIssue],
+    checks: list[CheckResult],
+) -> None:
+    entries = [
+        ("<application>", route.path, route) for route in _http_routes(app.router)
+    ]
+    sources = [
+        (feature.name, route)
+        for feature in features
+        for router in feature.routers
+        for route in _http_routes(router)
+    ]
+    entries.extend(
+        (owner, operation.path, route)
+        for (owner, route), operation in zip(
+            sources, description.operations, strict=True
+        )
+    )
+    external = (
+        container is None and getattr(app.state, "dishka_container", None) is not None
+    )
+    for owner, path, route in entries:
+        original = route.original_route
+        name = f"http.endpoint_dependencies:{owner}:{'|'.join(route.methods)}:{path}"
+        if type(original) not in (InjectedRoute, DishkaRoute, APIRoute):
+            checks.append(CheckResult(name, "skipped"))
+            continue
+        if type(original) is APIRoute and not (
+            is_dishka_injected(original.endpoint)
+            or hasattr(original.endpoint, "__canon_http_dependency_roots__")
+        ):
+            continue
+        endpoint = getattr(route.openapi_extra, "_endpoint", original.endpoint)
+        try:
+            dependencies = _endpoint_dependencies(endpoint)
+        except Exception:
+            issues.append(
+                CheckIssue(
+                    "canon.providers.E003",
+                    f"HTTP endpoint dependencies at {path!r} could not be inspected",
+                    "Check endpoint injection annotations and wrapper metadata.",
+                    feature_names=(owner,),
+                    locations=(f"{'|'.join(route.methods)} {path}",),
+                )
+            )
+            checks.append(CheckResult(name, "incomplete"))
+            continue
+        if dependencies and external:
+            checks.append(CheckResult(name, "skipped"))
+            continue
+        stream = bool(route.openapi_extra and "x-canon-stream" in route.openapi_extra)
+        scope = Scope.APP if stream else Scope.REQUEST
+        missing = [
+            key
+            for key in dependencies
+            if not _dependency_available(container, key, scope)
+        ]
+        for key in missing:
+            qualified = _qualified_name(key.type_hint)
+            issues.append(
+                CheckIssue(
+                    "canon.providers.E003",
+                    f"{'SSE' if stream else 'HTTP'} endpoint {path!r} injects {qualified} without a binding available through {scope.name} scope (component {key.component!r})",
+                    "Use APP services or an APP-scoped ServiceScope factory for stream work; HTTP REQUEST resources close before streaming."
+                    if stream
+                    else "Register this endpoint service and component in a feature provider at APP/SESSION/REQUEST scope.",
+                    feature_names=(owner,),
+                    locations=(f"{'|'.join(route.methods)} {path}", qualified),
+                )
+            )
+        checks.append(CheckResult(name, "failed" if missing else "passed"))
 
 
 def _check_operations(

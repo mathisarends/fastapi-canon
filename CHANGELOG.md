@@ -141,6 +141,18 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Breaking changes
 
+- Composition preflight validates HTTP/SSE endpoint `Inject[T]` and
+  `FromDishka[T]` roots with `canon.providers.E003`. Before adopting 0.16.0,
+  register missing service/component bindings at a scope available to the
+  endpoint. HTTP handlers can use APP/SESSION/REQUEST services. Typed SSE bodies
+  execute after HTTP REQUEST cleanup, so inject APP services or APP-scoped
+  `ServiceScope` factories for short request-scoped work inside the stream.
+  Stream bodies that previously failed at iteration, or borrowed closed REQUEST
+  resources, are rejected before installation. Custom route classes and external
+  containers keep ownership with skipped preflight coverage; review incomplete
+  reports before using `--require-complete`. FastAPI dependency functions remain
+  outside this endpoint-root check. See [endpoint dependency coverage](docs/system-checks.md#http-and-sse-endpoint-dependency-preflight).
+
 - Composition preflight validates default-resolver JSON-RPC method `Inject[T]`
   roots and rejects missing default-component APP/SESSION/REQUEST bindings with
   `canon.providers.E002`. Before adopting 0.16.0, register each service in feature

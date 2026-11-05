@@ -44,6 +44,26 @@ def inject_endpoint[EndpointT: Callable[..., Any]](endpoint: EndpointT) -> Endpo
     return _inject_sync(endpoint, hints, parameters)
 
 
+def _endpoint_dependencies(endpoint: Callable[..., Any]) -> tuple[DependencyKey, ...]:
+    retained = getattr(endpoint, "__canon_http_dependency_roots__", None)
+    if retained is not None:
+        return cast("tuple[DependencyKey, ...]", retained)
+    source = getattr(endpoint, "__dishka_orig_func__", endpoint)
+    hints = get_type_hints(source, include_extras=True)
+    return tuple(
+        dict.fromkeys(
+            dependency
+            for name, parameter in inspect.signature(source).parameters.items()
+            if (
+                dependency := _parse_dependency(
+                    parameter, hints.get(name, parameter.annotation)
+                )
+            )
+            is not None
+        )
+    )
+
+
 def _parse_dependency(parameter: Parameter, hint: Any) -> DependencyKey | None:
     dependency = injected_dependency(hint)
     if dependency is not None:
@@ -109,6 +129,9 @@ def _inject_sync[EndpointT: Callable[..., Any]](
         parameters=replaced
     )
     wrapper.__annotations__ = annotations
+    wrapper.__dict__["__canon_http_dependency_roots__"] = _endpoint_dependencies(
+        endpoint
+    )
     return wrapper  # type: ignore[return-value]
 
 

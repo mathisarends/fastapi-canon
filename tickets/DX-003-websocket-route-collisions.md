@@ -1,6 +1,6 @@
 # DX-003: Reject duplicate WebSocket paths across features
 
-- Status: In progress
+- Status: Done
 - Priority: P1
 - Kind: Verified bug
 - Baseline: `a366702` (2026-11-05)
@@ -79,7 +79,7 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
   153 warnings on Windows/Python 3.14; PostgreSQL cases need an external database.
   Mypy, Ruff lint/format, changed Smelt and full pre-commit including full Smelt
   passed. Standalone distribution/browser matrices were not run for this
-  routing-preflight change. Status stays In progress until merge.
+  routing-preflight change. Merged into main in `6a49911`.
 - CI follow-up: reproduced the telemetry compatibility job's missing cached
   route regex with an installed wheel under Python 3.12/FastAPI 0.143.0.
   The HTTP collision check now derives a missing regex from the effective
