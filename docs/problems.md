@@ -1,10 +1,8 @@
 # Canonical errors
 
 Define a domain exception once, map its public problem once, and declare that
-same `Error` on HTTP, SSE, and RPC handlers. These bindings and their
-Python/TypeScript generated-client support are implemented in Canon. See
-[release status](releases.md) for published and prepared versions.
-The complete executable example is in
+same `Error` on HTTP, SSE, and RPC handlers of one `APIRouter`. Generated
+Python and TypeScript clients raise the same problem types. The complete executable example is in
 [`examples/canonical_errors/app.py`](../examples/canonical_errors/app.py).
 
 ## Define the public error
@@ -50,12 +48,9 @@ from collections.abc import AsyncIterator
 from fastapi import Depends
 from pydantic import BaseModel
 
-from fastapi_canon import CanonRouter
-from fastapi_canon.integrations.sse import CanonStreamRouter
-from fastapi_canon.integrations.websockets import RpcChannel
+from fastapi_canon import APIRouter, RpcChannel
 
-http = CanonRouter(error_registry=errors)
-streams = CanonStreamRouter(error_registry=errors)
+router = APIRouter(error_registry=errors)
 projects = RpcChannel("projects", error_registry=errors)
 
 
@@ -72,13 +67,13 @@ def require_project(project_id: int) -> None:
         raise ProjectMissing("private database information")
 
 
-@http.get("/projects/{project_id}", raises=[project_missing])
+@router.get("/projects/{project_id}", raises=[project_missing])
 async def get_project(project_id: int) -> dict[str, int]:
     require_project(project_id)
     return {"id": project_id}
 
 
-@streams.stream(
+@router.sse(
     "/projects/{project_id}/events",
     operation_id="events",
     tags=["projects"],
@@ -102,44 +97,38 @@ For SSE, `raises=` documents HTTP admission failures from dependencies;
 after streaming starts, including the code before its first yield. Put admission
 checks in dependencies. Sync and async generators use the same terminal profile.
 
-RPC's existing `RpcError` declarations remain available for protocol-specific
-contracts. Application domain errors use the shared `Error` definitions above;
-there is no second domain-to-RPC mapping to maintain.
+Application domain errors use the shared `Error` definitions above; there is no
+second domain-to-RPC mapping to maintain. `RpcError` is only for contracts that
+exist solely in the JSON-RPC protocol.
 
 ## Compose the application and export its contracts
 
 ```python
 from fastapi import FastAPI
 
-from fastapi_canon import Composition, Feature
-from fastapi_canon.integrations.websockets import CanonWebSocketRouter
+from fastapi_canon import Composition, Feature, export_contracts
 
-websockets = CanonWebSocketRouter("/ws", channels=[projects])
+router.include_channel(projects, path="/ws")
 
 app = Composition(
-    features=(Feature(name="projects", routers=[http, streams, websockets]),),
-).apply(FastAPI())
+    features=(Feature(name="projects", routers=[router]),),
+).apply(FastAPI(title="Projects"))
 
-contract = websockets.contract(
-    title="Projects",
-    base_url="wss://api.example.com",
-    app=app,
-)
+contracts = export_contracts(app, base_url="wss://api.example.com")
 ```
 
-HTTP and stream routers contribute their catalogs. Mounted RPC channels also
-contribute theirs to the feature. Composition checks conflicts and installs the
-resolved application catalog. A feature-local registry can omit `type_base` and
-let `Composition(features=features, errors=ErrorOptions(type_base=...))` supply it. Passing
-`app=app` when creating the RPC contract uses those same resolved type URIs for
-code generation. A standalone RPC contract can use a fully resolved registry.
+The router contributes one catalog for its HTTP, SSE and RPC operations.
+Composition checks conflicts and installs the resolved application catalog. A
+feature-local registry can omit `type_base` and let
+`Composition(features=features, errors=ErrorOptions(type_base=...))` supply it.
+`export_contracts` reads the composed app, so `contracts.openapi` and
+`contracts.openrpc` use the same resolved type URIs as the runtime responses.
 
-Use `fastapi-canon generate --config fastapi-canon.toml` to export the app and its RPC contract
-and generate one domain SDK with shared models and one error runtime. The
-[common codegen guide](unified-canon-concept.md) and
-[example configuration](../examples/canonical_errors/fastapi-canon.toml) show the complete
-workflow. Specialized SSE/RPC generator commands remain available for separate
-SDK outputs. Generated runtimes do not depend on Canon.
+Use `fastapi-canon generate --config fastapi-canon.toml` to export both documents
+from `source = "app:app"` and generate one domain SDK with shared models and one
+error runtime. The [common codegen guide](unified-canon-concept.md) and
+[example configuration](../examples/canonical_errors/fastapi-canon.toml) show the
+complete workflow. Generated runtimes do not depend on Canon.
 
 ## What goes over the wire
 
@@ -159,8 +148,7 @@ Every normally exhausted Canon stream sends `canon.complete` with `{}`. A termin
 problem closes the stream without a completion frame. Undeclared processing
 errors and failed public renderers are logged and produce a safe internal
 problem. Cancellation and disconnect propagate through generator cleanup.
-`canon.*` event names are reserved for the profile. Raw `StreamRouter` endpoints
-keep their existing unprofiled SSE behavior. Binary RPC streams, raw socket
+`canon.*` event names are reserved for the profile. Binary RPC streams, raw socket
 messages, and WebRTC media do not receive SSE control frames.
 
 The SSE item schema describes business, problem, and completion frames. The
