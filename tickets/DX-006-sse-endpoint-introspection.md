@@ -1,6 +1,6 @@
 # DX-006: Preserve the original SSE callable for operation lookup
 
-- Status: Open
+- Status: In progress
 - Priority: P2
 - Kind: Verified bug
 - Baseline: `a366702` (2026-11-05)

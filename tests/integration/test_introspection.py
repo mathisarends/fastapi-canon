@@ -1,13 +1,19 @@
+import asyncio
 import json
+from collections.abc import AsyncIterator, Iterator
 from dataclasses import FrozenInstanceError, asdict
 from functools import wraps
 
 import pytest
-from dishka import FromDishka, Provider, Scope
+from dishka import FromDishka, Provider, Scope, provide
 from dishka.integrations.fastapi import DishkaRoute
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 
+from fastapi_canon import (
+    APIRouter as ApplicationRouter,
+)
 from fastapi_canon import (
     CanonRouter,
     Composition,
@@ -16,8 +22,10 @@ from fastapi_canon import (
     ErrorRegistry,
     Feature,
     FeatureConfigurationError,
+    Inject,
     RouterPolicy,
 )
+from fastapi_canon.integrations.sse import CanonStreamRouter
 
 
 class NotAuthenticated(Exception):
@@ -295,3 +303,168 @@ def test_endpoint_lookup_keeps_the_declared_symbol_with_dishka_routes() -> None:
     assert operation.path == "/projects"
     with TestClient(app) as client:
         assert client.get(operation.path).json() == "project"
+
+
+@pytest.mark.parametrize("injected", [False, True])
+@pytest.mark.parametrize("synchronous", [False, True])
+@pytest.mark.parametrize("operation_id", [None, "stable.events"])
+def test_sse_lookup_keeps_declarations_across_inclusion_and_injection(
+    injected: bool,
+    synchronous: bool,
+    operation_id: str | None,
+) -> None:
+    calls: list[str] = []
+
+    class Services(Provider):
+        @provide(scope=Scope.APP)
+        def service(self) -> ProjectService:
+            calls.append("provider")
+            return ProjectService()
+
+    child = ApplicationRouter(prefix="/projects", namespace="projects")
+    match synchronous, injected:
+        case False, False:
+
+            @child.sse("/events", operation_id=operation_id)
+            async def events() -> AsyncIterator[str]:
+                calls.append("generator")
+                yield "project"
+        case False, True:
+
+            @child.sse("/events", operation_id=operation_id)
+            async def events(service: Inject[ProjectService]) -> AsyncIterator[str]:
+                calls.append("generator")
+                yield service.name
+        case True, False:
+
+            @child.sse("/events", operation_id=operation_id)
+            def events() -> Iterator[str]:
+                calls.append("generator")
+                yield "project"
+        case True, True:
+
+            @child.sse("/events", operation_id=operation_id)
+            def events(service: Inject[ProjectService]) -> Iterator[str]:
+                calls.append("generator")
+                yield service.name
+
+    parent = ApplicationRouter(prefix="/v1")
+    parent.include_router(child)
+    composition = Composition(
+        features=[Feature(name="streams", routers=[parent], providers=[Services()])],
+        router_factory=lambda: ApplicationRouter(prefix="/api"),
+    )
+    app = composition.build(FastAPI())
+    description = composition.inspect(app)
+    operation = description.operation(events)
+
+    assert operation.feature_name == "streams"
+    assert operation.path == "/api/v1/projects/events"
+    assert operation.methods == ("GET",)
+    assert operation.operation_id == (operation_id or "projects.events")
+    assert description.operation_by_id(operation.operation_id) is operation
+    assert calls == []
+    exported = json.loads(json.dumps(asdict(description)))
+    assert set(exported) == {"features", "operations"}
+    schema = json.loads(json.dumps(app.openapi()))
+    assert (
+        schema["paths"][operation.path]["get"]["operationId"] == operation.operation_id
+    )
+
+    @child.sse("/later")
+    async def later() -> AsyncIterator[str]:
+        yield "later"
+
+    assert description.operations == (operation,)
+    assert composition.inspect(app).operations == (operation,)
+    with pytest.raises(LookupError, match="found 0"):
+        description.operation(later)
+
+    async def scenario() -> None:
+        async with (
+            asyncio.timeout(5),
+            app.router.lifespan_context(app),
+            AsyncClient(
+                transport=ASGITransport(app), base_url="http://test", timeout=5
+            ) as client,
+        ):
+            response = await client.get(operation.path)
+            assert response.status_code == 200
+            assert 'data: "project"' in response.text
+            assert "canon.complete" in response.text
+
+    asyncio.run(scenario())
+    assert calls == (["provider", "generator"] if injected else ["generator"])
+
+
+def test_sse_lookup_keeps_an_explicit_user_decorator() -> None:
+    calls: list[str] = []
+
+    async def source() -> AsyncIterator[str]:
+        calls.append("generator")
+        yield "project"
+
+    @wraps(source)
+    async def decorated() -> AsyncIterator[str]:
+        async for item in source():
+            yield item
+
+    attributes = dict(vars(decorated))
+    router = ApplicationRouter()
+    router.sse("/events", operation_id="events")(decorated)
+    composition = Composition(features=[Feature(name="streams", routers=[router])])
+    description = composition.inspect(composition.build(FastAPI()))
+
+    assert description.operation(decorated).path == "/events"
+    with pytest.raises(LookupError, match="found 0"):
+        description.operation(source)
+    assert vars(decorated) == attributes
+    assert calls == []
+
+
+def test_sse_lookup_rejects_ambiguous_declarations() -> None:
+    calls: list[str] = []
+
+    async def events() -> AsyncIterator[str]:
+        calls.append("generator")
+        yield "project"
+
+    router = ApplicationRouter()
+    router.sse("/first", operation_id="first.events")(events)
+    router.sse("/second", operation_id="second.events")(events)
+    composition = Composition(features=[Feature(name="streams", routers=[router])])
+    description = composition.inspect(composition.build(FastAPI()))
+
+    with pytest.raises(LookupError, match="found 2: GET /first, GET /second"):
+        description.operation(events)
+    assert description.operation_by_id("first.events").path == "/first"
+    assert description.operation_by_id("second.events").path == "/second"
+    assert calls == []
+
+
+def test_specialized_sse_lookup_preserves_explicit_dishka_declarations() -> None:
+    calls: list[str] = []
+
+    class Services(Provider):
+        @provide(scope=Scope.APP)
+        def service(self) -> ProjectService:
+            calls.append("provider")
+            return ProjectService()
+
+    router = CanonStreamRouter(namespace="legacy", route_class=DishkaRoute)
+
+    @router.stream("/events")
+    async def events(service: FromDishka[ProjectService]) -> AsyncIterator[str]:
+        calls.append("generator")
+        yield service.name
+
+    composition = Composition(
+        features=[Feature(name="streams", routers=[router], providers=[Services()])]
+    )
+    description = composition.inspect(composition.build(FastAPI()))
+
+    operation = description.operation(events)
+    assert operation.operation_id == "legacy.events"
+    assert operation.path == "/events"
+    assert description.operation_by_id("legacy.events") is operation
+    assert calls == []

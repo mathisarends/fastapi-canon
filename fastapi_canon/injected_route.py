@@ -40,8 +40,13 @@ def inject_endpoint[EndpointT: Callable[..., Any]](endpoint: EndpointT) -> Endpo
     ):
         return endpoint
     if inspect.iscoroutinefunction(endpoint) or inspect.isasyncgenfunction(endpoint):
-        return _inject_async(endpoint, hints, parameters)
-    return _inject_sync(endpoint, hints, parameters)
+        wrapped = _inject_async(endpoint, hints, parameters)
+    else:
+        wrapped = _inject_sync(endpoint, hints, parameters)
+    wrapped.__dict__["__canon_declared_endpoint__"] = getattr(
+        endpoint, "__canon_declared_endpoint__", endpoint
+    )
+    return wrapped
 
 
 def _endpoint_dependencies(endpoint: Callable[..., Any]) -> tuple[DependencyKey, ...]:

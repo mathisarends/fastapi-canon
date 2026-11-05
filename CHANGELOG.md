@@ -134,6 +134,12 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Fixed
 
+- `Composition.inspect(app).operation(events)` retains the declared SSE callable
+  through terminal processing and automatic injection wrappers, including sync
+  generators and nested prefixes. Explicit user decorators retain their own
+  registered identity, and ambiguous registrations still require ID lookup.
+  References remain outside exported OpenAPI and JSON snapshots.
+
 - HTTP path collision checks retain converter matching when native telemetry
   wrappers in FastAPI 0.143.0 omit their cached route regex. Repeated composition
   builds and late collision checks reconstruct the regex from the effective

@@ -188,4 +188,7 @@ def _terminal_stream(
     cast(Any, wrapped).__signature__ = signature.replace(
         parameters=parameters, return_annotation=AsyncIterator[item_type]
     )
+    wrapped.__dict__["__canon_declared_endpoint__"] = getattr(
+        endpoint, "__canon_declared_endpoint__", endpoint
+    )
     return wrapped
