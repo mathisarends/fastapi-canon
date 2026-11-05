@@ -101,6 +101,19 @@ def endpoint() -> None:
     assert report.operations[0].complete
 
 
+def test_api_router_operations_are_checked(tmp_path: Path) -> None:
+    report = analyze(
+        tmp_path,
+        PRELUDE.replace("CanonRouter", "APIRouter")
+        + """
+@router.get('/')
+def endpoint() -> None:
+    raise Missing
+""",
+    )
+    assert codes(report) == ["CAN001"]
+
+
 def test_unregistered_exception(tmp_path: Path) -> None:
     report = analyze(
         tmp_path,

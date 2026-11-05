@@ -121,6 +121,9 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Fixed
 
+- `fastapi-canon check errors` analyzes operations declared on the shared
+  `APIRouter` like those on `CanonRouter`, instead of reporting them as
+  unsupported router declarations.
 - Generated TypeScript SDKs resolve endpoint wire names independently of their
   camelCase helper exports, including automatically named channel endpoints and
   explicit names such as `project_session`. Regenerate SDKs to pick up the fix.
