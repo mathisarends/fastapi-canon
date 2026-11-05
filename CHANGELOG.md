@@ -134,6 +134,18 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Breaking changes
 
+- Composition preflight validates default-resolver JSON-RPC method `Inject[T]`
+  roots and rejects missing default-component APP/SESSION/REQUEST bindings with
+  `canon.providers.E002`. Before adopting 0.16.0, register each service in feature
+  providers at a scope available to the call. Framework connection/path values
+  and reachable context-hook results do not require duplicate providers.
+  Custom resolvers, resolver scopes, dynamic admission values, external
+  containers and unsupported transport roots remain application-owned; their
+  skipped checks make preflight reports incomplete rather than failing against
+  an unrelated Dishka graph. Assess that coverage before using
+  `--require-complete`. Provider bodies and lifespans are never executed by this
+  validation. See [RPC dependency coverage](docs/system-checks.md#rpc-method-dependency-preflight).
+
 - Composition preflight rejects duplicate effective WebSocket paths across
   features and existing application routes with `canon.routing.E004`, including
   native WebSockets colliding with JSON-RPC channels and equivalent parameter

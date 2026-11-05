@@ -14,8 +14,10 @@ from fastapi_canon import (
     Composition,
     Feature,
     FeatureConfigurationError,
+    Inject,
     RpcChannel,
 )
+from fastapi_canon.integrations.websockets import CanonWebSocketRouter
 
 
 class MissingService:
@@ -424,3 +426,121 @@ def test_websocket_paths_are_checked_across_composition_boundaries(
     assert app.router.lifespan_context is lifespan
     assert app.openapi_schema is None
     assert not hasattr(app.state, "dishka_container")
+
+
+@pytest.mark.parametrize(
+    "unrelated_provider", [False, True], ids=["no-container", "unrelated-graph"]
+)
+def test_missing_rpc_method_bindings_fail_without_starting_resources(
+    unrelated_provider: bool,
+) -> None:
+    events: list[str] = []
+    channel = RpcChannel(namespace="stores")
+
+    @channel.method("read")
+    async def read(store: Inject[MissingService]) -> str:
+        return "unreachable"
+
+    router = ApplicationRouter(prefix="/v1")
+    router.include_channel(channel, path="/rpc")
+    composition = Composition(
+        features=[
+            Feature(
+                name="stores",
+                routers=[router],
+                providers=[LazyProvider(events)] if unrelated_provider else [],
+            )
+        ],
+        router_factory=lambda: ApplicationRouter(prefix="/api"),
+    )
+    app = FastAPI()
+    routes = tuple(app.routes)
+    lifespan = app.router.lifespan_context
+
+    [issue] = composition.check(app).issues
+
+    assert issue.code == "canon.providers.E002"
+    assert issue.feature_names == ("stores",)
+    service = f"{MissingService.__module__}.{MissingService.__qualname__}"
+    assert issue.locations == ("WEBSOCKET /api/v1/rpc (stores.read)", service)
+    assert service in issue.message
+    with pytest.raises(FeatureConfigurationError, match=r"canon\.providers\.E002"):
+        composition.build(app)
+    assert events == []
+    assert tuple(app.routes) == routes
+    assert app.router.lifespan_context is lifespan
+    assert app.openapi_schema is None
+    assert not hasattr(app.state, "dishka_container")
+
+
+def test_rpc_preflight_does_not_freeze_caller_owned_channels() -> None:
+    channel = RpcChannel()
+    router = CanonWebSocketRouter()
+    router.socket("/rpc", channels=[channel])
+    composition = Composition(features=[Feature(name="stores", routers=[router])])
+    app = FastAPI()
+    assert not composition.check(app).has_errors
+
+    @channel.method("later")
+    async def later(store: Inject[MissingService]) -> str:
+        return "unreachable"
+
+    [issue] = composition.check(app).issues
+
+    assert issue.code == "canon.providers.E002"
+    assert issue.locations[0] == "WEBSOCKET /rpc (later)"
+
+
+def test_unused_context_hooks_do_not_supply_method_dependencies() -> None:
+    class Context:
+        pass
+
+    async def unused() -> MissingService:
+        return MissingService()
+
+    async def context() -> Context:
+        return Context()
+
+    channel = RpcChannel()
+
+    @channel.method("read")
+    async def read(store: Inject[MissingService]) -> str:
+        return "unreachable"
+
+    router = ApplicationRouter()
+    router.include_channel(channel, path="/rpc", context=context, hooks=(unused,))
+    composition = Composition(features=[Feature(name="stores", routers=[router])])
+
+    [issue] = composition.check(FastAPI()).issues
+
+    assert issue.code == "canon.providers.E002"
+    assert "MissingService" in issue.message
+
+
+@pytest.mark.parametrize("scope", [Scope.ACTION, Scope.STEP])
+def test_rpc_preflight_rejects_bindings_below_the_call_scope(scope: Scope) -> None:
+    created: list[MissingService] = []
+
+    class TooDeep(Provider):
+        @provide(scope=scope)
+        def missing(self) -> MissingService:
+            value = MissingService()
+            created.append(value)
+            return value
+
+    channel = RpcChannel()
+
+    @channel.method("read")
+    async def read(store: Inject[MissingService]) -> str:
+        return "unreachable"
+
+    router = ApplicationRouter()
+    router.include_channel(channel, path="/rpc")
+    composition = Composition(
+        features=[Feature(name="stores", routers=[router], providers=[TooDeep()])]
+    )
+
+    [issue] = composition.check(FastAPI()).issues
+
+    assert issue.code == "canon.providers.E002"
+    assert created == []

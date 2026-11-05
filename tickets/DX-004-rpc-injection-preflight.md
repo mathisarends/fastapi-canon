@@ -1,6 +1,6 @@
 # DX-004: Validate RPC handler dependency roots during composition preflight
 
-- Status: Open
+- Status: In progress
 - Priority: P1
 - Kind: Verified coverage gap
 - Baseline: `a366702` (2026-11-05)

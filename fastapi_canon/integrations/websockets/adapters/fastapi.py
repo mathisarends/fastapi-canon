@@ -305,18 +305,21 @@ class CanonWebSocketRouter(APIRouter):
         else:
             self._resolver = resolver
         self._context_type = None if context is None else _context_type(context)
+        self._context_values: tuple[type[Any], ...] = ()
         self._context = context
         if hooks and context is None:
             raise ValueError("hooks= requires a context= function")
         if context is not None:
-            self._context = ContextDependencies(
+            compiled_context = ContextDependencies(
                 context,
                 hooks,
                 self._preparation_scope,
                 self._websocket_resolver.dependency
                 if self._websocket_resolver is not None
                 else lambda function: function,
-            ).dependency
+            )
+            self._context = compiled_context.dependency
+            self._context_values = compiled_context.provided_types
         self._rejections = chain_rejections(
             rejections,
             contract_rejections(rejecting_contracts(rejects, "CanonWebSocketRouter")),
@@ -531,6 +534,9 @@ class CanonWebSocketRouter(APIRouter):
             else self._custom_handler(endpoint, handler)
         )
         setattr(handler_function, ENDPOINT_ATTRIBUTE, endpoint)
+        handler_function.__dict__["__canon_rpc_dependency_roots__"] = lambda: (
+            self._dependency_roots(endpoint, custom=handler is not None)
+        )
         self.websocket(
             self._route_path(endpoint),
             name=endpoint.name,
@@ -549,6 +555,53 @@ class CanonWebSocketRouter(APIRouter):
         self._canon_error_registries = tuple(contributions)  # type: ignore[attr-defined]
         handler_function.__dict__["_canon_error_registries"] = tuple(contributions)
         self._mounted.add(endpoint)
+
+    def _dependency_roots(
+        self, endpoint: RpcAnyEndpoint, *, custom: bool
+    ) -> tuple[tuple[str, tuple[type[Any], ...] | None], ...]:
+        if not isinstance(endpoint, RpcEndpoint):
+            return ((endpoint.name, None),)
+        # Inspect a snapshot: checking must not freeze caller-owned channels.
+        snapshot = RpcChannel()
+        for channel in endpoint.channels:
+            snapshot.include_channel(channel, namespace=channel.namespace)
+        protocol = snapshot.freeze()
+        available = {RpcConnection, *self._context_values}
+        if self._context is not None and endpoint.context is not None:
+            available.add(endpoint.context)
+        if endpoint.path_model is not None:
+            available.add(endpoint.path_model)
+        external = (
+            custom
+            or self._resolver is not None
+            or self._websocket_resolver is not None
+            or self._before_accept is not None
+            or endpoint.before_accept is not None
+        )
+        roots: list[tuple[str, tuple[type[Any], ...] | None]] = []
+        for method in protocol.methods:
+            dependencies = tuple(
+                dict.fromkeys(
+                    parameter.dependency
+                    for parameter in method.injected_parameters
+                    if parameter.dependency not in available
+                )
+            )
+            roots.append(
+                (
+                    method.name,
+                    None
+                    if dependencies
+                    and (external or method.resolver_scope not in (None, call_scope))
+                    else dependencies,
+                )
+            )
+        roots.extend(
+            (operation.name, None)
+            for operation in (*protocol.notifications, *protocol.subscriptions)
+            if operation.injected_parameters
+        )
+        return tuple(roots)
 
     @asynccontextmanager
     async def _preparation_scope(
