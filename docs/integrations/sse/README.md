@@ -178,7 +178,7 @@ Pair it with TypeScript's compiler and Pyright to catch invalid parameters and
 event access in consumer code.
 
 To regenerate or check the schema and every client with one command, list them
-under `[tool.fastapi-streams]` in `pyproject.toml` and run
+under `[tool.fastapi-canon.sse]` in `pyproject.toml` and run
 `uv run fastapi-canon sse sync` (or `sync --check --diff` in CI); see the
 [sync configuration](codegen.md#one-command-for-schema-and-clients).
 

@@ -3,17 +3,13 @@ from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from functools import wraps
 from inspect import Parameter, iscoroutinefunction, signature
-from typing import Annotated, Any, get_args, get_origin, get_type_hints
+from typing import Any, get_type_hints
 
 from dishka import AsyncContainer, Scope
 
+from fastapi_canon.injection import Inject as Inject
+from fastapi_canon.injection import injected_dependency
 
-class _Injection:
-    __slots__ = ()
-
-
-_MARKER = _Injection()
-type Inject[T] = Annotated[T, _MARKER]
 _ACTIVE: ContextVar[AsyncContainer] = ContextVar("canon_mcp_container")
 
 
@@ -43,10 +39,9 @@ def inject_handler(function: Callable[..., Any]) -> Callable[..., Any]:
     sig = signature(function)
     dependencies: dict[str, Any] = {}
     for name, annotation in hints.items():
-        if get_origin(annotation) is Inject or (
-            get_origin(annotation) is Annotated and _MARKER in get_args(annotation)[1:]
-        ):
-            dependencies[name] = get_args(annotation)[0]
+        dependency = injected_dependency(annotation)
+        if dependency is not None:
+            dependencies[name] = dependency
     if not dependencies:
         return function
     if not iscoroutinefunction(function):

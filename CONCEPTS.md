@@ -54,7 +54,7 @@ async def get_project(project_id: str) -> dict[str, str]:
     raise ProjectMissing(project_id)
 
 
-composition = Composition(Feature(name="projects", routers=[router]))
+composition = Composition(features=[Feature(name="projects", routers=[router])])
 app = composition.apply(FastAPI())
 composition.validate(app)
 ```

@@ -2,16 +2,10 @@ import inspect
 from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
-from typing import Annotated, Any, Protocol, TypeAliasType, cast, get_args, get_origin
+from typing import Any, Protocol, TypeAliasType, cast, get_origin
 
-
-class _Inject:
-    __slots__ = ()
-
-
-_INJECT = _Inject()
-
-type Inject[DependencyT] = Annotated[DependencyT, _INJECT]
+from fastapi_canon.injection import Inject as Inject
+from fastapi_canon.injection import injected_dependency
 
 
 class RpcResolver(Protocol):
@@ -138,17 +132,8 @@ def injected_parameter(
     name: str,
     annotation: Any,
 ) -> RpcInjectedParameter | None:
-    if get_origin(annotation) is Inject:
-        dependency = get_args(annotation)[0]
-        if not _concrete_dependency(dependency):
-            raise TypeError(
-                f"Injected RPC parameter {name!r} must name a concrete dependency type"
-            )
-        return RpcInjectedParameter(name=name, dependency=cast(type[Any], dependency))
-    if get_origin(annotation) is not Annotated:
-        return None
-    dependency, *metadata = get_args(annotation)
-    if _INJECT not in metadata:
+    dependency = injected_dependency(annotation)
+    if dependency is None:
         return None
     if not _concrete_dependency(dependency):
         raise TypeError(

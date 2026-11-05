@@ -56,13 +56,34 @@ class DishkaResolver:
 class Dishka:
     """Resolve ``CanonWebSocketRouter`` dependencies with the app's root container.
 
-    The context function may declare ``FromDishka[T]`` parameters without
-    ``@inject``; they resolve from the container of Dishka's FastAPI
-    middleware, so call ``setup_dishka()`` on the app.
+    Context functions and hooks resolve in a short REQUEST scope before the
+    connection is accepted. Providers own resources and their cleanup.
+    Existing ``FromDishka[T]`` context parameters remain supported.
     """
 
     def for_websocket(self, websocket: WebSocket) -> DishkaResolver:
         return DishkaResolver(websocket.app.state.dishka_container)
+
+    @asynccontextmanager
+    async def preparation_scope(
+        self, websocket: WebSocket
+    ) -> AsyncGenerator[RpcResolver]:
+        from dishka import Scope
+        from fastapi import WebSocket
+
+        previous = getattr(websocket.state, "dishka_container", None)
+        parent = previous or websocket.app.state.dishka_container
+        async with parent(
+            {WebSocket: websocket}, scope=Scope.REQUEST
+        ) as request_container:
+            websocket.state.dishka_container = request_container
+            try:
+                yield DishkaResolver(request_container)
+            finally:
+                if previous is None:
+                    del websocket.state.dishka_container
+                else:
+                    websocket.state.dishka_container = previous
 
     def dependency[FunctionT: Callable[..., Any]](
         self, function: FunctionT

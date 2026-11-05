@@ -62,16 +62,24 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         return webrtc_main(remaining)
     else:
-        if remaining and remaining[0] == "composition":
-            from fastapi_canon.composition_cli import _main as composition_main
+        return _check_main(remaining)
 
-            return composition_main(remaining[1:])
-        checker = argparse.ArgumentParser(prog="fastapi-canon check")
-        checker.add_argument("kind", choices=("errors", "composition"))
-        _, remaining = checker.parse_known_args(remaining)
-        from fastapi_canon.check_error_contracts import _main as check_main
 
-        return check_main(remaining)
+def _check_main(argv: Sequence[str]) -> int:
+    parser = argparse.ArgumentParser(prog="fastapi-canon check")
+    commands = parser.add_subparsers(dest="kind", required=True)
+    commands.add_parser("errors", help="Check source error contracts", add_help=False)
+    commands.add_parser(
+        "composition", help="Check an application composition", add_help=False
+    )
+    args, remaining = parser.parse_known_args(argv)
+    if args.kind == "composition":
+        from fastapi_canon.composition_cli import _main as composition_main
+
+        return composition_main(remaining)
+    from fastapi_canon.check_error_contracts import _main as check_main
+
+    return check_main(remaining, prog="fastapi-canon check errors")
 
 
 def _skill_main(argv: Sequence[str]) -> int:
