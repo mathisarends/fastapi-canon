@@ -46,6 +46,7 @@ from fastapi_canon.integrations.websockets.connection import (
 )
 from fastapi_canon.integrations.websockets.contract import RpcContract, ServerVariable
 from fastapi_canon.integrations.websockets.definition import (
+    ENDPOINT_ATTRIBUTE,
     RpcAnyEndpoint,
     RpcDefinition,
     RpcEndpoint,
@@ -511,15 +512,17 @@ class CanonWebSocketRouter(APIRouter):
                 )
             )
         )
-        self.websocket(
-            self._route_path(endpoint),
-            name=endpoint.name,
-            dependencies=dependencies,
-        )(
+        handler_function = (
             self._handler(endpoint)
             if handler is None
             else self._custom_handler(endpoint, handler)
         )
+        setattr(handler_function, ENDPOINT_ATTRIBUTE, endpoint)
+        self.websocket(
+            self._route_path(endpoint),
+            name=endpoint.name,
+            dependencies=dependencies,
+        )(handler_function)
         contributions = list(getattr(self, "_canon_error_registries", ()))
 
         def collect(channel: Any) -> None:

@@ -1,11 +1,11 @@
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi_canon.error import ErrorRegistry
 from fastapi_canon.error.catalog import registry_scope
@@ -20,6 +20,9 @@ from fastapi_canon.integrations.websockets.websocket import (
     REJECTION_CLOSE_CODES,
     close_reason,
 )
+
+if TYPE_CHECKING:
+    from fastapi_canon.integrations.websockets.definition import RpcAnyEndpoint
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +107,25 @@ def contract_from_service(
     description: str,
     variables: Mapping[str, ServerVariable] | None,
 ) -> RpcContract:
+    return contract_from_endpoints(
+        service.endpoints,
+        service.freeze(),
+        title=title,
+        base_url=base_url,
+        description=description,
+        variables=variables,
+    )
+
+
+def contract_from_endpoints(
+    endpoints: Sequence["RpcAnyEndpoint"],
+    protocol: RpcProtocol,
+    *,
+    title: str,
+    base_url: str,
+    description: str,
+    variables: Mapping[str, ServerVariable] | None = None,
+) -> RpcContract:
     from fastapi_canon.integrations.websockets.definition import (
         RpcEndpoint,
         RpcSocketEndpoint,
@@ -128,7 +150,7 @@ def contract_from_service(
     servers = []
     streams = []
     sockets = []
-    for endpoint in service.endpoints:
+    for endpoint in endpoints:
         url = base_url + endpoint.path
         names = tuple(dict.fromkeys(re.findall(r"{([^{}]+)}", url)))
         used.update(names)
@@ -201,7 +223,7 @@ def contract_from_service(
             + ", ".join(sorted(unused))
         )
     return RpcContract(
-        service.freeze(),
+        protocol,
         title,
         description,
         tuple(servers),

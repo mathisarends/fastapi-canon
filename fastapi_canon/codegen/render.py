@@ -387,6 +387,12 @@ def _typescript_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
                 if len(servers) == 1 and "{" not in servers[0]["url"]
                 else ""
             )
+            if source.document.get("x-canon-application") and any(
+                "baseUrl" in server.get("variables", {}) for server in servers
+            ):
+                defaults = (
+                    'baseUrl: this.runtime.websocketUrl("").replace(/\\/$/, ""), '
+                )
             factories.append(
                 f"{json.dumps(source.name)}: {{ create: () => {source.name}Client.connect({{lazy: true, {defaults}...options.bindings?.{source.name}?.connect}}), client: options.bindings?.{source.name}?.client, owned: options.bindings?.{source.name}?.owned ?? !options.bindings?.{source.name}?.client }},"
             )
@@ -596,6 +602,12 @@ def _python_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
                 if defaults
                 else "{}"
             )
+            if source.document.get("x-canon-application") and any(
+                "baseUrl" in server.get("variables", {}) for server in servers
+            ):
+                default_options = (
+                    "{'base_url': self._runtime.websocket_url('').rstrip('/')}"
+                )
             registrations.append(
                 f"self._runtime.register('{source.name}', lambda: {source.name}Client.connect(**{{'lazy': True, **{default_options}, **(bindings or {{}}).get('{source.name}', {{}})}}), client=(clients or {{}}).get('{source.name}'), owned='{source.name}' not in (clients or {{}}))"
             )

@@ -80,8 +80,12 @@ package = "api_client"
 ```
 
 Live sources use `module:attribute`; `factory = true` explicitly calls a factory.
-OpenAPI/WebRTC exports accept an app. OpenRPC accepts the result of
-`service.contract(..., app=app)`. Saved sources use `input = "contracts/api.json"`
+All formats accept the same app or factory reference, including OpenRPC, whose
+paths then come from registered routes. The factory is called once per distinct
+reference and factory flag in a generation invocation. OpenRPC also accepts the
+result of `service.contract(..., app=app)` for standalone services. See
+[application export](contracts.md) for the Python API, standalone export CLI and
+runtime-secret boundaries. Saved sources use `input = "contracts/api.json"`
 instead of `source`/`output`. Kinds are `openapi`, `openrpc`, `webrtc`. Paths are
 relative to the config file. Unknown settings fail explicitly.
 

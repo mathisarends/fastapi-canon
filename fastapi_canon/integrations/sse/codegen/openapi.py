@@ -1,10 +1,11 @@
-import copy
 import json
 from importlib.resources import files
 from typing import Any, cast
 from urllib.parse import unquote
 
 from fastapi import FastAPI
+
+from fastapi_canon.openapi import export_openapi
 
 type Document = dict[str, Any]
 
@@ -138,17 +139,9 @@ def export_schema(app: FastAPI) -> Document:
     synthesized and the application's cached document is never modified.
     Incompatible custom OpenAPI extensions fail validation instead of being lost.
     """
-    document = copy.deepcopy(app.openapi())
-    version = document.get("openapi", "")
-    if not version.startswith(("3.1.", "3.2.")):
-        raise ContractError(f"Expected OpenAPI 3.1 or 3.2, got {version!r}")
-    if (
-        document.get("jsonSchemaDialect")
-        == "https://spec.openapis.org/oas/3.1/dialect/base"
-    ):
-        document["jsonSchemaDialect"] = (
-            "https://spec.openapis.org/oas/3.2/dialect/2026-02-26"
-        )
-    document["openapi"] = "3.2.0"
+    try:
+        document = export_openapi(app)
+    except ValueError as exc:
+        raise ContractError(str(exc)) from exc
     validate_contract(document)
     return document
