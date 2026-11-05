@@ -130,7 +130,7 @@ def create_tasks_app() -> FastAPI:  # smelt: ignore[SMT429] -- external API
         request_logging=True,
         errors=ErrorOptions(type_base="https://api.example.test/problems"),
         router_factory=lambda: APIRouter(prefix="/api/v1"),
-    ).apply(app)
+    ).build(app)
     return app
 
 
@@ -148,7 +148,7 @@ def create_notifier_app() -> FastAPI:  # smelt: ignore[SMT429] -- external API
         features=(Feature(name="notifications", routers=(router,)),),
         telemetry=options,
         request_logging=True,
-    ).apply(FastAPI(title="Canon telemetry: notifier", lifespan=lifecycle))
+    ).build(FastAPI(title="Canon telemetry: notifier", lifespan=lifecycle))
 
 
 def _notification_feature() -> Feature:

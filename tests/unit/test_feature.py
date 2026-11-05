@@ -97,7 +97,7 @@ def test_composition_includes_routers_in_declaration_order() -> None:
             Feature(name="first", routers=[first]),
             Feature(name="second", routers=[second]),
         ),
-    ).apply(FastAPI())
+    ).build(FastAPI())
 
     with TestClient(app) as client:
         assert client.get("/same").json() == {"feature": "first"}
@@ -131,7 +131,7 @@ def test_composition_router_factory_applies_shared_router_configuration() -> Non
     app = Composition(
         features=(Feature(name="catalog", routers=[catalog]),),
         router_factory=router_factory,
-    ).apply(FastAPI())
+    ).build(FastAPI())
 
     with TestClient(app) as client:
         response = client.get("/api/v1/catalog/items")
@@ -155,7 +155,7 @@ def test_router_factory_must_return_a_fresh_router() -> None:
         Composition(
             features=(Feature(name="catalog"),),
             router_factory=lambda: router,
-        ).apply(app)
+        ).build(app)
 
     assert tuple(app.routes) == original_routes
 
@@ -166,9 +166,9 @@ def test_composition_is_idempotent_for_same_declarations() -> None:
     composition = Composition(features=(feature,))
     app = FastAPI()
 
-    first = composition.apply(app)
+    first = composition.build(app)
     route_count = len(app.routes)
-    second = composition.apply(app)
+    second = composition.build(app)
 
     assert first is app
     assert second is app
@@ -177,10 +177,10 @@ def test_composition_is_idempotent_for_same_declarations() -> None:
 
 def test_composition_rejects_a_different_second_composition() -> None:
     app = FastAPI()
-    Composition(features=(Feature(name="first"),)).apply(app)
+    Composition(features=(Feature(name="first"),)).build(app)
 
     with pytest.raises(FeatureConfigurationError, match="different composition"):
-        Composition(features=(Feature(name="second"),)).apply(app)
+        Composition(features=(Feature(name="second"),)).build(app)
 
 
 def test_composition_and_error_options_are_immutable() -> None:
@@ -215,7 +215,7 @@ def test_composition_rejects_shared_router_without_partial_application() -> None
                 Feature(name="catalog", routers=[router]),
                 Feature(name="orders", routers=[router]),
             ),
-        ).apply(app)
+        ).build(app)
 
     assert tuple(app.routes) == original_routes
 
@@ -242,7 +242,7 @@ def test_composition_validates_dishka_graph_without_partial_application() -> Non
                     name="catalog", routers=[router], providers=[InvalidProvider()]
                 ),
             ),
-        ).apply(app)
+        ).build(app)
 
     assert tuple(app.routes) == original_routes
 
@@ -278,7 +278,7 @@ def test_provider_class_and_factory_are_materialized_during_apply() -> None:
 
     assert created == []
 
-    Composition(features=(feature,)).apply(FastAPI())
+    Composition(features=(feature,)).build(FastAPI())
 
     assert created == ["class", "factory"]
 
@@ -290,7 +290,7 @@ def test_invalid_provider_factory_result_names_its_feature() -> None:
     with pytest.raises(FeatureConfigurationError, match=r"feature 'catalog'.*str"):
         Composition(
             features=(Feature(name="catalog", providers=[invalid_factory]),),
-        ).apply(FastAPI())
+        ).build(FastAPI())
 
 
 def test_composition_builds_and_closes_shared_container() -> None:
@@ -310,7 +310,7 @@ def test_composition_builds_and_closes_shared_container() -> None:
                 providers=[ResourceProvider(events)],
             ),
         ),
-    ).apply(FastAPI())
+    ).build(FastAPI())
 
     container = app.state.dishka_container
     with TestClient(app) as client:
@@ -346,7 +346,7 @@ def test_lifespans_start_in_order_and_stop_in_reverse_order() -> None:
             Feature(name="first", lifespan=lifespan("first")),
             Feature(name="second", lifespan=lifespan("second")),
         ),
-    ).apply(app)
+    ).build(app)
 
     with TestClient(app):
         assert events == ["app start", "first start", "second start"]
@@ -400,7 +400,7 @@ def test_router_lifespans_run_inside_feature_and_dependency_lifetimes() -> None:
                 lifespan=feature_lifespan,
             ),
         )
-    ).apply(FastAPI(lifespan=app_lifespan))
+    ).build(FastAPI(lifespan=app_lifespan))
     with TestClient(app):
         pass
     assert events == [
@@ -434,7 +434,7 @@ def test_router_event_handlers_run_once(app_lifespan: bool) -> None:
     )
     app = Composition(
         features=(Feature(name="legacy", routers=[router], providers=[Resources]),)
-    ).apply(FastAPI(lifespan=lifespan) if app_lifespan else FastAPI())
+    ).build(FastAPI(lifespan=lifespan) if app_lifespan else FastAPI())
     with TestClient(app):
         pass
     assert events == ["startup", "shutdown"]
@@ -465,7 +465,7 @@ def test_lifespan_cleans_up_when_later_startup_fails() -> None:
             Feature(name="started", lifespan=started),
             Feature(name="failing", lifespan=failing),
         ),
-    ).apply(app)
+    ).build(app)
 
     async def startup() -> None:
         async with asyncio.timeout(5), app.router.lifespan_context(app):
@@ -499,7 +499,7 @@ def test_error_registries_are_merged_for_runtime_and_openapi() -> None:
     app = Composition(
         features=(Feature(name="items", routers=[router], errors=errors),),
         errors=ErrorOptions(type_base="https://example.test/problems"),
-    ).apply(FastAPI())
+    ).build(FastAPI())
 
     with TestClient(app, raise_server_exceptions=False) as client:
         response = client.get("/items/missing")
@@ -531,7 +531,7 @@ def test_feature_collects_error_registry_from_canon_router() -> None:
     app = Composition(
         features=(feature,),
         errors=ErrorOptions(type_base="https://example.test/problems"),
-    ).apply(FastAPI())
+    ).build(FastAPI())
 
     assert feature.errors is not None
     with TestClient(app, raise_server_exceptions=False) as client:
@@ -558,7 +558,7 @@ def test_shared_error_definition_is_registered_once_across_features() -> None:
             Feature(name="second", routers=[second]),
         ),
         errors=ErrorOptions(type_base="https://example.test/problems"),
-    ).apply(FastAPI())
+    ).build(FastAPI())
 
     assert "404" in app.openapi()["paths"]["/first"]["get"]["responses"]
     assert "404" in app.openapi()["paths"]["/second"]["get"]["responses"]
@@ -571,7 +571,7 @@ def test_composition_installs_success_openapi_without_an_error_registry() -> Non
         status_code=307,
         responses=CanonResponse.empty(status=307).responses(),
     )(lambda: None)
-    app = Composition(features=(Feature(name="health", routers=[router]),)).apply(
+    app = Composition(features=(Feature(name="health", routers=[router]),)).build(
         FastAPI()
     )
 
@@ -617,7 +617,7 @@ def test_error_collision_does_not_install_routers() -> None:
                 ),
             ),
             errors=ErrorOptions(type_base="https://example.test/problems"),
-        ).apply(app)
+        ).build(app)
 
     assert tuple(app.routes) == original_routes
 
@@ -644,7 +644,7 @@ def test_feature_exception_handler_is_installed() -> None:
                 exception_handlers=[ExceptionHandlerSpec(TeapotError, handler)],
             ),
         ),
-    ).apply(FastAPI())
+    ).build(FastAPI())
 
     with TestClient(app) as client:
         response = client.get("/teapot")

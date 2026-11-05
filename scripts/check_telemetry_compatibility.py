@@ -108,8 +108,8 @@ def _verify() -> None:
             ),
             telemetry=options,
         )
-        composition.apply(app)
-        composition.apply(app)
+        composition.build(app)
+        composition.build(app)
         assert app._telemetry is configuration
         assert configuration["auto_configure"] is False
         assert configuration["meter_provider"] is meter

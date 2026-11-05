@@ -57,4 +57,4 @@ app = Composition(
         database.feature,
         Feature(name="items", routers=[router], providers=[ItemProvider]),
     ],
-).apply(FastAPI())
+).build(FastAPI())

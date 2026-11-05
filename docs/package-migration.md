@@ -11,6 +11,22 @@ The [repository migration](repository-migration.md) records the
 source history and publishing setup. The repository move does not rename the
 PyPI project or add further Python import changes.
 
+## Upcoming 0.16.0: building applications
+
+`Composition.build(app)` replaces `apply(app)` and `validate(app)`:
+
+```python
+# Before
+app = composition.apply(FastAPI())
+composition.validate(app)
+
+# After
+app = composition.build(FastAPI())
+```
+
+Register plain FastAPI routes before `build`, or call `build` again after adding
+them; rebuilding the same composition only repeats validation.
+
 ## Upcoming 0.16.0: error declarations
 
 This source change is unreleased. Replace SSE `stream_raises=` with `raises=`.

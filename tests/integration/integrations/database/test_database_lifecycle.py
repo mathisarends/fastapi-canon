@@ -119,7 +119,7 @@ async def test_context_covers_migration_validation_and_failed_startup(
             calls.append("exit")
 
     database = Database(url=url, migrations=migrations, engine_context=context)
-    app = Composition(features=[database.feature]).apply(FastAPI())
+    app = Composition(features=[database.feature]).build(FastAPI())
     async with asyncio.timeout(10):
         with pytest.raises(RuntimeError, match="pending"):
             async with app.router.lifespan_context(app):
@@ -160,8 +160,8 @@ async def test_context_is_per_app_and_outlives_feature_cleanup(
             calls.append("feature-exit")
 
     feature = Feature(name="consumer", lifespan=lifespan)
-    first = Composition(features=[database.feature, feature]).apply(FastAPI())
-    second = Composition(features=[database.feature, feature]).apply(FastAPI())
+    first = Composition(features=[database.feature, feature]).build(FastAPI())
+    second = Composition(features=[database.feature, feature]).build(FastAPI())
     assert calls == []
     async with asyncio.timeout(10):
         with (
@@ -207,7 +207,7 @@ async def test_disabled_startup_check_preserves_lazy_connections_and_explicit_co
         check_migrations_on_startup=False,
         engine_context=context,
     )
-    app = Composition(features=[database.feature]).apply(FastAPI())
+    app = Composition(features=[database.feature]).build(FastAPI())
     async with asyncio.timeout(15), app.router.lifespan_context(app):
         assert calls == []
         assert not filename.exists()

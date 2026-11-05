@@ -146,7 +146,7 @@ composition = Composition(features=(feature,))
 
 
 def create_app() -> FastAPI:
-    return composition.apply(FastAPI())
+    return composition.build(FastAPI())
 
 
 app = create_app()

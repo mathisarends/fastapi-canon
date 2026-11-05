@@ -332,7 +332,7 @@ async def test_database_declaration_detaches_before_disposal_and_after_feature_c
             )
             app = Composition(
                 features=[database.feature, Feature(name="consumer", lifespan=lifespan)]
-            ).apply(FastAPI())
+            ).build(FastAPI())
             async with asyncio.timeout(10):
                 with (
                     pytest.raises(RuntimeError, match="feature startup failed")

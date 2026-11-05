@@ -118,8 +118,7 @@ composition = Composition(
     features=(feature,),
     errors=ErrorOptions(type_base="https://api.example.com/problems"),
 )
-app = composition.apply(FastAPI())
-composition.validate(app)
+app = composition.build(FastAPI())
 ```
 
 Request `GET /runs/demo/events` with `Authorization: Bearer demo` to receive SSE.

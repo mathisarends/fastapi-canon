@@ -188,7 +188,7 @@ def test_export_never_enters_lifespan_and_absent_transports_are_none() -> None:
 
     app = Composition(
         features=[Feature(name="runtime", providers=[RuntimeProvider])]
-    ).apply(FastAPI(lifespan=lifespan))
+    ).build(FastAPI(lifespan=lifespan))
     contracts = export_contracts(app)
 
     assert set(contracts.documents) == {"openapi"}
@@ -219,7 +219,7 @@ def test_export_preserves_raw_sockets_and_composed_error_catalog() -> None:
     app = Composition(
         features=[Feature(name="browser", routers=[routes])],
         errors=ErrorOptions(type_base="https://api.example.test/problems"),
-    ).apply(FastAPI())
+    ).build(FastAPI())
 
     document = export_contracts(app, kinds=["openrpc"]).openrpc
 

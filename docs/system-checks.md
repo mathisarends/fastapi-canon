@@ -30,7 +30,7 @@ for issue in report.issues:
     print(issue.hint)
 
 if not report.has_errors:
-    composition.apply(app)
+    composition.build(app)
 ```
 
 `check` does not install routes, handlers, middleware or a container on the target
@@ -39,15 +39,16 @@ connect to a database or apply migrations. It can execute provider and router
 factories to inspect their configuration. Keep these factories free of resource
 acquisition and other startup work.
 
-`apply` uses the same preparation and checks, and raises
-`FeatureConfigurationError` for errors before installation. A separate `check`
-invocation is optional. Calling `check` followed by `apply` performs two separate
-preparations, so factories execute once in each call. A check of an already
-installed composition reuses its installation snapshot and does not rematerialize
-providers. `validate(app)` still requires the matching installed composition;
-it validates OpenAPI and raises for system-check errors, including custom checks.
-Missing optional runtimes appear as findings in `check`; `apply` retains its
-existing `ModuleNotFoundError` contract for those missing dependencies.
+`build` uses the same preparation and checks, and raises
+`FeatureConfigurationError` for errors before installation. After installing, it
+checks the installed application again, including custom checks and OpenAPI, and
+returns it. A separate `check` invocation is optional. Calling `check` followed by
+`build` performs two separate preparations, so factories execute once in each
+call. A check of an already installed composition reuses its installation snapshot
+and does not rematerialize providers. Building the same composition again only
+repeats these checks; building a different one into the same application fails.
+Missing optional runtimes appear as findings in `check`; `build` retains the
+`ModuleNotFoundError` contract for those missing dependencies.
 
 Invalid constructor arguments still fail at construction time. A report is
 available for a successfully constructed `Composition`, including configurations

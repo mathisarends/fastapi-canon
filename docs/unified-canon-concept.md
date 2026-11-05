@@ -44,7 +44,8 @@ One target plans all selected sources together. Model identities and resolved
 problem type URIs let HTTP, SSE and RPC share public DTOs and one error runtime.
 Use `--check --diff` in CI to detect contract or generated-file drift. The
 [source error checker](error-checking.md) separately
-checks supported HTTP error mappings and declarations before export.
+checks supported HTTP, SSE, RPC and WebRTC error mappings and declarations
+before export.
 
 ## Configuration
 

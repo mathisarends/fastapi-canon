@@ -76,7 +76,7 @@ def test_shared_and_local_raises_are_deduplicated_with_shared_status() -> None:
 
     application = Composition(
         features=(Feature(name="events", routers=[combined]),)
-    ).apply(FastAPI())
+    ).build(FastAPI())
     schema = application.openapi()
     response = schema["paths"]["/events"]["get"]["responses"]["404"]
     problem = response["content"]["application/problem+json"]["schema"]
@@ -186,7 +186,7 @@ def test_sync_generators_and_composition_router_factory(with_errors: bool) -> No
     application = Composition(
         features=(Feature(name="sync", routers=[sync]),),
         router_factory=lambda: CanonRouter(prefix="/api"),
-    ).apply(FastAPI())
+    ).build(FastAPI())
     with TestClient(application) as client:
         assert '"run_id":2' in client.get("/api/sync").text
     responses = application.openapi()["paths"]["/api/sync"]["get"]["responses"]
@@ -212,7 +212,7 @@ def test_feature_discovers_stream_and_rest_registries_together() -> None:
     mixed = Feature(name="mixed", routers=[router, rest], providers=[RunProvider])
     assert mixed.errors is not None
     assert mixed.errors.errors == (*run_errors.errors, other_missing)
-    application = Composition(features=(mixed,)).apply(FastAPI())
+    application = Composition(features=(mixed,)).build(FastAPI())
     with TestClient(application) as client:
         assert client.get("/rest").json()["code"] == "other_missing"
         assert (
@@ -301,7 +301,7 @@ def test_stream_service_uses_independent_scope_after_http_cleanup(
         features=(
             Feature(name="tracked", routers=[router], providers=[TrackedRunProvider]),
         )
-    ).apply(FastAPI())
+    ).build(FastAPI())
 
     async def recorded_app(scope: ASGIScope, receive: Receive, send: Send) -> None:
         async def record_start(message: Message) -> None:
@@ -384,7 +384,7 @@ def test_composition_policy_preserves_typed_sse_and_runs_before_streaming() -> N
 
     baseline = Composition(
         features=(Feature(name="baseline", routers=[selected]),)
-    ).apply(FastAPI())
+    ).build(FastAPI())
     expected = baseline.openapi()["paths"]["/policy-events"]["get"]["responses"]["200"]
 
     def require_run() -> None:
@@ -397,7 +397,7 @@ def test_composition_policy_preserves_typed_sse_and_runs_before_streaming() -> N
     )
     application = Composition(
         features=(Feature(name="events", routers=[selected]),), router_policy=policy
-    ).apply(FastAPI())
+    ).build(FastAPI())
     responses = application.openapi()["paths"]["/policy-events"]["get"]["responses"]
     assert responses["200"] == expected
     assert responses["404"]["content"]["application/problem+json"]["schema"] == {
@@ -426,7 +426,7 @@ def test_generator_body_errors_happen_after_response_start() -> None:
 
     application = Composition(
         features=(Feature(name="late", routers=[selected]),)
-    ).apply(FastAPI())
+    ).build(FastAPI())
     with TestClient(application, raise_server_exceptions=False) as client:
         response = client.get("/late/0")
     assert calls == ["dependency", "generator"]

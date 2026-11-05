@@ -105,7 +105,7 @@ def application() -> tuple[FastAPI, WebRtcRouter, Resources]:
 
     app = Composition(
         features=(Feature(name="rtc", routers=[rtc], providers=[resources]),)
-    ).apply(FastAPI())
+    ).build(FastAPI())
     return app, rtc, resources
 
 

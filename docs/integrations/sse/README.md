@@ -71,7 +71,7 @@ async def stream_run_events(run_id: str) -> AsyncIterator[RunEvent]:
     yield RunCompleted(type="run.completed", run_id=run_id)
 
 
-app = Composition(features=[Feature(name="runs", routers=[router])]).apply(FastAPI())
+app = Composition(features=[Feature(name="runs", routers=[router])]).build(FastAPI())
 ```
 
 The result is `GET /runs/{run_id}/events`. The SSE operation lives on the same

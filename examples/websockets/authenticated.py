@@ -100,7 +100,7 @@ def create_app() -> FastAPI:
         ),
     )
     feature = Feature(name="account", routers=[router], providers=[Dependencies])
-    return Composition(features=(feature,)).apply(FastAPI())
+    return Composition(features=(feature,)).build(FastAPI())
 
 
 app = create_app()

@@ -22,6 +22,15 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- `fastapi-canon check errors` also checks `APIRouter.sse()` streams,
+  `APIRouter.webrtc()` sessions and `RpcChannel` methods against their `raises=`
+  declarations. Loops are now analyzed, and iterating a generator follows
+  its body. JSON reports include each operation's `transport`.
+
+- `Composition.override(*providers)` returns a copy whose Dishka providers
+  replace existing feature bindings, for example fakes in tests. Overrides that
+  provide a type no feature provides fail with `canon.providers.E001`.
+
 - `McpOptions(auth_factory=..., middleware_factory=...)` builds app-specific
   FastMCP adapters from the borrowed Dishka APP container. Synchronous factories
   are validated during composition preflight before application mutation.
@@ -93,6 +102,14 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Breaking changes
 
+- `Composition.build(app)` replaces `Composition.apply(app)` and
+  `Composition.validate(app)`. It installs the composition, checks the installed
+  application including OpenAPI and returns it, so an application can no longer
+  start unvalidated. Replace `composition.apply(app)` and any following
+  `composition.validate(app)` with `composition.build(app)`; register plain
+  FastAPI routes before calling `build`, or call `build` again after adding them.
+  `Composition.check(app)` remains the non-raising report. This change belongs to
+  the next minor release, 0.16.0.
 - SSE removes `stream_raises=` from `CanonStreamRouter` and its stream decorators,
   including `APIRouter.sse()`. Merge previous `raises` and `stream_raises` values
   into one `raises=[...]` declaration. Router-level and operation-level errors now

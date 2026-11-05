@@ -5,16 +5,28 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from fastapi_canon.checks.analysis import _ROUTE_METHODS, _Analyzer, _Flow, _Unknown
+from fastapi_canon.checks.analysis import (
+    _ROUTE_METHODS,
+    _RPC_METHOD,
+    _TRANSPORT_METHODS,
+    _Analyzer,
+    _Flow,
+    _Unknown,
+)
 from fastapi_canon.checks.source import _Definition, _Source
 
 _CANON_ROUTER = "fastapi_canon.CanonRouter"
+_API_ROUTERS = frozenset(
+    {"fastapi_canon.APIRouter", "fastapi_canon.api_router.APIRouter"}
+)
 _CANON_ROUTERS = frozenset(
+    {_CANON_ROUTER, "fastapi_canon.router.CanonRouter", *_API_ROUTERS}
+)
+_RPC_CHANNELS = frozenset(
     {
-        _CANON_ROUTER,
-        "fastapi_canon.router.CanonRouter",
-        "fastapi_canon.APIRouter",
-        "fastapi_canon.api_router.APIRouter",
+        "fastapi_canon.RpcChannel",
+        "fastapi_canon.integrations.websockets.RpcChannel",
+        "fastapi_canon.integrations.websockets.channel.RpcChannel",
     }
 )
 _ERROR = "fastapi_canon.Error"
@@ -42,6 +54,7 @@ class _Operation:
     path: str
     line: int
     diagnostics: list[_Diagnostic] = field(default_factory=list)
+    transport: str = "http"
 
     @property
     def complete(self) -> bool:
@@ -92,19 +105,30 @@ class _Checker:
             if not isinstance(function.node, ast.FunctionDef | ast.AsyncFunctionDef):
                 continue
             for decorator in function.node.decorator_list:
-                if (
-                    not isinstance(decorator, ast.Call)
-                    or not isinstance(decorator.func, ast.Attribute)
-                    or decorator.func.attr not in _ROUTE_METHODS
+                if isinstance(decorator, ast.Call) and isinstance(
+                    decorator.func, ast.Attribute
                 ):
+                    method, owner = decorator.func.attr, decorator.func.value
+                elif isinstance(decorator, ast.Attribute):
+                    method, owner = decorator.attr, decorator.value
+                else:
                     continue
-                module, router = self.source.value(
-                    decorator.func.value, function.module
-                )
+                if method == _RPC_METHOD:
+                    rpc = self._rpc_method(function, decorator, owner, nested)
+                    if rpc is not None:
+                        operations.append(rpc)
+                    continue
+                if not isinstance(decorator, ast.Call) or method not in {
+                    *_ROUTE_METHODS,
+                    *_TRANSPORT_METHODS,
+                }:
+                    continue
+                module, router = self.source.value(owner, function.module)
                 operation = _Operation(
                     function.name,
                     str(self.source.paths[function.module]),
                     decorator.lineno,
+                    transport=method if method in _TRANSPORT_METHODS else "http",
                 )
                 if id(function.node) in nested:
                     operations.append(operation)
@@ -118,7 +142,10 @@ class _Checker:
                     if isinstance(router, ast.Call)
                     else None
                 )
-                if constructor not in _CANON_ROUTERS:
+                supported = (
+                    _API_ROUTERS if method in _TRANSPORT_METHODS else _CANON_ROUTERS
+                )
+                if constructor not in supported:
                     if constructor in {
                         "fastapi.APIRouter",
                         "fastapi.routing.APIRouter",
@@ -134,6 +161,34 @@ class _Checker:
                 operations.append(operation)
                 self._operation(operation, function, decorator, module, router)
         return _Report(operations)
+
+    def _rpc_method(
+        self,
+        function: _Definition,
+        decorator: ast.expr,
+        owner: ast.expr,
+        nested: set[int],
+    ) -> _Operation | None:
+        # `method` is a common attribute name: only resolved RpcChannels count.
+        module, channel = self.source.value(owner, function.module)
+        if not isinstance(channel, ast.Call) or (
+            self.source.resolve(channel.func, module) not in _RPC_CHANNELS
+        ):
+            return None
+        operation = _Operation(
+            function.name,
+            str(self.source.paths[function.module]),
+            decorator.lineno,
+            transport="rpc",
+        )
+        if id(function.node) in nested:
+            self._unknown(
+                operation, "nested RPC declarations require runtime factory execution"
+            )
+            return operation
+        call = decorator if isinstance(decorator, ast.Call) else None
+        self._operation(operation, function, call, module, channel)
+        return operation
 
     def _unknown(
         self, operation: _Operation, message: str, line: int | None = None
@@ -298,13 +353,15 @@ class _Checker:
         self,
         operation: _Operation,
         function: _Definition,
-        decorator: ast.Call,
+        decorator: ast.Call | None,
         module: str,
         router: ast.Call,
     ) -> None:
         self.source.touched = {function.module, module}
         layers = [(module, router)]
-        policy_node = _keyword(router, "policy")
+        policy_node = (
+            _keyword(router, "policy") if operation.transport != "rpc" else None
+        )
         if policy_node is not None:
             scope, policy = self.source.value(policy_node, module)
             if not (isinstance(policy, ast.Constant) and policy.value is None):
@@ -326,7 +383,10 @@ class _Checker:
                     line,
                 )
             )
-        for call in [*(layer for _, layer in layers), decorator]:
+        calls = [layer for _, layer in layers]
+        if decorator is not None:
+            calls.append(decorator)
+        for call in calls:
             if any(item.arg is None for item in call.keywords):
                 self._unknown(
                     operation, "expanded keyword arguments may change the contract"
@@ -357,19 +417,39 @@ class _Checker:
                 else:
                     self._unknown(operation, "unresolved ErrorRegistry declaration")
             declared.update(self._errors(_keyword(layer, "raises"), scope, operation))
-        declared.update(
-            self._errors(_keyword(decorator, "raises"), function.module, operation)
-        )
+        if decorator is not None:
+            declared.update(
+                self._errors(_keyword(decorator, "raises"), function.module, operation)
+            )
         catalog.update(declared)
         contracts_known = not operation.diagnostics
-        flow = self._analyzer.function(function)
+        # SSE generator bodies run while the response streams; follow iterated calls.
+        flow = self._analyzer.function(function, iterated=operation.transport == "sse")
         flow.extend(self._dependencies(function))
         for scope, layer in layers:
             flow.extend(self._router_dependencies(layer, scope, operation))
-        flow.extend(self._router_dependencies(decorator, function.module, operation))
+        if decorator is not None:
+            flow.extend(
+                self._router_dependencies(decorator, function.module, operation)
+            )
         contracts_known = contracts_known and not any(
             self.source.uncertain.get(scope) for scope in self.source.touched
         )
+        self._compare(operation, flow, catalog, declared, contracts_known)
+        for scope in sorted(self.source.touched):
+            for message in dict.fromkeys(self.source.uncertain.get(scope, [])):
+                operation.diagnostics.append(
+                    _Diagnostic("CAN003", message, str(self.source.paths[scope]), 1)
+                )
+
+    def _compare(
+        self,
+        operation: _Operation,
+        flow: _Flow,
+        catalog: dict[str, str],
+        declared: dict[str, str],
+        contracts_known: bool,
+    ) -> None:
         seen: set[tuple[str, str]] = set()
         for escape in flow.escapes:
             # Only application-defined exceptions are in scope, not implicit runtime failures.
@@ -419,11 +499,6 @@ class _Checker:
             )
             if diagnostic not in operation.diagnostics:
                 operation.diagnostics.append(diagnostic)
-        for scope in sorted(self.source.touched):
-            for message in dict.fromkeys(self.source.uncertain.get(scope, [])):
-                operation.diagnostics.append(
-                    _Diagnostic("CAN003", message, str(self.source.paths[scope]), 1)
-                )
 
 
 def _check_error_contracts(roots: list[Path]) -> _Report:

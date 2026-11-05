@@ -119,12 +119,11 @@ composition = Composition(
     features=(feature,),
     errors=ErrorOptions(type_base="https://api.example.com/problems"),
 )
-app = composition.apply(FastAPI())
-composition.validate(app)
+app = composition.build(FastAPI())
 ```
 
-`apply` checks every operation contract before installing the feature;
-`validate` confirms the installed app compiles to valid OpenAPI.
+`build` checks every operation contract before installing the feature, then
+confirms the installed app compiles to valid OpenAPI.
 `GET /projects/1` returns `{"id": 1}`. `GET /projects/0` returns a 404
 `application/problem+json` response with the stable type
 `https://api.example.com/problems/project_missing` and code `project_missing`.
@@ -349,7 +348,8 @@ machine-readable report for tooling and agents.
 
 This checks supported explicit source paths, not every possible runtime failure.
 Abstract Dishka ports and dynamic code can leave analysis incomplete. The checker
-covers HTTP operations declared on `APIRouter`, not SSE, RPC or WebRTC handlers.
+covers `APIRouter` HTTP operations, `.sse()` streams and `.webrtc()` sessions,
+and `RpcChannel` methods.
 Keep runtime contract validation and behavioral tests. See
 [error checking](docs/error-checking.md) for boundaries and
 CI options.

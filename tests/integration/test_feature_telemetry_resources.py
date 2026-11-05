@@ -97,7 +97,7 @@ async def test_http_request_shares_configuration_exclusions_and_resource_lifetim
                     logs=False,
                     exclude=lambda scope: scope["path"] == "/excluded",
                 ),
-            ).apply(FastAPI())
+            ).build(FastAPI())
             async with (
                 asyncio.timeout(5),
                 app.router.lifespan_context(app),

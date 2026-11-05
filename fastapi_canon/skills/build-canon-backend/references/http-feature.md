@@ -200,9 +200,7 @@ def create_app() -> FastAPI:
         errors=ErrorOptions(type_base="https://api.example.com/problems"),
         router_factory=lambda: APIRouter(prefix="/api/v1"),
     )
-    app = composition.apply(FastAPI(title="Projects API"))
-    composition.validate(app)
-    return app
+    return composition.build(FastAPI(title="Projects API"))
 ```
 
 ### `backend/main.py`

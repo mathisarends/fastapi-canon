@@ -45,7 +45,7 @@ app = Composition(
         tracer_provider=tracer_provider,
         exclude=lambda scope: scope["path"] in {"/health", "/ready"},
     ),
-).apply(FastAPI())
+).build(FastAPI())
 ```
 
 `instrument(Port, OtherPort, ...)` requires at least one positional port and
@@ -361,7 +361,7 @@ router.include_channel(
 app = Composition(
     features=(Feature(name="browser", routers=[router]),),
     telemetry=telemetry,
-).apply(FastAPI())
+).build(FastAPI())
 ```
 
 Select `fastapi-canon[websockets,otel]` to enable the bundled middleware. The

@@ -69,7 +69,7 @@ async def chat(
 
 app = Composition(
     features=(Feature(name="chat", routers=[router], providers=[Services]),)
-).apply(FastAPI())
+).build(FastAPI())
 ```
 
 Callbacks are called directly with the documented `Peer`, message, track or

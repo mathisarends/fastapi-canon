@@ -15,7 +15,7 @@ def _main(
 ) -> int:
     parser = argparse.ArgumentParser(
         prog=prog,
-        description="Check explicit application exceptions against CanonRouter raises declarations without importing application code.",
+        description="Check explicit application exceptions against HTTP, SSE, WebRTC and RPC raises declarations without importing application code.",
     )
     parser.add_argument(
         "roots",
@@ -54,7 +54,7 @@ def _main(
         )
         if not report.operations:
             print(
-                "No supported CanonRouter operations found; check the import roots and supported declaration forms."
+                "No supported Canon operations found; check the import roots and supported declaration forms."
             )
     return int(
         bool(
