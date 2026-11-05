@@ -74,12 +74,16 @@ export const endpoints = {
   rpc,
 } as const;
 
+const _serversByWireName: Readonly<Record<ServerName, RpcServerInfo>> = {
+  ["rpc"]: servers.rpc,
+};
+
 /** Resolve one declared server, ignoring variables it does not declare. */
 export function endpoint(
   server: ServerName,
   variables: ServerVariables = {},
 ): Endpoint {
-  const info: RpcServerInfo = servers[server];
+  const info: RpcServerInfo = _serversByWireName[server];
   return {
     server,
     url: resolveUrl(info, variables),

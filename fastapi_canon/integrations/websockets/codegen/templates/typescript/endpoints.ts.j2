@@ -79,12 +79,16 @@ export const servers = {
 {% for server in servers %}  {{ server.name | identifier }},
 {% endfor %}} as const;
 
+const _serversByWireName: Readonly<Record<ServerName, RpcServerInfo>> = {
+{% for server in servers %}  [{{ server.name | literal }}]: servers.{{ server.name | identifier }},
+{% endfor %}};
+
 /** Resolve one declared server, ignoring variables it does not declare. */
 export function endpoint(
   server: ServerName,
   variables: ServerVariables = {},
 ): Endpoint {
-  const info: RpcServerInfo = servers[server];
+  const info: RpcServerInfo = _serversByWireName[server];
   return {
     server,
     url: resolveUrl(info, variables),

@@ -55,8 +55,6 @@ The next release containing the breaking changes below must be 0.16.0.
   the structured `check(app)` report. Configuration failures remain subclasses of
   `FeatureConfigurationError` and include finding codes and remediation hints.
 
-### Breaking changes
-
 - Composed applications now install the configured validation, HTTP-exception
   and unhandled-error normalizers even without a domain registry. The fallback
   problem type base is `urn:fastapi-canon:problem`. To retain application-owned
@@ -68,9 +66,39 @@ The next release containing the breaking changes below must be 0.16.0.
 - Normalized validation and internal failures participate in the documented
   422/500 problem unions. Regenerate SDKs when adopting these response contracts.
   These changes require the next minor release when this unreleased work ships.
+- Error installation rejects domain exception classes and codes reserved by the
+  enabled normalizers (`request_validation_error` and `internal_server_error`).
+  Rename domain codes, use application-specific exception classes, or disable the
+  relevant normalizer. Normalization flags must be booleans, and `ErrorOptions`
+  now validates registry names and absolute, query-free, fragment-free type bases
+  at construction instead of accepting invalid values until installation.
+
+### Fixed
+
+- Generated TypeScript SDKs resolve endpoint wire names independently of their
+  camelCase helper exports, including automatically named channel endpoints and
+  explicit names such as `project_session`. Regenerate SDKs to pick up the fix.
+- Handler conflicts are checked before error installation changes the app.
+  Domain errors on ordinary WebSockets use an HTTP problem denial before accept
+  when the server supports it; otherwise they close with 1008 (client failures)
+  or 1011 (server failures), preserving the problem code as the close reason.
+  RPC method failures retain their JSON-RPC problem envelopes.
+- Composition validates contracts before opening lifespan resources and keeps
+  the dependency container alive through feature and router cleanup.
 
 ### Migration
 
+- Use `from fastapi_canon import APIRouter, RpcChannel` for a feature's shared
+  HTTP, SSE, RPC and WebRTC declarations. Mount reusable channel groups with
+  `router.include_channel(channel, path=...)`; the mount captures a snapshot, so
+  later changes to the source group do not alter existing endpoints. Grouped
+  methods share the mounted socket and its path context. For different project
+  IDs, create separately bound SDK clients rather than passing an HTTP path
+  argument to retarget an existing RPC connection. See [routers](docs/routers.md).
+- If an application owns its framework exception handlers, set
+  `ErrorOptions(include_validation_error=False, include_http_exceptions=False,
+  include_unhandled_error=False)` on the composition. Otherwise remove conflicting
+  handlers and let the composed catalog provide the normalized problem responses.
 - Replace application-specific OpenAPI scripts and handwritten mounted RPC URL
   maps with the application export command or root Python API. Existing transport
   commands and standalone `RpcContract` sources remain supported; this addition
