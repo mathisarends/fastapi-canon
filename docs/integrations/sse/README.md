@@ -11,7 +11,7 @@ See the [public API](../../canon.md#public-namespaces) and
 
 **Decorate a FastAPI endpoint. Get typed streaming clients in TypeScript and Python.**
 
-Define your events with Pydantic and add `@router.stream()`. Canon SSE
+Define your events with Pydantic and add `@router.sse()` to a Canon `APIRouter`. Canon SSE
 turns that definition into an OpenAPI 3.2 stream contract and generated SDKs with
 named event values, typed async iteration, and shared SSE transport code.
 
@@ -47,7 +47,7 @@ from typing import Annotated, Literal
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-from fastapi_canon.integrations.sse import StreamRouter
+from fastapi_canon import APIRouter, Composition, Feature
 
 
 class TokenDelta(BaseModel):
@@ -62,23 +62,25 @@ class RunCompleted(BaseModel):
 
 type RunEvent = Annotated[TokenDelta | RunCompleted, Field(discriminator="type")]
 
-router = StreamRouter(prefix="/runs", tags=["agentRuns"])
+router = APIRouter(prefix="/runs", tags=["agentRuns"])
 
 
-@router.stream("/{run_id}/events", operation_id="stream_run_events")
+@router.sse("/{run_id}/events", operation_id="stream_run_events")
 async def stream_run_events(run_id: str) -> AsyncIterator[RunEvent]:
     yield TokenDelta(type="token.delta", text="Hello")
     yield RunCompleted(type="run.completed", run_id=run_id)
 
 
-app = FastAPI()
-app.include_router(router, prefix="/v1")
+app = Composition(features=[Feature(name="runs", routers=[router])]).apply(FastAPI())
 ```
 
-The result is `GET /v1/runs/{run_id}/events`. `StreamRouter` extends `APIRouter`:
-normal `Depends`, security dependencies, validation, middleware, and nested
-routers keep working. FastAPI handles SSE framing, serialization, and heartbeats.
-Use `methods=["POST"]` for request-body-driven streams.
+The result is `GET /runs/{run_id}/events`. The SSE operation lives on the same
+`APIRouter` as the feature's HTTP routes: normal `Depends`, security
+dependencies, validation and middleware keep working. FastAPI handles SSE
+framing, serialization, and heartbeats. Canon ends each stream with a
+`canon.complete` event, or a terminal `canon.problem` for failures after the
+response started; the generated clients consume both. Use `methods=["POST"]`
+for request-body-driven streams.
 
 ## 2. Export once, generate both clients
 

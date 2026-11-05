@@ -42,7 +42,7 @@ from typing import Annotated, Literal
 
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
-from fastapi_canon.integrations.sse import StreamRouter
+from fastapi_canon import APIRouter, Composition, Feature
 
 
 class TokenDelta(BaseModel):
@@ -57,26 +57,25 @@ class RunCompleted(BaseModel):
 
 type RunEvent = Annotated[TokenDelta | RunCompleted, Field(discriminator="type")]
 
-router = StreamRouter(prefix="/runs", tags=["agentRuns"])
+router = APIRouter(prefix="/runs", tags=["agentRuns"])
 
 
-@router.stream("/{run_id}/events", operation_id="stream_run_events")
+@router.sse("/{run_id}/events", operation_id="stream_run_events")
 async def stream_run_events(run_id: str) -> AsyncIterator[RunEvent]:
     yield TokenDelta(type="token.delta", text="Hello")
     yield RunCompleted(type="run.completed", run_id=run_id)
 
 
-app = FastAPI()
-app.include_router(router, prefix="/v1")
+app = Composition(features=[Feature(name="runs", routers=[router])]).apply(FastAPI())
 ```
 
-`StreamRouter` extends `APIRouter`. `stream()` defaults to GET and SSE. Pass
+`APIRouter.sse()` defaults to GET and SSE. Pass
 `methods=["POST"]` for JSON request bodies. Options such as `dependencies`,
 `responses`, `tags`, `operation_id` and `status_code`
 pass through to FastAPI. Stable operation IDs make the generated API stable.
 The original function and signature are registered directly.
 
-Event serialization must match the exported schema. `stream()` rejects non-None
+Event serialization must match the exported schema. `sse()` rejects non-None
 `response_model_include`, nonempty `response_model_exclude`,
 `response_model_by_alias=False`, and enabled `response_model_exclude_none`,
 `response_model_exclude_unset` or `response_model_exclude_defaults` at registration.
@@ -91,5 +90,7 @@ rejected. Yield application data; FastAPI owns framing, heartbeats and ASGI.
 
 Put authentication and other HTTP preconditions in dependencies. A generator
 body executes after the response starts, so exceptions inside it cannot change
-the HTTP status. Represent application failures in your own event union when
-needed, as the example's `RunFailed` does.
+the HTTP status. Declare registered errors raised while streaming with
+`stream_raises=`; they end the stream with a terminal `canon.problem` event.
+Represent recoverable application outcomes in your own event union, as the
+example's `RunFailed` does.
