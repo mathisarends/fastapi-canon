@@ -350,6 +350,8 @@ This checks supported explicit source paths, not every possible runtime failure.
 Abstract Dishka ports and dynamic code can leave analysis incomplete. The checker
 covers `APIRouter` HTTP operations, `.sse()` streams and `.webrtc()` sessions,
 and `RpcChannel` methods.
+Calls into installed libraries such as Pydantic or SQLAlchemy contribute no
+application errors; application callbacks passed to them are still followed.
 Keep runtime contract validation and behavioral tests. See
 [error checking](docs/error-checking.md) for boundaries and
 CI options.

@@ -37,6 +37,8 @@ flowchart TD
     INDEX --> CONTRACT["Combine policy + router + operation raises and optional ErrorRegistry mappings"]
     INDEX --> CALLS["Follow endpoint, service, helper and dependency calls"]
     CALLS --> HANDLING["Remove caught exceptions and include translated exceptions"]
+    CALLS -->|Library call| CALLBACKS["Follow application callables and construction hooks it receives"]
+    CALLBACKS --> HANDLING
     HANDLING --> MATCH{"Error mapping found through inheritance?"}
     CONTRACT --> MATCH
     MATCH -->|Yes| COMPARE{"Mapped error declared?"}
@@ -195,6 +197,49 @@ specific registered error takes precedence over a base mapping. Conditions are
 not proved feasible: a finding describes a possible source path, not a guarantee
 that a particular request reaches it.
 
+### Library calls
+
+Mapped errors are application exceptions, so a call into code outside the
+scanned roots, such as the standard library, Pydantic or SQLAlchemy, contributes
+no escaping errors of its own. The checker treats a call as a library call when
+its target resolves to a package that the import path can locate outside the
+scanned roots. Locating a package does not import or execute it. Run the checker
+in the application's environment so that its dependencies are found.
+
+```python
+class TaskRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def list_recent(self, user_id: UUID) -> list[Task]:
+        # select(...) and the typed session are library calls.
+        statement = select(TaskModel).where(TaskModel.user_id == user_id).limit(20)
+        rows = await self._session.scalars(statement)
+        return list(map(self.to_domain, rows))  # to_domain is followed
+```
+
+Receivers are recognized through parameter, constructor and field annotations,
+module-level library objects such as `bearer = HTTPBearer()`, literals and
+chained calls on library results. A FastAPI dependency on such an object, for
+example `Depends(bearer)`, is a library dependency.
+
+Library code reaches application code only through what it receives, and the
+checker follows that code:
+
+- An application function, method or lambda passed as an argument is analyzed
+  as if the library called it.
+- Constructing a class with a library base class or a library class decorator
+  (Pydantic models, SQLModel tables, `@dataclass`) follows its `__new__`,
+  `__init__`, `__post_init__`, `__attrs_post_init__` and `model_post_init`
+  methods. Other decorated methods on such classes, such as Pydantic validators,
+  keep the operation incomplete (`CAN003`).
+
+Calls stay unresolved (`CAN003`) when their package cannot be located, when the
+package contains a scanned root (for example the installed application during a
+partial scan), for dynamic builtins such as `getattr`, `super` and `next`, and
+when a method on an untyped library result has the name of an application
+method.
+
 ## Analysis boundaries
 
 `complete` describes analysis of the supported explicit source paths, not proof
@@ -203,7 +248,7 @@ interpreter errors, every Python protocol or implicit descriptor invocation,
 framework internals, application startup, transactions or background tasks.
 Explicit built-in exceptions are outside the application-error comparison.
 
-Unresolved calls, abstract ports, external constructors, custom decorators,
+Unresolved calls, abstract ports, decorated hooks of library-based classes, custom decorators,
 recursive calls, dynamic contracts, nested route factories, deferred coroutine
 execution and unsupported control flow produce `CAN003`. `for`, `async for` and
 `while` loops are analyzed like branches that may run; iterating a call to a
@@ -215,6 +260,11 @@ prevent a complete result, including assignments with type annotations. Expanded
 are not executed or inferred:
 an abstract port remains incomplete even if the application always binds one
 implementation.
+
+Library calls are assumed not to raise application exceptions except through
+the application callables and construction hooks they receive. Methods that a
+library calls later on objects it stored, such as an overridden
+`logging.Handler.emit`, are not followed.
 
 Only source route declarations are inspected; the tool does not establish which
 routers are actually mounted, follow `dependency_overrides`, or validate composed

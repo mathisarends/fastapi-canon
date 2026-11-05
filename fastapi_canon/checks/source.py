@@ -2,12 +2,37 @@
 
 import ast
 import builtins
+import importlib.util
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Self
 
 type _FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 type _Environment = dict[str, str]
+
+# Builtins whose result or effect depends on application objects at runtime.
+_DYNAMIC = frozenset(
+    f"builtins.{name}"
+    for name in (
+        "__import__",
+        "aiter",
+        "anext",
+        "compile",
+        "delattr",
+        "eval",
+        "exec",
+        "getattr",
+        "globals",
+        "iter",
+        "locals",
+        "next",
+        "setattr",
+        "super",
+        "type",
+        "vars",
+    )
+)
 
 
 def _walk_error(error: OSError) -> None:
@@ -31,6 +56,9 @@ class _Source:
     nested: list[_Definition] = field(default_factory=list)
     touched: set[str] = field(default_factory=set)
     composition_policies: list[tuple[str, int]] = field(default_factory=list)
+    roots: list[Path] = field(default_factory=list)
+    _externals: dict[str, bool] = field(default_factory=dict)
+    _methods: frozenset[str] | None = None
     _keys: dict[ast.expr, str] = field(default_factory=dict)
     _mros: dict[str, tuple[tuple[str, ...] | None, frozenset[str]]] = field(
         default_factory=dict
@@ -44,6 +72,7 @@ class _Source:
             root = root.resolve()
             if not root.is_dir():
                 raise ValueError(f"source root is not a directory: {root}")
+            source.roots.append(root)
             for directory, directories, files in root.walk(on_error=_walk_error):
                 directories[:] = sorted(
                     name
@@ -372,6 +401,107 @@ class _Source:
     def exception(self, name: str) -> bool:
         return "builtins.Exception" in (self.mro(name) or [])
 
+    def external(self, name: str) -> bool:
+        """Whether *name* belongs to an importable package outside the roots.
+
+        Locating the top-level package searches the import path without
+        executing it. A package that overlaps a scanned root, such as the
+        installed application of a partial scan, is not external.
+        """
+        package = name.partition(".")[0]
+        if package not in self._externals:
+            self._externals[package] = self._locate(package)
+        return self._externals[package]
+
+    def origin(
+        self,
+        node: ast.expr,
+        module: str,
+        env: _Environment | None = None,
+        seen: frozenset[str] = frozenset(),
+    ) -> str | None:
+        """The external callable or value that *node* evaluates or derives from."""
+        name = self.resolve(node, module, env)
+        if name is not None:
+            if name in _DYNAMIC or name in self.definitions or name in seen:
+                return None
+            if self.external(name):
+                return name
+            binding = self.bindings.get(name)
+            if isinstance(binding, tuple):
+                return self.origin(binding[1], binding[0], seen=seen | {name})
+            owner, _, attribute = name.rpartition(".")
+            annotation = self._field(owner, attribute)
+            if annotation is not None:
+                return annotation if self.external(annotation) else None
+        match node:
+            case ast.Constant() if node.value is not None:
+                return f"builtins.{type(node.value).__name__}"
+            case ast.JoinedStr():
+                return "builtins.str"
+            case ast.List() | ast.Tuple() | ast.Set() | ast.Dict():
+                return f"builtins.{type(node).__name__.lower()}"
+            case ast.Await():
+                return self.origin(node.value, module, env, seen)
+            case ast.Call():
+                return self.origin(node.func, module, env, seen)
+            case ast.Subscript():
+                return self.origin(node.value, module, env, seen)
+            case ast.Attribute():
+                receiver = self.origin(node.value, module, env, seen)
+                # An untyped call result may be an application object returned
+                # by the library; application method names stay unresolved.
+                if receiver is None or (
+                    isinstance(node.value, ast.Call | ast.Await | ast.Subscript)
+                    and node.attr in self.methods
+                ):
+                    return None
+                return f"{receiver}.{node.attr}"
+        return None
+
+    def lineage(self, name: str) -> tuple[list[str], bool] | None:
+        """Scanned classes of *name*'s hierarchy and whether an external base joins.
+
+        Returns ``None`` when a base resolves neither to a scanned class nor to
+        an external package.
+        """
+        order = self.mro(name)
+        if order is not None:
+            return [item for item in order if item in self.definitions], False
+        classes: list[str] = []
+        external = False
+        pending = [name]
+        while pending:
+            current = pending.pop(0)
+            if current in classes:
+                continue
+            definition = self.definitions.get(current)
+            if definition is None or not isinstance(definition.node, ast.ClassDef):
+                return None
+            classes.append(current)
+            for base in definition.node.bases:
+                if isinstance(base, ast.Subscript):
+                    base = base.value
+                resolved = self.resolve(base, definition.module)
+                if resolved in self.definitions:
+                    pending.append(resolved)
+                elif resolved and self.external(resolved):
+                    external = True
+                else:
+                    return None
+        return (classes, True) if external else None
+
+    @property
+    def methods(self) -> frozenset[str]:
+        """Names of all methods defined by scanned classes."""
+        if self._methods is None:
+            self._methods = frozenset(
+                definition.node.name
+                for definition in self.definitions.values()
+                if definition.owner
+            )
+        return self._methods
+
     def environment(self, function: _Definition) -> _Environment:
         assert isinstance(function.node, ast.FunctionDef | ast.AsyncFunctionDef)
         env: _Environment = {}
@@ -406,3 +536,38 @@ class _Source:
                                 if isinstance(target, ast.Attribute):
                                     env[self.key(target)] = resolved
         return env
+
+    def _field(self, owner: str, attribute: str) -> str | None:
+        lineage = self.lineage(owner) if owner in self.definitions else None
+        for name in lineage[0] if lineage else []:
+            definition = self.definitions[name]
+            assert isinstance(definition.node, ast.ClassDef)
+            for statement in definition.node.body:
+                if (
+                    isinstance(statement, ast.AnnAssign)
+                    and isinstance(statement.target, ast.Name)
+                    and statement.target.id == attribute
+                ):
+                    return self.annotation(statement.annotation, definition.module)
+        return None
+
+    def _locate(self, package: str) -> bool:
+        if not package.isidentifier() or package in self.paths:
+            return False
+        if package in sys.builtin_module_names:
+            return True
+        try:
+            spec = importlib.util.find_spec(package)
+        except (ImportError, ValueError):
+            return False
+        if spec is None:
+            return False
+        locations = [Path(item) for item in spec.submodule_search_locations or []]
+        if not locations and spec.origin and spec.has_location:
+            locations.append(Path(spec.origin))
+        for location in locations:
+            location = location.resolve()
+            for root in self.roots:
+                if root.is_relative_to(location) or location.is_relative_to(root):
+                    return False
+        return True

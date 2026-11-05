@@ -91,6 +91,12 @@ incomplete. This source analysis is separate from imported composition checks. I
 analysis) using [error-checking.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/error-checking.md); do not claim complete coverage by
 dropping the completeness flag or adding broad suppressions.
 
+Run the checker in the application's environment: calls into installed
+libraries count as raising no application errors only when their packages can
+be located. Pass application callbacks to libraries as functions or methods,
+not through dynamic lookups, and keep validators that raise application errors
+out of Pydantic models so the checker can follow them.
+
 If contracts generate clients, run `fastapi-canon generate --check --diff` after
 generation. Report executed checks accurately and distinguish an unexecuted
 browser/target-database suite from a passing lint or type check.
