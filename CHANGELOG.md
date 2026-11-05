@@ -6,6 +6,16 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 The next release containing the breaking changes below must be 0.16.0.
 
+### TL;DR
+
+- Register reusable WebSocket admission functions with `hooks=(function, ...)`.
+  `Inject[T]` obtains their results by return type or resolves application services
+  through DI. The shared `APIRouter.include_channel(...)` forwards these options;
+  specialized WebSocket routers remain supported.
+- Dishka owns resources. Canon closes the admission REQUEST scope before
+  acceptance. Return independently usable context data and put resources needed
+  until disconnect in SESSION-scoped providers.
+
 ### Added
 
 - Public `fastapi_canon.integrations.mcp.McpScope` opens an independent Dishka
@@ -17,6 +27,21 @@ The next release containing the breaking changes below must be 0.16.0.
   `middleware`. Both boolean options default to `None`, preserving native
   FastMCP settings. Middleware wraps mounted feature execution inside Canon's
   dependency scope.
+
+- Root `Inject[T]` is shared by WebSocket and MCP integrations. WebSocket
+  context functions support `Inject[T]` and reusable `hooks=(function, ...)`
+  registrations keyed by return type. Hooks can combine injected services with
+  FastAPI path, header and dependency parameters; their results are available
+  to connection handlers without becoming public protocol parameters.
+- `fastapi_canon.Scoped[UseCase]` executes an async callable use case in a fresh
+  short service scope per invocation. Its call preserves argument and result
+  types and finishes provider cleanup before returning. Register wrappers at
+  APP scope; retain `ServiceScope` for multiple calls sharing one transaction.
+  This API is opt-in and introduces no additional breaking changes: existing
+  `ServiceScope` signatures, provider lifetimes, transport injection markers,
+  routing defaults and dependency requirements are unchanged. Existing
+  applications require no migration to continue using their current APIs.
+  See [short use-case calls](docs/database.md#short-use-case-calls).
 
 - The bundled `build-canon-backend` skill explains Canon's components and
   Composition/Dishka wiring through focused references and small examples.
@@ -81,6 +106,15 @@ The next release containing the breaking changes below must be 0.16.0.
   those routes or select a distinct `McpOptions(path=...)` before upgrading to
   0.16.0. Preflight reports `canon.mcp.E001` before application mutation.
 
+- WebSocket context preparation with `resolver=Dishka()` now owns a short
+  REQUEST scope and closes it before acceptance. Return independently usable
+  context data; put connection-lifetime resources in SESSION-scoped providers.
+  Context `FromDishka[T]` parameters also resolve in this short scope, so code
+  retaining admission resources through an accepted connection must migrate.
+  Existing `FromDishka[T]` syntax remains supported. Move resource ownership to
+  the appropriate Dishka provider and pass immutable IDs or other independent
+  values through the context. Generator resources belong in Dishka providers,
+  not in `hooks=`. RPC wire formats and generated clients are unchanged.
 - `fastapi-canon skill install` now creates both
   `.agents/skills/build-canon-backend` and `.claude/skills/build-canon-backend`.
   Use `--destination .agents/skills/build-canon-backend` to retain the previous
@@ -118,6 +152,22 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Fixed
 
+- WebSocket routes without an explicit resolver use Composition's Dishka
+  container for injected services, including context hooks. Explicit resolvers
+  keep precedence and provider scope cleanup is preserved.
+- `fastapi-canon check errors --help` shows the error check's own options, and
+  missing arguments report the public command name. `check` uses real
+  subcommands for errors and composition.
+- The concepts example passes `features=[...]` to `Composition`; the README's
+  supported Python range renders correctly.
+- SSE sync configuration uses `[tool.fastapi-canon.sse]` and
+  `[[tool.fastapi-canon.sse.clients]]`. The old `tool.fastapi-streams` tables
+  remain accepted for one transition release with a visible deprecation warning;
+  rename them to the Canon tables, which take precedence when both exist.
+  Regenerate SSE SDKs to migrate `.fastapi-streams.json` to
+  `.fastapi-canon-sse.json`; old ownership is retained for cleanup, handwritten
+  files are preserved, and check mode reports migration without writes.
+
 - Generated TypeScript SDKs resolve endpoint wire names independently of their
   camelCase helper exports, including automatically named channel endpoints and
   explicit names such as `project_session`. Regenerate SDKs to pick up the fix.
@@ -130,6 +180,24 @@ The next release containing the breaking changes below must be 0.16.0.
   the dependency container alive through feature and router cleanup.
 
 ### Migration
+
+- Adopting `Scoped` is optional. For a single coroutine use-case call, replace
+  `async with service_scope() as use_case: result = await use_case(...)` with
+  `result = await scoped_use_case(...)`, after registering an APP-scoped
+  `Scoped(container, UseCase)` provider. The constructor requires the APP
+  container and a class with an asynchronous coroutine `__call__`; it rejects
+  request/socket child containers, synchronous callables and async generators.
+  Keep `ServiceScope` when several calls must share one scope/transaction, or
+  when the service exposes ordinary methods instead of `__call__`. Each
+  `Scoped` invocation has its own scope and, with Canon's Database providers,
+  commits independently; splitting a previously shared transaction changes
+  atomicity and is an application decision. Return materialized values rather
+  than scoped resources or lazy ORM graphs. Commit/cleanup errors propagate
+  before a result reaches the caller; no automatic retries, read-only mode or
+  consistent-snapshot guarantee is added. Continue using the existing transport
+  injection API (for example `FromDishka[Scoped[UseCase]]` for HTTP). `Scoped`
+  itself does not change transport injection; the separate WebSocket/MCP
+  `Inject[T]` additions and admission changes are described above.
 
 - Use `from fastapi_canon import APIRouter, RpcChannel` for a feature's shared
   HTTP, SSE, RPC and WebRTC declarations. Mount reusable channel groups with
