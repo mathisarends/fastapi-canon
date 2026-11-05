@@ -36,6 +36,13 @@ The next release containing the breaking changes below must be 0.16.0.
   declarations. Loops are now analyzed, and iterating a generator follows
   its body. JSON reports include each operation's `transport`.
 
+- `fastapi-canon check errors` treats calls into packages outside the scanned
+  roots (standard library, Pydantic, SQLAlchemy, FastAPI security objects) as
+  library calls that raise no application exceptions, instead of reporting
+  `CAN003`. Application callables passed to them and construction hooks of
+  library-based classes such as `model_post_init` are still followed; decorated
+  hooks such as Pydantic validators keep the operation incomplete.
+
 - `fastapi-canon check errors` resolves abstract Dishka ports statically. Calls on
   an abstract method or `Protocol` member follow the implementations bound by
   `Provider` classes in the scanned roots (`@provide` factories and

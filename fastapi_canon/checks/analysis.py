@@ -5,6 +5,16 @@ from dataclasses import dataclass, field
 
 from fastapi_canon.checks.source import _Definition, _Environment, _Source
 
+_PLAIN_DECORATORS = frozenset(
+    {
+        "abc.abstractmethod",
+        "builtins.classmethod",
+        "builtins.property",
+        "builtins.staticmethod",
+        "functools.cached_property",
+    }
+)
+
 
 @dataclass(frozen=True)
 class _Escape:
@@ -155,30 +165,7 @@ class _Analyzer:
             if name and name.startswith("builtins.") and self.source.exception(name):
                 return flow
             if definition and isinstance(definition.node, ast.ClassDef):
-                if definition.node.decorator_list or definition.node.keywords:
-                    flow.unknowns.append(
-                        _Unknown(
-                            "class decorators or metaclasses may change construction",
-                            function.name,
-                            node.lineno,
-                        )
-                    )
-                constructor = self.source.method(definition.name, "__init__")
-                if constructor:
-                    called = self.function(constructor, stack)
-                    flow.escapes.extend(
-                        _Escape(item.exception, (function.name, *item.trace), item.line)
-                        for item in called.escapes
-                    )
-                    flow.unknowns.extend(called.unknowns)
-                elif self.source.mro(definition.name) is None:
-                    flow.unknowns.append(
-                        _Unknown(
-                            f"unresolved constructor: {name}",
-                            function.name,
-                            node.lineno,
-                        )
-                    )
+                flow.extend(self._construct(definition, function, stack, node.lineno))
             elif definition and definition.owner and self.source.abstract(definition):
                 flow.extend(
                     self._dispatch(
@@ -213,6 +200,18 @@ class _Analyzer:
                         iterated=iterated,
                     )
                 )
+            elif self.source.origin(node.func, function.module, env) is not None:
+                # Library code raises no application exceptions of its own; it
+                # reaches them only through receivers and callables it is given.
+                if isinstance(node.func, ast.Attribute | ast.Call):
+                    evaluated: ast.expr = (
+                        node.func.value
+                        if isinstance(node.func, ast.Attribute)
+                        else node.func
+                    )
+                    flow.extend(self.expression(evaluated, function, env, stack))
+                for argument in [*node.args, *(kw.value for kw in node.keywords)]:
+                    flow.extend(self._callback(argument, function, env, stack))
             else:
                 flow.unknowns.append(
                     _Unknown(
@@ -238,6 +237,144 @@ class _Analyzer:
             ):
                 flow.extend(self.function(member, stack))
         return flow
+
+    def _construct(
+        self,
+        definition: _Definition,
+        function: _Definition,
+        stack: tuple[str, ...],
+        line: int,
+    ) -> _Flow:
+        """Follow the application code that constructing *definition* runs."""
+        flow = _Flow()
+        lineage = self.source.lineage(definition.name)
+        if lineage is None:
+            flow.unknowns.append(
+                _Unknown(
+                    f"unresolved constructor: {definition.name}", function.name, line
+                )
+            )
+            return flow
+        classes, external = lineage
+        node = definition.node
+        assert isinstance(node, ast.ClassDef)
+        changes = [
+            decorator.func if isinstance(decorator, ast.Call) else decorator
+            for decorator in node.decorator_list
+        ]
+        changes.extend(
+            keyword.value for keyword in node.keywords if keyword.arg == "metaclass"
+        )
+        for change in changes:
+            name = self.source.resolve(change, definition.module)
+            if name is None or not self.source.external(name):
+                flow.unknowns.append(
+                    _Unknown(
+                        "class decorators or metaclasses may change construction",
+                        function.name,
+                        line,
+                    )
+                )
+                return flow
+            external = True
+        if not external and node.keywords:
+            # Class keywords of a scanned hierarchy reach its own __init_subclass__.
+            flow.unknowns.append(
+                _Unknown(
+                    "class decorators or metaclasses may change construction",
+                    function.name,
+                    line,
+                )
+            )
+        hooks = ["__new__", "__init__"]
+        if external:
+            # Library-generated constructors call these application hooks.
+            hooks.extend(["__post_init__", "__attrs_post_init__", "model_post_init"])
+        for hook in hooks:
+            member = next(
+                (
+                    self.source.definitions[f"{owner}.{hook}"]
+                    for owner in classes
+                    if f"{owner}.{hook}" in self.source.definitions
+                ),
+                None,
+            )
+            if member is not None:
+                flow.extend(self._traced(function, self.function(member, stack)))
+        if external:
+            for owner in classes:
+                owner_node = self.source.definitions[owner].node
+                assert isinstance(owner_node, ast.ClassDef)
+                for member_node in owner_node.body:
+                    if isinstance(
+                        member_node, ast.FunctionDef | ast.AsyncFunctionDef
+                    ) and any(
+                        self.source.resolve(
+                            item.func if isinstance(item, ast.Call) else item,
+                            self.source.definitions[owner].module,
+                        )
+                        not in _PLAIN_DECORATORS
+                        for item in member_node.decorator_list
+                    ):
+                        flow.unknowns.append(
+                            _Unknown(
+                                "library construction may call decorated hook: "
+                                f"{owner}.{member_node.name}",
+                                function.name,
+                                line,
+                            )
+                        )
+        return flow
+
+    def _callback(
+        self,
+        argument: ast.expr,
+        function: _Definition,
+        env: _Environment,
+        stack: tuple[str, ...],
+    ) -> _Flow:
+        """Assume library code calls the application callables it receives."""
+        if isinstance(argument, ast.Starred):
+            argument = argument.value
+        if isinstance(argument, ast.Lambda):
+            lambda_env = dict(env)
+            parameters = argument.args
+            for item in [
+                *parameters.posonlyargs,
+                *parameters.args,
+                *parameters.kwonlyargs,
+                *filter(None, [parameters.vararg, parameters.kwarg]),
+            ]:
+                lambda_env[item.arg] = ""
+            return self.expression(argument.body, function, lambda_env, stack)
+        if not isinstance(argument, ast.Name | ast.Attribute):
+            return _Flow()
+        name = self.source.resolve(argument, function.module, env)
+        definition = self.source.definitions.get(name or "")
+        if definition is None:
+            return _Flow()
+        if isinstance(definition.node, ast.ClassDef):
+            root: ast.expr = argument
+            while isinstance(root, ast.Attribute):
+                root = root.value
+            # Typed parameters and attributes resolve to their class; they
+            # pass an instance, not a constructor.
+            if isinstance(root, ast.Name) and root.id in env:
+                return _Flow()
+            return self._construct(definition, function, stack, argument.lineno)
+        return self._traced(
+            function,
+            self.function(definition, stack, iterated=_generator(definition.node)),
+        )
+
+    def _traced(self, function: _Definition, called: _Flow) -> _Flow:
+        return _Flow(
+            [
+                _Escape(item.exception, (function.name, *item.trace), item.line)
+                for item in called.escapes
+            ],
+            list(called.unknowns),
+        )
 
     def _call(
         self,

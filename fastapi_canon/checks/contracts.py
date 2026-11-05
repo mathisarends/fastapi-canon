@@ -311,6 +311,11 @@ class _Checker:
                 ):
                     flow.extend(self._analyzer.function(dependency))
                     flow.extend(self._dependencies(dependency, seen | {function.name}))
+                elif target is not None and self.source.origin(target, module):
+                    # Library dependencies such as HTTPBearer() raise no
+                    # application exceptions and declare no application
+                    # sub-dependencies.
+                    continue
                 else:
                     flow.unknowns.append(
                         _Unknown(
