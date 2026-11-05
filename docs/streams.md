@@ -6,16 +6,10 @@ Select the SSE dependencies:
 pip install "fastapi-canon[sse]"
 ```
 
-Import the router explicitly:
-
-```python
-from fastapi_canon.integrations.sse import CanonStreamRouter
-```
-
-Canon includes the SSE implementation in the same
-wheel. The `sse` extra selects FastAPI >=0.143.3 and Pydantic >=2.11.2;
-base composition keeps its existing lower bounds. No separate Streams package
-is installed. See the [migration guide](package-migration.md).
+Declare typed streams with `@router.sse(...)` on the feature's
+`fastapi_canon.APIRouter`. The `sse` extra selects FastAPI >=0.143.3 and
+Pydantic >=2.11.2; base composition keeps its lower bounds, and core imports do
+not load the SSE runtime.
 
 ## Complete integration example
 
@@ -31,14 +25,13 @@ from fastapi import Depends, FastAPI, Header
 from pydantic import BaseModel
 
 from fastapi_canon import (
-    HTTPMethod,
+    APIRouter,
     Composition,
     Error,
     ErrorRegistry,
     Feature,
     ServiceScope,
 )
-from fastapi_canon.integrations.sse import CanonStreamRouter
 
 
 class AuthenticationRequired(Exception):
@@ -102,7 +95,7 @@ async def require_existing_run(run_id: str, runs: FromDishka[RunService]) -> Non
     await runs.require_existing(run_id)
 
 
-router = CanonStreamRouter(
+router = APIRouter(
     prefix="/runs",
     error_registry=run_errors,
     raises=[authentication_required],
@@ -110,9 +103,8 @@ router = CanonStreamRouter(
 )
 
 
-@router.stream(
+@router.sse(
     "/{run_id}/events",
-    methods=[HTTPMethod.GET],
     raises=[run_not_found],
     dependencies=[Depends(require_existing_run)],
     operation_id="run_events",
@@ -153,7 +145,7 @@ closing it before yielding frames. For an unbounded stream, fetch short batches
 in separate scopes rather than materializing the entire stream or keeping a
 database session open. APP-scoped services can also be injected directly.
 
-Place `@inject` directly above the function, below `@router.stream(...)`.
+Place `@inject` directly above the function, below `@router.sse(...)`.
 Decorate the dependency function with `@inject` too. Run the resource check in
 `require_existing_run`: injecting the generator itself does not move checks
 or provider creation into the pre-response dependency phase. Resolve any
@@ -163,14 +155,11 @@ for `FromDishka` and dependency injection details.
 
 ## Router and operation options
 
-`CanonStreamRouter` inherits `CanonRouter` and `StreamRouter`. It combines their
-existing APIs without replacing registration, validation, or serialization.
-
 | API | Behavior |
 | --- | --- |
-| `CanonStreamRouter(error_registry=registry, raises=[...], **options)` | The registry contains available errors. Router-level `raises` applies to operations declared on this router. Standard FastAPI router options pass through. |
-| `router.stream(path, raises=[...], methods=None, **options)` | Local errors extend shared errors. Defaults to GET; use `methods=[HTTPMethod.POST]` for a body-driven stream. FastAPI dependencies, tags, operation IDs, and manual responses pass through. |
-| `router.get(...)`, `router.post(...)`, `router.api_route(...)` | Normal canon REST declarations remain available on the same router. |
+| `APIRouter(error_registry=registry, raises=[...], http_statuses=[...], **options)` | The registry contains available errors. Router-level `raises` and normalized `http_statuses` apply to every HTTP and SSE operation declared on this router. Standard FastAPI router options pass through. |
+| `router.sse(path, raises=[...], stream_raises=[...], methods=None, **options)` | Local errors extend shared errors. Defaults to GET; use `methods=[HTTPMethod.POST]` for a body-driven stream. FastAPI dependencies, tags and operation IDs pass through. |
+| `router.get(...)`, `router.post(...)`, `router.api_route(...)` | Ordinary HTTP declarations on the same router. |
 
 ### HTTP methods
 
@@ -185,7 +174,7 @@ For a separate POST operation, add this before constructing the feature/app:
 from fastapi_canon import HTTPMethod
 
 
-@router.stream(
+@router.sse(
     "/{run_id}/events",
     methods=[HTTPMethod.POST],
     raises=[run_not_found],
@@ -200,10 +189,10 @@ async def create_events(
         yield event
 ```
 
-`methods=[HTTPMethod.POST]` selects **only POST**. The list is the native Streams
-API, following FastAPI's `api_route()` convention. It can also select both
-`[HTTPMethod.GET, HTTPMethod.POST]` for the same handler. Streams currently
-accepts GET and POST only; other enum members remain invalid for `stream()`.
+`methods=[HTTPMethod.POST]` selects **only POST**, following FastAPI's
+`api_route()` convention. It can also select both
+`[HTTPMethod.GET, HTTPMethod.POST]` for the same handler. SSE accepts GET and
+POST only; other enum members are rejected.
 GET is useful for subscribing to events; POST lets the request include a typed
 JSON body, as in [`examples/streams/app.py`](../examples/streams/app.py).
 For generated clients, declare GET and POST separately with different
@@ -214,21 +203,18 @@ Nonempty `raises` requires a registry. Duplicate instances, including errors
 declared at both levels, appear once. Distinct errors with the same HTTP status
 use canon's discriminated `oneOf` problem schema. Invalid declarations raise
 `ErrorConfigurationError` during router construction or endpoint registration.
-As with `CanonRouter`, shared `raises` does not propagate to included child routers.
+Shared `raises` does not propagate to included child routers.
 
 Use an annotated generator (`AsyncIterator[RunEvent]`, or `Iterator[RunEvent]`
-for synchronous endpoints). Streams infers its successful SSE response and
-rejects incompatible methods, response models, and serialization options. No
-`CanonResponse.sse()` declaration is needed. Typed POST bodies and a
+for synchronous endpoints). Canon infers the successful SSE response from the
+annotation and rejects incompatible methods, response models, and serialization
+options. Typed POST bodies and a
 discriminated event union are shown in the executable
 [`examples/streams/app.py`](../examples/streams/app.py).
 
-To document normalized `HTTPException` statuses, use canon's existing
-`responses=run_errors.responses(http_statuses=[403])` router/operation option.
-Request validation errors are normalized and documented by `Composition` by
-default. For manual app assembly, include the router and call
-`run_errors.install(app)` before generating OpenAPI. If you bypass `Composition`,
-also configure Dishka's container, middleware, and lifespan yourself.
+To document normalized `HTTPException` statuses, pass `http_statuses=[403]` to
+the router or the operation. Request validation errors are normalized and
+documented by `Composition` by default.
 
 ## Export and client generation
 
@@ -241,23 +227,17 @@ iteration. The binding handles framing, decoding, terminal problems and
 completion. The [README walkthrough](../README.md#streams-typed-events-from-server-to-sdk)
 shows the server declaration, configuration and both client languages.
 
-The specialized commands below generate a separate SSE client from the same
-typed stream schema.
-
-Canon preserves Streams' complete native `itemSchema` and JSON `contentSchema`,
-including referenced models and event discriminators. The exported contract
-also contains the declared `application/problem+json` responses. From this repo:
+The exported OpenAPI 3.2 document keeps the complete native `itemSchema` and
+JSON `contentSchema`, including referenced models and event discriminators, and
+the declared `application/problem+json` responses. Export it from this repository
+with:
 
 ```console
-uv sync --locked --all-groups
-uv run --locked fastapi-canon sse schema --app examples.streams.app:app --output openapi.json
-uv run --locked fastapi-canon sse generate --schema openapi.json --language python --output generated/python
-uv run --locked fastapi-canon sse generate --schema openapi.json --language typescript --output generated/typescript
+uv run --locked fastapi-canon contracts export --app examples.streams.app:app --output-dir contracts
 ```
 
-Another application can install `fastapi-canon[codegen]` and use its own
-module path.
-Both clients consume the same OpenAPI 3.2 contract.
+Another application installs `fastapi-canon[codegen]` and uses its own module
+path.
 
 ## Streaming boundary
 
@@ -283,7 +263,7 @@ The [root CI workflow](../.github/workflows/ci.yml) checks the locked repository
 Python 3.12–3.14 and Windows with Python 3.14. Regression coverage includes
 dependency problems, typed GET/POST streams, complete SSE schemas, both client
 generators and Dishka lifetime/cleanup. Installed-wheel checks also exercise
-Canon with Streams absent. Run the focused suite from the repository root:
+Canon without the SSE extra. Run the focused suite from the repository root:
 
 ```console
 uv run --locked python -m pytest tests/integration/integrations tests/integration/test_optional_streams.py
