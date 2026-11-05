@@ -2,6 +2,31 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
+## 0.16.0 - Unreleased
+
+### Added
+
+- `Composition.check(app)` provides structured preflight findings and per-check
+  execution status without starting resources. `Feature(checks=...)` adds explicit
+  synchronous checks over immutable composition descriptions.
+- `Composition.inspect(app)` explains installed HTTP operations, feature ownership,
+  effective prefixes, provider-source names and dependency/error provenance.
+- `fastapi-canon check composition` and `fastapi-canon inspect` expose the same
+  Python APIs in text or versioned JSON, separately from import-free source checks.
+
+### Breaking changes
+
+- Duplicate HTTP operation IDs now fail composition installation. Assign distinct
+  `operation_id` values, including across existing app routes and features.
+  Split multi-method routes when they would export the same operation ID twice.
+- Composition preflight now compiles HTTP/OpenAPI contracts before installation.
+  Fix invalid response/catalog metadata before `apply()`; failures previously
+  deferred to OpenAPI generation can now occur during application construction.
+- `Composition.validate(app)` also runs registered feature checks. Keep checks
+  deterministic and free of startup work; migrate configuration diagnostics to
+  the structured `check(app)` report. Installation failures remain subclasses of
+  `FeatureConfigurationError` and include finding codes and remediation hints.
+
 ## 0.15.0 - 2026-11-04
 
 ### Added

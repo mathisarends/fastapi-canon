@@ -68,6 +68,13 @@ consumer imports.
 
 ## Tests and checks
 
+`diagnostics.py` contains framework-independent immutable descriptions and check
+results. `introspection.py` adapts effective HTTP route metadata; composition owns
+preflight orchestration, feature checks and the installed snapshot. CLI adapters
+consume those same APIs. Canon route declarations retain provenance as Python
+metadata that survives FastAPI route copies without entering exported OpenAPI.
+See [composition checks](system-checks.md) for scope and developer APIs.
+
 Unit, integration and contract roots mirror library paths independently. For
 example, `fastapi_canon/error/openapi.py` maps to
 `tests/contract/error/test_openapi.py`; focused topics can use a descriptive suffix.

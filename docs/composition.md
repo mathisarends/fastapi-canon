@@ -81,6 +81,11 @@ app = Composition(features=(project_feature,)).apply(FastAPI())
 
 ## Feature composition
 
+Use `composition.check(app)` for a structured preflight report before installation
+and `composition.inspect(app)` for an immutable description after installation.
+See [composition checks and introspection](system-checks.md) for findings, feature
+checks, provenance, CLI commands and coverage boundaries.
+
 Pass an ordered list or tuple with `Composition(features=...)`. Canon copies the
 sequence into an immutable tuple, preserving declaration order and validating
 duplicate instances and names. The default `features=()` creates an empty

@@ -4,6 +4,18 @@ from http import HTTPMethod
 from typing import TYPE_CHECKING
 
 from ._version import __version__
+from .diagnostics import (
+    CheckContext,
+    CheckIssue,
+    CheckReport,
+    CheckResult,
+    CompositionInfo,
+    DependencyInfo,
+    ErrorInfo,
+    FeatureCheck,
+    FeatureInfo,
+    OperationInfo,
+)
 from .error import Error, ErrorConfigurationError, ErrorRegistry, Problem
 from .feature import (
     Composition,
@@ -34,16 +46,26 @@ __all__ = [
     "AlembicMigrations",
     "CanonResponse",
     "CanonRouter",
+    "CheckContext",
+    "CheckIssue",
+    "CheckReport",
+    "CheckResult",
     "Composition",
+    "CompositionInfo",
     "Database",
+    "DependencyInfo",
     "Error",
     "ErrorConfigurationError",
+    "ErrorInfo",
     "ErrorOptions",
     "ErrorRegistry",
     "ExceptionHandlerSpec",
     "Feature",
+    "FeatureCheck",
     "FeatureConfigurationError",
+    "FeatureInfo",
     "HTTPMethod",
+    "OperationInfo",
     "Problem",
     "ProviderFactory",
     "ProviderSource",
