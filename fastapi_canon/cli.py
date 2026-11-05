@@ -27,6 +27,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ("webrtc", "Export WebRTC contracts and generate browser clients"),
         ("check", "Check source contracts or an imported application composition"),
         ("inspect", "Describe an installed application composition"),
+        ("explain", "Explain a built-in source, composition or generation diagnostic"),
         ("generate", "Generate one domain SDK from configured application contracts"),
         ("db", "Manage database revisions with Alembic"),
         ("skill", "Install the bundled backend-building skill in your project"),
@@ -41,6 +42,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         from fastapi_canon.composition_cli import _main as inspect_main
 
         return inspect_main(remaining, inspect=True)
+    elif args.command == "explain":
+        from fastapi_canon.diagnostic_explanations import _main as explain_main
+
+        return explain_main(remaining)
     elif args.command == "skill":
         return _skill_main(remaining)
     elif args.command == "db":
