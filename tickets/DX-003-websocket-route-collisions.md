@@ -80,6 +80,13 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
   Mypy, Ruff lint/format, changed Smelt and full pre-commit including full Smelt
   passed. Standalone distribution/browser matrices were not run for this
   routing-preflight change. Status stays In progress until merge.
+- CI follow-up: reproduced the telemetry compatibility job's missing cached
+  route regex with an installed wheel under Python 3.12/FastAPI 0.143.0.
+  The HTTP collision check now derives a missing regex from the effective
+  declared path, preserving converters. The installed-wheel smoke also checks
+  a late collision after telemetry installation. The full smoke passed on
+  Python 3.12 with FastAPI 0.143.0 and locked 0.143.3; focused routing,
+  introspection and telemetry regressions passed (69 tests).
 - Remaining follow-ups: late WebSocket mutation of an already built application
   is outside this preflight; broader installed transport descriptions/checks
   remain a separate DX-029 decision. Mounted apps remain separate boundaries.

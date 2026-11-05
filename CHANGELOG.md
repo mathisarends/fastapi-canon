@@ -132,6 +132,13 @@ The next release containing the breaking changes below must be 0.16.0.
 - `fastapi-canon check composition` and `fastapi-canon inspect` expose the same
   Python APIs in text or versioned JSON, separately from import-free source checks.
 
+### Fixed
+
+- HTTP path collision checks retain converter matching when native telemetry
+  wrappers in FastAPI 0.143.0 omit their cached route regex. Repeated composition
+  builds and late collision checks reconstruct the regex from the effective
+  declared path instead of failing with an AttributeError.
+
 ### Breaking changes
 
 - Composition preflight validates default-resolver JSON-RPC method `Inject[T]`
