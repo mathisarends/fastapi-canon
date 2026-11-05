@@ -135,6 +135,7 @@ from .errors import PROJECT_MISSING
 from .schemas import ProjectResponse
 
 router = APIRouter(
+    namespace="projects",
     prefix="/projects",
     tags=["projects"],
     route_class=DishkaRoute,
@@ -143,11 +144,10 @@ router = APIRouter(
 
 @router.get(
     "/{project_id}",
-    operation_id="projects.get",
     response_model=ProjectResponse,
     raises=[PROJECT_MISSING],
 )
-async def get_project(
+async def get(
     project_id: int,
     project_service: FromDishka[ProjectService],
 ) -> ProjectResponse:
@@ -161,6 +161,35 @@ auth use `RouterPolicy` with real dependencies; declarations do not authorize
 requests. For empty/binary success use `CanonResponse.empty()` /
 `CanonResponse.binary(...)` and return the matching response. Details:
 [problems.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/problems.md) and [composition.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/composition.md).
+
+## Operation IDs
+
+The router's `namespace="projects"` and handler name `get` produce the OpenAPI
+ID `projects.get` and SDK member `client.projects.get(...)`. Use the same rule
+for HTTP and typed SSE:
+
+- An explicit `operation_id=` wins unchanged. Otherwise Canon uses
+  `<namespace>.<function_name>`, or just `<function_name>` without a namespace.
+  A custom FastAPI `generate_unique_id_function=` replaces this default rule.
+- Choose a stable namespace once per router. URL prefixes, parameter/return
+  types, route `name=` and `Feature.name` do not determine operation IDs.
+  Included Canon routers retain their own naming policy.
+- Renaming a handler changes its automatic ID. To rename `get` to `get_project`
+  while preserving the SDK contract, set `operation_id="projects.get"`.
+  Preserve existing published IDs when adopting namespaces, then regenerate
+  clients if the public names intentionally change.
+- IDs must be unique across schema-visible HTTP/SSE operations. Collisions are
+  configuration errors; never resolve them by automatically adding numbers,
+  URL fragments or method suffixes. Use distinct namespaces, function names or
+  explicit IDs. Repeated mounts and multiple HTTP methods need distinct
+  operation declarations when they represent separate public operations.
+
+Verify the installed `APIRouter` signature before using `namespace=`. For an
+older release without that parameter, retain explicit `operation_id` values.
+Run the [composition and CLI checks](testing.md#composition-and-operation-ids)
+before exporting contracts. See the
+[router guide](https://github.com/mathisarends/fastapi_canon/blob/main/docs/routers.md#automatic-http-and-sse-operation-names)
+for naming and compatibility details.
 
 ## Feature and application composition
 
@@ -193,13 +222,14 @@ from fastapi_canon import APIRouter, Composition, ErrorOptions
 
 from backend.composition import FEATURES
 
+composition = Composition(
+    features=FEATURES,
+    errors=ErrorOptions(type_base="https://api.example.com/problems"),
+    router_factory=lambda: APIRouter(prefix="/api/v1"),
+)
+
 
 def create_app() -> FastAPI:
-    composition = Composition(
-        features=FEATURES,
-        errors=ErrorOptions(type_base="https://api.example.com/problems"),
-        router_factory=lambda: APIRouter(prefix="/api/v1"),
-    )
     return composition.build(FastAPI(title="Projects API"))
 ```
 

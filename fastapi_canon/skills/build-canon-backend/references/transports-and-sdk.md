@@ -17,16 +17,16 @@ from fastapi_canon import APIRouter, Inject, RpcChannel
 
 from backend.features.projects.application import ProjectService
 
-from .errors import PROJECT_MISSING, project_errors
+from .errors import PROJECT_MISSING
 from .schemas import Project, ProjectEvent, RenameProject
 
-router = APIRouter(prefix="/projects")
+router = APIRouter(namespace="projects", prefix="/projects")
 channel = RpcChannel("projects")
 
 
-@router.sse("/events", operation_id="projects.events")
+@router.sse("/events")
 @inject
-async def project_events(
+async def events(
     projects: FromDishka[ProjectService],
 ) -> AsyncIterator[ProjectEvent]:
     async for event in projects.events():
@@ -40,6 +40,11 @@ async def rename(params: RenameProject, projects: Inject[ProjectService]) -> Pro
 
 router.include_channel(channel, path="/rpc")
 ```
+
+The stream exports as `projects.events`. Router `namespace=` names HTTP/SSE
+operations; RPC names still come from `RpcChannel("projects")` and its declared
+methods. Follow the shared [operation naming rules](http-feature.md#operation-ids),
+including explicit overrides and collision handling.
 
 Declare channel operations before inclusion: each mount captures a snapshot.
 Use `@router.webrtc(...)` for managed media sessions after selecting the required
@@ -98,9 +103,12 @@ protocol.
 
 ## One generated domain SDK
 
-Choose stable explicit operation names such as `projects.get`. Feature names and
-folder paths do not define SDK namespaces. Preserve existing public operation
-IDs; use explicit generation mappings when adapting an existing naming contract.
+Use router namespaces and endpoint names to obtain operations such as
+`projects.get` and `projects.events`, following
+[operation naming](http-feature.md#operation-ids). Feature names and folder paths
+do not define SDK namespaces. Preserve existing public operation IDs with
+`operation_id=` when refactoring; use explicit generation mappings when adapting
+an existing naming contract.
 Use shared semantic model identities for the same data across transports, rather
 than assuming structurally similar models are the same type.
 
