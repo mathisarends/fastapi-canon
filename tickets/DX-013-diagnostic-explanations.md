@@ -41,7 +41,7 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
 
 ## Completion
 
-- Implementation or decision PR:
+- Implementation or decision PR: [#94](https://github.com/mathisarends/fastapi-canon/pull/94).
 - Final commit and verification: implementation `54feb8c`. All 24 built-in codes
   have JSON meaning/example/repair/guide coverage; text, unknown/custom codes,
   help and optional-import checks also pass (51 focused unit cases). Combined
