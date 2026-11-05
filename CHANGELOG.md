@@ -8,6 +8,12 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- The bundled `build-canon-backend` skill explains Canon's components and
+  Composition/Dishka wiring through focused references and small examples.
+  `fastapi-canon skill install --force` refreshes complete skill trees from the
+  installed library, restoring missing resources and removing obsolete ones.
+  Upgrade the project's Canon dependency first to obtain a newer bundle.
+
 - A shared root `APIRouter` with typed `sse(...)`, reusable
   `include_channel(..., path=...)` and managed `webrtc(...)` declarations.
   `RpcChannel()` supports anonymous groups and snapshot-based
@@ -43,6 +49,12 @@ The next release containing the breaking changes below must be 0.16.0.
   Python APIs in text or versioned JSON, separately from import-free source checks.
 
 ### Breaking changes
+
+- `fastapi-canon skill install` now creates both
+  `.agents/skills/build-canon-backend` and `.claude/skills/build-canon-backend`.
+  Use `--destination .agents/skills/build-canon-backend` to retain the previous
+  single-directory behavior. Existing destinations still require explicit
+  `--force` to overwrite; keep local customizations outside the managed skill.
 
 - Duplicate HTTP operation IDs now fail composition installation. Assign distinct
   `operation_id` values, including across existing app routes and features.

@@ -95,5 +95,5 @@ foreign SQL repository or presentation module. Treat `platform` as shared runtim
 adapters and `shared` as a small inward vocabulary, rather than a home for
 unrelated behavior. A new abstraction needs concrete use.
 
-See the [reference service](https://github.com/mathisarends/fastapi_canon/tree/fastapi-canon-v0.13.0/examples/reference-service/src/app)
+See the [reference service](https://github.com/mathisarends/fastapi_canon/tree/main/examples/reference-service/src/app)
 for a complete example.

@@ -352,17 +352,30 @@ CI options.
 
 ## Documentation
 
-The next release includes a [`build-canon-backend` skill](fastapi_canon/skills/build-canon-backend/SKILL.md)
+Canon includes a [`build-canon-backend` skill](fastapi_canon/skills/build-canon-backend/SKILL.md)
 for agents working on **your application**. From your backend project, run:
 
 ```console
 uv run fastapi-canon skill install
 ```
 
-This copies the bundled skill to `.agents/skills/build-canon-backend` in your
-project. Use `--destination <skill-directory>` for another agent's skill location.
-Existing destinations are never overwritten. The skill loads focused references
-for folder structure, HTTP features, resources, transports/SDKs and testing.
+The next release installs identical copies, including all references, into
+`.agents/skills/build-canon-backend` and `.claude/skills/build-canon-backend`,
+creating missing directories. Existing destinations require `--force`. To update
+both copies to the bundle shipped with the newest compatible Canon release:
+
+```console
+uv sync --upgrade-package fastapi-canon
+uv run fastapi-canon skill install --force
+```
+
+Installation itself uses the installed Canon version and does not download a
+different skill. `--force` replaces the complete skill directories, removing old
+resources and local edits; keep custom guidance outside those directories.
+Use `--destination <skill-directory>` to install only at a custom location (or
+only `.agents/skills/build-canon-backend` for the previous behavior).
+The skill progressively loads concise references for components and Composition
+wiring, folder structure, HTTP features, resources, transports/SDKs and testing.
 
 | Goal | Start here |
 | --- | --- |
