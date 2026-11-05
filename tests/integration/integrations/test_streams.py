@@ -91,14 +91,9 @@ def test_shared_and_local_raises_are_deduplicated_with_shared_status() -> None:
 @pytest.mark.parametrize(
     ("options", "message"),
     [
-        ({"raises": [run_not_found]}, "requires an error registry"),
         ({"error_registry": object()}, "error_registry must be"),
         ({"error_registry": run_errors, "raises": "invalid"}, "must be a sequence"),
         ({"error_registry": run_errors, "raises": [object()]}, "Error instance"),
-        (
-            {"error_registry": ErrorRegistry(errors=[]), "raises": [run_not_found]},
-            "does not belong",
-        ),
     ],
 )
 def test_invalid_canon_declarations(

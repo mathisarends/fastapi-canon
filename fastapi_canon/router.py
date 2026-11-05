@@ -4,6 +4,7 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from fastapi import APIRouter
+from fastapi.params import Depends
 from fastapi.responses import JSONResponse, Response
 
 from fastapi_canon.error import Error, ErrorConfigurationError, ErrorRegistry
@@ -13,6 +14,7 @@ from fastapi_canon.error.validation import unique_instances
 from fastapi_canon.policy import (
     RouterPolicy,
     merge_policy_registry,
+    normalize_raises,
     validate_policy,
     validate_registry,
 )
@@ -37,11 +39,7 @@ class CanonRouter(APIRouter):
         self.policy = policy
         self.error_registry = error_registry
         self._included_error_registries: list[ErrorRegistry] = []
-        self.raises = _normalize_raises(
-            raises,
-            registry=error_registry,
-            parameter="raises",
-        )
+        self.raises = normalize_raises(raises, parameter="raises")
         self.http_statuses = _normalize_http_statuses(http_statuses)
         if policy is not None:
             self.raises = _distinct((*policy.raises, *self.raises))
@@ -49,6 +47,7 @@ class CanonRouter(APIRouter):
                 *policy.dependencies,
                 *(kwargs.get("dependencies") or ()),
             ]
+        self._register_errors(self.raises)
         super().__init__(**kwargs)
 
     @property
@@ -71,6 +70,23 @@ class CanonRouter(APIRouter):
                 getattr(router, "_canon_error_registries", ())
             )
 
+    def add_api_websocket_route(
+        self,
+        path: str,
+        endpoint: Callable[..., Any],
+        name: str | None = None,
+        *,
+        dependencies: Sequence[Depends] | None = None,
+    ) -> None:
+        registries = (
+            *getattr(endpoint, "_canon_error_registries", ()),
+            *self.error_registries,
+        )
+        endpoint.__dict__["_canon_error_registries"] = tuple(dict.fromkeys(registries))
+        super().add_api_websocket_route(
+            path, endpoint, name=name, dependencies=dependencies
+        )
+
     def api_route[CallableT: Callable[..., Any]](
         self,
         path: str,
@@ -81,11 +97,8 @@ class CanonRouter(APIRouter):
         **kwargs: Any,
     ) -> Callable[[CallableT], CallableT]:
         """Declare a route and compile its inherited and local contracts."""
-        local_raises = _normalize_raises(
-            raises,
-            registry=self.error_registry,
-            parameter="raises",
-        )
+        local_raises = normalize_raises(raises, parameter="raises")
+        self._register_errors(local_raises)
         raw_response: object = response
         if raw_response is not None and not isinstance(raw_response, CanonResponse):
             msg = "response must be a fastapi_canon.CanonResponse instance or None"
@@ -135,6 +148,7 @@ class CanonRouter(APIRouter):
                     dependency_origins,
                     error_origins,
                     endpoint,
+                    self.error_registry,
                 ),
             }
             return super(CanonRouter, self).api_route(path, **configured)(endpoint)
@@ -237,6 +251,18 @@ class CanonRouter(APIRouter):
             "TRACE", path, raises, http_statuses, response, kwargs
         )
 
+    def _register_errors(self, errors: Sequence[AnyError]) -> None:
+        registry = self.error_registry
+        if not errors or (
+            registry is not None and all(registry.contains(error) for error in errors)
+        ):
+            return
+        self.error_registry = ErrorRegistry.merge(
+            *((registry,) if registry is not None else ()),
+            ErrorRegistry(errors=errors),
+            type_base=registry.type_base if registry is not None else None,
+        )
+
     def _method_route[CallableT: Callable[..., Any]](
         self,
         method: str,
@@ -293,28 +319,6 @@ class CanonRouter(APIRouter):
         return {**manual, **canon}
 
 
-def _normalize_raises(
-    values: Sequence[AnyError],
-    *,
-    registry: ErrorRegistry | None,
-    parameter: str,
-) -> tuple[AnyError, ...]:
-    raw_values: object = values
-    if isinstance(raw_values, str) or not isinstance(raw_values, Sequence):
-        msg = f"{parameter} must be a sequence of Error instances"
-        raise ErrorConfigurationError(msg)
-    normalized = tuple(unique_instances(values, Error, parameter=parameter))
-    if normalized and registry is None:
-        msg = f"{parameter} requires an error registry"
-        raise ErrorConfigurationError(msg)
-    if registry is not None:
-        for error in normalized:
-            if not registry.contains(error):
-                msg = f"error {error.code!r} does not belong to this router's registry"
-                raise ErrorConfigurationError(msg)
-    return normalized
-
-
 class _RouteMetadata(dict[str, Any]):
     """Retain declaration provenance across FastAPI route copies without JSON keys."""
 
@@ -324,6 +328,7 @@ class _RouteMetadata(dict[str, Any]):
         dependencies: dict[str, str],
         errors: dict[str, str],
         endpoint: Callable[..., object],
+        registry: ErrorRegistry | None,
     ) -> None:
         super().__init__(values)
         self._dependency_origins = tuple(
@@ -331,6 +336,7 @@ class _RouteMetadata(dict[str, Any]):
         )
         self._error_origins = tuple(errors.items())
         self._endpoint = endpoint
+        self._error_registry = registry
 
 
 def _normalize_responses(value: object) -> OpenAPIResponses:

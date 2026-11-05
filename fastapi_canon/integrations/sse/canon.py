@@ -28,32 +28,23 @@ logger = logging.getLogger(__name__)
 class CanonStreamRouter(CanonRouter, StreamRouter):
     """Typed SSE with Canon HTTP admission and terminal problem contracts."""
 
-    def __init__(
-        self, *, stream_raises: Sequence[AnyError] = (), **options: Any
-    ) -> None:
-        super().__init__(**options)
-        self.stream_raises = normalize_raises(
-            stream_raises, registry=self.error_registry, parameter="stream_raises"
-        )
-
     def stream[Endpoint: Callable[..., Any]](
         self,
         path: str,
         *,
         methods: list[str] | None = None,
-        stream_raises: Sequence[AnyError] = (),
+        raises: Sequence[AnyError] = (),
         **options: Any,
     ) -> Callable[[Endpoint], Endpoint]:
-        """Declare HTTP failures with raises and processing failures with stream_raises.
+        """Declare admission and terminal processing failures with raises.
 
         Normal exhaustion sends canon.complete. Processing failures send a terminal
         canon.problem. Disconnects and cancellation propagate through cleanup.
         """
+        local = normalize_raises(raises, parameter="raises")
+        errors = tuple(dict.fromkeys((*self.raises, *local)))
+        self._register_errors(errors)
         registry = self.error_registry
-        local = normalize_raises(
-            stream_raises, registry=registry, parameter="stream_raises"
-        )
-        errors = tuple(dict.fromkeys((*self.stream_raises, *local)))
         extra = dict(options.pop("openapi_extra", None) or {})
         if "x-canon-stream" in extra:
             raise ErrorConfigurationError(
@@ -65,7 +56,7 @@ class CanonStreamRouter(CanonRouter, StreamRouter):
         }
         options["openapi_extra"] = extra
 
-        register = super().stream(path, methods=methods, **options)
+        register = super().stream(path, methods=methods, raises=local, **options)
 
         def decorate(endpoint: Endpoint) -> Endpoint:
             validate_endpoint(endpoint)

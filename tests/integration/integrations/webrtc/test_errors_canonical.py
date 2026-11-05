@@ -85,9 +85,7 @@ def test_factory_and_dependency_problems_do_not_allocate_peers(
 
 
 def test_shared_local_contracts_use_composed_registry_and_effective_path() -> None:
-    router = CanonWebRtcRouter(
-        engine=NoPeerEngine(), error_registry=ERRORS, raises=[MISSING, MISSING]
-    )
+    router = CanonWebRtcRouter(engine=NoPeerEngine(), raises=[MISSING, MISSING])
 
     @router.session("/{browser_id}", raises=[MISSING, FORBIDDEN, FORBIDDEN])
     async def video(browser_id: str) -> Session:
@@ -104,7 +102,7 @@ def test_shared_local_contracts_use_composed_registry_and_effective_path() -> No
     with pytest.raises(ErrorConfigurationError, match="resolved problem type"):
         build_contract(nested.routes)
     app = Composition(
-        features=(Feature(name="browser", routers=[parent], errors=feature.errors),),
+        features=(Feature(name="browser", routers=[parent]),),
         errors=ErrorOptions(type_base="https://example.test/problems"),
     ).apply(FastAPI())
     contract = build_contract(app)
@@ -126,7 +124,6 @@ def test_router_policy_applies_to_webrtc_admission_and_contract() -> None:
         raise Forbidden()
 
     policy = RouterPolicy(
-        error_registry=ErrorRegistry(errors=[FORBIDDEN]),
         dependencies=[Depends(authorize)],
         raises=[FORBIDDEN],
     )
@@ -160,13 +157,9 @@ def test_router_policy_applies_to_webrtc_admission_and_contract() -> None:
 
 
 def test_invalid_declarations_fail_during_configuration() -> None:
-    with pytest.raises(ErrorConfigurationError, match="requires an error registry"):
-        CanonWebRtcRouter(engine=NoPeerEngine(), raises=[MISSING])
-    router = CanonWebRtcRouter(
-        engine=NoPeerEngine(), error_registry=ErrorRegistry(errors=[MISSING])
-    )
-    with pytest.raises(ErrorConfigurationError, match="does not belong"):
-        router.session("/s", raises=[FORBIDDEN])
+    router = CanonWebRtcRouter(engine=NoPeerEngine(), raises=[MISSING])
+    with pytest.raises(ErrorConfigurationError, match="Error instance"):
+        router.session("/s", raises=[object()])  # type: ignore[list-item]
     with pytest.raises(ErrorConfigurationError, match="derives admission_errors"):
         router.session("/s", admission_errors=lambda app: [])
 

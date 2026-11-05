@@ -540,16 +540,15 @@ def test_feature_collects_error_registry_from_canon_router() -> None:
     assert response.json()["code"] == "item_not_found"
 
 
-def test_shared_router_registry_is_contributed_only_once() -> None:
+def test_shared_error_definition_is_registered_once_across_features() -> None:
     error = Error(
         NotFoundError,
         status=404,
         code="item_not_found",
         title="Item not found",
     )
-    errors = ErrorRegistry(name="items", errors=[error])
-    first = CanonRouter(error_registry=errors)
-    second = CanonRouter(error_registry=errors)
+    first = CanonRouter()
+    second = CanonRouter()
     first.get("/first", raises=[error])(lambda: None)
     second.get("/second", raises=[error])(lambda: None)
 

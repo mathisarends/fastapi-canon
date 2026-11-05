@@ -8,7 +8,7 @@ Python and TypeScript clients raise the same problem types. The complete executa
 ## Define the public error
 
 ```python
-from fastapi_canon import Error, ErrorRegistry
+from fastapi_canon import Error
 
 
 class ProjectMissing(Exception):
@@ -22,10 +22,6 @@ project_missing = Error(
     title="Project not found",
     detail="Choose another project.",
     extensions={"replacement": None},
-)
-errors = ErrorRegistry(
-    errors=[project_missing],
-    type_base="https://api.example.com/problems",
 )
 ```
 
@@ -50,8 +46,8 @@ from pydantic import BaseModel
 
 from fastapi_canon import APIRouter, RpcChannel
 
-router = APIRouter(error_registry=errors)
-projects = RpcChannel("projects", error_registry=errors)
+router = APIRouter()
+projects = RpcChannel("projects")
 
 
 class ProjectEvent(BaseModel):
@@ -79,7 +75,6 @@ async def get_project(project_id: int) -> dict[str, int]:
     tags=["projects"],
     raises=[project_missing],
     dependencies=[Depends(require_project)],
-    stream_raises=[project_missing],
 )
 async def events(project_id: int) -> AsyncIterator[ProjectEvent]:
     yield ProjectEvent(sequence=1)
@@ -92,8 +87,9 @@ async def cancel(params: CancelProject) -> None:
     require_project(params.project_id)
 ```
 
-For SSE, `raises=` documents HTTP admission failures from dependencies;
-`stream_raises=` declares terminal processing failures. A generator's body runs
+Each `raises=` declaration automatically registers its `Error` instances. For SSE,
+the same declaration covers HTTP admission failures from dependencies and terminal
+processing failures. A generator's body runs
 after streaming starts, including the code before its first yield. Put admission
 checks in dependencies. Sync and async generators use the same terminal profile.
 
@@ -106,21 +102,25 @@ exist solely in the JSON-RPC protocol.
 ```python
 from fastapi import FastAPI
 
-from fastapi_canon import Composition, Feature, export_contracts
+from fastapi_canon import Composition, ErrorOptions, Feature, export_contracts
 
 router.include_channel(projects, path="/ws")
 
 app = Composition(
     features=(Feature(name="projects", routers=[router]),),
+    errors=ErrorOptions(type_base="https://api.example.com/problems"),
 ).apply(FastAPI(title="Projects"))
 
 contracts = export_contracts(app, base_url="wss://api.example.com")
 ```
 
-The router contributes one catalog for its HTTP, SSE and RPC operations.
-Composition checks conflicts and installs the resolved application catalog. A
-feature-local registry can omit `type_base` and let
-`Composition(features=features, errors=ErrorOptions(type_base=...))` supply it.
+The router contributes the errors declared by its HTTP, SSE and RPC operations.
+Composition merges definitions by identity, checks conflicts and installs the
+resolved application catalog. Configure the common URI prefix through
+`ErrorOptions(type_base=...)`; an explicit `Error.type` keeps its own URI.
+Use `Feature(errors=ErrorRegistry(...))` or `error_registry=` only for additional
+errors that are not declared anywhere, such as dependency failures. Registration
+alone does not add those errors to an operation's documented contract.
 `export_contracts` reads the composed app, so `contracts.openapi` and
 `contracts.openrpc` use the same resolved type URIs as the runtime responses.
 

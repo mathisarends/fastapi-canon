@@ -149,7 +149,8 @@ async def project_media(project_id: str) -> Session:
 Make these declarations before composing the application. SSE infers its item
 schema and serialization from the return annotation. It sends `canon.complete`
 on normal exhaustion and `canon.problem` for processing failures. Declare
-pre-response failures with `raises=` and stream failures with `stream_raises=`.
+both pre-response failures and terminal stream failures with `raises=`. Errors
+are registered automatically; no separate registry entry is required.
 Perform admission checks in dependencies, before generator execution starts.
 
 `webrtc()` accepts the existing session options: `role`, `media`, `data_channels`,

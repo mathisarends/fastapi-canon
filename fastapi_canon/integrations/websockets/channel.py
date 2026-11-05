@@ -8,7 +8,7 @@ from math import isfinite
 from types import FunctionType
 from typing import Any, overload
 
-from fastapi_canon.error import ErrorRegistry
+from fastapi_canon.error import Error, ErrorRegistry
 from fastapi_canon.integrations.websockets.connection import RpcLimits
 from fastapi_canon.integrations.websockets.dependencies import (
     RpcResolverLike,
@@ -21,7 +21,6 @@ from fastapi_canon.integrations.websockets.errors import (
     RpcError,
     RpcErrorBinding,
     RpcErrorDeclaration,
-    error_declarations,
     merge_error_declarations,
     rejecting_contracts,
 )
@@ -103,9 +102,8 @@ class RpcChannel:
             raise ProtocolDefinitionError("RPC channel name cannot be empty")
         self._namespace = resolved_namespace
         self.error_registry = error_registry
-        self._raises = error_declarations(
-            raises, owner=f"RPC channel {self.name}", registry=error_registry
-        )
+        self._raises: tuple[type[RpcError], ...] = ()
+        self._raises = self._merge_raises(raises, owner=f"RPC channel {self.name}")
         if not callable(resolver_scope):
             raise ProtocolDefinitionError("RPC resolver scope must be callable")
         self._resolver_scope = resolver_scope
@@ -219,10 +217,8 @@ class RpcChannel:
             wire_name = join_rpc_name(
                 channel.namespace, local_name or function.__name__
             )
-            merged_raises = merge_error_declarations(
-                channel.raises,
+            merged_raises = channel._merge_raises(
                 raises,
-                registry=channel.error_registry,
                 owner=f"RPC method {wire_name}",
             )
             channel._reserve(wire_name)
@@ -286,10 +282,8 @@ class RpcChannel:
             wire_name = join_rpc_name(
                 channel.namespace, _name(name or function.__name__, "event name")
             )
-            merged_raises = merge_error_declarations(
-                channel.raises,
+            merged_raises = channel._merge_raises(
                 raises,
-                registry=channel.error_registry,
                 owner=f"RPC event {wire_name}",
             )
             definition = notification_definition(
@@ -365,10 +359,8 @@ class RpcChannel:
                     raise ProtocolDefinitionError(
                         "Content types apply only to binary streams"
                     )
-                merged_raises = merge_error_declarations(
-                    channel.raises,
+                merged_raises = channel._merge_raises(
                     raises,
-                    registry=channel.error_registry,
                     owner=f"RPC stream {wire_name}",
                 )
                 message_stream = subscription_definition(
@@ -507,14 +499,10 @@ class RpcChannel:
             join_rpc_name(self.name, local),
             namespace=join_rpc_name(self.namespace, local),
             error_registry=self.error_registry,
-            raises=merge_error_declarations(
-                self.raises,
-                raises,
-                registry=self.error_registry,
-                owner=f"RPC channel {join_rpc_name(self.name, local)}",
-            ),
+            raises=self.raises,
             resolver_scope=resolver_scope or self.resolver_scope,
         )
+        child._raises = child._merge_raises(raises, owner=f"RPC channel {child.name}")
         self._children.append(child)
         return child
 
@@ -631,6 +619,24 @@ class RpcChannel:
             strict_errors=strict_errors,
             middleware=middleware,
         )
+
+    def _merge_raises(
+        self, raises: Iterable[RpcErrorDeclaration], *, owner: str
+    ) -> tuple[type[RpcError], ...]:
+        declarations = tuple(raises)
+        canonical = tuple(error for error in declarations if isinstance(error, Error))
+        registry = self.error_registry
+        if canonical:
+            registry = ErrorRegistry.merge(
+                *((registry,) if registry is not None else ()),
+                ErrorRegistry(errors=canonical),
+                type_base=registry.type_base if registry is not None else None,
+            )
+        result = merge_error_declarations(
+            self.raises, declarations, owner=owner, registry=registry
+        )
+        self.error_registry = registry
+        return result
 
     def _reserve(self, name: str) -> None:
         included_controls = set().union(

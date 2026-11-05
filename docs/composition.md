@@ -111,11 +111,11 @@ feature boundary. Composition adds their Dishka decorators only when telemetry
 is enabled; the original providers remain usable directly. See the
 [telemetry guide](telemetry.md) for configuration and migration from `observe()`.
 
-When `errors=` is omitted, a feature collects the registries referenced by its
-direct router contributions. Supplying `errors=` remains available when
-ownership must be explicit, such as a registry used by routers in another
-feature. Repeated contributions of the same definitions are merged once at the
-application boundary.
+Features automatically collect `Error` definitions from `raises=` declarations
+and explicit registries on their routers, including nested routers and channels.
+Use `errors=ErrorRegistry(...)` for additional errors that are not declared
+anywhere. Repeated references to the same definitions are merged by identity at
+the application boundary; collisions between different definitions still fail.
 
 Mutable sequences passed to `Feature` are copied to tuples. Installing features
 preserves declaration order for routes and startup. Shutdown runs in reverse
@@ -161,7 +161,6 @@ from fastapi import Depends
 from fastapi_canon import APIRouter, Composition, RouterPolicy
 
 protected = RouterPolicy(
-    error_registry=authentication_errors,
     dependencies=[Depends(require_authenticated_user)],
     raises=[authentication_required, forbidden],
 )
@@ -171,7 +170,6 @@ projects = APIRouter(
     tags=["projects"],
     route_class=DishkaRoute,
     policy=protected,
-    error_registry=project_errors,
 )
 
 
@@ -182,10 +180,9 @@ async def get_project(project_id: int) -> ProjectResponse: ...
 The application supplies the authentication dependency and error definitions.
 Dependencies execute through FastAPI; `raises` documents HTTP failures and does
 not itself enforce authentication. Policies copy their input sequences to tuples.
-A dependency-only policy needs no error registry. Policy errors must belong to
-the policy's own registry. Router and operation errors may use the merged policy
-and router catalog. The merge keeps the existing registry collision checks and
-deduplicates identical Error instances. Policy errors precede router and local
+Policy, router and operation `raises` automatically register their errors; no
+explicit registry is required. The merge keeps the existing registry collision
+checks and deduplicates identical Error instances. Policy errors precede router and local
 errors; local declarations extend the shared contract. Policy dependencies run
 before local router dependencies, with FastAPI's normal dependency caching.
 
@@ -265,9 +262,9 @@ ports remain visible as incomplete. This checks direct `APIRouter` HTTP
 operations; SSE, RPC and WebRTC handlers are outside its current scope.
 
 Error contracts are implemented directly by `fastapi-canon`; no separate error
-library is required. Each feature may expose one `ErrorRegistry`. Registries are
-merged and installed once, so runtime RFC 9457 Problem Details and OpenAPI use
-the same definitions:
+library is required. Declare `Error` definitions with `raises=`; Composition
+collects and installs them once, so runtime RFC 9457 Problem Details and OpenAPI
+use the same definitions. Explicit registries add errors not declared elsewhere:
 
 ```python
 from fastapi_canon import (
@@ -275,7 +272,6 @@ from fastapi_canon import (
     Composition,
     Error,
     ErrorOptions,
-    ErrorRegistry,
     Feature,
 )
 
@@ -292,31 +288,13 @@ project_not_found = Error(
     detail="The requested project does not exist.",
 )
 
-project_errors = ErrorRegistry(
-    name="projects",
-    errors=[project_not_found],
-)
-
 projects = APIRouter(
     prefix="/projects",
     tags=["projects"],
-    error_registry=project_errors,
 )
-
-project_feature = Feature(
-    name="projects",
-    routers=[projects],
-)
-
-app = Composition(
-    features=(project_feature,),
-    errors=ErrorOptions(
-        type_base="https://api.example.com/problems",
-    ),
-).apply(FastAPI())
 ```
 
-Declare operation failures from the same registry used at runtime:
+Declare operation failures directly, then compose the application:
 
 ```python
 @projects.get(
@@ -325,6 +303,13 @@ Declare operation failures from the same registry used at runtime:
 )
 async def get_project(project_id: str) -> dict[str, str]:
     raise ProjectNotFound(project_id)
+
+
+project_feature = Feature(name="projects", routers=[projects])
+app = Composition(
+    features=(project_feature,),
+    errors=ErrorOptions(type_base="https://api.example.com/problems"),
+).apply(FastAPI())
 ```
 
 Document normalized `HTTPException` statuses with `http_statuses=[403]` on the
@@ -415,15 +400,14 @@ match unrelated programming failures.
 ### Shared and operation errors
 
 Errors shared by a router context are declared once on the router; errors that
-belong to one operation are declared on that operation. Give the router its
-registry through `error_registry=`:
+belong to one operation are declared on that operation. Each declaration also
+registers its error definitions:
 
 ```python
 from fastapi_canon import APIRouter
 
 router = APIRouter(
     prefix="/sessions",
-    error_registry=session_errors,
     raises=[authentication_required, session_not_found],
 )
 
@@ -444,9 +428,10 @@ FastAPI's internal route tree. The standard `get`, `put`, `post`, `delete`,
 `options`, `head`, `patch`, and `trace` decorators support `raises=` and
 `response=`; `api_route()` supports them for custom method sets.
 
-The error registry is optional for success-only routers, but any `raises=`
-declaration requires one. Every declared error must belong to that exact
-registry. The same error declared at both levels is included only once.
+An explicit error registry is optional. `raises=` contributes definitions to the
+application catalog automatically. The same error declared at both levels is
+included only once; explicit registry entries add mappings without declaring
+them on every operation.
 Router-level `raises=` applies to operations declared on that router, not to
 separately included child routers; use a [composition policy](#router-policies)
 for contracts across routers.
@@ -457,8 +442,8 @@ Canon rejects mismatched status codes, bodyless responses with an explicit
 declarations at route declaration time. Other FastAPI decorator options continue
 to pass through unchanged.
 
-Contracts are checked in two places. Each declaration is validated against its
-router's registry when the route is registered, including routes excluded with
+Contracts are checked in two places. Each declaration validates its error
+definitions when the route is registered, including routes excluded with
 `include_in_schema=False`. `Composition.check(app)` and `apply(app)` then compile
 every installed operation against the composed error catalog on a temporary
 application, before anything is installed; a mismatch is reported as
@@ -485,8 +470,7 @@ from fastapi import Depends
 
 @router.sse(
     "/{session_id}/events",
-    raises=[session_not_found],
-    stream_raises=[session_closed],
+    raises=[session_not_found, session_closed],
     dependencies=[Depends(require_existing_session)],
     operation_id="sessions.events",
 )
@@ -496,9 +480,9 @@ async def session_events(session_id: str) -> AsyncIterator[SessionEvent]:
 ```
 
 Run HTTP preconditions in dependencies: even generator code before the first
-`yield` runs after the response starts. `raises=` documents HTTP problems
-returned before the stream starts; `stream_raises=` declares terminal domain
-problems during processing. Generated iterators yield business events, consume
+`yield` runs after the response starts. `raises=` registers and documents the
+errors for both phases: an HTTP problem before response start, or a terminal
+`canon.problem` during processing. Generated iterators yield business events, consume
 completion frames and raise `ProblemError` for declared terminal problems.
 Connection failures remain transport errors. See
 [shared problem bindings](problems.md).

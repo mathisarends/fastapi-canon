@@ -27,8 +27,8 @@ then generates Python and TypeScript consumers from them.
 | `RpcChannel("projects").method()` decorating `cancel` | OpenRPC | `client.projects.cancel(...)` | WebSocket connection, request IDs, response correlation and declared errors. |
 
 An SSE endpoint's return annotation supplies the event schema; it does not need
-a second handwritten client model. `raises=` describes HTTP admission errors,
-while `stream_raises=` describes terminal failures after the stream starts. The
+a second handwritten client model. `raises=` automatically registers errors and
+describes both HTTP admission errors and terminal stream failures. The
 generated iterator yields business events, consumes `canon.complete`, and raises
 `ProblemError` for `canon.problem`. EOF without completion is a `TransportError`.
 See [stream contracts](streams.md).

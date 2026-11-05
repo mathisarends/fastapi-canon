@@ -30,7 +30,7 @@ class CanonWebRtcRouter(CanonRouter, WebRtcRouter):
     """Reuse Canon errors for pre-accept HTTP admission contracts.
 
     Declare errors from dependencies and the factory with ``raises``. This
-    documents failures and validates membership; it is not an exception allowlist.
+    registers and documents failures; it is not an exception allowlist.
     Once accepted, failures use WebRTC's protocol and lifecycle instead of HTTP.
     """
 
@@ -54,11 +54,10 @@ class CanonWebRtcRouter(CanonRouter, WebRtcRouter):
         declared = _distinct(
             (
                 *self.raises,
-                *_normalize_raises(
-                    raises, registry=self.error_registry, parameter="raises"
-                ),
+                *_normalize_raises(raises, parameter="raises"),
             )
         )
+        self._register_errors(declared)
 
         def contracts(app: FastAPI | None) -> Sequence[Mapping[str, Any]]:
             registry = self.error_registry

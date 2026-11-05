@@ -10,9 +10,11 @@ from fastapi.testclient import TestClient
 from fastapi_canon import (
     CanonResponse,
     CanonRouter,
+    Composition,
     Error,
     ErrorConfigurationError,
     ErrorRegistry,
+    Feature,
     HTTPMethod,
     ResponseConfigurationError,
 )
@@ -83,6 +85,33 @@ def test_router_composes_shared_and_operation_contracts() -> None:
     assert responses["409"]["content"]["application/problem+json"]["schema"] == {
         "$ref": "#/components/schemas/PlaylistEmptyProblem"
     }
+
+
+@pytest.mark.parametrize("explicit_registry", [False, True])
+def test_auto_registration_preserves_inheritance_and_operation_local_errors(
+    explicit_registry: bool,
+) -> None:
+    router = CanonRouter(
+        raises=[AUTHENTICATION_REQUIRED],
+        error_registry=(
+            ErrorRegistry(errors=[AUTHENTICATION_REQUIRED])
+            if explicit_registry
+            else None
+        ),
+    )
+    router.get("/tasks")(lambda: [])
+    router.post("/tasks/completion", raises=[SESSION_NOT_FOUND])(lambda: None)
+    app = Composition(features=[Feature(name="tasks", routers=[router])]).apply(
+        FastAPI()
+    )
+    paths = app.openapi()["paths"]
+    list_responses = paths["/tasks"]["get"]["responses"]
+    completion_responses = paths["/tasks/completion"]["post"]["responses"]
+    assert "401" in list_responses
+    assert "404" not in list_responses
+    assert set(completion_responses) >= {"401", "404"}
+    assert router.error_registry is not None
+    assert router.error_registry.errors == (AUTHENTICATION_REQUIRED, SESSION_NOT_FOUND)
 
 
 def test_response_status_becomes_the_route_status() -> None:
@@ -186,9 +215,10 @@ def test_http_method_enum_works_with_rest_routes(method: HTTPMethod) -> None:
     assert method.value.lower() in app.openapi()["paths"]["/method"]
 
 
-def test_raises_requires_a_registry() -> None:
-    with pytest.raises(ErrorConfigurationError, match="requires an error registry"):
-        CanonRouter(raises=[SESSION_NOT_FOUND])
+def test_raises_registers_errors_without_an_explicit_registry() -> None:
+    router = CanonRouter(raises=[SESSION_NOT_FOUND])
+    assert router.error_registry is not None
+    assert router.error_registry.errors == (SESSION_NOT_FOUND,)
 
 
 def test_error_registry_rejects_invalid_value() -> None:
@@ -196,11 +226,11 @@ def test_error_registry_rejects_invalid_value() -> None:
         CanonRouter(error_registry=object())  # type: ignore[arg-type]
 
 
-def test_raises_rejects_foreign_errors_at_declaration_time() -> None:
+def test_raises_rejects_conflicting_errors_at_declaration_time() -> None:
     foreign = error(SessionNotFound, 404, "foreign_session")
     router = CanonRouter(error_registry=SESSION_ERRORS)
 
-    with pytest.raises(ErrorConfigurationError, match="does not belong"):
+    with pytest.raises(ErrorConfigurationError, match="conflicting exception class"):
         router.get("/session", raises=[foreign])
 
 

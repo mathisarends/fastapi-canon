@@ -360,6 +360,7 @@ class _Checker:
         declared.update(
             self._errors(_keyword(decorator, "raises"), function.module, operation)
         )
+        catalog.update(declared)
         contracts_known = not operation.diagnostics
         flow = self._analyzer.function(function)
         flow.extend(self._dependencies(function))
@@ -394,7 +395,7 @@ class _Checker:
             message = (
                 f"{escape.exception}: {mapped} is missing from raises"
                 if mapped
-                else f"{escape.exception}: no Error mapping in the router registry"
+                else f"{escape.exception}: no Error mapping in raises or the router registry"
             )
             origin = self.source.definitions[escape.trace[-1]]
             operation.diagnostics.append(
