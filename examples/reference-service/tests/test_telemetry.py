@@ -1,5 +1,5 @@
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
@@ -92,7 +92,10 @@ async def test_endpoint_trace_contracts_and_payload_privacy(
             )
             capture.clear()
 
-            assert client.post(f"/api/v1/tasks/{uuid4()}/completion").status_code == 404
+            assert (
+                client.post(f"/api/v1/tasks/{UUID(int=1)}/completion").status_code
+                == 404
+            )
             span = capture.one("TaskService.complete")
             assert span.status.status_code.name == "UNSET"
             assert span.events[0].name == "canon.port.expected_exception"

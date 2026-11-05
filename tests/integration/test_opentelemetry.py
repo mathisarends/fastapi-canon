@@ -5,7 +5,7 @@ import textwrap
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from dataclasses import FrozenInstanceError
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import pytest
 from dishka import FromDishka, Provider, Scope, make_async_container, provide
@@ -166,7 +166,7 @@ def test_trace_tree_attributes_parent_context_and_cleanup() -> None:
     global_provider = trace.get_tracer_provider()
     with SpanCapture() as capture:
         app = application(Telemetry(tracer_provider=capture.provider, logs=False))
-        key = uuid4()
+        key = UUID(int=1)
         parent = "00-12345678901234567890123456789012-1234567890123456-01"
         with TestClient(app) as client:
             assert (
@@ -219,7 +219,7 @@ def test_expected_and_unexpected_failures(
     with SpanCapture() as capture:
         app = application(Telemetry(tracer_provider=capture.provider, logs=False))
         with TestClient(app, raise_server_exceptions=False) as client:
-            assert client.get(f"/items/{uuid4()}?fail={fail}").status_code == status
+            assert client.get(f"/items/{UUID(int=1)}?fail={fail}").status_code == status
         server = capture.one("GET /items/{key}")
         assert (
             server.attributes is not None
@@ -283,7 +283,7 @@ def test_exclusion_and_operation_switch() -> None:
         with TestClient(app) as client:
             client.get("/http")
             assert not capture.spans
-            client.get(f"/items/{uuid4()}")
+            client.get(f"/items/{UUID(int=1)}")
         capture.assert_tree("GET /items/{key}", [("Service.run", ["Repository.get"])])
         assert len(calls) == 2
         assert not any(span.name.startswith("fastapi.") for span in capture.spans)
@@ -302,7 +302,7 @@ def test_metrics_only_no_arguments_in_metric_labels() -> None:
             )
         )
         with TestClient(app) as client:
-            client.get(f"/items/{uuid4()}")
+            client.get(f"/items/{UUID(int=1)}")
         assert not capture.spans
     data = reader.get_metrics_data()
     assert data is not None
@@ -329,7 +329,7 @@ def test_metrics_only_no_arguments_in_metric_labels() -> None:
 def test_disabled_metadata_keeps_original_instances() -> None:
     app = application(None)
     with TestClient(app) as client:
-        assert client.get(f"/items/{uuid4()}").status_code == 200
+        assert client.get(f"/items/{UUID(int=1)}").status_code == 200
     assert isinstance(app.state.closed[0], MemoryRepository)
 
 
@@ -374,7 +374,7 @@ def test_combined_groups_keep_expected_failures_independent() -> None:
             ):
                 service = await request.get(Service)
                 with pytest.raises(Missing):
-                    await service.run(uuid4(), fail="expected")
+                    await service.run(UUID(int=1), fail="expected")
 
         asyncio.run(run())
         assert capture.one("Repository.get").status.status_code is StatusCode.UNSET
@@ -429,7 +429,7 @@ def test_feature_reuse_keeps_providers_and_app_telemetry_isolated() -> None:
                 first_repository = await containers[0].get(Repository)
                 second_repository = await containers[1].get(Repository)
                 assert first_repository is not second_repository
-                key = uuid4()
+                key = UUID(int=1)
                 assert await first_repository.get(key) == str(key)
                 assert len(first.spans) == 1 and not second.spans
                 assert await second_repository.get(key) == str(key)
@@ -453,7 +453,7 @@ def test_feature_reuse_keeps_providers_and_app_telemetry_isolated() -> None:
 def test_inherited_async_call_preserves_result_and_parentage() -> None:
     with SpanCapture() as capture:
         app = callable_application(Telemetry(tracer_provider=capture.provider))
-        key = uuid4()
+        key = UUID(int=1)
         with TestClient(app) as client:
             response = client.get(f"/callable/{key}")
         assert response.status_code == 200 and response.json() == str(key)
@@ -480,7 +480,9 @@ def test_async_call_keeps_exception_classification_and_privacy(
     with SpanCapture() as capture:
         app = callable_application(Telemetry(tracer_provider=capture.provider))
         with TestClient(app, raise_server_exceptions=False) as client:
-            assert client.get(f"/callable/{uuid4()}?fail={fail}").status_code == status
+            assert (
+                client.get(f"/callable/{UUID(int=1)}?fail={fail}").status_code == status
+            )
         span = capture.one("CallableService.__call__")
         assert span.status.status_code is span_status
         assert len(span.events) == 1 and span.events[0].name == event
@@ -500,7 +502,7 @@ def test_async_call_cancellation_propagates_without_error() -> None:
             async with app.state.dishka_container() as request:
                 service = await request.get(CallableService)
                 with pytest.raises(asyncio.CancelledError):
-                    await service(uuid4(), fail="cancel")
+                    await service(UUID(int=1), fail="cancel")
 
         with TestClient(app) as client:
             assert client.portal is not None
@@ -527,7 +529,7 @@ def test_async_call_metrics_only_and_request_exclusion(exclude: bool) -> None:
                 )
             )
             with TestClient(app) as client:
-                assert client.get(f"/callable/{uuid4()}").status_code == 200
+                assert client.get(f"/callable/{UUID(int=1)}").status_code == 200
             assert not capture.spans
             data = reader.get_metrics_data()
             if exclude:
@@ -711,7 +713,7 @@ def test_provider_scopes_caching_and_original_cleanup() -> None:
             container = app.state.dishka_container
             first = await container.get(Repository)
             assert await container.get(Repository) is first
-            await first.get(uuid4())
+            await first.get(UUID(int=1))
             assert type(first) is not MemoryRepository
 
         with TestClient(app) as client:
@@ -735,7 +737,7 @@ def test_request_exclusion_suppresses_port_spans_and_metrics() -> None:
             )
         )
         with TestClient(app) as client:
-            assert client.get(f"/items/{uuid4()}").status_code == 200
+            assert client.get(f"/items/{UUID(int=1)}").status_code == 200
         assert not capture.spans
         data = reader.get_metrics_data()
         assert data is None or not any(
@@ -755,7 +757,7 @@ def test_cancellation_propagates_without_error() -> None:
             async with app.state.dishka_container() as request:
                 repository = await request.get(Repository)
                 with pytest.raises(asyncio.CancelledError):
-                    await repository.get(uuid4(), fail="cancel")
+                    await repository.get(UUID(int=1), fail="cancel")
 
         with TestClient(app) as client:
             assert client.portal is not None
@@ -775,7 +777,7 @@ def test_opt_out_of_problem_enrichment_and_port_spans() -> None:
             )
         )
         with TestClient(app) as client:
-            assert client.get(f"/items/{uuid4()}?fail=expected").status_code == 404
+            assert client.get(f"/items/{UUID(int=1)}?fail=expected").status_code == 404
         assert not any(
             span.name in {"Service.run", "Repository.get"} for span in capture.spans
         )
@@ -849,8 +851,8 @@ def test_named_components_keep_feature_ownership() -> None:
 
         async def resolve() -> None:
             container = app.state.dishka_container
-            await (await container.get(Repository)).get(uuid4())
-            await (await container.get(Repository, component="named")).get(uuid4())
+            await (await container.get(Repository)).get(UUID(int=1))
+            await (await container.get(Repository, component="named")).get(UUID(int=1))
 
         with TestClient(app) as client:
             assert client.portal is not None

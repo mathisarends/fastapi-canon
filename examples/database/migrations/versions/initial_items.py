@@ -3,7 +3,10 @@
 import sqlalchemy as sa
 from alembic import op
 
-__all__ = ["downgrade", "upgrade"]
+__all__ = [
+    "downgrade",
+    "upgrade",
+]
 
 revision = "20261102_items"
 down_revision = None
