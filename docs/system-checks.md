@@ -95,7 +95,7 @@ Database/deployment probes remain explicit operations outside this profile.
 
 ```python
 description = composition.inspect(app)
-operation = description.operation("projects.get")
+operation = description.operation(get_project)
 
 assert operation.feature_name == "projects"
 assert operation.path == "/projects/{project_id}"
@@ -113,7 +113,11 @@ contains its operations and qualified provider-source names. Each `OperationInfo
 contains its feature, effective path, HTTP methods, operation ID, schema visibility,
 dependencies and declared HTTP errors. Prefixes from nested routers and
 `router_factory` are included. Hidden HTTP routes remain visible with
-`include_in_schema=False`. Operation lookup rejects missing or ambiguous IDs.
+`include_in_schema=False`. Use `operation(endpoint)` for Python symbol references
+and `operation_by_id("projects.get")` for external IDs. Both reject missing or
+ambiguous matches. Callable lookup uses identity and never invokes the endpoint;
+decorated routes use the callable registered with the router. Runtime lookup
+references are excluded from dataclass/JSON exports.
 
 Origins distinguish `application`, `composition.router_policy`,
 `composition.router_factory`, `router.include_router`, `router.policy`, `router`,
@@ -122,7 +126,7 @@ Plain FastAPI response metadata without a Canon declaration uses `route` for
 its error origin. These describe provenance, not an authentication property.
 
 Canon records provenance automatically without adding implementation fields to
-exported OpenAPI. Values contain names and public contract metadata, not routers,
+exported OpenAPI. Exported values contain names and public contract metadata, not routers,
 provider objects, service instances, credentials or configuration values.
 The description is a detached snapshot recorded during installation. Later router
 mutations do not rewrite it; build a new application for a new composition.

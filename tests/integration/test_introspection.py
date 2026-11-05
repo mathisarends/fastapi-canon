@@ -1,4 +1,6 @@
+import json
 from dataclasses import FrozenInstanceError, asdict
+from functools import wraps
 
 import pytest
 from fastapi import APIRouter, Depends, FastAPI
@@ -64,7 +66,7 @@ def test_snapshot_records_effective_paths_dependencies_and_error_origins() -> No
     app = composition.apply(FastAPI())
 
     snapshot = composition.inspect(app)
-    operation = snapshot.operation("projects.get")
+    operation = snapshot.operation_by_id("projects.get")
 
     assert operation.feature_name == "projects"
     assert operation.path == "/api/v1/projects/{project_id}"
@@ -97,7 +99,9 @@ def test_snapshot_records_effective_paths_dependencies_and_error_origins() -> No
         operation.path = "/changed"
     copied = asdict(snapshot)
     copied["operations"][0]["path"] = "/changed"
-    assert snapshot.operation("projects.get").path == "/api/v1/projects/{project_id}"
+    assert (
+        snapshot.operation_by_id("projects.get").path == "/api/v1/projects/{project_id}"
+    )
     with TestClient(app) as client:
         assert client.get("/api/v1/projects/1").json() == {"id": "1"}
     document = app.openapi()
@@ -125,8 +129,8 @@ def test_nested_router_prefixes_and_hidden_routes_are_described() -> None:
     app = composition.apply(FastAPI())
 
     info = composition.inspect(app)
-    operation = info.operation("projects.list")
-    hidden = info.operation("projects.internal")
+    operation = info.operation_by_id("projects.list")
+    hidden = info.operation_by_id("projects.internal")
 
     assert operation.path == "/api/workspace/v2/projects"
     assert operation.dependencies[0].origin == "router.policy"
@@ -151,7 +155,7 @@ def test_inspect_requires_the_matching_installation_and_keeps_a_snapshot() -> No
         "first",
     )
     with pytest.raises(LookupError, match="found 0"):
-        snapshot.operation("later")
+        snapshot.operation_by_id("later")
     with pytest.raises(FeatureConfigurationError, match="must be applied"):
         Composition().inspect(app)
 
@@ -167,7 +171,7 @@ def test_application_and_factory_dependencies_keep_their_origins() -> None:
         ),
     )
     composition.apply(app)
-    operation = composition.inspect(app).operation("projects.list")
+    operation = composition.inspect(app).operation_by_id("projects.list")
     assert operation.path == "/api/projects"
     assert [
         (dep.name.rsplit(".", 1)[-1], dep.origin) for dep in operation.dependencies
@@ -198,7 +202,7 @@ def test_path_converters_share_openapi_paths_and_policy_contracts() -> None:
         router_policy=RouterPolicy(error_registry=registry, raises=[failure]),
     )
     app = composition.apply(FastAPI())
-    operation = composition.inspect(app).operation("files.get")
+    operation = composition.inspect(app).operation_by_id("files.get")
     assert operation.path == "/files/{path}"
     assert operation.errors[0].code == "authentication_required"
     assert "401" in app.openapi()["paths"][operation.path]["get"]["responses"]
@@ -215,3 +219,53 @@ def test_mounted_applications_keep_their_own_ownership_boundary() -> None:
     description = composition.inspect(app)
     assert tuple(op.operation_id for op in description.operations) == ("projects.list",)
     assert composition.check(app).complete
+
+
+def test_endpoint_lookup_uses_the_registered_symbol_and_keeps_exports_data_only() -> (
+    None
+):
+    calls: list[str] = []
+
+    def get_project() -> str:
+        calls.append("called")
+        return "project"
+
+    @wraps(get_project)
+    def wrapped_project() -> str:
+        return get_project()
+
+    child = CanonRouter(prefix="/projects")
+    child.get("/current", operation_id="projects.get")(wrapped_project)
+    parent = APIRouter(prefix="/v1")
+    parent.include_router(child)
+    composition = Composition(features=(Feature(name="projects", routers=[parent]),))
+    app = composition.apply(FastAPI())
+    description = composition.inspect(app)
+
+    operation = description.operation(wrapped_project)
+    assert operation.path == "/v1/projects/current"
+    assert operation is description.operation_by_id("projects.get")
+    assert calls == []
+    with pytest.raises(LookupError, match="found 0"):
+        description.operation(get_project)
+    exported = asdict(description)
+    assert set(exported) == {"features", "operations"}
+    assert (
+        json.loads(json.dumps(exported))["operations"][0]["operation_id"]
+        == "projects.get"
+    )
+
+
+def test_endpoint_lookup_reports_every_ambiguous_registration() -> None:
+    def get_project() -> str:
+        return "project"
+
+    router = CanonRouter()
+    router.get("/projects", operation_id="projects.get")(get_project)
+    router.get("/archive", operation_id="archive.get")(get_project)
+    composition = Composition(features=(Feature(name="projects", routers=[router]),))
+    description = composition.inspect(composition.apply(FastAPI()))
+
+    with pytest.raises(LookupError, match="found 2: GET /projects, GET /archive"):
+        description.operation(get_project)
+    assert description.operation_by_id("archive.get").path == "/archive"

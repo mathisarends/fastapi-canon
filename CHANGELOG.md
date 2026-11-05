@@ -30,6 +30,8 @@ The next release containing the breaking changes below must be 0.16.0.
   synchronous checks over immutable composition descriptions.
 - `Composition.inspect(app)` explains installed HTTP operations, feature ownership,
   effective prefixes, provider-source names and dependency/error provenance.
+  Look up operations by endpoint symbol with `operation(endpoint)` or by public
+  ID with the explicit `operation_by_id(...)` method.
 - `fastapi-canon check composition` and `fastapi-canon inspect` expose the same
   Python APIs in text or versioned JSON, separately from import-free source checks.
 

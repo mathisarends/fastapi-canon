@@ -50,4 +50,10 @@ def test_operation_lookup_rejects_missing_or_ambiguous_ids(count: int) -> None:
     operation = OperationInfo("projects", "projects.get", "/projects", ("GET",))
     snapshot = CompositionInfo((), (operation,) * count)
     with pytest.raises(LookupError, match=f"found {count}"):
-        snapshot.operation("projects.get")
+        snapshot.operation_by_id("projects.get")
+
+
+def test_callable_lookup_requires_a_symbol_instead_of_a_string() -> None:
+    snapshot = CompositionInfo((), ())
+    with pytest.raises(TypeError, match="operation_by_id"):
+        snapshot.operation("projects.get")  # type: ignore[arg-type]  # Verify invalid runtime input.

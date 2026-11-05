@@ -1,7 +1,7 @@
 """Immutable composition descriptions and system-check results."""
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import InitVar, dataclass
 from typing import Literal
 
 
@@ -44,15 +44,48 @@ class FeatureInfo:
         _freeze_sequences(self, "operations", "providers")
 
 
+class _EndpointIndex:
+    __slots__ = ("_endpoints",)
+
+    _endpoints: tuple[Callable[..., object], ...]
+
+
 @dataclass(frozen=True, slots=True)
-class CompositionInfo:
+class CompositionInfo(_EndpointIndex):
     features: tuple[FeatureInfo, ...]
     operations: tuple[OperationInfo, ...]
+    endpoints: InitVar[tuple[Callable[..., object], ...]] = ()
 
-    def __post_init__(self) -> None:
+    def __post_init__(self, endpoints: tuple[Callable[..., object], ...]) -> None:
         _freeze_sequences(self, "features", "operations")
+        if endpoints and len(endpoints) != len(self.operations):
+            raise ValueError(
+                "Endpoint references must match the operation descriptions"
+            )
+        object.__setattr__(self, "_endpoints", tuple(endpoints))
 
-    def operation(self, operation_id: str) -> OperationInfo:
+    def operation(self, endpoint: Callable[..., object]) -> OperationInfo:
+        """Look up a registered callable by identity without invoking it."""
+        if not callable(endpoint):
+            raise TypeError(
+                "operation() requires an endpoint callable; use operation_by_id() for IDs"
+            )
+        matches = tuple(
+            operation
+            for candidate, operation in zip(
+                self._endpoints, self.operations, strict=False
+            )
+            if candidate is endpoint
+        )
+        if len(matches) != 1:
+            locations = ", ".join(f"{'|'.join(op.methods)} {op.path}" for op in matches)
+            raise LookupError(
+                f"Expected one operation for endpoint, found {len(matches)}"
+                + (f": {locations}" if locations else "")
+            )
+        return matches[0]
+
+    def operation_by_id(self, operation_id: str) -> OperationInfo:
         """Find exactly one operation; never silently choose an ambiguous ID."""
         matches = tuple(op for op in self.operations if op.operation_id == operation_id)
         if len(matches) != 1:
