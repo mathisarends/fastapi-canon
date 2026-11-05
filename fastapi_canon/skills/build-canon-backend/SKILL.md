@@ -1,6 +1,6 @@
 ---
 name: build-canon-backend
-description: Build, extend or review an application using the installed fastapi-canon library. Use for backend folder structure, feature slices, Dishka wiring, typed HTTP/error contracts, resource scopes and generated SDKs. Intended for Canon consumers, not library maintenance.
+description: Build, extend or review FastAPI Canon applications with feature slices, Composition and Dishka wiring, typed contracts, resource scopes and generated SDKs. Use for Canon consumers, not library maintenance or plain FastAPI projects without Canon.
 ---
 
 # Build a Canon backend
@@ -12,21 +12,23 @@ and assemble them explicitly with `Feature` and `Composition`.
 
 1. Read the application's instructions, dependency pins and architecture policy.
    Use its architecture tooling when configured; do not assume Smelt is installed.
-2. Check the installed Canon version and use its matching documentation. These
-   examples and linked guides target Canon 0.13.0; verify APIs before using them
-   with another version. The Canon source checkout is not required.
+2. Run `uv run fastapi-canon --version` and verify the APIs in that environment.
+   The bundled examples accompany the installed library. Linked GitHub guides
+   track development; use the matching release tag when consulting them for an
+   older installation. The Canon source checkout is not required.
 3. Read only the reference needed for the current decision:
 
 | Task | Load |
 | --- | --- |
+| Understand the components or assemble the app | [Components and composition](references/components.md) |
 | Choose folders, ownership, imports or feature boundaries | [Application layout](references/application-layout.md) |
 | Implement a route, service, port, provider or error mapping | [HTTP feature walkthrough](references/http-feature.md) |
 | Add persistence, transactions, workers or pooled clients | [Resources and scopes](references/resources.md) |
 | Add streaming/RPC, SDK generation or telemetry | [Transports and SDKs](references/transports-and-sdk.md) |
 | Choose test boundaries and verify a feature | [Testing and verification](references/testing.md) |
 
-Supporting references are bundled with this skill. Links to detailed Canon
-guides open public documentation for the example version.
+Load only the needed reference; follow deeper links when that decision requires
+them. Supporting references are installed beside this file for both agent tools.
 
 ## Keep these boundaries
 
@@ -39,7 +41,7 @@ guides open public documentation for the example version.
 - Import Canon through `fastapi_canon`, `fastapi_canon.error` or documented
   `fastapi_canon.integrations.*` facades. Define each public problem once, bind
   its registry to the router, and declare operation failures with `raises=`.
-- Use `Composition(features=(...))`; 0.13 composition arguments are keyword-only.
+- Use `Composition(features=(...))`; composition arguments are keyword-only.
   Give operations stable explicit IDs and concrete input/output models.
 - Keep request resources out of streams and background tasks. Load the resource
   reference before changing ownership or transaction boundaries.
