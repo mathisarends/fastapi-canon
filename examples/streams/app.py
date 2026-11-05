@@ -1,4 +1,4 @@
-"""Run with: uv run --extra streams --with uvicorn uvicorn examples.streams.app:app."""
+"""Run with: uv run --with uvicorn uvicorn examples.streams.app:app."""
 
 from collections.abc import AsyncIterator
 from typing import Annotated, Literal
@@ -9,6 +9,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from fastapi_canon import (
+    APIRouter,
     Composition,
     Error,
     ErrorRegistry,
@@ -16,7 +17,6 @@ from fastapi_canon import (
     HTTPMethod,
     ServiceScope,
 )
-from fastapi_canon.integrations.sse import CanonStreamRouter
 
 
 class AuthenticationRequired(Exception):
@@ -98,17 +98,17 @@ async def require_existing_run(run_id: int, runs: FromDishka[RunService]) -> Non
     await runs.require_existing(run_id)
 
 
-router = CanonStreamRouter(
+router = APIRouter(
     prefix="/runs",
     tags=["runs"],
     error_registry=run_errors,
     raises=[authentication_required],
     dependencies=[Depends(require_authentication)],
-    responses=run_errors.responses(http_statuses=[403]),
+    http_statuses=[403],
 )
 
 
-@router.stream(
+@router.sse(
     "/{run_id}/events",
     operation_id="run_events",
     raises=[run_not_found],
@@ -124,7 +124,7 @@ async def events(
         yield event
 
 
-@router.stream(
+@router.sse(
     "/{run_id}/events",
     methods=[HTTPMethod.POST],
     operation_id="create_run_events",

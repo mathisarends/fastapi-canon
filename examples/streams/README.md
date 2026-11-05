@@ -1,64 +1,44 @@
-# Typed streams with canon errors
+# Typed streams with Canon errors
 
-See [`docs/streams.md`](../../docs/streams.md) for the integration API and a
-complete minimal application.
-
-`CanonStreamRouter` combines `CanonRouter` and `fastapi_canon.integrations.sse.StreamRouter`.
-It inherits the native `stream()` decorator and routes registration through
-canon's existing `api_route()` compiler. Shared and operation `raises=` use the
-same registry membership checks and deduplication as REST routes. `Feature`
-discovers the router's registry automatically; `Composition` installs the
-handlers and OpenAPI compiler.
-
-## Installation
-
-For an installed canon checkout or release containing this integration:
+A runnable SSE feature: authenticated GET and POST streams of a discriminated
+event union, declared with `APIRouter.sse`. See [`docs/streams.md`](../../docs/streams.md)
+for the complete API.
 
 ```console
-pip install "fastapi-canon[sse]"
+uv run --with uvicorn uvicorn examples.streams.app:app
+curl -N -H "Authorization: Bearer demo" http://127.0.0.1:8000/runs/1/events
 ```
 
-Canon includes the SSE implementation in the same wheel since 0.10.0.
-The `sse` extra selects FastAPI >=0.143.3 and Pydantic >=2.11.2;
-base composition requires FastAPI >=0.121 and Pydantic >=2.9. No separate Streams package
-is installed. See the [migration guide](../../docs/package-migration.md).
+Omit the header for a `401` problem, use `Bearer forbidden` for a normalized
+`403`, or request run `0` for a `404` problem. All of them are returned before the
+stream starts.
 
-## Export and generate clients
+## What the example shows
 
-Install the locked Streams codegen dependencies with the repository's group:
+- `APIRouter(prefix="/runs", error_registry=..., raises=[...])` shares
+  authentication and error contracts between both stream operations.
+- `@router.sse(..., methods=[HTTPMethod.POST])` accepts a typed JSON body.
+- Resource checks run in dependencies, so they fail as HTTP problems before
+  the response starts. Generator code always runs after the response starts.
+- The generator opens a short `ServiceScope` to materialize its events instead
+  of keeping a request-scoped service alive for the whole stream.
+- `Feature` collects the router's error registry; `Composition` installs the
+  problem handlers, OpenAPI compiler and Dishka container.
+
+## Contracts and clients
+
+Export the OpenAPI document, which contains the typed SSE events and problem
+schemas:
 
 ```console
-uv sync --locked --all-groups
-uv run --locked fastapi-canon sse schema --app examples.streams.app:app --output openapi.json
-uv run --locked fastapi-canon sse generate --schema openapi.json --language python --output generated/python
-uv run --locked fastapi-canon sse generate --schema openapi.json --language typescript --output generated/typescript
+uv run --locked fastapi-canon contracts export --app examples.streams.app:app --output-dir contracts
 ```
 
-An installed application can add `fastapi-canon[codegen]` and lock it
-alongside its feature dependencies. Both clients consume the same
-exported OpenAPI 3.2 document, containing typed SSE events and canon problem schemas.
+Use [`fastapi-canon generate`](../../docs/unified-canon-concept.md) to generate a
+Python or TypeScript SDK whose stream methods are async iterators.
 
-## Streaming boundary
-
-Before the response starts, canon can return RFC 9457 HTTP problem responses.
-Put authentication, authorization, and resource checks in dependencies.
-**All generator body code, including code before the first `yield`, executes
-after the response starts.** `raises=` documents HTTP error contracts; it does
-not move generator execution or catch exceptions during a stream.
-
-Business errors during an active stream require an application-specific error
-event declared in your event union. Connection failures remain transport
-errors. This integration adds neither `stream_raises` nor automatic conversion
-of exceptions to events.
-
-## Regression checks
-
-The [root CI workflow](../../.github/workflows/ci.yml) checks the locked repository on Linux with
-Python 3.12–3.14 and Windows with Python 3.14. Regression coverage includes
-dependency problems, typed GET/POST streams, complete SSE schemas, both client
-generators and Dishka lifetime/cleanup. Installed-wheel checks also exercise
-Canon with Streams absent. Run the focused suite from the repository root:
+## Tests
 
 ```console
-uv run --locked python -m pytest tests/integration/integrations tests/integration/test_optional_streams.py
+uv run --locked pytest tests/integration/integrations/test_streams.py
 ```
