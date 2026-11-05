@@ -1,13 +1,13 @@
 from dishka import FromDishka
 from dishka.integrations.fastapi import inject
 
-from fastapi_canon import CanonRouter
+from fastapi_canon import APIRouter
 
 from .errors import product_not_found, product_unavailable, registry
 from .models import Product, Reservation
 from .service import CatalogService
 
-router = CanonRouter(
+router = APIRouter(
     prefix="/products",
     tags=["catalog"],
     error_registry=registry,

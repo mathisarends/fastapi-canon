@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from examples.database.config import database
 from examples.database.schema import ItemRow
-from fastapi_canon import CanonRouter, Composition, Feature
+from fastapi_canon import APIRouter, Composition, Feature
 
 
 class Item(BaseModel):
@@ -44,7 +44,7 @@ class ItemProvider(Provider):
     item_service = provide(ItemService)
 
 
-router = CanonRouter(prefix="/items", route_class=DishkaRoute)
+router = APIRouter(prefix="/items", route_class=DishkaRoute)
 
 
 @router.post("", status_code=201)
