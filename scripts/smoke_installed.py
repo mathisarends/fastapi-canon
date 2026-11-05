@@ -15,7 +15,7 @@ from logging.handlers import BufferingHandler
 from pathlib import Path
 from typing import Literal
 
-from fastapi import Depends, FastAPI, Header, WebSocket
+from fastapi import APIRouter, Depends, FastAPI, Header, WebSocket
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, ConfigDict
 from starlette.websockets import WebSocketDisconnect
@@ -935,7 +935,7 @@ async def _scoped_check() -> None:
 
 
 def _shared_problem_check() -> None:
-    from fastapi_canon import CanonRouter, Composition, Error, ErrorRegistry, Feature
+    from fastapi_canon import CanonRouter, Composition, Error, ErrorOptions, Feature
 
     class Missing(Exception):
         pass
@@ -947,16 +947,18 @@ def _shared_problem_check() -> None:
         title="Item missing",
         extensions={"replacement": None},
     )
-    registry = ErrorRegistry(errors=[missing], type_base="urn:canon:smoke")
-    router = CanonRouter(error_registry=registry)
+    router = CanonRouter()
 
     @router.get("/missing", raises=[missing])
     async def fail() -> None:
         raise Missing("private")
 
-    app = Composition(features=(Feature(name="missing", routers=[router]),)).apply(
-        FastAPI()
-    )
+    parent = APIRouter()
+    parent.include_router(router)
+    app = Composition(
+        features=(Feature(name="missing", routers=[parent]),),
+        errors=ErrorOptions(type_base="urn:canon:smoke"),
+    ).apply(FastAPI())
     with TestClient(app) as client:
         response = client.get("/missing")
     payload = response.json()

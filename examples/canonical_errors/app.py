@@ -7,7 +7,7 @@ from fastapi_canon import (
     APIRouter,
     Composition,
     Error,
-    ErrorRegistry,
+    ErrorOptions,
     Feature,
     RpcChannel,
 )
@@ -38,11 +38,8 @@ project_missing = Error(
     extensions_model=MissingFields,
     extensions={"replacement": None},
 )
-errors = ErrorRegistry(
-    errors=[project_missing], type_base="https://api.example.com/problems"
-)
-router = APIRouter(error_registry=errors)
-projects = RpcChannel("projects", error_registry=errors)
+router = APIRouter()
+projects = RpcChannel("projects")
 
 
 def require_project(project_id: int) -> None:
@@ -67,7 +64,6 @@ async def get_project(project_id: int) -> Project:
     tags=["projects"],
     raises=[project_missing],
     dependencies=[Depends(require_project)],
-    stream_raises=[project_missing],
 )
 async def events(project_id: int) -> AsyncIterator[ProjectEvent]:
     yield ProjectEvent(sequence=1)
@@ -89,7 +85,10 @@ feature = Feature(name="projects", routers=[router])
 
 
 def create_app() -> FastAPI:
-    return Composition(features=(feature,)).apply(FastAPI(title="Projects"))
+    return Composition(
+        features=(feature,),
+        errors=ErrorOptions(type_base="https://api.example.com/problems"),
+    ).apply(FastAPI(title="Projects"))
 
 
 app = create_app()

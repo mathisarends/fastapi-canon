@@ -42,7 +42,7 @@ backend/
           router.py               APIRouter and thin handlers
           schemas.py              Request/response models
           mapper.py               Wire mapping when it warrants a module
-          errors.py               Error values and ErrorRegistry
+          errors.py               Error definitions used by raises
     platform/                    Shared concrete runtime capabilities
       database/                  Database declaration and metadata assembly
       http/                      Owned client pools

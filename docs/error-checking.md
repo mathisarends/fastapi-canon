@@ -33,15 +33,15 @@ It reads both from source; it does not execute the application.
 flowchart TD
     CLI["check_error_contracts src"] --> AST["Parse Python files into an AST"]
     AST --> INDEX["Resolve imports, aliases, types and definitions"]
-    INDEX --> CONTRACT["Read ErrorRegistry and combine policy + router + operation raises"]
+    INDEX --> CONTRACT["Combine policy + router + operation raises and optional ErrorRegistry mappings"]
     INDEX --> CALLS["Follow endpoint, service, helper and dependency calls"]
     CALLS --> HANDLING["Remove caught exceptions and include translated exceptions"]
-    HANDLING --> MATCH{"Registry mapping found through inheritance?"}
+    HANDLING --> MATCH{"Error mapping found through inheritance?"}
     CONTRACT --> MATCH
     MATCH -->|Yes| COMPARE{"Mapped error declared?"}
     COMPARE -->|Yes| COVERED["Supported error path covered"]
     COMPARE -->|No| MISSING["CAN001: missing raises entry"]
-    MATCH -->|No| UNMAPPED["CAN002: missing registry mapping"]
+    MATCH -->|No| UNMAPPED["CAN002: missing Error mapping"]
     INDEX -.->|Unresolved declaration| UNKNOWN["CAN003: incomplete analysis"]
     CONTRACT -.->|Dynamic contract| UNKNOWN
     CALLS -.->|Abstract port or unresolved call| UNKNOWN
@@ -52,9 +52,10 @@ flowchart TD
 ```
 
 For example, `complete_task` calls `TaskService.complete`, which can explicitly
-raise `TaskNotFound`. The checker finds its `task_not_found` registry mapping and
-looks for that exact error in the operation's combined `raises`. Removing the
-declaration produces `CAN001` with the call path. If the same service calls an
+raise `TaskNotFound`. A `raises=[task_not_found]` declaration supplies both its
+mapping and its operation contract. Removing that declaration produces `CAN002`
+with the call path; an explicit registry mapping without the declaration produces
+`CAN001`. If the same service calls an
 abstract repository method, that call also produces `CAN003`: a known gap and an
 incomplete analysis can appear together.
 
@@ -67,9 +68,9 @@ the documented JSON fields are the machine-readable interface.
 The [README walkthrough](../README.md#check-that-errors-are-mapped-and-declared)
 provides a minimal example: `get_project` calls `require_project`, which raises
 `ProjectMissing`. Remove the operation's `raises=[project_missing]` and run
-`fastapi-canon check errors src --strict --require-complete`: it reports `CAN001`
-and exits one. Remove that exception's registry mapping instead and it reports
-`CAN002`. Restore both to obtain zero gaps for that supported HTTP path.
+`fastapi-canon check errors src --strict --require-complete`: it reports `CAN002`
+and exits one. Restore the declaration to obtain zero gaps for that supported
+HTTP path. An explicit registry mapping without `raises` produces `CAN001`.
 
 The stream and RPC additions in the walkthrough remain outside this check's
 scope. A successful check covers supported HTTP source paths, not all transports
@@ -87,7 +88,7 @@ service.py:24: CAN001 [app.router.complete_task] app.service.TaskNotFound: app.e
 | Code | Meaning |
 | --- | --- |
 | `CAN001` | An explicit application exception has a registry mapping that is missing from the operation's combined `raises`. |
-| `CAN002` | An explicit application exception has no mapping in that router's registry. |
+| `CAN002` | An explicit application exception has no mapping in `raises` or the router's registry. |
 | `CAN003` | A declaration or execution path could not be fully analyzed. |
 
 Default mode prints findings and exits zero. Use `--strict` to exit one for

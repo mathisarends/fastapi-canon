@@ -81,12 +81,11 @@ def test_policy_copies_sequences_and_is_frozen() -> None:
     ("options", "message"),
     [
         ({"error_registry": object()}, "error_registry must be"),
-        ({"raises": [AUTHENTICATION_REQUIRED]}, "requires an error registry"),
         ({"raises": "invalid"}, "must be a sequence"),
         ({"dependencies": None}, "must be a sequence"),
         ({"dependencies": "invalid"}, "must be a sequence"),
         ({"dependencies": [object()]}, "Depends instance"),
-        ({"error_registry": AUTH_ERRORS, "raises": [MISSING]}, "does not belong"),
+        ({"raises": [object()]}, "Error instance"),
     ],
 )
 def test_policy_rejects_invalid_configuration(
@@ -150,7 +149,7 @@ def test_router_policy_combines_contracts_dependencies_and_dishka_injection() ->
 
 
 def test_composition_policy_preserves_nested_router_definitions() -> None:
-    child = CanonRouter(error_registry=ITEM_ERRORS)
+    child = CanonRouter()
 
     @child.get("/items/{item_id}", raises=[MISSING])
     async def item(item_id: int) -> int:
@@ -167,11 +166,12 @@ def test_composition_policy_preserves_nested_router_definitions() -> None:
     original_responses = deepcopy(route.responses)
     parent = APIRouter()
     parent.include_router(child)
-    # An explicit registry is needed for a generic parent, as before.
-    feature = Feature(name="items", routers=[parent], errors=ITEM_ERRORS)
+    feature = Feature(name="items", routers=[parent])
     composition = Composition(
         features=(feature,),
-        router_policy=PROTECTED,
+        router_policy=RouterPolicy(
+            dependencies=PROTECTED.dependencies, raises=PROTECTED.raises
+        ),
         router_factory=lambda: CanonRouter(prefix="/api"),
     )
     protected = FastAPI()

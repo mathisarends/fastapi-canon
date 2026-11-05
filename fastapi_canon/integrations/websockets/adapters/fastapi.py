@@ -547,6 +547,7 @@ class CanonWebSocketRouter(APIRouter):
         for channel in endpoint.channels if isinstance(endpoint, RpcEndpoint) else ():
             collect(channel)
         self._canon_error_registries = tuple(contributions)  # type: ignore[attr-defined]
+        handler_function.__dict__["_canon_error_registries"] = tuple(contributions)
         self._mounted.add(endpoint)
 
     @asynccontextmanager

@@ -1,4 +1,4 @@
-from fastapi_canon import Error, ErrorRegistry
+from fastapi_canon import Error
 
 from app.authentication.application import AuthenticationFailed
 
@@ -16,4 +16,3 @@ authentication_required = Error(
         }
     },
 )
-errors = ErrorRegistry(name="authentication", errors=[authentication_required])

@@ -422,13 +422,13 @@ def test_sse_serializes_events_and_sends_terminal_completion() -> None:
     )
 
 
-def test_sse_stream_errors_use_the_shared_registry() -> None:
+def test_sse_raises_registers_terminal_errors() -> None:
     missing = Error(
         MissingProject, status=404, code="project_missing", title="Project missing"
     )
-    router = APIRouter(error_registry=ErrorRegistry(errors=[missing]))
+    router = APIRouter()
 
-    @router.sse("/events", stream_raises=[missing])
+    @router.sse("/events", raises=[missing])
     async def events() -> AsyncIterator[str]:
         yield "first"
         raise MissingProject("private failure")

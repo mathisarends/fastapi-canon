@@ -43,8 +43,8 @@ them. Supporting references are installed beside this file for both agent tools.
   RPC methods request services with `Inject[T]`. Let `Composition` own the
   container and scope lifecycle.
 - Import Canon through `fastapi_canon`, `fastapi_canon.error` or documented
-  `fastapi_canon.integrations.*` facades. Define each public problem once, bind
-  its registry to the router, and declare operation failures with `raises=`.
+  `fastapi_canon.integrations.*` facades. Define each public problem once and
+  declare failures with `raises=`, which automatically registers their errors.
 - Use `Composition(features=(...))`; composition arguments are keyword-only.
   Give operations stable explicit IDs and concrete input/output models.
 - Keep request resources out of streams and background tasks. Load the resource
