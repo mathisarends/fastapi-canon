@@ -43,11 +43,11 @@ snapshot detached and avoid placing Python callable metadata in exported schemas
 
 ## Acceptance criteria
 
-- [ ] operation(events) returns the correct SSE HTTP operation with and without injected parameters.
-- [ ] Nested inclusion and effective prefixes preserve the original callable reference.
-- [ ] Explicit operation IDs and operation_by_id() keep working; ambiguous callable lookups still raise.
-- [ ] Inspection never executes the generator or dependencies.
-- [ ] OpenAPI/JSON exports contain no implementation metadata, and ordinary HTTP lookup is unchanged.
+- [x] operation(events) returns the correct SSE HTTP operation with and without injected parameters.
+- [x] Nested inclusion and effective prefixes preserve the original callable reference.
+- [x] Explicit operation IDs and operation_by_id() keep working; ambiguous callable lookups still raise.
+- [x] Inspection never executes the generator or dependencies.
+- [x] OpenAPI/JSON exports contain no implementation metadata, and ordinary HTTP lookup is unchanged.
 
 ## Verification
 
@@ -57,6 +57,14 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
 
 ## Completion
 
-- Implementation or decision PR:
-- Final commit and verification:
-- Remaining follow-ups:
+- Implementation or decision PR: [#86](https://github.com/mathisarends/fastapi-canon/pull/86).
+- Final commit and verification: source `67efea2`, synchronized with merged
+  DX-005/main in `cc59674`. The exact repro now resolves demo.events.
+  Focused introspection/injection/router/operation-ID suites: 78 passed.
+  Full root pytest: 2,488 passed, 26 skipped, 153 warnings on Windows/Python 3.14;
+  PostgreSQL cases need an external database. Client gate passed exact generator
+  drift, TypeScript typechecks and runtime/coverage checks. Mypy, Ruff, changed
+  Smelt and full pre-commit passed. Standalone wheel/browser matrices were not
+  repeated for the metadata-only change. Status stays In progress until merge.
+- Remaining follow-ups: none in this identity-lookup scope; callable-object
+  registration/injection remains DX-007.
