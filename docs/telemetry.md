@@ -220,7 +220,7 @@ Tracing and metrics follow their respective application switches independently.
 Both-off configurations are no-ops, including without optional packages installed.
 
 For Canon-owned database engines, pass a reusable declaration to the engine
-context hook (0.14.0, unreleased):
+context hook:
 
 ```python
 from fastapi_canon import Database
