@@ -64,7 +64,7 @@ operation groups and client entry points. Jinja templates keep operation code
 separate from contract processing; shared runtime files contain transport logic.
 
 [`writer.py`](../../../fastapi_canon/integrations/sse/codegen/writer.py) compares exact UTF-8 output,
-writes files atomically and records owned paths in `.fastapi-streams.json`.
+writes files atomically and records owned paths in `.fastapi-canon-sse.json`.
 Regeneration removes stale owned files. Check mode only reads. Paths are checked
 before writing, including stale manifest entries.
 

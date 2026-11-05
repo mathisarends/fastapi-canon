@@ -96,6 +96,10 @@ connection has its own limits, pending requests and message streams. Its
 `context`, `resolver`, `middleware`, `limits` and other RPC options configure the
 existing WebSocket adapter. `dependencies=` runs ordinary FastAPI dependencies
 before acceptance. Native FastAPI router prefixes and dependency overrides apply.
+When Composition installs Dishka providers, omitted `resolver=` automatically
+uses the application's container for `Inject[T]` in methods, streams and context
+hooks. APP, SESSION and REQUEST lifetimes retain their existing cleanup behavior.
+An explicit resolver takes precedence.
 Duplicate WebSocket paths on the application router are rejected before inclusion.
 Endpoint names default to the complete local path, including the router prefix,
 so separate URLs ending in `/session` export separately. Pass `name=` when a

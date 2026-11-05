@@ -124,6 +124,21 @@ The next release containing the breaking changes below must be 0.16.0.
 - `fastapi-canon check errors` analyzes operations declared on the shared
   `APIRouter` like those on `CanonRouter`, instead of reporting them as
   unsupported router declarations.
+- WebSocket routes without an explicit resolver use Composition's Dishka
+  container for injected services, including context hooks. Explicit resolvers
+  keep precedence and provider scope cleanup is preserved.
+- `fastapi-canon check errors --help` shows the error check's own options, and
+  missing arguments report the public command name. `check` uses real
+  subcommands for errors and composition.
+- The concepts example passes `features=[...]` to `Composition`; the README's
+  supported Python range renders correctly.
+- SSE sync configuration uses `[tool.fastapi-canon.sse]` and
+  `[[tool.fastapi-canon.sse.clients]]`. The old `tool.fastapi-streams` tables
+  remain accepted for one transition release with a visible deprecation warning;
+  rename them to the Canon tables, which take precedence when both exist.
+  Regenerate SSE SDKs to migrate `.fastapi-streams.json` to
+  `.fastapi-canon-sse.json`; old ownership is retained for cleanup, handwritten
+  files are preserved, and check mode reports migration without writes.
 - Generated TypeScript SDKs resolve endpoint wire names independently of their
   camelCase helper exports, including automatically named channel endpoints and
   explicit names such as `project_session`. Regenerate SDKs to pick up the fix.

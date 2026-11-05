@@ -4,15 +4,15 @@ import pytest
 from fastapi_canon.integrations.sse.codegen.cli import main
 
 CONFIG = """
-[tool.fastapi-streams]
+[tool.fastapi-canon.sse]
 app = "examples.sse.agent_runs:app"
 schema = "contract/openapi.json"
 
-[[tool.fastapi-streams.clients]]
+[[tool.fastapi-canon.sse.clients]]
 language = "typescript"
 output = "web/generated"
 
-[[tool.fastapi-streams.clients]]
+[[tool.fastapi-canon.sse.clients]]
 language = "python"
 output = "py/generated"
 python-http-client = "httpx2"
@@ -30,12 +30,41 @@ def test_sync_writes_schema_and_every_client_then_checks_clean(tmp_path, capsys)
     assert (tmp_path / "contract/openapi.json").is_file()
     assert (tmp_path / "web/generated/index.ts").is_file()
     manifest = json.loads(
-        (tmp_path / "py/generated/.fastapi-streams.json").read_text("utf-8")
+        (tmp_path / "py/generated/.fastapi-canon-sse.json").read_text("utf-8")
     )
     assert manifest["generation"]["python_http_client"] == "httpx2"
     capsys.readouterr()
     assert main([*args, "--check", "--diff"]) == 0
     assert capsys.readouterr().out == ""
+
+
+def test_sync_accepts_legacy_config_with_a_visible_deprecation_warning(
+    tmp_path, capsys
+):
+    config = tmp_path / "pyproject.toml"
+    config.write_text(
+        CONFIG.replace("tool.fastapi-canon.sse", "tool.fastapi-streams"),
+        encoding="utf-8",
+    )
+    args = ["sync", "--config", str(config)]
+    assert main(args) == 0
+    warning = capsys.readouterr().err
+    assert "DeprecationWarning: [tool.fastapi-streams]" in warning
+    assert "[tool.fastapi-canon.sse]" in warning
+    assert (tmp_path / "py/generated/.fastapi-canon-sse.json").is_file()
+    assert main([*args, "--check"]) == 0
+
+
+def test_sync_prefers_canon_config_when_both_tables_exist(tmp_path, capsys):
+    config = tmp_path / "pyproject.toml"
+    config.write_text(
+        CONFIG + '\n[tool.fastapi-streams]\nschema = "unused.json"\n',
+        encoding="utf-8",
+    )
+    assert main(["sync", "--config", str(config)]) == 0
+    assert "DeprecationWarning" in capsys.readouterr().err
+    assert (tmp_path / "contract/openapi.json").is_file()
+    assert not (tmp_path / "unused.json").exists()
 
 
 def test_sync_check_reports_every_stale_target_with_a_diff(tmp_path, capsys):
@@ -98,27 +127,27 @@ def test_diff_requires_check(tmp_path, capsys):
 @pytest.mark.parametrize(
     ("config", "message"),
     [
-        ("[tool.other]\n", "no [tool.fastapi-streams] table"),
-        ('[tool.fastapi-streams]\nschema = "s.json"\nextra = 1\n', "Unknown"),
-        ('[tool.fastapi-streams]\napp = "m:app"\n', "requires schema"),
-        ('[tool.fastapi-streams]\nschema = "s.json"\n', "neither app nor clients"),
+        ("[tool.other]\n", "no [tool.fastapi-canon.sse] table"),
+        ('[tool.fastapi-canon.sse]\nschema = "s.json"\nextra = 1\n', "Unknown"),
+        ('[tool.fastapi-canon.sse]\napp = "m:app"\n', "requires schema"),
+        ('[tool.fastapi-canon.sse]\nschema = "s.json"\n', "neither app nor clients"),
         (
-            '[tool.fastapi-streams]\nschema = "s.json"\n'
-            '[[tool.fastapi-streams.clients]]\nlanguage = "go"\noutput = "x"\n',
+            '[tool.fastapi-canon.sse]\nschema = "s.json"\n'
+            '[[tool.fastapi-canon.sse.clients]]\nlanguage = "go"\noutput = "x"\n',
             "language must be",
         ),
         (
-            '[tool.fastapi-streams]\nschema = "s.json"\n'
-            '[[tool.fastapi-streams.clients]]\nlanguage = "python"\n',
+            '[tool.fastapi-canon.sse]\nschema = "s.json"\n'
+            '[[tool.fastapi-canon.sse.clients]]\nlanguage = "python"\n',
             "requires output",
         ),
         (
-            '[tool.fastapi-streams]\nschema = "s.json"\n'
-            '[[tool.fastapi-streams.clients]]\nlanguage = "python"\n'
+            '[tool.fastapi-canon.sse]\nschema = "s.json"\n'
+            '[[tool.fastapi-canon.sse.clients]]\nlanguage = "python"\n'
             'output = "x"\nstrict = "yes"\n',
             "strict must be a boolean",
         ),
-        ("[tool.fastapi-streams\n", "Invalid TOML"),
+        ("[tool.fastapi-canon.sse\n", "Invalid TOML"),
     ],
 )
 def test_sync_rejects_invalid_configuration(tmp_path, capsys, config, message):
