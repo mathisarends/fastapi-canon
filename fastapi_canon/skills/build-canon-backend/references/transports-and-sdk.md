@@ -20,8 +20,8 @@ from backend.features.projects.application import ProjectService
 from .errors import PROJECT_MISSING, project_errors
 from .schemas import Project, ProjectEvent, RenameProject
 
-router = APIRouter(prefix="/projects", error_registry=project_errors)
-channel = RpcChannel("projects", error_registry=project_errors)
+router = APIRouter(prefix="/projects")
+channel = RpcChannel("projects")
 
 
 @router.sse("/events", operation_id="projects.events")
@@ -56,11 +56,12 @@ when the generator uses `FromDishka`.
 | Failure phase | Declaration and behavior |
 | --- | --- |
 | Before response start | Auth/lookup in real FastAPI dependencies; `raises=[...]`; HTTP Problem Details |
-| During generator execution | `stream_raises=[...]` from the same catalog; terminal `canon.problem` |
+| During generator execution | The same `raises=[...]`; terminal `canon.problem` |
 | Normal exhaustion | `canon.complete` |
 | Cancellation / broken connection | Cleanup and transport/cancellation semantics |
 
-Even code before the first `yield` executes after response start. Use dependencies
+`raises` automatically registers the declared errors. Even code before the first
+`yield` executes after response start. Use dependencies
 for admission checks. For data access during iteration, inject an APP-owned short
 scope factory as described in [resources](resources.md).
 

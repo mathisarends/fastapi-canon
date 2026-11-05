@@ -43,7 +43,7 @@ portfolio_feature = Feature(
 app = Composition(
     features=[portfolio_feature],
     mcp=McpOptions(),
-).apply(FastAPI(title="Maximus"))
+).build(FastAPI(title="Maximus"))
 ```
 
 The endpoint is `/mcp`; its server name defaults to `FastAPI.title` (`Maximus`).

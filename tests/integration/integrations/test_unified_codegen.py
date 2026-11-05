@@ -14,7 +14,7 @@ from typing import Any
 import httpx
 import pytest
 
-from examples.canonical_errors.app import app, create_app, projects
+from examples.canonical_errors.app import app, create_app
 from fastapi_canon import export_contracts
 from fastapi_canon.cli import main
 from fastapi_canon.codegen.config import (
@@ -56,32 +56,22 @@ def test_unified_python_calls_streams_and_model_error_identity(tmp_path: Path) -
         assert not any(name.endswith("problem.py") for name in files)
 
         async def exercise() -> None:
+            from tests.unit.integrations.webrtc.server import serve
+
             module = importlib.import_module(
                 "unified_test.internal.control_jsonrpc.transport"
             )
             client_module = importlib.import_module(
                 "unified_test.internal.control_jsonrpc.client"
             )
-            server = projects.create_server()
-            queue: asyncio.Queue[str] = asyncio.Queue()
-            closed = []
-
-            class Socket:
-                async def send(self, text: str) -> None:
-                    response = await server.handle(json.loads(text))
-                    assert response is not None and not isinstance(response, list)
-                    await queue.put(response.model_dump_json())
-
-                async def recv(self) -> str:
-                    return await queue.get()
-
-                async def close(self) -> None:
-                    closed.append(True)
-
-            rpc = client_module.BindingClient(module.WebSocketTransport(Socket()))
-            async with httpx.AsyncClient(
-                transport=httpx.ASGITransport(app), base_url="http://test"
-            ) as http:
+            async with (
+                serve(app) as base_url,
+                httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app), base_url="http://test"
+                ) as http,
+            ):
+                transport = await module.WebSocketTransport.open(f"{base_url}/ws")
+                rpc = client_module.BindingClient(transport)
                 async with sdk.ApiClient(
                     "http://test", http_client=http, clients={"control": rpc}
                 ) as client:
@@ -107,13 +97,13 @@ def test_unified_python_calls_streams_and_model_error_identity(tmp_path: Path) -
                         )
                     await client.projects.cancel(project_id=1)
                 assert not http.is_closed
-                assert closed == []  # Injected binding belongs to the caller.
+                assert not transport.closed.done()  # The caller owns this binding.
                 await rpc.projects.cancel(project_id=1)
                 await client.aclose()
                 with pytest.raises(sdk.TransportError, match="closed"):
                     await client.projects.get(project_id=1)
-            await rpc.close()
-            assert closed == [True]
+                await rpc.close()
+                assert transport.closed.done()
 
         asyncio.run(asyncio.wait_for(exercise(), timeout=15))
     finally:
@@ -714,7 +704,7 @@ def test_terminal_only_nested_problem_definitions_share_identity(
     # Avoid local forward-reference names in the operation signature.
     nested.__annotations__["return"] = AsyncIterator[int]
     streams.stream(
-        "/nested", operation_id="nested", tags=["projects"], stream_raises=[missing]
+        "/nested", operation_id="nested", tags=["projects"], raises=[missing]
     )(nested)
     application = Composition(
         features=(Feature(name="nested", routers=[streams]),)

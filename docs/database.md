@@ -64,7 +64,7 @@ the actual URL value and options such as `echo` at the composition boundary.
 from fastapi import FastAPI
 from fastapi_canon import Composition
 
-app = Composition(features=[database.feature, orders_feature]).apply(FastAPI())
+app = Composition(features=[database.feature, orders_feature]).build(FastAPI())
 ```
 
 Each application gets its own lazy engine and pool. Composition closes it after

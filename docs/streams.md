@@ -28,7 +28,7 @@ from fastapi_canon import (
     APIRouter,
     Composition,
     Error,
-    ErrorRegistry,
+    ErrorOptions,
     Feature,
     ServiceScope,
 )
@@ -76,11 +76,6 @@ authentication_required = Error(
 run_not_found = Error(
     RunNotFound, status=404, code="run_not_found", title="Run not found"
 )
-run_errors = ErrorRegistry(
-    name="runs",
-    errors=[authentication_required, run_not_found],
-    type_base="https://api.example.com/problems",
-)
 
 
 async def require_authentication(
@@ -97,7 +92,6 @@ async def require_existing_run(run_id: str, runs: FromDishka[RunService]) -> Non
 
 router = APIRouter(
     prefix="/runs",
-    error_registry=run_errors,
     raises=[authentication_required],
     dependencies=[Depends(require_authentication)],
 )
@@ -120,13 +114,17 @@ async def events(
 
 
 feature = Feature(name="runs", routers=[router], providers=[RunProvider])
-app = Composition(features=(feature,)).build(FastAPI())
+composition = Composition(
+    features=(feature,),
+    errors=ErrorOptions(type_base="https://api.example.com/problems"),
+)
+app = composition.build(FastAPI())
 ```
 
 Request `GET /runs/demo/events` with `Authorization: Bearer demo` to receive SSE.
 Omit the header for a 401 problem, or request another run ID for a 404 problem.
-`Feature` automatically collects the registry from the router; declaring
-`errors=run_errors` on the feature is optional. `Composition` installs the
+`Feature` automatically collects the errors declared by the router; no explicit
+registry is required. `Composition` installs the
 runtime handlers and OpenAPI compiler together.
 
 ## Dishka injection
@@ -155,8 +153,8 @@ for `FromDishka` and dependency injection details.
 
 | API | Behavior |
 | --- | --- |
-| `APIRouter(error_registry=registry, raises=[...], http_statuses=[...], **options)` | The registry contains available errors. Router-level `raises` and normalized `http_statuses` apply to every HTTP and SSE operation declared on this router. Standard FastAPI router options pass through. |
-| `router.sse(path, raises=[...], stream_raises=[...], methods=None, **options)` | Local errors extend shared errors. Defaults to GET; use `methods=[HTTPMethod.POST]` for a body-driven stream. FastAPI dependencies, tags and operation IDs pass through. |
+| `APIRouter(raises=[...], http_statuses=[...], **options)` | Router-level `raises` automatically registers shared errors and applies to every HTTP and SSE operation declared on this router. `error_registry=` optionally adds undeclared mappings. Standard FastAPI router options pass through. |
+| `router.sse(path, raises=[...], methods=None, **options)` | Local errors extend shared errors for both admission and terminal stream failures. Defaults to GET; use `methods=[HTTPMethod.POST]` for a body-driven stream. FastAPI dependencies, tags and operation IDs pass through. |
 | `router.get(...)`, `router.post(...)`, `router.api_route(...)` | Ordinary HTTP declarations on the same router. |
 
 ### HTTP methods
@@ -196,8 +194,8 @@ JSON body, as in [`examples/streams/app.py`](../examples/streams/app.py).
 For generated clients, declare GET and POST separately with different
 `operation_id` values, as the runnable example does.
 
-Every declared error must be an `Error` instance in that router's registry.
-Nonempty `raises` requires a registry. Duplicate instances, including errors
+Every declared error must be an `Error` instance and is registered automatically.
+Duplicate instances, including errors
 declared at both levels, appear once. Distinct errors with the same HTTP status
 use canon's discriminated `oneOf` problem schema. Invalid declarations raise
 `ErrorConfigurationError` during router construction or endpoint registration.
@@ -244,13 +242,13 @@ path.
   problems, including normalized HTTP and request validation errors.
 - **During streaming:** every generator statement, even before its first
   `yield`, executes after response start. Declare public domain failures with
-  `stream_raises=[...]`; Canon emits a terminal `canon.problem` frame and closes
+  `raises=[...]`; Canon emits a terminal `canon.problem` frame and closes
   the stream. Normal exhaustion emits `canon.complete`.
 - **Connection failures:** disconnects remain transport errors.
 
-`raises=` documents HTTP admission contracts; it does not move generator
-execution before response start. `stream_raises=` is the separate processing
-contract and uses errors from the same registry. Generated iterators yield only
+`raises=` registers and documents errors for both HTTP admission and stream
+processing; it does not move generator execution before response start. The
+failure phase determines the wire representation. Generated iterators yield only
 business events, raise `ProblemError` for terminal problems, and distinguish
 completion from unexpected EOF (`TransportError`). Undeclared processing errors
 produce a safe internal problem. See [canonical error bindings](problems.md).

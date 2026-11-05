@@ -14,7 +14,7 @@ from fastapi_canon.integrations.websockets.adapters.dishka import Dishka
 
 rpc = CanonWebSocketRouter("/rpc", channels=[tasks], resolver=Dishka())
 feature = Feature(name="tasks", routers=[rpc], providers=[TaskProvider])
-app = Composition(features=[feature]).apply(FastAPI())
+app = Composition(features=[feature]).build(FastAPI())
 contract = rpc.contract(title="Tasks", base_url="wss://api.example.com", app=app)
 ```
 

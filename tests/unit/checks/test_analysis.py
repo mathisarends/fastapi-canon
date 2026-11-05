@@ -78,14 +78,20 @@ async def complete(service: Service) -> None:
 
 
 @pytest.mark.parametrize("shared", [False, True])
-def test_shared_and_local_contracts(tmp_path: Path, shared: bool) -> None:
+@pytest.mark.parametrize("explicit_registry", [False, True])
+def test_shared_and_local_contracts(
+    tmp_path: Path, shared: bool, explicit_registry: bool
+) -> None:
+    base = (
+        PRELUDE if explicit_registry else PRELUDE.replace("error_registry=registry", "")
+    )
     prelude = (
-        PRELUDE.replace(
-            "router = CanonRouter(error_registry=registry)",
-            "router = CanonRouter(error_registry=registry, raises=[missing])",
+        base.replace(
+            "router = CanonRouter(",
+            "router = CanonRouter(raises=[missing], ",
         )
         if shared
-        else PRELUDE
+        else base
     )
     decorator = "@router.get('/')" if shared else "@router.get('/', raises=[missing])"
     report = analyze(
@@ -482,9 +488,9 @@ def test_reference_service_detects_removed_contract(tmp_path: Path) -> None:
         item
         for operation in after.operations
         for item in operation.diagnostics
-        if item.code == "CAN001"
+        if item.code == "CAN002"
     )
-    assert "task_not_found" in finding.message
+    assert "TaskNotFound" in finding.message
 
 
 def test_handler_translation_from_implicit_failure(tmp_path: Path) -> None:

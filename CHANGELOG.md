@@ -8,6 +8,10 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### TL;DR
 
+- Declare public errors once with `raises=` across HTTP, SSE and RPC. Composition
+  automatically collects their `Error` instances; separate registry entries are
+  no longer required. SSE uses the same declaration for admission and terminal
+  stream failures.
 - Register reusable WebSocket admission functions with `hooks=(function, ...)`.
   `Inject[T]` obtains their results by return type or resolves application services
   through DI. The shared `APIRouter.include_channel(...)` forwards these options;
@@ -21,9 +25,9 @@ The next release containing the breaking changes below must be 0.16.0.
 - `Composition.build(app)` applies a composition and validates the installed
   application in one call, replacing `apply(app)` followed by `validate(app)`.
 
-- `fastapi-canon check errors` also checks `APIRouter.sse()` streams (body
-  failures against `stream_raises=`), `APIRouter.webrtc()` sessions and
-  `RpcChannel` methods. Loops are now analyzed, and iterating a generator follows
+- `fastapi-canon check errors` also checks `APIRouter.sse()` streams,
+  `APIRouter.webrtc()` sessions and `RpcChannel` methods against their `raises=`
+  declarations. Loops are now analyzed, and iterating a generator follows
   its body. JSON reports include each operation's `transport`.
 
 - `Composition.override(*providers)` returns a copy whose Dishka providers
@@ -101,6 +105,21 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Breaking changes
 
+- SSE removes `stream_raises=` from `CanonStreamRouter` and its stream decorators,
+  including `APIRouter.sse()`. Merge previous `raises` and `stream_raises` values
+  into one `raises=[...]` declaration. Router-level and operation-level errors now
+  describe both HTTP admission responses and terminal `canon.problem` frames;
+  the failure phase determines the transport representation. Keep admission
+  checks in dependencies because generator bodies execute after response start.
+  Regenerate SDKs to include the combined admission and stream problem contracts.
+  This change belongs to the next minor release, 0.16.0.
+- `raises=` automatically registers canonical `Error` definitions on routers,
+  policies, SSE streams, WebRTC admission and RPC channels/operations. Remove
+  duplicate registry entries and `error_registry=` arguments used only to repeat
+  these declarations. Keep explicit registries for additional undeclared errors,
+  and configure a common problem URI prefix with `Composition(errors=ErrorOptions(
+  type_base=...))`. Repeated references to the same definition are deduplicated;
+  conflicting definitions still fail configuration checks.
 - The new MCP factory fields extend `McpOptions` for 0.16.0. Move auth and shared
   middleware adapters that read `app.state.dishka_container` into synchronous
   factories receiving the container directly. Supply either `auth` or

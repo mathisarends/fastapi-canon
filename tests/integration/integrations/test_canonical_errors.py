@@ -62,6 +62,7 @@ def test_same_domain_error_across_http_stream_and_rpc() -> None:
     app = create_app()
     with TestClient(app) as client:
         http_problem = client.get("/projects/0").json()
+        admission = client.get("/projects/0/events")
         terminal = client.get("/projects/2/events")
         frame = terminal.text.split("event: canon.problem\n", 1)[1]
         stream_problem = json.loads(frame.split("data: ", 1)[1])
@@ -85,6 +86,8 @@ def test_same_domain_error_across_http_stream_and_rpc() -> None:
         == rpc_problem
     )
     assert http_problem["status"] == 404
+    assert admission.status_code == 404
+    assert admission.json() == http_problem
     assert "status" not in stream_problem
     assert "private" not in terminal.text
     assert "canon.complete" not in terminal.text
@@ -96,14 +99,90 @@ def test_same_domain_error_across_http_stream_and_rpc() -> None:
     assert "errorIds" not in operation["x-canon-stream"]
 
 
+@pytest.mark.parametrize("shared", [False, True])
+@pytest.mark.parametrize("before_first_yield", [False, True])
+def test_sse_raises_registers_shared_and_local_processing_errors(
+    shared: bool, before_first_yield: bool
+) -> None:
+    from fastapi import FastAPI
+
+    from examples.canonical_errors.app import ProjectMissing
+    from fastapi_canon.integrations.sse import CanonStreamRouter
+
+    router = CanonStreamRouter(raises=[project_missing] if shared else [])
+
+    @router.stream("/events", raises=[] if shared else [project_missing])
+    async def events() -> AsyncIterator[int]:
+        if not before_first_yield:
+            yield 1
+        raise ProjectMissing("private failure")
+
+    app = Composition(
+        features=[Feature(name="events", routers=[router])],
+        errors=ErrorOptions(type_base="urn:stream:problem"),
+    ).apply(FastAPI())
+    with TestClient(app) as client:
+        response = client.get("/events")
+    assert response.status_code == 200
+    assert "event: canon.problem" in response.text
+    assert "urn:stream:problem/project_missing" in response.text
+    assert "private failure" not in response.text
+    assert "canon.complete" not in response.text
+    operation = app.openapi()["paths"]["/events"]["get"]
+    assert "404" in operation["responses"]
+    assert len(operation["x-canon-stream"]["problems"]) == 1
+
+
+def test_nested_plain_router_keeps_declarations_isolated_between_applications() -> None:
+    from fastapi import APIRouter, FastAPI
+
+    from examples.canonical_errors.app import router
+
+    parent = APIRouter(prefix="/nested")
+    parent.include_router(router)
+    feature = Feature(name="projects", routers=[parent])
+    first = Composition(
+        features=[feature], errors=ErrorOptions(type_base="urn:first:problem")
+    ).apply(FastAPI())
+    second = Composition(
+        features=[feature], errors=ErrorOptions(type_base="urn:second:problem")
+    ).apply(FastAPI())
+    with TestClient(first) as client:
+        response = client.get("/nested/projects/0")
+        terminal = client.get("/nested/projects/2/events")
+        with client.websocket_connect("/nested/ws") as socket:
+            socket.send_json(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "projects.cancel",
+                    "params": {"projectId": 0},
+                }
+            )
+            rpc = socket.receive_json()
+    assert response.json()["type"] == "urn:first:problem/project_missing"
+    assert "urn:first:problem/project_missing" in terminal.text
+    assert rpc["error"]["data"]["problem"]["type"] == response.json()["type"]
+    with TestClient(second) as client:
+        assert client.get("/nested/projects/0").json()["type"] == (
+            "urn:second:problem/project_missing"
+        )
+    assert feature.errors is not None
+    assert feature.errors.errors == (project_missing,)
+    contracts = export_contracts(first)
+    assert contracts.openrpc is not None
+    assert contracts.openrpc["methods"][0]["errors"][0]["x-canon-problem-type"] == (
+        "urn:first:problem/project_missing"
+    )
+
+
 async def test_rpc_router_contributes_catalog_and_uses_composition_type_base() -> None:
     from fastapi import FastAPI
     from websockets.asyncio.client import connect
 
     from tests.unit.integrations.webrtc.server import serve
 
-    local = ErrorRegistry(errors=[project_missing])
-    channel = RpcChannel("projects", error_registry=local)
+    channel = RpcChannel("projects")
 
     @channel.method(raises=[project_missing])
     async def missing() -> None:
@@ -348,10 +427,10 @@ def test_stream_shared_declarations_and_safe_renderer_failures() -> None:
         detail=bad_detail,
     )
     registry = ErrorRegistry(errors=[error], type_base="urn:test:problems")
-    router = CanonStreamRouter(error_registry=registry, stream_raises=[error])
+    router = CanonStreamRouter(error_registry=registry, raises=[error])
     closed = []
 
-    @router.stream("/events", stream_raises=[error])
+    @router.stream("/events", raises=[error])
     def events() -> Iterator[ProjectEvent]:
         try:
             yield ProjectEvent(sequence=1)
@@ -375,10 +454,10 @@ def test_stream_shared_declarations_and_safe_renderer_failures() -> None:
 async def test_cancelled_server_stream_runs_cleanup_without_terminal_problem() -> None:
     from fastapi import FastAPI
 
-    from examples.canonical_errors.app import ProjectEvent, errors
+    from examples.canonical_errors.app import ProjectEvent
     from fastapi_canon.integrations.sse import CanonStreamRouter
 
-    router = CanonStreamRouter(error_registry=errors)
+    router = CanonStreamRouter()
     closed = []
 
     @router.stream("/events")
@@ -477,34 +556,22 @@ def test_generated_python_rpc_error_uses_type_uri_and_preserves_extensions(
             )
 
         async def request() -> None:
-            from examples.canonical_errors.app import projects
+            from tests.unit.integrations.webrtc.server import serve
 
             transport_module = importlib.import_module("canonical_rpc_sdk.transport")
-            queue: asyncio.Queue[str] = asyncio.Queue()
-            server = projects.create_server()
-
-            class Socket:
-                async def send(self, message: str) -> None:
-                    response = await server.handle(json.loads(message))
-                    assert response is not None and not isinstance(response, list)
-                    await queue.put(response.model_dump_json())
-
-                async def recv(self) -> str:
-                    return await queue.get()
-
-                async def close(self) -> None:
-                    pass
-
-            transport = transport_module.WebSocketTransport(Socket())
-            client = sdk.ProjectsClient(transport)
-            try:
-                with pytest.raises(sdk.ProjectMissingError) as caught:
-                    await client.projects.cancel(project_id=0)
-                assert isinstance(caught.value, sdk.ProblemError)
-                assert caught.value.problem.replacement is None
-                await client.projects.cancel(project_id=1)
-            finally:
-                await client.close()
+            async with asyncio.timeout(15), serve(create_app()) as base_url:
+                transport = await transport_module.WebSocketTransport.open(
+                    f"{base_url}/ws"
+                )
+                client = sdk.ProjectsClient(transport)
+                try:
+                    with pytest.raises(sdk.ProjectMissingError) as caught:
+                        await client.projects.cancel(project_id=0)
+                    assert isinstance(caught.value, sdk.ProblemError)
+                    assert caught.value.problem.replacement is None
+                    await client.projects.cancel(project_id=1)
+                finally:
+                    await client.close()
 
         asyncio.run(request())
 

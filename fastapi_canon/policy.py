@@ -37,9 +37,13 @@ class RouterPolicy:
         normalized_dependencies = tuple(
             unique_instances(dependencies, Depends, parameter="dependencies")
         )
-        normalized_raises = normalize_raises(
-            raises, registry=registry, parameter="raises"
-        )
+        normalized_raises = normalize_raises(raises, parameter="raises")
+        if normalized_raises:
+            registry = ErrorRegistry.merge(
+                *((registry,) if registry is not None else ()),
+                ErrorRegistry(errors=normalized_raises),
+                type_base=registry.type_base if registry is not None else None,
+            )
         object.__setattr__(self, "error_registry", registry)
         object.__setattr__(self, "dependencies", normalized_dependencies)
         object.__setattr__(self, "raises", normalized_raises)
@@ -77,20 +81,10 @@ def merge_policy_registry(
 def normalize_raises(
     values: Sequence[AnyError],
     *,
-    registry: ErrorRegistry | None,
     parameter: str,
 ) -> tuple[AnyError, ...]:
     raw_values: object = values
     if isinstance(raw_values, str) or not isinstance(raw_values, Sequence):
         msg = f"{parameter} must be a sequence of Error instances"
         raise ErrorConfigurationError(msg)
-    normalized = tuple(unique_instances(values, Error, parameter=parameter))
-    if normalized and registry is None:
-        msg = f"{parameter} requires an error registry"
-        raise ErrorConfigurationError(msg)
-    if registry is not None:
-        for error in normalized:
-            if not registry.contains(error):
-                msg = f"error {error.code!r} does not belong to this router's registry"
-                raise ErrorConfigurationError(msg)
-    return normalized
+    return tuple(unique_instances(values, Error, parameter=parameter))

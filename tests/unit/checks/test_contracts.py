@@ -49,20 +49,22 @@ def findings(report: dict[str, Any]) -> list[tuple[str, str, str]]:
 
 @pytest.mark.parametrize(
     ("declaration", "expected"),
-    [
-        ("", [("sse", "CAN001", "stream_raises")]),
-        ("raises=[missing]", [("sse", "CAN001", "stream_raises")]),
-        ("stream_raises=[missing]", []),
-    ],
+    [("", [("sse", "CAN001", "raises")] * 2), ("raises=[missing]", [])],
 )
-def test_sse_body_errors_need_stream_raises(
+def test_sse_dependency_and_body_errors_need_raises(
     analyze: Callable[..., dict[str, Any]],
     declaration: str,
     expected: list[tuple[str, str, str]],
 ) -> None:
     report = analyze(
         f"""
-@router.sse('/events', {declaration})
+class Denied(Missing):
+    pass
+
+def authenticate() -> str:
+    raise Denied()
+
+@router.sse('/events', dependencies=[Depends(authenticate)], {declaration})
 async def events() -> AsyncIterator[int]:
     yield 1
     raise Missing()
@@ -71,32 +73,6 @@ async def events() -> AsyncIterator[int]:
 
     assert findings(report) == expected
     assert report["operations"][0]["complete"]
-
-
-@pytest.mark.parametrize(
-    ("declaration", "expected"),
-    [
-        ("stream_raises=[missing]", [("sse", "CAN001", "raises")]),
-        ("raises=[missing]", []),
-    ],
-)
-def test_sse_dependency_errors_need_raises(
-    analyze: Callable[..., dict[str, Any]],
-    declaration: str,
-    expected: list[tuple[str, str, str]],
-) -> None:
-    report = analyze(
-        f"""
-def authenticate() -> str:
-    raise Missing()
-
-@router.sse('/events', dependencies=[Depends(authenticate)], {declaration})
-async def events() -> AsyncIterator[int]:
-    yield 1
-""",
-    )
-
-    assert findings(report) == expected
 
 
 def test_sse_follows_iterated_service_generators(

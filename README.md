@@ -21,8 +21,6 @@ The generated API follows your domain: `client.projects.get()`,
 - [Generate and use the SDK](#generate-and-use-the-sdk)
 - [Check that errors are mapped and declared](#check-that-errors-are-mapped-and-declared)
 - [Documentation](#documentation)
-- [Repository](#repository)
-- [Current releases](#current-releases)
 - [Repository layout](#repository-layout)
 
 ## Core features
@@ -30,7 +28,7 @@ The generated API follows your domain: `client.projects.get()`,
 | Declare | Canon provides |
 | --- | --- |
 | `Feature` + `Composition` | Ordered router/provider installation, one Dishka container and managed startup/shutdown. |
-| `Error` + `ErrorRegistry` + `raises=` | Shared public problem definitions for runtime responses, contracts and generated SDKs. |
+| `Error` + `raises=` | Declare and automatically register shared public problems for runtime responses, contracts and generated SDKs. |
 | `APIRouter` + `CanonResponse` | Familiar FastAPI routes with composable error and success contracts, including JSON, empty and binary responses. |
 | `router.sse(...)` | Typed SSE events, declared terminal problems and explicit completion, consumed through async iteration. |
 | `RpcChannel` + `router.include_channel(...)` | Compose methods and message streams under namespaces, then mount them on one WebSocket path. |
@@ -79,7 +77,7 @@ composition block at the end of the file and add them above it.
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from fastapi_canon import APIRouter, Composition, Error, ErrorRegistry, Feature
+from fastapi_canon import APIRouter, Composition, Error, ErrorOptions, Feature
 
 
 class ProjectMissing(Exception):
@@ -97,10 +95,7 @@ project_missing = Error(
     title="Project not found",
     detail="Choose another project.",
 )
-errors = ErrorRegistry(
-    errors=[project_missing], type_base="https://api.example.com/problems"
-)
-router = APIRouter(error_registry=errors)
+router = APIRouter()
 
 
 def require_project(project_id: int) -> None:
@@ -120,7 +115,11 @@ async def get_project(project_id: int) -> dict[str, int]:
 
 
 feature = Feature(name="projects", routers=[router])
-app = Composition(features=(feature,)).build(FastAPI())
+composition = Composition(
+    features=(feature,),
+    errors=ErrorOptions(type_base="https://api.example.com/problems"),
+)
+app = composition.build(FastAPI())
 ```
 
 `build` checks every operation contract before installing the feature, then
@@ -141,7 +140,7 @@ error contracts. See the [core API guide](docs/composition.md),
 
 ## Streams: typed events from server to SDK
 
-Add a stream to the same router, reusing the error registry and lookup above:
+Add a stream to the same router, reusing the error definition and lookup above:
 
 ```python
 from collections.abc import AsyncIterator
@@ -158,7 +157,6 @@ class ProjectEvent(BaseModel):
     operation_id="projects.events",
     dependencies=[Depends(require_project)],
     raises=[project_missing],
-    stream_raises=[project_missing],
 )
 async def events(project_id: int) -> AsyncIterator[ProjectEvent]:
     yield ProjectEvent(sequence=1)
@@ -167,9 +165,10 @@ async def events(project_id: int) -> AsyncIterator[ProjectEvent]:
 ```
 
 The event model becomes the generated iterator's item type.
-`raises=` describes HTTP admission failures; `stream_raises=` describes failures
-after streaming starts. Put admission checks in dependencies: generator bodies
-run after the response begins.
+`raises=` registers errors and describes both HTTP admission failures and terminal
+stream failures. Before response start, Canon sends an HTTP problem; during
+generator execution, it sends `canon.problem` and closes the stream. Put admission
+checks in dependencies: generator bodies run after the response begins.
 
 The generated SDK handles SSE framing and JSON decoding, yields business events,
 consumes `canon.complete`, and raises `ProblemError` on `canon.problem`.
@@ -190,7 +189,7 @@ channel on the same router:
 ```python
 from fastapi_canon import RpcChannel
 
-projects = RpcChannel("projects", error_registry=errors)
+projects = RpcChannel("projects")
 
 
 class CancelProject(BaseModel):
@@ -336,11 +335,13 @@ policy/router/operation `raises=` declarations:
 | Finding | Meaning | Example fix |
 | --- | --- | --- |
 | `CAN001` | A mapped error is missing from `raises=`. | Restore `raises=[project_missing]` on `get_project`. |
-| `CAN002` | An application exception has no registry mapping. | Define its public `Error` and add it to the router's registry. |
+| `CAN002` | An application exception has no mapping in `raises` or the router's registry. | Define its public `Error` and declare it in `raises`. |
 | `CAN003` | Analysis could not resolve a declaration or execution path. | Inspect the reported path and supported patterns. |
 
 For example, remove `raises=[project_missing]` from the HTTP operation above:
-the checker follows `get_project -> require_project` and reports `CAN001`.
+the checker follows `get_project -> require_project` and reports `CAN002` because
+the error is no longer registered by that declaration. With an explicit registry
+mapping, a missing declaration produces `CAN001`.
 `--strict` fails CI for mapping/declaration gaps; `--require-complete` also fails
 for incomplete analysis or no supported operations. `--format json` produces a
 machine-readable report for tooling and agents.
@@ -348,7 +349,7 @@ machine-readable report for tooling and agents.
 This checks supported explicit source paths, not every possible runtime failure.
 Abstract Dishka ports and dynamic code can leave analysis incomplete. The checker
 covers `APIRouter` HTTP operations, `.sse()` streams and `.webrtc()` sessions,
-and `RpcChannel` methods. SSE stream bodies are compared with `stream_raises=`.
+and `RpcChannel` methods.
 Keep runtime contract validation and behavioral tests. See
 [error checking](docs/error-checking.md) for boundaries and
 CI options.
@@ -397,42 +398,6 @@ wiring, folder structure, HTTP features, resources, transports/SDKs and testing.
 | Upgrade an existing application | [Package migration](docs/package-migration.md), [RPC migration](docs/integrations/websockets/migration.md) |
 | Run a complete application | [Reference service](examples/reference-service/README.md), [HTTP/SSE/RPC example](examples/stack_service.py) |
 | Contribute or prepare a release | [Contributing](docs/contributing.md), [guardrails](docs/architecture-guardrails.md), [compatibility](docs/compatibility.md), [releases](docs/releases.md) |
-
-## Repository
-
-The canonical home for development, issues and future releases is
-[`mathisarends/fastapi_canon`](https://github.com/mathisarends/fastapi_canon).
-The consolidated source returns from `mathisarends/canon` with its complete Git
-history. The PyPI project remains `fastapi-canon`, and Python imports remain
-`fastapi_canon`. There is one maintained source repository, not a mirrored pair.
-See the [repository migration](docs/repository-migration.md) for the cutover
-sequence, publisher setup and historical release locations.
-
-## Current releases
-
-Canon **0.15.0** is the current published unified distribution.
-It adds the unified WebSocket stream API, managed Python and TypeScript SDK stream
-resources, and optional FastMCP feature mounts with Dishka injection. Regenerate
-both SDKs and upgrade them with the server; stream decorators, controls and limits
-have changed. See the
-[upgrade guide](docs/package-migration.md#upgrade-to-0150),
-[migration notes](CHANGELOG.md#0150---2026-11-04)
-and [publication record](docs/releases.md#current-versions).
-The other names below are historical releases from the earlier four-distribution
-layout; use Canon's feature extras for current development.
-
-| Package | Version | GitHub | PyPI |
-| --- | --- | --- | --- |
-| `fastapi-canon` | 0.15.0 | [Release notes and artifacts](https://github.com/mathisarends/fastapi_canon/releases/tag/fastapi-canon-v0.15.0) | [Install](https://pypi.org/project/fastapi-canon/0.15.0/) |
-| `fastapi-streams` | 0.5.0 | [Release notes and artifacts](https://github.com/mathisarends/canon/releases/tag/fastapi-streams-v0.5.0) | [Install](https://pypi.org/project/fastapi-streams/0.5.0/) |
-| `fastapi-rpckit` | 0.4.1 | [Release notes and artifacts](https://github.com/mathisarends/canon/releases/tag/fastapi-rpckit-v0.4.1) | [Install](https://pypi.org/project/fastapi-rpckit/0.4.1/) |
-| `fastapi-webrtc` | 0.3.0 | [Release notes and artifacts](https://github.com/mathisarends/canon/releases/tag/fastapi-webrtc-v0.3.0) | [Install](https://pypi.org/project/fastapi-webrtc/0.3.0/) |
-
-Canon releases use this repository's
-[release list](https://github.com/mathisarends/fastapi_canon/releases), one Canon
-version, tag, changelog and artifact set. Historical release URLs and assets stay
-in the former [`canon` release list](https://github.com/mathisarends/canon/releases)
-and their original repositories.
 
 ## Repository layout
 

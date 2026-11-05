@@ -417,19 +417,14 @@ class _Checker:
                 else:
                     self._unknown(operation, "unresolved ErrorRegistry declaration")
             declared.update(self._errors(_keyword(layer, "raises"), scope, operation))
-        streamed: dict[str, str] = {}
         if decorator is not None:
             declared.update(
                 self._errors(_keyword(decorator, "raises"), function.module, operation)
             )
-            if operation.transport == "sse":
-                streamed = self._errors(
-                    _keyword(decorator, "stream_raises"), function.module, operation
-                )
+        catalog.update(declared)
         contracts_known = not operation.diagnostics
-        # SSE bodies run after the response starts, so only stream_raises applies.
-        body = self._analyzer.function(function, iterated=operation.transport == "sse")
-        flow = _Flow() if operation.transport == "sse" else body
+        # SSE generator bodies run while the response streams; follow iterated calls.
+        flow = self._analyzer.function(function, iterated=operation.transport == "sse")
         flow.extend(self._dependencies(function))
         for scope, layer in layers:
             flow.extend(self._router_dependencies(layer, scope, operation))
@@ -440,11 +435,7 @@ class _Checker:
         contracts_known = contracts_known and not any(
             self.source.uncertain.get(scope) for scope in self.source.touched
         )
-        phases = [(flow, declared, "raises")]
-        if operation.transport == "sse":
-            phases.append((body, streamed, "stream_raises"))
-        for phase, allowed, keyword in phases:
-            self._compare(operation, phase, catalog, allowed, keyword, contracts_known)
+        self._compare(operation, flow, catalog, declared, contracts_known)
         for scope in sorted(self.source.touched):
             for message in dict.fromkeys(self.source.uncertain.get(scope, [])):
                 operation.diagnostics.append(
@@ -457,7 +448,6 @@ class _Checker:
         flow: _Flow,
         catalog: dict[str, str],
         declared: dict[str, str],
-        keyword: str,
         contracts_known: bool,
     ) -> None:
         seen: set[tuple[str, str]] = set()
@@ -483,9 +473,9 @@ class _Checker:
                 continue
             seen.add(key)
             message = (
-                f"{escape.exception}: {mapped} is missing from {keyword}"
+                f"{escape.exception}: {mapped} is missing from raises"
                 if mapped
-                else f"{escape.exception}: no Error mapping in the router registry"
+                else f"{escape.exception}: no Error mapping in raises or the router registry"
             )
             origin = self.source.definitions[escape.trace[-1]]
             operation.diagnostics.append(
