@@ -1,6 +1,6 @@
 # DX-001: Keep provider-factory reassignment analysis sound
 
-- Status: In progress
+- Status: Done
 - Priority: P1
 - Kind: Verified bug
 - Baseline: `a366702` (2026-11-05)
@@ -90,6 +90,6 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
   Mypy, Ruff lint/format, changed Smelt and full pre-commit including full Smelt
   passed. The skipped database cases require their optional external services.
   The standalone distribution/browser matrices were not run for this static
-  checker-only change. Status stays In progress until the implementation lands.
+  checker-only change. Merged into main in `d5daf91`; implementation and required verification have landed.
 - Remaining follow-ups: broader checker flow slices remain DX-014 through DX-016;
   unmodeled provider control flow reports CAN003.
