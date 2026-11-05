@@ -1,6 +1,6 @@
 # DX-001: Keep provider-factory reassignment analysis sound
 
-- Status: Open
+- Status: In progress
 - Priority: P1
 - Kind: Verified bug
 - Baseline: `a366702` (2026-11-05)
@@ -66,11 +66,11 @@ Do not expand unrelated Python flow analysis.
 
 ## Acceptance criteria
 
-- [ ] The exact repro cannot report complete success: report the Missing gap when the implementation is known, or CAN003 when it is ambiguous.
-- [ ] Cover straight-line reassignment, annotated assignment, conditional assignments and return/yield positions; unreachable assignments after a return cannot replace its value.
-- [ ] Do not collect unrelated constructors from nested functions/classes as factory results.
-- [ ] Direct factories, provides= bindings, aliases and override-provider unions retain their supported behavior.
-- [ ] Classify any stricter validation or changed accepted behavior under the repository release policy; add concrete migration notes when required.
+- [x] The exact repro cannot report complete success: report the Missing gap when the implementation is known, or CAN003 when it is ambiguous.
+- [x] Cover straight-line reassignment, annotated assignment, conditional assignments and return/yield positions; unreachable assignments after a return cannot replace its value.
+- [x] Do not collect unrelated constructors from nested functions/classes as factory results.
+- [x] Direct factories, provides= bindings, aliases and override-provider unions retain their supported behavior.
+- [x] Classify any stricter validation or changed accepted behavior under the repository release policy; add concrete migration notes when required.
 
 ## Verification
 
@@ -80,6 +80,16 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
 
 ## Completion
 
-- Implementation or decision PR:
-- Final commit and verification:
-- Remaining follow-ups:
+- Implementation or decision PR: [#81](https://github.com/mathisarends/fastapi-canon/pull/81).
+- Final commit and verification: source fix `6435c50d91da7572e4c22228a538227e5c57fd37`
+  (regressions introduced in `369b44a`). The exact reassignment repro and its
+  direct-return control both exit 1 with CAN002 after the fix.
+  `uv run --frozen pytest tests/unit/checks -q`: 117 passed.
+  `uv run --frozen pytest`: 2,416 passed, 26 skipped, 153 warnings on
+  Windows/Python 3.14 (the additional module-alias case passed in the focused run).
+  Mypy, Ruff lint/format, changed Smelt and full pre-commit including full Smelt
+  passed. The skipped database cases require their optional external services.
+  The standalone distribution/browser matrices were not run for this static
+  checker-only change. Status stays In progress until the implementation lands.
+- Remaining follow-ups: broader checker flow slices remain DX-014 through DX-016;
+  unmodeled provider control flow reports CAN003.

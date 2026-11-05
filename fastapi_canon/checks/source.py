@@ -10,6 +10,7 @@ from typing import Self
 
 type _FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 type _Environment = dict[str, str]
+type _FactoryEnvironment = dict[str, tuple[str | None, ...]]
 
 # Builtins whose result or effect depends on application objects at runtime.
 _DYNAMIC = frozenset(
@@ -646,35 +647,117 @@ class _Source:
         return node
 
     def _constructed(self, factory: _FunctionNode, module: str) -> list[str | None]:
-        # Classes constructed by the values a provider factory returns or yields.
-        assigned: dict[str, ast.expr] = {}
-        values: list[ast.expr] = []
+        # Follow values at each exit, rather than resolving all names after a walk.
         pending: list[ast.AST] = list(factory.body)
+        yielding = False
         while pending:
             node = pending.pop()
             if isinstance(
                 node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda
             ):
                 continue
-            if (
-                isinstance(node, ast.Assign)
-                and len(node.targets) == 1
-                and isinstance(node.targets[0], ast.Name)
-            ):
-                assigned[node.targets[0].id] = node.value
-            if isinstance(node, ast.Return | ast.Yield) and node.value is not None:
-                values.append(node.value)
+            if isinstance(node, ast.Yield | ast.YieldFrom):
+                yielding = True
+                break
             pending.extend(ast.iter_child_nodes(node))
-        result: list[str | None] = []
-        for value in values:
-            if isinstance(value, ast.Name):
-                value = assigned.get(value.id, value)
-            if isinstance(value, ast.Await):
-                value = value.value
-            result.append(
-                self._class(value.func, module) if isinstance(value, ast.Call) else None
-            )
+        arguments = factory.args
+        assigned: _FactoryEnvironment = {
+            arg.arg: (None,)
+            for arg in [*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs]
+        }
+        result, remaining = self._factory_block(factory.body, module, assigned)
+        if remaining is not None and not yielding:
+            result.append(None)
         return result or [None]
+
+    def _factory_block(
+        self, statements: list[ast.stmt], module: str, assigned: _FactoryEnvironment
+    ) -> tuple[list[str | None], _FactoryEnvironment | None]:
+        assigned = dict(assigned)
+        result: list[str | None] = []
+        for statement in statements:
+            match statement:
+                case ast.Assign(targets=targets, value=value):
+                    resolved = self._factory_value(value, module, assigned)
+                    for target in targets:
+                        if not isinstance(target, ast.Name):
+                            return [*result, None], None
+                        assigned[target.id] = resolved
+                case ast.AnnAssign(target=ast.Name(id=name), value=value):
+                    if value is not None:
+                        assigned[name] = self._factory_value(value, module, assigned)
+                case ast.Return(value=value):
+                    result.extend(self._factory_value(value, module, assigned))
+                    return result, None
+                case ast.Expr(value=ast.Yield(value=value)):
+                    result.extend(self._factory_value(value, module, assigned))
+                case ast.If(test=test, body=body, orelse=orelse):
+                    if any(isinstance(node, ast.NamedExpr) for node in ast.walk(test)):
+                        return [*result, None], None
+                    first, left = self._factory_block(body, module, assigned)
+                    second, right = self._factory_block(orelse, module, assigned)
+                    result.extend([*first, *second])
+                    if left is None and right is None:
+                        return result, None
+                    if left is None or right is None:
+                        assigned = left if left is not None else right or {}
+                    else:
+                        assigned = {
+                            name: tuple(
+                                dict.fromkeys(
+                                    (
+                                        *left.get(name, (None,)),
+                                        *right.get(name, (None,)),
+                                    )
+                                )
+                            )
+                            for name in left.keys() | right.keys()
+                        }
+                case ast.Raise():
+                    return result, None
+                case (
+                    ast.FunctionDef(name=name)
+                    | ast.AsyncFunctionDef(name=name)
+                    | ast.ClassDef(name=name)
+                ):
+                    # Their bodies execute in a separate scope.
+                    assigned[name] = (None,)
+                case ast.Pass():
+                    continue
+                case ast.Expr(value=value) if not any(
+                    isinstance(node, ast.NamedExpr | ast.YieldFrom | ast.Yield)
+                    for node in ast.walk(value)
+                ):
+                    continue
+                case _:
+                    # Loops, exception handlers and other unmodeled control flow
+                    # cannot establish a complete provider implementation.
+                    return [*result, None], None
+        return result, assigned
+
+    def _factory_value(
+        self, value: ast.expr | None, module: str, assigned: _FactoryEnvironment
+    ) -> tuple[str | None, ...]:
+        match value:
+            case ast.Name(id=name):
+                return assigned.get(name, (None,))
+            case ast.Await(value=inner):
+                return self._factory_value(inner, module, assigned)
+            case ast.Call(func=constructor):
+                if isinstance(constructor, ast.Name) and constructor.id in assigned:
+                    return (None,)
+                return (self._class(constructor, module),)
+            case ast.IfExp(body=body, orelse=orelse):
+                return tuple(
+                    dict.fromkeys(
+                        (
+                            *self._factory_value(body, module, assigned),
+                            *self._factory_value(orelse, module, assigned),
+                        )
+                    )
+                )
+            case _:
+                return (None,)
 
     def _class(self, node: ast.expr, module: str) -> str | None:
         definition = self.definitions.get(self.resolve(node, module) or "")
