@@ -1,6 +1,6 @@
 # DX-001: Keep provider-factory reassignment analysis sound
 
-- Status: Open
+- Status: In progress
 - Priority: P1
 - Kind: Verified bug
 - Baseline: `a366702` (2026-11-05)

@@ -83,8 +83,16 @@ class AppProvider(Provider):
 class AppProvider(Provider):
     repository = provide(SqlRepository, provides=Repository, scope=Scope.REQUEST)
 """,
+        """
+Alias = SqlRepository
+
+class AppProvider(Provider):
+    @provide(scope=Scope.REQUEST)
+    def repository(self) -> Repository:
+        return Alias()
+""",
     ],
-    ids=["factory", "provides"],
+    ids=["factory", "provides", "module-alias"],
 )
 def test_port_calls_follow_the_dishka_binding(
     analyze: Callable[..., dict[str, Any]], provider: str
