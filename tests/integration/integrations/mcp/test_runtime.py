@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import httpx2
 import pytest
-from dishka import AsyncContainer, Provider, Scope, provide
+from dishka import AsyncContainer, Provider, Scope, make_async_container, provide
 from fastapi import FastAPI
 from fastmcp import Client, FastMCP
 from fastmcp.client.transports import StreamableHttpTransport
@@ -16,7 +16,13 @@ from fastmcp.utilities.asgi_transport import StreamingASGITransport
 from mcp import MCPError
 
 from fastapi_canon import Composition, Feature, FeatureConfigurationError
-from fastapi_canon.integrations.mcp import Inject, McpMount, McpOptions, McpServer
+from fastapi_canon.integrations.mcp import (
+    Inject,
+    McpMount,
+    McpOptions,
+    McpScope,
+    McpServer,
+)
 
 
 class Service:
@@ -463,3 +469,338 @@ def test_runtime_factory_requires_an_app_container() -> None:
         FeatureConfigurationError, match="requires features with Dishka providers"
     ):
         composition.apply(FastAPI())
+
+
+async def test_public_scope_shares_native_injection_and_restores_nested_context() -> (
+    None
+):
+    events: list[str] = []
+    container = make_async_container(Services(events))
+    scope = McpScope(container)
+    server = McpServer("Operations")
+
+    @server.tool
+    async def identify(service: Inject[Service]) -> str:
+        return service.identifier
+
+    try:
+        async with scope() as outer:
+            first = await outer.get(Service)
+            assert (await server.call_tool("identify")).structured_content == {
+                "result": first.identifier
+            }
+            async with scope() as inner:
+                second = await inner.get(Service)
+                assert second is not first
+                assert (await server.call_tool("identify")).structured_content == {
+                    "result": second.identifier
+                }
+            assert (await server.call_tool("identify")).structured_content == {
+                "result": first.identifier
+            }
+        assert events == ["open", "open", "commit", "close", "commit", "close"]
+        async with scope() as fresh:
+            assert (await fresh.get(Service)).identifier != first.identifier
+    finally:
+        await container.close()
+
+
+async def test_shielded_operation_owns_resources_after_its_waiter_is_cancelled() -> (
+    None
+):
+    events: list[str] = []
+    container = make_async_container(Services(events))
+    scope = McpScope(container)
+    started, finish = asyncio.Event(), asyncio.Event()
+
+    async def execute() -> str:
+        async with scope() as scoped:
+            service = await scoped.get(Service)
+            started.set()
+            async with asyncio.timeout(5):
+                await finish.wait()
+            assert events == ["open"]
+            return service.identifier
+
+    task = asyncio.create_task(execute())
+
+    async def wait_for_result() -> str:
+        return await asyncio.shield(task)
+
+    waiter = asyncio.create_task(wait_for_result())
+    try:
+        async with asyncio.timeout(5):
+            await started.wait()
+            waiter.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await waiter
+            assert not task.done()
+            finish.set()
+            assert await task
+        assert events == ["open", "commit", "close"]
+    finally:
+        finish.set()
+        task.cancel()
+        await asyncio.gather(task, waiter, return_exceptions=True)
+        await container.close()
+
+
+async def test_failed_public_operation_scope_rolls_back_and_remains_reusable() -> None:
+    events: list[str] = []
+    container = make_async_container(Services(events))
+    scope = McpScope(container)
+    try:
+        with pytest.raises(ValueError, match="operation rejected"):
+            async with scope() as scoped:
+                await scoped.get(Service)
+                raise ValueError("operation rejected")
+        assert events == ["open", "rollback", "close"]
+        async with scope() as scoped:
+            assert (await scoped.get(Service)).identifier
+        assert events == ["open", "rollback", "close", "open", "commit", "close"]
+    finally:
+        await container.close()
+
+
+@pytest.mark.parametrize("stateless", [False, True])
+async def test_http_session_mode_is_explicitly_configurable(stateless: bool) -> None:
+    app = Composition(mcp=McpOptions(stateless_http=stateless)).apply(FastAPI())
+    async with (
+        app.router.lifespan_context(app),
+        httpx2.AsyncClient(
+            transport=StreamingASGITransport(app), base_url="http://testserver"
+        ) as client,
+    ):
+        response = await client.post(
+            "/mcp/",
+            headers={"Accept": "application/json, text/event-stream"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-03-26",
+                    "capabilities": {},
+                    "clientInfo": {"name": "test", "version": "1"},
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    assert bool(response.headers.get("mcp-session-id")) is not stateless
+
+
+async def test_root_middleware_wraps_children_before_dependency_cleanup() -> None:
+    events: list[str] = []
+
+    class Recording(Middleware):
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        async def on_call_tool(
+            self, context: MiddlewareContext[Any], call_next: Any
+        ) -> Any:
+            events.append(self.name + ".before")
+            result = await call_next(context)
+            events.append(self.name + ".after")
+            return result
+
+    server = McpServer("Portfolio", middleware=[Recording("child")])
+
+    @server.tool
+    async def identify(service: Inject[Service]) -> str:
+        events.append("handler")
+        return service.identifier
+
+    feature = Feature(
+        name="portfolio",
+        providers=[lambda: Services(events)],
+        mcp=[McpMount(server=server, namespace="portfolio")],
+    )
+    app = Composition(
+        features=[feature],
+        mcp=McpOptions(middleware=(Recording("root"),)),
+    ).apply(FastAPI())
+
+    async with connected(app) as client:
+        assert (await client.call_tool("portfolio_identify")).data
+    assert events == [
+        "root.before",
+        "child.before",
+        "open",
+        "handler",
+        "child.after",
+        "root.after",
+        "commit",
+        "close",
+    ]
+
+
+@pytest.mark.parametrize("masked", [False, True])
+async def test_root_masks_forwarded_execution_failures_when_requested(
+    masked: bool,
+) -> None:
+    class Failure(Middleware):
+        async def on_call_tool(
+            self, context: MiddlewareContext[Any], call_next: Any
+        ) -> Any:
+            raise RuntimeError("private-operation-detail")
+
+    server = FastMCP("Native", middleware=[Failure()])
+
+    @server.tool
+    async def greet() -> str:
+        return "hello"
+
+    app = Composition(
+        features=[
+            Feature(name="native", mcp=[McpMount(server=server, namespace="native")])
+        ],
+        mcp=McpOptions(mask_error_details=masked),
+    ).apply(FastAPI())
+
+    async with connected(app) as client:
+        result = await client.call_tool("native_greet", raise_on_error=False)
+    assert result.is_error
+    assert ("private-operation-detail" in str(result.content)) is not masked
+
+
+async def test_concatenated_tool_names_cannot_be_discovered(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    first, second = FastMCP("First"), FastMCP("Second")
+
+    @first.tool(name="b_c")
+    async def one() -> str:
+        return "first"
+
+    @second.tool(name="c")
+    async def two() -> str:
+        return "second"
+
+    feature = Feature(
+        name="collision",
+        mcp=[
+            McpMount(server=first, namespace="a"),
+            McpMount(server=second, namespace="a_b"),
+        ],
+    )
+    app = Composition(features=[feature], mcp=McpOptions()).apply(FastAPI())
+
+    async with connected(app) as client:
+        with pytest.raises(MCPError, match="Internal server error"):
+            await client.list_tools()
+    assert "Duplicate MCP component 'tool:a_b_c@'" in caplog.text
+
+
+async def test_ambiguous_tool_call_is_rejected_before_either_handler_runs() -> None:
+    calls: list[str] = []
+    first, second = FastMCP("First"), FastMCP("Second")
+
+    @first.tool(name="b_c")
+    async def one() -> str:
+        calls.append("first")
+        return "first"
+
+    @second.tool(name="c")
+    async def two() -> str:
+        calls.append("second")
+        return "second"
+
+    feature = Feature(
+        name="collision",
+        mcp=[
+            McpMount(server=first, namespace="a"),
+            McpMount(server=second, namespace="a_b"),
+        ],
+    )
+    app = Composition(features=[feature], mcp=McpOptions()).apply(FastAPI())
+
+    async with connected(app) as client:
+        with pytest.raises(MCPError, match="Internal server error"):
+            await client.call_tool("a_b_c", raise_on_error=False)
+    assert calls == []
+
+
+async def test_concatenated_prompt_names_cannot_be_discovered(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    first, second = FastMCP("First"), FastMCP("Second")
+
+    @first.prompt(name="b_c")
+    async def one() -> str:
+        return "first"
+
+    @second.prompt(name="c")
+    async def two() -> str:
+        return "second"
+
+    feature = Feature(
+        name="collision",
+        mcp=[
+            McpMount(server=first, namespace="a"),
+            McpMount(server=second, namespace="a_b"),
+        ],
+    )
+    app = Composition(features=[feature], mcp=McpOptions()).apply(FastAPI())
+
+    async with connected(app) as client:
+        with pytest.raises(MCPError, match="Internal server error"):
+            await client.list_prompts()
+    assert "Duplicate MCP component 'prompt:a_b_c@'" in caplog.text
+
+
+async def test_distinct_versions_of_a_public_tool_name_remain_supported() -> None:
+    first, second = FastMCP("First"), FastMCP("Second")
+
+    @first.tool(name="b_c", version="1")
+    async def one() -> str:
+        return "first"
+
+    @second.tool(name="c", version="2")
+    async def two() -> str:
+        return "second"
+
+    feature = Feature(
+        name="versions",
+        mcp=[
+            McpMount(server=first, namespace="a"),
+            McpMount(server=second, namespace="a_b"),
+        ],
+    )
+    app = Composition(features=[feature], mcp=McpOptions()).apply(FastAPI())
+
+    async with connected(app) as client:
+        assert [tool.name for tool in await client.list_tools()] == ["a_b_c"]
+        assert (await client.call_tool("a_b_c")).data == "second"
+
+
+async def test_late_tool_registration_cannot_introduce_an_ambiguous_call() -> None:
+    first, second = FastMCP("First"), FastMCP("Second")
+    calls: list[str] = []
+
+    @first.tool(name="b_c")
+    async def one() -> str:
+        calls.append("first")
+        return "first"
+
+    feature = Feature(
+        name="dynamic",
+        mcp=[
+            McpMount(server=first, namespace="a"),
+            McpMount(server=second, namespace="a_b"),
+        ],
+    )
+    app = Composition(features=[feature], mcp=McpOptions()).apply(FastAPI())
+
+    async with connected(app) as client:
+        assert [tool.name for tool in await client.list_tools()] == ["a_b_c"]
+
+        @second.tool(name="c")
+        async def two() -> str:
+            calls.append("second")
+            return "second"
+
+        with pytest.raises(MCPError, match="Internal server error"):
+            await client.call_tool("a_b_c", raise_on_error=False)
+    assert calls == []

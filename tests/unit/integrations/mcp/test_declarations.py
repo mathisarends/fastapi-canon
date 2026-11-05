@@ -45,3 +45,16 @@ def test_async_runtime_factories_are_rejected(parameter: str) -> None:
 
     with pytest.raises(FeatureConfigurationError, match="synchronous callable"):
         McpOptions(**{parameter: factory})  # type: ignore[arg-type]  # Async factories are deliberately invalid.
+
+
+@pytest.mark.parametrize("parameter", ["stateless_http", "mask_error_details"])
+def test_runtime_flags_reject_non_booleans(parameter: str) -> None:
+    with pytest.raises(FeatureConfigurationError, match=parameter):
+        McpOptions(**{parameter: "true"})  # type: ignore[arg-type]
+
+
+def test_runtime_defaults_preserve_fastmcp_settings() -> None:
+    options = McpOptions()
+    assert options.stateless_http is None
+    assert options.mask_error_details is None
+    assert options.middleware == ()

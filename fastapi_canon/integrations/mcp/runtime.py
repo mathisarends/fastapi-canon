@@ -8,9 +8,9 @@ from fastmcp.server.middleware import Middleware, MiddlewareContext
 from starlette.types import Lifespan
 
 from fastapi_canon.error.types import FeatureConfigurationError
-from fastapi_canon.integrations.mcp import McpMount, McpOptions
+from fastapi_canon.integrations.mcp import McpMount, McpOptions, McpScope
+from fastapi_canon.integrations.mcp.component_validation import ComponentValidation
 from fastapi_canon.integrations.mcp.configuration import McpRuntime
-from fastapi_canon.integrations.mcp.dependencies import request_scope
 
 
 def install_mcp(
@@ -21,15 +21,19 @@ def install_mcp(
     configuration: McpRuntime,
 ) -> Lifespan[FastAPI]:
     server = FastMCP(
-        options.name or app.title, on_duplicate="error", auth=configuration.auth
+        options.name or app.title,
+        on_duplicate="error",
+        auth=configuration.auth,
+        mask_error_details=options.mask_error_details,
     )
     if container is not None:
         server.add_middleware(_DishkaScope(container))
-    for middleware in configuration.middleware:
+    server.add_middleware(ComponentValidation(server))
+    for middleware in (*options.middleware, *configuration.middleware):
         server.add_middleware(middleware)
     for mount in mounts:
         server.mount(mount.server, namespace=mount.namespace)
-    mcp_app = server.http_app(path="/")
+    mcp_app = server.http_app(path="/", stateless_http=options.stateless_http)
     app.mount(options.path, mcp_app)
     return mcp_app.lifespan
 
@@ -61,17 +65,17 @@ class _DishkaScope(Middleware):
     async def on_call_tool(
         self, context: MiddlewareContext[Any], call_next: Any
     ) -> Any:
-        async with request_scope(self._container):
+        async with McpScope(self._container)():
             return await call_next(context)
 
     async def on_read_resource(
         self, context: MiddlewareContext[Any], call_next: Any
     ) -> Any:
-        async with request_scope(self._container):
+        async with McpScope(self._container)():
             return await call_next(context)
 
     async def on_get_prompt(
         self, context: MiddlewareContext[Any], call_next: Any
     ) -> Any:
-        async with request_scope(self._container):
+        async with McpScope(self._container)():
             return await call_next(context)

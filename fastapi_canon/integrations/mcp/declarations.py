@@ -44,6 +44,9 @@ class McpOptions:
     name: str | None = None
     path: str = "/mcp"
     auth: AuthProvider | None = None
+    stateless_http: bool | None = None
+    mask_error_details: bool | None = None
+    middleware: tuple[Middleware, ...] = ()
     auth_factory: Callable[[AsyncContainer], AuthProvider] | None = None
     middleware_factory: Callable[[AsyncContainer], Sequence[Middleware]] | None = None
 
@@ -59,6 +62,20 @@ class McpOptions:
             ):
                 raise FeatureConfigurationError(
                     f"MCP {parameter} must be a synchronous callable or None"
+                )
+        for parameter in ("stateless_http", "mask_error_details"):
+            value = getattr(self, parameter)
+            if value is not None and not isinstance(value, bool):
+                raise FeatureConfigurationError(
+                    f"MCP {parameter} must be a bool or None"
+                )
+        object.__setattr__(self, "middleware", tuple(self.middleware))
+        if self.middleware:
+            from fastmcp.server.middleware import Middleware
+
+            if any(not isinstance(item, Middleware) for item in self.middleware):
+                raise FeatureConfigurationError(
+                    "MCP middleware must contain Middleware instances"
                 )
         if self.name is not None and (
             not isinstance(self.name, str) or not self.name.strip()

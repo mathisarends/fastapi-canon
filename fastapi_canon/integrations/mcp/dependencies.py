@@ -17,6 +17,27 @@ type Inject[T] = Annotated[T, _MARKER]
 _ACTIVE: ContextVar[AsyncContainer] = ContextVar("canon_mcp_container")
 
 
+class McpScope:
+    """Own an independent MCP REQUEST scope while borrowing an APP container.
+
+    Register this reusable factory at APP scope. Enter it inside the task that
+    owns an operation, and keep result conversion inside the context manager.
+    The caller owns task cancellation, shielding and deduplication.
+    """
+
+    def __init__(self, container: AsyncContainer) -> None:
+        self._container = container
+
+    @asynccontextmanager
+    async def __call__(self) -> AsyncIterator[AsyncContainer]:
+        async with self._container(scope=Scope.REQUEST) as scoped:
+            token = _ACTIVE.set(scoped)
+            try:
+                yield scoped
+            finally:
+                _ACTIVE.reset(token)
+
+
 def inject_handler(function: Callable[..., Any]) -> Callable[..., Any]:
     hints = get_type_hints(function, include_extras=True)
     sig = signature(function)
@@ -63,10 +84,6 @@ def inject_handler(function: Callable[..., Any]) -> Callable[..., Any]:
 
 
 @asynccontextmanager
-async def request_scope(container: AsyncContainer) -> AsyncIterator[None]:
-    async with container(scope=Scope.REQUEST) as scoped:
-        token = _ACTIVE.set(scoped)
-        try:
-            yield
-        finally:
-            _ACTIVE.reset(token)
+async def request_scope(container: AsyncContainer) -> AsyncIterator[AsyncContainer]:
+    async with McpScope(container)() as scoped:
+        yield scoped

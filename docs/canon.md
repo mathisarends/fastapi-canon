@@ -160,7 +160,7 @@ tag and artifact set.
 
 ## MCP composition
 
-`fastapi_canon.integrations.mcp` exports `McpServer`, `Inject`, `McpMount`, and
+`fastapi_canon.integrations.mcp` exports `McpServer`, `Inject`, `McpMount`, `McpScope`, and
 `McpOptions`. Install `fastapi-canon[mcp]` for the FastMCP runtime. Features
 contribute explicit namespaced mounts; `Composition(mcp=McpOptions())` owns the
 common HTTP endpoint and lifespan. See the [MCP guide](integrations/mcp/README.md).

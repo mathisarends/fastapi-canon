@@ -100,6 +100,25 @@ FastAPI app or reading `app.state`. Canon retains ownership of the container and
 closes it after MCP lifespan cleanup. Factory output failures report
 `canon.mcp.E002`.
 
+Configure the common root with `McpOptions(stateless_http=True,
+mask_error_details=True, middleware=(audit_middleware,))` when replacing a
+custom FastMCP HTTP adapter. Both boolean options default to `None`, which
+preserves FastMCP's settings and environment configuration. Root middleware
+runs in declaration order inside Canon's execution scope and outside child
+server middleware. Each application creates its own root; use independent
+middleware instances when they retain application-specific state. Stateful
+HTTP requires session affinity in deployments with multiple workers. Stateless
+HTTP does not make application-owned capabilities or deduplicated results shared.
+FastMCP error masking should also be enabled on child servers when their own
+error handling could expose details; the root option does not rewrite children.
+
+The combined catalog also rejects duplicate public component identities during
+discovery and before execution. For example, namespace `a` with tool `b_c` and
+namespace `a_b` with tool `c` both produce `a_b_c`. Rename one local component or
+namespace. Distinct component versions remain valid. These checks run against
+the current caller's live catalog, including authenticated dynamic providers;
+composition preflight does not start or query those providers.
+
 `McpServer` is a thin FastMCP subclass: it translates `Inject[T]` annotations before
 FastMCP creates schemas. Its `tool`, `resource`, and `prompt` decorators retain
 FastMCP behavior. Async injected handlers and direct `add_tool(function)` are
@@ -112,6 +131,35 @@ resource or prompt execution. All injected parameters share that scope. Cleanup
 runs after result conversion, including exceptions and cancellation. The MCP
 lifespan runs inside the composition lifecycle; MCP does not close the borrowed
 APP container. Child server declarations do not store application containers.
+
+For an application-owned operation that must outlive an HTTP response, register
+`McpScope` at APP scope and enter it inside the operation's task:
+
+```python
+from dishka import AsyncContainer
+from fastapi_canon.integrations.mcp import McpScope
+
+
+class OperationProvider(Provider):
+    @provide(scope=Scope.APP)
+    def operation_scope(self, container: AsyncContainer) -> McpScope:
+        return McpScope(container)
+
+
+async def execute(scope: McpScope) -> dict[str, str]:
+    async with scope() as scoped:
+        service = await scoped.get(PortfolioService)
+        return await service.get("p1")
+```
+
+Within that context, `Inject[T]` also resolves against the same container when
+executing a registered native tool. Keep execution and result conversion inside
+the context. Each entry owns a fresh REQUEST scope; nested and concurrent entries
+restore the previous injection context on exit. The factory never closes the APP
+container. Applications own their tasks, cancellation/shielding and logical-call
+deduplication. Create and enter the operation scope inside a shielded task rather
+than borrowing resources from its caller's transport scope. `McpScope` itself does
+not require FastMCP to be installed.
 
 FastAPI router dependencies and `RouterPolicy` do not protect mounted MCP routes.
 Pass a native FastMCP auth provider through `McpOptions(auth=...)` and enforce
