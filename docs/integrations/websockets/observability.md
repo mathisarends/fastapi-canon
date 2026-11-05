@@ -40,9 +40,12 @@ web = FastAPI()
 web.include_router(rpc)
 ```
 
-Configure middleware once on `CanonWebSocketRouter`. It wraps connection-context
-dependencies, RPC calls and raw or binary endpoints. Endpoint-specific
-`middleware=` extends the router configuration. Low-level `serve_websocket()`
+For a JSON-RPC channel, pass the middleware when mounting it:
+`router.include_channel(channel, path="/rpc", middleware=[OpenTelemetry()])`.
+Binary and raw endpoints such as the one above configure it on their
+`CanonWebSocketRouter`. Middleware wraps connection-context dependencies, RPC
+calls and binary or raw endpoints; endpoint-specific `middleware=` extends the
+router configuration. Low-level `serve_websocket()`
 and channel/endpoint `create_server()` also accept middleware.
 
 ## Configure signals and providers
@@ -180,7 +183,7 @@ context-manager variables. Instrumentation failures are logged and isolated,
 and middleware cannot suppress application failures or rewrite responses.
 Cancellation propagates after cleanup.
 
-`CanonWebSocketRouter` opens connection middleware before its `context=` dependency and
+Each endpoint opens connection middleware before its `context=` dependency and
 closes it after dependency cleanup, including mapped context rejections.
 Earlier FastAPI or router-wide dependencies remain outside that boundary.
 Manual routes start their boundary when they call `serve_websocket()`.
