@@ -40,7 +40,7 @@ them. Supporting references are installed beside this file for both agent tools.
   (`@router.webrtc`). Contribute it once through `Feature(routers=[router])`.
 - Use Dishka for application dependencies. Put `DishkaRoute` on the router for
   HTTP handlers using `FromDishka`; decorate SSE endpoints with `@inject`; mount
-  channels using `Inject[T]` with `resolver=Dishka()`. Let `Composition` own the
+  RPC methods request services with `Inject[T]`. Let `Composition` own the
   container and scope lifecycle.
 - Import Canon through `fastapi_canon`, `fastapi_canon.error` or documented
   `fastapi_canon.integrations.*` facades. Define each public problem once, bind

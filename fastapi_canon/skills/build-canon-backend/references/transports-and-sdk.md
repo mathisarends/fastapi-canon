@@ -14,7 +14,6 @@ from collections.abc import AsyncIterator
 
 from dishka.integrations.fastapi import FromDishka, inject
 from fastapi_canon import APIRouter, Inject, RpcChannel
-from fastapi_canon.integrations.websockets.adapters.dishka import Dishka
 
 from backend.features.projects.application import ProjectService
 
@@ -39,7 +38,7 @@ async def rename(params: RenameProject, projects: Inject[ProjectService]) -> Pro
     return await projects.rename(params.project_id, params.title)
 
 
-router.include_channel(channel, path="/rpc", resolver=Dishka())
+router.include_channel(channel, path="/rpc")
 ```
 
 Declare channel operations before inclusion: each mount captures a snapshot.
@@ -74,9 +73,9 @@ Generated iterators yield business events, consume completion and raise shared
 Install the `websockets` extra. Declare typed methods and events on an
 `RpcChannel` with `@channel.method(raises=[...])`, using the same public `Error`
 definitions as HTTP, and mount it with `router.include_channel(channel,
-path="/rpc")` after declaring operations. With Dishka, pass `resolver=Dishka()`
-and request services with `Inject[T]`; HTTP's `DishkaRoute` is not the RPC
-injection mechanism. Handshake authentication uses `context=`/`hooks=` and
+path="/rpc")` after declaring operations. Methods request services with
+`Inject[T]`, resolved from Composition's Dishka container; HTTP's `DishkaRoute`
+is not the RPC injection mechanism. Handshake authentication uses `context=`/`hooks=` and
 `rejects=` on the same call; see
 [integrations/websockets/dependencies.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/integrations/websockets/dependencies.md).
 

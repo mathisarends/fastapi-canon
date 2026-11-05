@@ -63,7 +63,7 @@ resources in yielding providers or lifespans. Do not add a second `setup_dishka`
 or manually install the same error registry.
 
 HTTP handlers use `DishkaRoute` and `FromDishka[T]`; SSE endpoints use `@inject`.
-JSON-RPC methods use `Inject[T]` on a channel mounted with `resolver=Dishka()`.
+JSON-RPC methods use `Inject[T]`; Composition's container resolves them.
 APP resources own pools and
 factories; REQUEST resources own a single operation. See the
 [HTTP walkthrough](http-feature.md) for the complete router/service/provider and
