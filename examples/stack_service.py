@@ -72,7 +72,7 @@ def create_app() -> FastAPI:
 
     router.include_channel(channel, path="/rpc")
     feature = Feature(name="counter", routers=[router], providers=[StackProvider])
-    return Composition(features=(feature,)).apply(FastAPI(title="Canon stack example"))
+    return Composition(features=(feature,)).build(FastAPI(title="Canon stack example"))
 
 
 app = create_app()

@@ -22,7 +22,7 @@ def application_module(tmp_path: Path) -> Path:
         composition = Composition(features=(Feature(name="projects", routers=[router], checks=[warning]),))
 
         def create_app():
-            return composition.apply(FastAPI())
+            return composition.build(FastAPI())
 
         app = create_app()
     """),

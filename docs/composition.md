@@ -75,7 +75,7 @@ async def list_projects() -> list[str]:
 
 project_feature = Feature(name="projects", routers=[projects])
 
-app = Composition(features=(project_feature,)).apply(FastAPI())
+app = Composition(features=(project_feature,)).build(FastAPI())
 ```
 
 ## Feature composition
@@ -147,7 +147,7 @@ composition = Composition(
 )
 ```
 
-The factory is called during `apply()` and must return a fresh, empty router.
+The factory is called during `build()` and must return a fresh, empty router.
 Omitting it installs feature routers directly on the app.
 
 ### Router policies
@@ -236,7 +236,7 @@ feature = Feature(
 )
 ```
 
-Classes and factories are materialized once per application during `apply()`;
+Classes and factories are materialized once per application during `build()`;
 instances are used as supplied. The providers from every feature are validated
 together and used to build one `AsyncContainer`.
 
@@ -245,6 +245,39 @@ middleware, exposes the container as `app.state.dishka_container`, and closes
 it during application shutdown. Existing application lifespans are composed
 automatically. Applications should treat the exposed container as
 composition-owned and not close it independently.
+
+### Overriding providers in tests
+
+`composition.override(*providers)` returns a copy of the composition whose
+providers are added after every feature provider, so their bindings replace the
+feature bindings. The original composition is unchanged:
+
+```python
+from dishka import Provider, Scope, provide
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from app.main import composition
+
+
+class FakeProjectProvider(Provider):
+    scope = Scope.APP
+
+    @provide
+    def repository(self) -> ProjectRepository:
+        return InMemoryProjectRepository()
+
+
+def test_lists_projects() -> None:
+    app = composition.override(FakeProjectProvider).build(FastAPI())
+    with TestClient(app) as client:
+        assert client.get("/projects").json() == []
+```
+
+Overrides accept the same provider instances, classes and factories as
+`Feature(providers=...)`. An override may only replace bindings that a feature
+already provides; a binding for any other type fails with
+`canon.providers.E001`, which catches typos and stale fakes.
 
 ## Error contracts
 
@@ -309,7 +342,7 @@ project_feature = Feature(name="projects", routers=[projects])
 app = Composition(
     features=(project_feature,),
     errors=ErrorOptions(type_base="https://api.example.com/problems"),
-).apply(FastAPI())
+).build(FastAPI())
 ```
 
 Document normalized `HTTPException` statuses with `http_statuses=[403]` on the
@@ -444,11 +477,12 @@ to pass through unchanged.
 
 Contracts are checked in two places. Each declaration validates its error
 definitions when the route is registered, including routes excluded with
-`include_in_schema=False`. `Composition.check(app)` and `apply(app)` then compile
+`include_in_schema=False`. `Composition.check(app)` and `build(app)` then compile
 every installed operation against the composed error catalog on a temporary
 application, before anything is installed; a mismatch is reported as
-`canon.contracts.E001` and makes `apply` raise `FeatureConfigurationError`.
-`composition.validate(app)` repeats the check on the installed application.
+`canon.contracts.E001` and makes `build` raise `FeatureConfigurationError`.
+After installation, `build` repeats the checks on the installed application,
+including OpenAPI compilation.
 
 For explicit method lists, import the string enum `HTTPMethod` from
 `fastapi_canon`, for example `methods=[HTTPMethod.POST]`. Canon re-exports

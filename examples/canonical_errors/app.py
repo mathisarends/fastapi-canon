@@ -88,7 +88,7 @@ def create_app() -> FastAPI:
     return Composition(
         features=(feature,),
         errors=ErrorOptions(type_base="https://api.example.com/problems"),
-    ).apply(FastAPI(title="Projects"))
+    ).build(FastAPI(title="Projects"))
 
 
 app = create_app()

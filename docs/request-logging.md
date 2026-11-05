@@ -13,7 +13,7 @@ app = Composition(
     errors=ErrorOptions(type_base="https://api.example.test/problems"),
     request_logging=True,
     telemetry=telemetry,  # Optional; omit for request logging alone.
-).apply(FastAPI())
+).build(FastAPI())
 ```
 
 `request_logging` defaults to `False`. It needs no Canon OTel extra, SDK, exporter,

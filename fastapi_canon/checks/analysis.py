@@ -34,24 +34,33 @@ class _Analyzer:
     def __init__(self, source: _Source) -> None:
         self.source = source
         self._summaries: dict[
-            str, tuple[tuple[_Escape, ...], tuple[_Unknown, ...], frozenset[str]]
+            tuple[str, bool],
+            tuple[tuple[_Escape, ...], tuple[_Unknown, ...], frozenset[str]],
         ] = {}
 
-    def function(self, function: _Definition, stack: tuple[str, ...] = ()) -> _Flow:
+    def function(
+        self,
+        function: _Definition,
+        stack: tuple[str, ...] = (),
+        *,
+        iterated: bool = False,
+    ) -> _Flow:
+        """Summarize *function*; iterated generators execute their bodies."""
         if function.name in stack:
             return _Flow(
                 unknowns=[
                     _Unknown("recursive call", function.name, function.node.lineno)
                 ]
             )
-        if function.name in self._summaries:
-            escapes, unknowns, modules = self._summaries[function.name]
+        summary_key = function.name, iterated
+        if summary_key in self._summaries:
+            escapes, unknowns, modules = self._summaries[summary_key]
             self.source.touched.update(modules)
             return _Flow(list(escapes), list(unknowns))
         previous = self.source.touched
         self.source.touched = set()
         try:
-            flow = self._analyze_function(function, stack)
+            flow = self._analyze_function(function, stack, iterated=iterated)
             # The report retains the first path per exception. Propagation and
             # catching depend on exception types, not duplicate paths to them.
             first: dict[str, _Escape] = {}
@@ -60,7 +69,7 @@ class _Analyzer:
             flow.escapes = list(first.values())
             flow.unknowns = list(dict.fromkeys(flow.unknowns))
             if not any(item.message == "recursive call" for item in flow.unknowns):
-                self._summaries[function.name] = (
+                self._summaries[summary_key] = (
                     tuple(flow.escapes),
                     tuple(flow.unknowns),
                     frozenset(self.source.touched),
@@ -70,7 +79,9 @@ class _Analyzer:
             previous.update(self.source.touched)
             self.source.touched = previous
 
-    def _analyze_function(self, function: _Definition, stack: tuple[str, ...]) -> _Flow:
+    def _analyze_function(
+        self, function: _Definition, stack: tuple[str, ...], *, iterated: bool
+    ) -> _Flow:
         node = function.node
         assert isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
         flow = _Flow()
@@ -87,18 +98,11 @@ class _Analyzer:
                 "builtins.staticmethod",
                 "builtins.classmethod",
                 "builtins.property",
-            } and not (
-                isinstance(decorator, ast.Call)
-                and isinstance(decorator.func, ast.Attribute)
-                and decorator.func.attr in _ROUTE_METHODS
-            ):
+            } and not _operation_decorator(decorator):
                 flow.unknowns.append(
                     _Unknown("unresolved decorator", function.name, decorator.lineno)
                 )
-        if any(
-            isinstance(child, ast.Yield | ast.YieldFrom)
-            for child in _executed_nodes(node.body)
-        ):
+        if not iterated and _generator(node):
             flow.unknowns.append(
                 _Unknown(
                     "generator execution is outside the HTTP response boundary",
@@ -119,10 +123,13 @@ class _Analyzer:
         stack: tuple[str, ...],
         *,
         awaited: bool = False,
+        iterated: bool = False,
     ) -> _Flow:
         flow = _Flow()
         if isinstance(node, ast.Await):
-            return self.expression(node.value, function, env, stack, awaited=True)
+            return self.expression(
+                node.value, function, env, stack, awaited=True, iterated=iterated
+            )
         if isinstance(node, ast.Lambda):
             return flow
         if isinstance(
@@ -185,7 +192,12 @@ class _Analyzer:
                                 node.lineno,
                             )
                         )
-                if isinstance(definition.node, ast.AsyncFunctionDef) and not awaited:
+                iterated_generator = iterated and _generator(definition.node)
+                if (
+                    isinstance(definition.node, ast.AsyncFunctionDef)
+                    and not awaited
+                    and not iterated_generator
+                ):
                     flow.unknowns.append(
                         _Unknown(
                             "coroutine execution is deferred until awaited",
@@ -194,7 +206,7 @@ class _Analyzer:
                         )
                     )
                     return flow
-                called = self.function(definition, stack)
+                called = self.function(definition, stack, iterated=iterated_generator)
                 flow.escapes.extend(
                     _Escape(item.exception, (function.name, *item.trace), item.line)
                     for item in called.escapes
@@ -366,6 +378,23 @@ class _Analyzer:
                 )
                 self._invalidate(node, env)
                 continue
+            if isinstance(node, ast.For | ast.AsyncFor | ast.While):
+                # Iterations may run zero or more times, like independent branches.
+                if isinstance(node, ast.While):
+                    flow.extend(self.expression(node.test, function, env, stack))
+                else:
+                    flow.extend(
+                        self.expression(node.iter, function, env, stack, iterated=True)
+                    )
+                    self._invalidate(node.target, env)
+                flow.extend(
+                    self.block(node.body, function, env.copy(), stack, reraised)
+                )
+                flow.extend(
+                    self.block(node.orelse, function, env.copy(), stack, reraised)
+                )
+                self._invalidate(node, env)
+                continue
             if isinstance(node, ast.Assign | ast.AnnAssign):
                 if node.value is not None:
                     flow.extend(self.expression(node.value, function, env, stack))
@@ -456,6 +485,25 @@ class _Analyzer:
 _ROUTE_METHODS = frozenset(
     {"get", "post", "put", "patch", "delete", "head", "options", "trace", "api_route"}
 )
+_TRANSPORT_METHODS = frozenset({"sse", "webrtc"})
+_RPC_METHOD = "method"
+
+
+def _operation_decorator(decorator: ast.expr) -> bool:
+    if isinstance(decorator, ast.Attribute):
+        return decorator.attr == _RPC_METHOD
+    return (
+        isinstance(decorator, ast.Call)
+        and isinstance(decorator.func, ast.Attribute)
+        and decorator.func.attr in {*_ROUTE_METHODS, *_TRANSPORT_METHODS, _RPC_METHOD}
+    )
+
+
+def _generator(node: ast.AST) -> bool:
+    return isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and any(
+        isinstance(child, ast.Yield | ast.YieldFrom)
+        for child in _executed_nodes(node.body)
+    )
 
 
 def _executed_nodes(body: list[ast.stmt]) -> list[ast.AST]:

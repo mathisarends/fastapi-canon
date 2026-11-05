@@ -54,7 +54,7 @@ def test_composition_normalizes_without_domain_registries() -> None:
     async def broken() -> None:
         raise RuntimeError("private database credentials")
 
-    app = Composition(features=[Feature(name="items", routers=[router])]).apply(
+    app = Composition(features=[Feature(name="items", routers=[router])]).build(
         FastAPI()
     )
     document = app.openapi()
@@ -88,7 +88,7 @@ def test_nested_routers_and_explicit_registries_contribute_together() -> None:
     root = CanonRouter()
     root.include_router(parent)
     feature = Feature(name="items", routers=[root], errors=ErrorRegistry(errors=[]))
-    app = Composition(features=[feature]).apply(FastAPI())
+    app = Composition(features=[feature]).build(FastAPI())
 
     with TestClient(app) as client:
         response = client.get("/api/items/missing")
@@ -103,7 +103,7 @@ def test_nested_routers_and_explicit_registries_contribute_together() -> None:
 def test_http_contracts_compose_on_every_decorator(method: str) -> None:
     router = CanonRouter(http_statuses=[401])
     getattr(router, method)("/protected", http_statuses=[401, 403])(lambda: None)
-    app = Composition(features=[Feature(name="private", routers=[router])]).apply(
+    app = Composition(features=[Feature(name="private", routers=[router])]).build(
         FastAPI()
     )
     responses = app.openapi()["paths"]["/protected"][method]["responses"]
@@ -127,7 +127,7 @@ def test_http_contracts_respect_normalization_options() -> None:
         errors=ErrorOptions(include_http_exceptions=False),
     )
     with pytest.raises(ConfigurationError, match="normalization is disabled"):
-        composition.apply(FastAPI())
+        composition.build(FastAPI())
 
 
 @pytest.mark.parametrize("status", [422, 500])
@@ -141,7 +141,7 @@ def test_framework_and_domain_errors_share_discriminated_contracts(status: int) 
             raise RuntimeError("private")
         raise Missing
 
-    app = Composition(features=[Feature(name="items", routers=[router])]).apply(
+    app = Composition(features=[Feature(name="items", routers=[router])]).build(
         FastAPI()
     )
     document = app.openapi()
@@ -229,7 +229,7 @@ def test_app_router_and_feature_lifespans_run_and_unwind_together() -> None:
             Feature(name="health", routers=[router], lifespan=lifecycle("feature"))
         ]
     )
-    app = composition.apply(FastAPI(lifespan=lifecycle("app")))
+    app = composition.build(FastAPI(lifespan=lifecycle("app")))
     with TestClient(app):
         assert events == ["start app", "start feature", "start router"]
     assert events == [
@@ -246,7 +246,7 @@ def test_installation_after_startup_fails_explicitly() -> None:
     app = FastAPI()
     with TestClient(app):
         with pytest.raises(ConfigurationError, match="before the app starts"):
-            Composition(features=[Feature(name="late")]).apply(app)
+            Composition(features=[Feature(name="late")]).build(app)
         with pytest.raises(ConfigurationError, match="before the app starts"):
             ErrorRegistry(errors=[], type_base="urn:test:problems").install(app)
 
@@ -267,7 +267,7 @@ def test_composition_validates_before_opening_feature_resources() -> None:
     )
     app = FastAPI()
     with pytest.raises(ConfigurationError, match="Duplicate operation ID 'duplicate'"):
-        composition.apply(app)
+        composition.build(app)
     assert not started
     assert app.openapi_schema is None
 
@@ -287,7 +287,7 @@ def test_domain_errors_respect_websocket_transport(
             await websocket.accept()
         raise Missing
 
-    app = Composition(features=[Feature(name="socket", routers=[router])]).apply(
+    app = Composition(features=[Feature(name="socket", routers=[router])]).build(
         FastAPI()
     )
     messages: list[Message] = []
@@ -334,7 +334,7 @@ def test_stream_authentication_uses_the_same_http_problem_contract() -> None:
     async def events() -> StreamingResponse:
         raise HTTPException(401, "Sign in before opening the stream")
 
-    app = Composition(features=[Feature(name="events", routers=[router])]).apply(
+    app = Composition(features=[Feature(name="events", routers=[router])]).build(
         FastAPI()
     )
     with TestClient(app) as client:
@@ -358,7 +358,7 @@ def test_failure_after_stream_start_does_not_send_a_second_response() -> None:
     async def events() -> StreamingResponse:
         return StreamingResponse(chunks(), media_type="text/event-stream")
 
-    app = Composition(features=[Feature(name="events", routers=[router])]).apply(
+    app = Composition(features=[Feature(name="events", routers=[router])]).build(
         FastAPI()
     )
     messages: list[Message] = []

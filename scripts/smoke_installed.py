@@ -157,7 +157,7 @@ def _main() -> None:
         app = Composition(
             features=(Feature(name="installed", routers=routers),),
             errors=ErrorOptions(type_base="https://example.test/problems"),
-        ).apply(app)
+        ).build(app)
     else:
         for router in routers:
             app.include_router(router)
@@ -258,7 +258,7 @@ def _mcp_check(selected: set[str]) -> None:
         providers=[Services],
         mcp=[McpMount(server=server, namespace="smoke")],
     )
-    app = Composition(features=[feature], mcp=McpOptions()).apply(FastAPI())
+    app = Composition(features=[feature], mcp=McpOptions()).build(FastAPI())
 
     def factory(**kwargs: object) -> httpx2.AsyncClient:
         return httpx2.AsyncClient(transport=StreamingASGITransport(app), **kwargs)
@@ -319,7 +319,7 @@ def _database_check(selected: set[str]) -> None:
             async with database.open_engine() as engine:
                 await migrations.revision(engine, message="initial", autogenerate=True)
                 await migrations.upgrade(engine)
-            app = Composition(features=[database.feature]).apply(FastAPI())
+            app = Composition(features=[database.feature]).build(FastAPI())
             async with app.router.lifespan_context(app):
                 async with app.state.dishka_container(scope=Scope.REQUEST) as scope:
                     session = await scope.get(AsyncSession)
@@ -346,7 +346,7 @@ def _request_logging_check() -> None:
     logger.setLevel(logging.INFO)
     logger.addHandler(capture)
     try:
-        app = Composition(request_logging=True).apply(FastAPI())
+        app = Composition(request_logging=True).build(FastAPI())
         with TestClient(app) as client:
             assert client.get("/absent?secret=hidden").status_code == 404
         assert len(capture.buffer) == 1
@@ -437,7 +437,7 @@ def _observation_check(*, enabled: bool) -> None:
             ),
         ),
         telemetry=Telemetry() if enabled else None,
-    ).apply(FastAPI())
+    ).build(FastAPI())
     with TestClient(app) as client:
         assert client.get("/observed").json() == "pong"
     if enabled:
@@ -885,8 +885,7 @@ def _router_policies() -> None:
         composition = Composition(
             features=(feature,), router_policy=None if direct else policy
         )
-        app = composition.apply(FastAPI())
-        composition.validate(app)
+        app = composition.build(FastAPI())
         with TestClient(app) as client:
             assert client.get("/policy").json()["code"] == "authentication_required"
             assert (
@@ -898,7 +897,7 @@ def _router_policies() -> None:
             len(response["content"]["application/problem+json"]["schema"]["oneOf"]) == 2
         )
         if not direct:
-            public = Composition(features=(feature,)).apply(FastAPI())
+            public = Composition(features=(feature,)).build(FastAPI())
             assert TestClient(public).get("/policy").status_code == 200
 
 
@@ -958,7 +957,7 @@ def _shared_problem_check() -> None:
     app = Composition(
         features=(Feature(name="missing", routers=[parent]),),
         errors=ErrorOptions(type_base="urn:canon:smoke"),
-    ).apply(FastAPI())
+    ).build(FastAPI())
     with TestClient(app) as client:
         response = client.get("/missing")
     payload = response.json()

@@ -54,7 +54,7 @@ router.include_channel(channel, path="/rpc")
 router.include_channel(projects, path="/projects/rpc")
 app = Composition(
     features=(Feature(name="control", routers=[router]),),
-).apply(FastAPI(title="Control"))
+).build(FastAPI(title="Control"))
 contract = export_contracts(
     app, kinds=("openrpc",), base_url="wss://api.example.com"
 ).openrpc

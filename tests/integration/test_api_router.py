@@ -75,7 +75,7 @@ def test_composed_channels_resolve_services_and_close_their_scopes(
     )
     app = FastAPI()
     assert not composition.check(app).has_errors
-    composition.apply(app)
+    composition.build(app)
 
     async def scenario() -> None:
         async with app.router.lifespan_context(app):
@@ -113,7 +113,7 @@ def test_composed_channels_preserve_an_explicit_resolver() -> None:
     router.include_channel(channel, path="/session", resolver=resolve)
     app = Composition(
         features=[Feature(name="stores", routers=[router], providers=[Stores()])]
-    ).apply(FastAPI())
+    ).build(FastAPI())
 
     async def scenario() -> int:
         async with (
@@ -143,7 +143,7 @@ def test_composed_channels_share_one_connection_and_keep_path_context() -> None:
     session.include_channel(tasks, namespace="tasks")
     router = APIRouter(prefix="/projects")
     router.include_channel(session, path="/{project_id}/session")
-    app = Composition(features=[Feature(name="projects", routers=[router])]).apply(
+    app = Composition(features=[Feature(name="projects", routers=[router])]).build(
         FastAPI()
     )
 
@@ -248,7 +248,7 @@ def test_nested_channel_errors_are_collected_and_do_not_close_the_connection() -
     router.include_channel(session, path="/session")
     parent = APIRouter(prefix="/api")
     parent.include_router(router)
-    app = Composition(features=[Feature(name="projects", routers=[parent])]).apply(
+    app = Composition(features=[Feature(name="projects", routers=[parent])]).build(
         FastAPI()
     )
 
@@ -405,7 +405,7 @@ def test_sse_serializes_events_and_sends_terminal_completion() -> None:
     async def events(project_id: str) -> AsyncIterator[Rename]:
         yield Rename(title=project_id)
 
-    app = Composition(features=[Feature(name="projects", routers=[router])]).apply(
+    app = Composition(features=[Feature(name="projects", routers=[router])]).build(
         FastAPI()
     )
     with TestClient(app) as client:
@@ -433,7 +433,7 @@ def test_sse_raises_registers_terminal_errors() -> None:
         yield "first"
         raise MissingProject("private failure")
 
-    app = Composition(features=[Feature(name="projects", routers=[router])]).apply(
+    app = Composition(features=[Feature(name="projects", routers=[router])]).build(
         FastAPI()
     )
     with TestClient(app) as client:
@@ -461,7 +461,7 @@ def test_webrtc_uses_real_engine_and_closes_factory_dependencies() -> None:
         finally:
             lifecycle.append(f"close {project_id}")
 
-    app = Composition(features=[Feature(name="projects", routers=[router])]).apply(
+    app = Composition(features=[Feature(name="projects", routers=[router])]).build(
         FastAPI()
     )
 
@@ -511,7 +511,7 @@ def test_application_shutdown_closes_active_webrtc_sessions() -> None:
         finally:
             closed.append("factory closed")
 
-    app = Composition(features=[Feature(name="media", routers=[router])]).apply(
+    app = Composition(features=[Feature(name="media", routers=[router])]).build(
         FastAPI()
     )
 

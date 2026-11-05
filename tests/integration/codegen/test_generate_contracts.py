@@ -104,7 +104,7 @@ def test_generation_exports_one_app_instance_and_offline_reuses_saved_contracts(
         "    def status() -> str: return 'ok'\n"
         "    @http.sse('/events')\n"
         "    async def events() -> AsyncIterator[str]: yield 'updated'\n"
-        "    return Composition(features=[Feature(name='system', routers=[http])]).apply(app)\n",
+        "    return Composition(features=[Feature(name='system', routers=[http])]).build(app)\n",
         encoding="utf-8",
     )
     (tmp_path / "fastapi-canon.toml").write_text(

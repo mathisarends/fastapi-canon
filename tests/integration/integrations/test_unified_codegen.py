@@ -539,7 +539,7 @@ def test_canonical_names_wire_aliases_and_primitive_results(tmp_path: Path) -> N
     endpoint = service.socket("/ws", channels=[channel])
     application = Composition(
         features=(Feature(name="records", routers=[http_router, streams]),)
-    ).apply(FastAPI())
+    ).build(FastAPI())
     inputs = (
         (
             SourceConfig(
@@ -708,7 +708,7 @@ def test_terminal_only_nested_problem_definitions_share_identity(
     )(nested)
     application = Composition(
         features=(Feature(name="nested", routers=[streams]),)
-    ).apply(FastAPI())
+    ).build(FastAPI())
     plan = build_plan(((SourceConfig("api", "openapi"), export_schema(application)),))
     assert (
         sum(

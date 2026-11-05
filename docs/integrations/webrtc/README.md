@@ -86,7 +86,7 @@ def practice(lesson: Annotated[str, Depends(lesson_access)]) -> Session:
     return Session(on_track=on_track, on_message={MESSAGES: on_prompt})
 
 
-app = Composition(features=[Feature(name="lessons", routers=[router])]).apply(FastAPI())
+app = Composition(features=[Feature(name="lessons", routers=[router])]).build(FastAPI())
 ```
 
 A `Session` is assembled from handlers:

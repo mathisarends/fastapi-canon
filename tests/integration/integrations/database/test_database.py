@@ -88,7 +88,7 @@ async def test_http_scope_finishes_before_response_start(
                 ),
             ),
         ],
-    ).apply(FastAPI())
+    ).build(FastAPI())
     at_response_start: list[list[str]] = []
     checked_out = 0
     connections_at_start: list[int] = []
@@ -150,7 +150,7 @@ async def test_existing_and_future_app_routes_share_the_early_scope(
         await session.execute(insert(items).values(name="before"))
         return "before"
 
-    Composition(features=[database.feature]).apply(app)
+    Composition(features=[database.feature]).build(app)
 
     @app.post("/after")
     @inject
@@ -188,7 +188,7 @@ async def test_cancellation_rolls_back_the_request(
 
     app = Composition(
         features=[database.feature, Feature(name="cancel", routers=[router])]
-    ).apply(FastAPI())
+    ).build(FastAPI())
     async with asyncio.timeout(15), app.router.lifespan_context(app):
         async with AsyncClient(
             transport=ASGITransport(app), base_url="http://test"
@@ -218,7 +218,7 @@ async def test_stream_starts_after_the_handler_session_is_closed(
 
     app = Composition(
         features=[database.feature, Feature(name="stream", routers=[router])]
-    ).apply(FastAPI())
+    ).build(FastAPI())
     async with (
         asyncio.timeout(15),
         app.router.lifespan_context(app),
@@ -233,7 +233,7 @@ async def test_sqlmodel_and_sqlalchemy_inject_the_same_session(tmp_path: Path) -
     database = Database(
         url=f"sqlite:///{tmp_path / 'model.db'}", session_class=ModelSession
     )
-    app = Composition(features=[database.feature]).apply(FastAPI())
+    app = Composition(features=[database.feature]).build(FastAPI())
     async with (
         asyncio.timeout(10),
         app.router.lifespan_context(app),
@@ -285,7 +285,7 @@ async def test_service_scopes_use_fresh_sessions_and_commit_before_returning(
 
     app = Composition(
         features=[database.feature, Feature(name="services", providers=[Services])]
-    ).apply(FastAPI())
+    ).build(FastAPI())
     sessions: list[AsyncSession] = []
     async with asyncio.timeout(15), app.router.lifespan_context(app):
         scope_factory = await app.state.dishka_container.get(ServiceScope[Writer])
@@ -348,7 +348,7 @@ async def test_scoped_use_case_finishes_transaction_before_return(
 
     app = Composition(
         features=[database.feature, Feature(name="writers", providers=[Services])]
-    ).apply(FastAPI())
+    ).build(FastAPI())
     async with asyncio.timeout(15), app.router.lifespan_context(app):
         write = await app.state.dishka_container.get(Scoped[Write])
         task = asyncio.create_task(write(outcome))
@@ -388,7 +388,7 @@ async def test_explicit_commit_survives_a_later_http_rejection(
 
     app = Composition(
         features=[database.feature, Feature(name="reject", routers=[router])]
-    ).apply(FastAPI())
+    ).build(FastAPI())
     async with asyncio.timeout(15), app.router.lifespan_context(app):
         async with AsyncClient(
             transport=ASGITransport(app), base_url="http://test"
@@ -403,7 +403,7 @@ async def test_explicit_commit_survives_a_later_http_rejection(
 async def test_savepoint_failure_preserves_the_outer_transaction(
     database: Database, items: Table
 ) -> None:
-    app = Composition(features=[database.feature]).apply(FastAPI())
+    app = Composition(features=[database.feature]).build(FastAPI())
     async with asyncio.timeout(15), app.router.lifespan_context(app):
         async with app.state.dishka_container(scope=Scope.REQUEST) as scope:
             session = await scope.get(AsyncSession)
@@ -428,7 +428,7 @@ async def test_native_upserts_and_backend_row_locks_remain_available(
     from sqlalchemy.dialects.postgresql import insert as pg_insert
     from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-    app = Composition(features=[database.feature]).apply(FastAPI())
+    app = Composition(features=[database.feature]).build(FastAPI())
     async with asyncio.timeout(15), app.router.lifespan_context(app):
         engine = await app.state.dishka_container.get(AsyncEngine)
         postgres = engine.dialect.name == "postgresql"

@@ -120,8 +120,7 @@ def test_router_policy_combines_contracts_dependencies_and_dishka_injection() ->
 
     feature = Feature(name="items", routers=[router], providers=[Services()])
     composition = Composition(features=(feature,))
-    app = composition.apply(FastAPI())
-    composition.validate(app)
+    app = composition.build(FastAPI())
     with TestClient(app) as client:
         response = client.get("/items")
         assert response.status_code == 401
@@ -176,10 +175,10 @@ def test_composition_policy_preserves_nested_router_definitions() -> None:
     )
     protected = FastAPI()
     protected.get("/health")(lambda: "ok")
-    composition.apply(protected)
+    composition.build(protected)
     protected.get("/later")(lambda: "later")
-    composition.validate(protected)
-    public = Composition(features=(feature,)).apply(FastAPI())
+    composition.build(protected)
+    public = Composition(features=(feature,)).build(FastAPI())
 
     with TestClient(protected) as client:
         assert client.get("/api/items/1").status_code == 401
@@ -215,14 +214,12 @@ def test_composition_policy_preserves_nested_router_definitions() -> None:
 def test_composition_policy_identity_is_part_of_installation() -> None:
     feature = Feature(name="empty")
     composition = Composition(features=(feature,), router_policy=PROTECTED)
-    app = composition.apply(FastAPI())
-    assert composition.apply(app) is app
-    Composition(features=(feature,), router_policy=PROTECTED).validate(app)
+    app = composition.build(FastAPI())
+    assert composition.build(app) is app
+    assert Composition(features=(feature,), router_policy=PROTECTED).build(app) is app
     different = Composition(features=(feature,), router_policy=RouterPolicy())
     with pytest.raises(FeatureConfigurationError, match="different composition"):
-        different.apply(app)
-    with pytest.raises(FeatureConfigurationError, match="before validation"):
-        different.validate(app)
+        different.build(app)
 
 
 @pytest.mark.parametrize("scope", ["router", "composition"])
@@ -247,7 +244,7 @@ def test_policy_registry_collisions_are_rejected(scope: str) -> None:
             Composition(
                 features=(Feature(name="other", errors=registry),),
                 router_policy=PROTECTED,
-            ).apply(app)
+            ).build(app)
     assert tuple(app.routes) == original_routes
 
 
@@ -259,7 +256,7 @@ def test_composition_policy_rejects_manual_collision_before_installation() -> No
     with pytest.raises(FeatureConfigurationError, match="policy response status 401"):
         Composition(
             features=(Feature(name="items", routers=[router]),), router_policy=PROTECTED
-        ).apply(app)
+        ).build(app)
     assert tuple(app.routes) == original_routes
     assert app.openapi_schema is None
 
@@ -277,7 +274,7 @@ def test_dependency_only_policy_preserves_normalizers_and_deduplicates_execution
     router.get("/items")(lambda: None)
     app = Composition(
         features=(Feature(name="items", routers=[router]),), router_policy=policy
-    ).apply(FastAPI())
+    ).build(FastAPI())
     assert TestClient(app).get("/items").status_code == 200
     assert calls == ["called"]
     assert app.openapi()["paths"]["/items"]["get"]["responses"]["500"]["content"][
@@ -290,7 +287,7 @@ def test_existing_parent_raises_remain_local_to_parent_operations() -> None:
     child = CanonRouter()
     child.get("/child")(lambda: None)
     parent.include_router(child)
-    app = Composition(features=(Feature(name="parent", routers=[parent]),)).apply(
+    app = Composition(features=(Feature(name="parent", routers=[parent]),)).build(
         FastAPI()
     )
     assert "403" not in app.openapi()["paths"]["/child"]["get"]["responses"]
@@ -310,7 +307,7 @@ def test_composition_policy_422_includes_automatic_validation() -> None:
 
     app = Composition(
         features=(Feature(name="items", routers=[router]),), router_policy=policy
-    ).apply(FastAPI())
+    ).build(FastAPI())
     response = app.openapi()["paths"]["/items/{item_id}"]["get"]["responses"]["422"]
     assert response["content"]["application/problem+json"]["schema"] == {
         "oneOf": [

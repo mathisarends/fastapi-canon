@@ -154,7 +154,7 @@ async def test_http_exclusion_suppresses_use_case_ports_and_httpx(
             logs=False,
             exclude=exclude,
         ),
-    ).apply(FastAPI())
+    ).build(FastAPI())
     async with (
         asyncio.timeout(5),
         app.router.lifespan_context(app),
@@ -311,7 +311,7 @@ async def test_parallel_applications_reuse_features_without_exclusion_leaks(
             logs=False,
             exclude=lambda scope: True,
         ),
-    ).apply(FastAPI())
+    ).build(FastAPI())
     included = _application(scenario.feature, capture, meter)
     async with (
         asyncio.timeout(5),
@@ -351,7 +351,7 @@ async def test_mounted_http_application_keeps_inherited_exclusion(
             logs=False,
             exclude=lambda scope: True,
         ),
-    ).apply(FastAPI())
+    ).build(FastAPI())
     outer.mount("/inner", inner)
     async with (
         asyncio.timeout(5),
@@ -382,7 +382,7 @@ def _application(
             logs=False,
             exclude=lambda scope: scope["path"].startswith("/excluded"),
         ),
-    ).apply(FastAPI())
+    ).build(FastAPI())
 
 
 def _client(app: FastAPI) -> httpx2.AsyncClient:

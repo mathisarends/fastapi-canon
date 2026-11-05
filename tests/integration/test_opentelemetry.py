@@ -109,7 +109,7 @@ def callable_application(options: Telemetry) -> FastAPI:
             ),
         ),
         telemetry=options,
-    ).apply(FastAPI())
+    ).build(FastAPI())
 
 
 def application(options: Telemetry | None, *, expected: bool = True) -> FastAPI:
@@ -155,10 +155,9 @@ def application(options: Telemetry | None, *, expected: bool = True) -> FastAPI:
         telemetry=options,
         errors=ErrorOptions(type_base="https://example.test/problems"),
     )
-    app = composition.apply(FastAPI())
+    app = composition.build(FastAPI())
     app.state.closed = closed
-    composition.apply(app)
-    composition.validate(app)
+    composition.build(app)
     return app
 
 
@@ -364,7 +363,7 @@ def test_combined_groups_keep_expected_failures_independent() -> None:
     with SpanCapture() as capture:
         app = Composition(
             features=(feature,), telemetry=Telemetry(tracer_provider=capture.provider)
-        ).apply(FastAPI())
+        ).build(FastAPI())
 
         async def run() -> None:
             async with (
@@ -411,11 +410,11 @@ def test_feature_reuse_keeps_providers_and_app_telemetry_isolated() -> None:
     with SpanCapture() as first, SpanCapture() as second:
         first_app = Composition(
             features=(feature,), telemetry=Telemetry(tracer_provider=first.provider)
-        ).apply(FastAPI())
+        ).build(FastAPI())
         second_app = Composition(
             features=(feature,), telemetry=Telemetry(tracer_provider=second.provider)
-        ).apply(FastAPI())
-        disabled = Composition(features=(feature,)).apply(FastAPI())
+        ).build(FastAPI())
+        disabled = Composition(features=(feature,)).build(FastAPI())
 
         async def resolve() -> None:
             direct = make_async_container(provider)
@@ -556,15 +555,15 @@ def test_async_call_metrics_only_and_request_exclusion(exclude: bool) -> None:
 def test_composition_guards() -> None:
     app = FastAPI()
     first = Telemetry()
-    Composition(telemetry=first).apply(app)
+    Composition(telemetry=first).build(app)
     with pytest.raises(FeatureConfigurationError, match="different composition"):
-        Composition(telemetry=Telemetry()).apply(app)
+        Composition(telemetry=Telemetry()).build(app)
     started = FastAPI()
     with (
         TestClient(started),
         pytest.raises(FeatureConfigurationError, match="before the app starts"),
     ):
-        Composition(telemetry=first).apply(started)
+        Composition(telemetry=first).build(started)
 
 
 def test_invalid_instrumentation() -> None:
@@ -610,7 +609,7 @@ def test_duplicate_instrumentation_is_rejected(
     with pytest.raises(FeatureConfigurationError, match="instrumented more than once"):
         Composition(
             features=features, telemetry=Telemetry() if enabled else None
-        ).apply(app)
+        ).build(app)
     assert not app.user_middleware
 
 
@@ -636,7 +635,7 @@ def test_websocket_controllers_export_independent_traces_before_disconnect() -> 
         app = Composition(
             features=(Feature(name="websocket", routers=[router]),),
             telemetry=options,
-        ).apply(FastAPI())
+        ).build(FastAPI())
         with TestClient(app) as client, client.websocket_connect("/rpc") as websocket:
             websocket.send_json({"jsonrpc": "2.0", "id": 1, "method": "tasks.ping"})
             assert websocket.receive_json()["result"] == "pong"
@@ -707,7 +706,7 @@ def test_provider_scopes_caching_and_original_cleanup() -> None:
                 ),
             ),
             telemetry=Telemetry(tracer_provider=capture.provider),
-        ).apply(FastAPI())
+        ).build(FastAPI())
 
         async def resolve() -> None:
             container = app.state.dishka_container
@@ -807,7 +806,7 @@ def test_globals_set_in_lifespan_are_resolved_lazily() -> None:
             @app.get("/health")
             async def health():
                 return {"status": "ok"}
-            Composition(telemetry=Telemetry()).apply(app)
+            Composition(telemetry=Telemetry()).build(app)
             with TestClient(app) as client:
                 assert client.get("/health").status_code == 200
             capture.one("GET /health")
@@ -824,7 +823,7 @@ def test_globals_set_in_lifespan_are_resolved_lazily() -> None:
 
 def test_native_auto_export_is_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FASTAPI_OTEL_AUTO_CONFIGURE", "true")
-    app = Composition(telemetry=Telemetry()).apply(FastAPI())
+    app = Composition(telemetry=Telemetry()).build(FastAPI())
     assert app._telemetry["auto_configure"] is False
 
 
@@ -847,7 +846,7 @@ def test_named_components_keep_feature_ownership() -> None:
                 ),
             ),
             telemetry=Telemetry(tracer_provider=capture.provider),
-        ).apply(FastAPI())
+        ).build(FastAPI())
 
         async def resolve() -> None:
             container = app.state.dishka_container
@@ -886,7 +885,7 @@ def test_declarations_and_disabled_composition_import_no_otel_runtime() -> None:
             port = provide(Port, scope=Scope.REQUEST)
         Composition(features=(Feature(
             name="test", providers=[Dependencies], instrumentation=instrument(Port)
-        ),)).apply(FastAPI())
+        ),)).build(FastAPI())
         assert not any(name.startswith("opentelemetry") for name in sys.modules)
         composition = Composition(telemetry=Telemetry())
         report = composition.check(FastAPI())
@@ -894,7 +893,7 @@ def test_declarations_and_disabled_composition_import_no_otel_runtime() -> None:
         assert report.issues[0].code == "canon.composition.E001"
         assert "fastapi-canon[otel]" in report.issues[0].message
         try:
-            composition.apply(FastAPI())
+            composition.build(FastAPI())
         except ModuleNotFoundError as error:
             assert "fastapi-canon[otel]" in str(error)
         else:

@@ -41,7 +41,7 @@ async def video(browser_id: str) -> Session:
 app = Composition(
     features=(Feature(name="browser", routers=[router]),),
     errors=ErrorOptions(type_base="https://example.test/problems"),
-).apply(FastAPI())
+).build(FastAPI())
 contract = export_contracts(app, kinds=("webrtc",)).webrtc
 ```
 

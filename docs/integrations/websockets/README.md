@@ -103,7 +103,7 @@ router = APIRouter()
 router.include_channel(greetings, path="/rpc")
 app = Composition(
     features=(Feature(name="greetings", routers=[router]),),
-).apply(FastAPI())
+).build(FastAPI())
 ```
 
 `include_channel` mounts a snapshot of the channel's methods, events and message

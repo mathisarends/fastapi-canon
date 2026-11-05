@@ -57,7 +57,7 @@ def application(*, dependency: bool, declared: bool = True) -> FastAPI:
     return Composition(
         features=(Feature(name="browser", routers=[router]),),
         errors=ErrorOptions(type_base="https://example.test/problems"),
-    ).apply(FastAPI())
+    ).build(FastAPI())
 
 
 @pytest.mark.parametrize("dependency", [False, True])
@@ -104,7 +104,7 @@ def test_shared_local_contracts_use_composed_registry_and_effective_path() -> No
     app = Composition(
         features=(Feature(name="browser", routers=[parent]),),
         errors=ErrorOptions(type_base="https://example.test/problems"),
-    ).apply(FastAPI())
+    ).build(FastAPI())
     contract = build_contract(app)
     session = contract["sessions"][0]
     assert session["path"] == "/api/browser/{browser_id}"
@@ -140,7 +140,7 @@ def test_router_policy_applies_to_webrtc_admission_and_contract() -> None:
     app = Composition(
         features=(Feature(name="video", routers=[router]),),
         errors=ErrorOptions(type_base="https://example.test/problems"),
-    ).apply(FastAPI())
+    ).build(FastAPI())
     errors = build_contract(app)["sessions"][0]["admission_errors"]
     assert [error["code"] for error in errors] == [
         "browser_forbidden",
@@ -179,7 +179,7 @@ def test_error_after_accept_uses_protocol_close() -> None:
     app = Composition(
         features=(Feature(name="browser", routers=[router]),),
         errors=ErrorOptions(type_base="https://example.test/problems"),
-    ).apply(FastAPI())
+    ).build(FastAPI())
     with TestClient(app) as client, client.websocket_connect("/s") as socket:
         message = socket.receive()
         assert message == {
@@ -211,7 +211,7 @@ def test_embedded_problem_schema_preserves_nested_extension_references() -> None
     async def video() -> Session:
         return Session()
 
-    app = Composition(features=(Feature(name="browser", routers=[router]),)).apply(
+    app = Composition(features=(Feature(name="browser", routers=[router]),)).build(
         FastAPI()
     )
     contract = build_contract(app)

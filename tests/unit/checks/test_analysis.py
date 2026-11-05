@@ -454,7 +454,7 @@ def test_cli_syntax_error_and_empty_scan(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     assert _main([str(tmp_path), "--require-complete"]) == 1
-    assert "No supported CanonRouter operations" in capsys.readouterr().out
+    assert "No supported Canon operations" in capsys.readouterr().out
     (tmp_path / "broken.py").write_text("def (", encoding="utf-8")
     with pytest.raises(SystemExit) as error:
         _main([str(tmp_path)])
@@ -760,7 +760,7 @@ def test_cli_help_names_the_error_contract_check(
     assert result.value.code == 0
     output = capsys.readouterr().out
     assert "python -m fastapi_canon.check_error_contracts" in output
-    assert "CanonRouter raises declarations" in output
+    assert "raises declarations" in " ".join(output.split())
 
 
 @pytest.mark.parametrize("declared", [True, False])
@@ -850,9 +850,11 @@ def second(): shared()
     analyzer = checker._analyzer  # smelt: ignore[SMT420] -- flow-analysis unit seam
     original = analyzer._analyze_function
 
-    def counted(function: _Definition, stack: tuple[str, ...]) -> _Flow:
+    def counted(
+        function: _Definition, stack: tuple[str, ...], *, iterated: bool
+    ) -> _Flow:
         calls.append(function.name)
-        return original(function, stack)
+        return original(function, stack, iterated=iterated)
 
     monkeypatch.setattr(analyzer, "_analyze_function", counted)
     report = checker.check()

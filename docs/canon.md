@@ -131,7 +131,7 @@ There is one installed command, `fastapi-canon`, also available as
 | `fastapi-canon sse` | Export OpenAPI/SSE contracts and generate Python/TypeScript clients |
 | `fastapi-canon websockets` | Export OpenRPC/socket contracts and generate Python/TypeScript clients |
 | `fastapi-canon webrtc` | Export session contracts and generate TypeScript browser clients |
-| `fastapi-canon check errors` | Check HTTP error declarations without importing application code |
+| `fastapi-canon check errors` | Check HTTP, SSE, RPC and WebRTC error declarations without importing application code |
 | `fastapi-canon skill install` | Install the bundled backend-building skill and resources into `.agents` and `.claude`; `--force` refreshes both, `--destination` selects one directory |
 
 The specialized emitters retain their configuration, runtime options and ownership

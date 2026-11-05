@@ -29,7 +29,7 @@ def test_http_routes_cannot_shadow_mcp(path: str, on_app: bool) -> None:
     assert report.has_errors
     assert any(issue.code == "canon.mcp.E001" for issue in report.issues)
     with pytest.raises(FeatureConfigurationError, match=r"MCP path.*conflicts"):
-        composition.apply(app)
+        composition.build(app)
     assert tuple(app.routes) == routes
 
 
@@ -47,7 +47,7 @@ def test_conflicts_include_router_factory_prefixes() -> None:
     )
 
     with pytest.raises(FeatureConfigurationError, match=r"MCP path.*conflicts"):
-        composition.apply(FastAPI())
+        composition.build(FastAPI())
 
 
 def test_existing_parent_mount_cannot_shadow_mcp() -> None:
@@ -55,7 +55,7 @@ def test_existing_parent_mount_cannot_shadow_mcp() -> None:
     app.mount("/", FastAPI())
 
     with pytest.raises(FeatureConfigurationError, match=r"MCP path.*conflicts"):
-        Composition(mcp=McpOptions()).apply(app)
+        Composition(mcp=McpOptions()).build(app)
 
 
 def test_another_http_method_cannot_block_the_slashless_mcp_redirect() -> None:
@@ -70,7 +70,7 @@ def test_another_http_method_cannot_block_the_slashless_mcp_redirect() -> None:
     )
 
     with pytest.raises(FeatureConfigurationError, match=r"MCP path.*conflicts"):
-        composition.apply(FastAPI())
+        composition.build(FastAPI())
 
 
 def test_neighboring_http_route_remains_accessible() -> None:
@@ -85,7 +85,7 @@ def test_neighboring_http_route_remains_accessible() -> None:
     )
     app = FastAPI()
     assert not composition.check(app).has_errors
-    composition.apply(app)
+    composition.build(app)
 
     with TestClient(app) as client:
         assert client.get("/mcp-status").json() == "ready"

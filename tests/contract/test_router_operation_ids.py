@@ -28,7 +28,7 @@ def test_http_and_sse_ids_follow_the_declaring_namespace(namespace: str | None) 
 
     parent = APIRouter(namespace="parent", prefix="/v1")
     parent.include_router(router)
-    app = Composition(features=[Feature(name="feature_name", routers=[parent])]).apply(
+    app = Composition(features=[Feature(name="feature_name", routers=[parent])]).build(
         FastAPI()
     )
     prefix = f"{namespace}." if namespace is not None else ""
@@ -123,7 +123,7 @@ def test_duplicate_ids_block_composition_before_application_mutation() -> None:
     with pytest.raises(
         FeatureConfigurationError, match=r"Duplicate operation ID 'projects\.events'"
     ):
-        composition.apply(app)
+        composition.build(app)
     assert tuple(app.routes) == routes
     assert app.openapi_schema is None
 
@@ -139,7 +139,7 @@ def test_distinct_namespaces_allow_reusing_an_endpoint() -> None:
     second.get("/archive")(events)
     app = Composition(
         features=[Feature(name="projects", routers=[first, second])]
-    ).apply(FastAPI())
+    ).build(FastAPI())
     paths = app.openapi()["paths"]
     assert paths["/current"]["get"]["operationId"] == "projects.events"
     assert paths["/archive"]["get"]["operationId"] == "archive.events"

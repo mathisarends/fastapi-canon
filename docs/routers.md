@@ -126,7 +126,7 @@ session.include_channel(tasks, namespace="tasks")
 router = APIRouter(prefix="/projects")
 router.include_channel(session, path="/{project_id}/session")
 
-app = Composition(features=[Feature(name="projects", routers=[router])]).apply(
+app = Composition(features=[Feature(name="projects", routers=[router])]).build(
     FastAPI()
 )
 ```
