@@ -5,11 +5,11 @@ import json
 import sys
 from collections.abc import Sequence
 from dataclasses import asdict
-from importlib import import_module
-from typing import Any
+from pathlib import Path
 
 from fastapi import FastAPI
 
+from fastapi_canon.application_loading import _load_application, _load_reference
 from fastapi_canon.diagnostics import CheckReport, CompositionInfo
 from fastapi_canon.feature import Composition, _installed_description
 
@@ -25,29 +25,27 @@ def _main(arguments: Sequence[str], *, inspect: bool = False) -> int:
         parser.add_argument(
             "--factory",
             action="store_true",
-            help="Call the target as an application factory (without entering its lifespan)",
+            help="Compatibility flag: synchronous zero-argument app factories are accepted automatically",
         )
     else:
         parser.add_argument(
-            "--app", help="Check against this module:app instead of a fresh FastAPI app"
+            "--app",
+            help="Check against module:app or a synchronous zero-argument app factory",
         )
         parser.add_argument("--require-complete", action="store_true")
         parser.add_argument("--fail-on", choices=("error", "warning"), default="error")
     args = parser.parse_args(arguments)
     try:
-        target = _load(args.target)
         if inspect:
-            if args.factory:
-                target = target()
-            if not isinstance(target, FastAPI):
-                raise ValueError("inspect target must be a FastAPI application")
+            target = _load_application(args.target, root=Path.cwd())
             result: CompositionInfo | CheckReport = _installed_description(target)
         else:
+            target = _load_reference(args.target, root=Path.cwd())
             if not isinstance(target, Composition):
                 raise ValueError("check target must be a Composition")
-            app = _load(args.app) if args.app else FastAPI()
-            if not isinstance(app, FastAPI):
-                raise ValueError("--app target must be a FastAPI application")
+            app = (
+                _load_application(args.app, root=Path.cwd()) if args.app else FastAPI()
+            )
             result = target.check(app)
     except (ImportError, AttributeError, ValueError, TypeError) as error:
         if args.format == "json":
@@ -92,13 +90,3 @@ def _main(arguments: Sequence[str], *, inspect: bool = False) -> int:
             result.has_errors or (args.fail_on == "warning" and bool(result.issues))
         )
     return 0
-
-
-def _load(reference: str) -> Any:
-    module, separator, name = reference.partition(":")
-    if not separator or not module or not name:
-        raise ValueError("Use an explicit module:attribute target")
-    value: Any = import_module(module)
-    for part in name.split("."):
-        value = getattr(value, part)
-    return value

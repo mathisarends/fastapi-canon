@@ -294,13 +294,16 @@ fastapi-canon check composition app.bootstrap:composition
 fastapi-canon check composition app.bootstrap:composition --format json --require-complete
 fastapi-canon check composition app.bootstrap:composition --app app.main:app
 fastapi-canon inspect app.main:app --format json
-fastapi-canon inspect app.main:create_app --factory
+fastapi-canon inspect app.main:create_app
 ```
 
 Composition checking imports the target and checks against a fresh FastAPI app by
 default. `--app module:app` selects a configured application, including an already
-installed one. Introspection imports an installed app; `--factory` explicitly
-calls an application factory. Neither command enters its lifespan. Imports and
+installed one. Both application targets also accept synchronous zero-argument
+factories automatically; `inspect --factory` remains a compatibility flag.
+The composition target itself remains a `Composition` instance. Neither command
+enters lifespan. See the shared [target loading rules](contracts.md#application-target-rules).
+Imports and
 user factories execute application code; this is not an import-free mode.
 
 JSON output has `schema_version: 1` and the corresponding dataclass fields.

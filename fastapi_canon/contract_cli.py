@@ -2,16 +2,12 @@
 
 import argparse
 import difflib
-import importlib
-import inspect
 import json
 import sys
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
 
-from fastapi import FastAPI
-
+from fastapi_canon.application_loading import _load_application
 from fastapi_canon.codegen.ir import ContractKind
 from fastapi_canon.contracts import export_contracts
 
@@ -105,28 +101,3 @@ def main(argv: Sequence[str] | None = None) -> int:
     except Exception as exc:
         print(f"fastapi-canon contracts export: {exc}", file=sys.stderr)
         return 2
-
-
-def _load_application(reference: str, *, root: Path) -> FastAPI:
-    """Use an app instance directly or invoke its synchronous zero-argument factory."""
-    module, separator, attribute = reference.partition(":")
-    if not separator or not module or not attribute:
-        raise ValueError("Application references must use module:attribute syntax")
-    sys.path.insert(0, str(root))
-    try:
-        value: Any = importlib.import_module(module)
-        for part in attribute.split("."):
-            value = getattr(value, part)
-        if not isinstance(value, FastAPI) and callable(value):
-            if inspect.iscoroutinefunction(value) or inspect.iscoroutinefunction(
-                type(value).__call__
-            ):
-                raise TypeError(f"{reference} must use a synchronous app factory")
-            value = value()
-        if not isinstance(value, FastAPI):
-            raise TypeError(
-                f"{reference} must resolve to a FastAPI application or a zero-argument factory returning one"
-            )
-        return value
-    finally:
-        sys.path.pop(0)

@@ -58,8 +58,10 @@ def test_cli_inspect_uses_the_installed_snapshot_as_json(
     assert document["operations"][0]["operation_id"] == "projects.get"
 
 
-def test_cli_inspect_calls_a_factory_only_when_requested(
+@pytest.mark.parametrize("options", [[], ["--factory"]])
+def test_cli_inspect_accepts_a_factory_and_its_compatibility_flag(
     application_module: Path,
+    options: list[str],
 ) -> None:
     result = subprocess.run(
         [
@@ -68,7 +70,7 @@ def test_cli_inspect_calls_a_factory_only_when_requested(
             "fastapi_canon",
             "inspect",
             "diagnostic_app:create_app",
-            "--factory",
+            *options,
         ],
         cwd=application_module,
         capture_output=True,

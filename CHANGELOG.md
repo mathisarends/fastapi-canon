@@ -22,6 +22,12 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- Application CLI targets share dotted-reference and synchronous zero-argument
+  factory loading. `inspect` and `check composition --app` accept app factories
+  automatically; `inspect --factory` remains accepted. App instances are never
+  called as ASGI functions, and common SDK generation reuses each configured
+  factory result across contract formats without entering lifespan.
+
 - WebRTC session factories resolve `Inject[T]` and `FromDishka[T]` automatically
   from the WebSocket SESSION container, including sync/coroutine functions and
   sync/async generator dependencies. FastAPI path/header inputs and pre-accept
@@ -158,6 +164,16 @@ The next release containing the breaking changes below must be 0.16.0.
   declared path instead of failing with an AttributeError.
 
 ### Breaking changes
+
+- CLI target loading rejects async/generator factories, awaitable/generator
+  results and uninspectable or required-argument factory signatures consistently.
+  Before adopting 0.16.0, use a synchronous inspectable zero-argument wrapper
+  returning an app or materialized contract value. Import/factory errors now
+  expose the target, phase/type and hint instead of arbitrary exception contents;
+  update output parsers that depended on raw error text. Keep eager runtime
+  configuration in lifespan/dependency code. Common SDK `factory = true`
+  selection and standalone contract forms remain available. See
+  [target loading rules](docs/contracts.md#application-target-rules).
 
 - Composition rejects WebRTC factory marker roots unavailable through APP/SESSION
   scope with `canon.providers.E004`. Before adopting 0.16.0, register missing
