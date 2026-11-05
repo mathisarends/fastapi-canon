@@ -199,6 +199,9 @@ report their type and a corrective hint without their raw contents.
 | `canon.codegen.E001` | error | Configuration, target loading, contract/planning or artifact ownership failed. |
 | `canon.codegen.E002` | error | An operation requests an unsupported binding feature, such as multipart input. |
 
+`fastapi-canon explain canon.codegen.E002` provides an example and repair for a
+generation code; see [diagnostic explanations](diagnostics.md) for text/JSON lookup.
+
 Exit codes remain 0 for successful generation or a clean check, 1 for drift and
 2 for invalid configuration/generation. Constraint warnings alone do not change
 the exit code. Preflight failures complete before any contracts or SDK files are

@@ -22,6 +22,12 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- `fastapi-canon explain CODE` explains existing source, composition and common
+  generation codes with a meaning, example, repair and guide. Text is the default;
+  `--format json` returns a versioned object. Unknown/application-defined codes
+  exit 2 with a hint. Lookup is offline and imports no application or optional
+  runtime; checker ownership and emitted code names remain unchanged.
+
 - Common SDK generation supports `--format json` with a versioned envelope for
   success, drift, source-located validation warnings and preflight errors.
   Operation/source/target metadata is reported where available; `--diff` stays

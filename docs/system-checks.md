@@ -92,6 +92,11 @@ application behavior. Independent failures can appear together.
 | `canon.contracts.E001` | HTTP/OpenAPI response contracts cannot be compiled. |
 | `canon.checks.E001` | A feature check failed to return valid findings. |
 
+Use `fastapi-canon explain canon.routing.E002` for a built-in code's meaning,
+minimal example, repair and guide. [Diagnostic explanations](diagnostics.md)
+also support JSON and source/generation code families without importing
+an application or executing its checks.
+
 Built-in checks validate composition configuration, the provider graph, selected
 HTTP/SSE, RPC and WebRTC factory roots, HTTP contracts and registered WebSocket path
 uniqueness during preflight. They do not

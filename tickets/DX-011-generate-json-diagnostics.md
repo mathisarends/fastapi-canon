@@ -1,6 +1,6 @@
 # DX-011: Add structured diagnostics to common SDK generation
 
-- Status: In progress
+- Status: Done
 - Priority: P2
 - Kind: Feature
 - Baseline: `a366702` (2026-11-05)
@@ -58,8 +58,8 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
   including JSON diagnostics with the optional codegen dependencies absent.
   The smoke is now permanently part of the wheel matrix. All changed local
   Markdown links/anchors resolve. Browser and all-combination dependency
-  matrices were not repeated for diagnostic output. Status remains In progress
-  until merge.
+  matrices were not repeated for diagnostic output. The final follow-up merged
+  into main as `8ad8138` after the primary implementation `9af03f3`.
 - Remaining follow-ups: no specialized-emitter or CI-uploader redesign is
   included. Locations are optional for global/foreign failures; owned source
   and operation failures carry available metadata. CLI help and code

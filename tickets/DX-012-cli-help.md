@@ -1,6 +1,6 @@
 # DX-012: Explain CLI options and exit policies in command help
 
-- Status: In progress
+- Status: Done
 - Priority: P2
 - Kind: Documentation and CLI help
 - Baseline: `a366702` (2026-11-05)
@@ -44,7 +44,7 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
 
 ## Completion
 
-- Implementation or decision PR:
+- Implementation or decision PR: [#93](https://github.com/mathisarends/fastapi-canon/pull/93).
 - Final commit and verification: help/semantic coverage `49c38b5`. Focused public
   CLI, loader, contract and generation suites: 95 passed. Full root pytest:
   2,586 passed, 26 skipped, 153 warnings on Windows/Python 3.14. A fresh Python
@@ -53,7 +53,7 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
   runtimes. Mypy, Ruff, changed/full Smelt and all-files pre-commit passed.
   Changed Markdown links/anchors resolve. Argument choices, defaults and
   dispatch were not redesigned; no generator/client drift or browser matrix
-  was repeated for help text. Status remains In progress until merge.
+  was repeated for help text. Merged into main as `e1e105e`.
 - Remaining follow-ups: diagnostic explanation lookup is separately scoped in
   DX-013. Documentation retains the module source-check entry point alongside
   the installed `fastapi-canon check errors` command.
