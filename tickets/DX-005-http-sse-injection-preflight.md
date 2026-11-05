@@ -1,6 +1,6 @@
 # DX-005: Validate HTTP and SSE injected dependency roots before serving
 
-- Status: Open
+- Status: In progress
 - Priority: P1
 - Kind: Coverage improvement
 - Baseline: `a366702` (2026-11-05)
@@ -21,6 +21,24 @@ in [DX-004](DX-004-rpc-injection-preflight.md); do not assume identical HTTP beh
 without running these cases.
 
 ## Scope
+
+### Verified baseline (parent DX-004 plus the DX-003 CI fix)
+
+Real bounded ASGI requests confirmed these cases before implementation:
+
+| Endpoint | Binding | check/build | Actual request |
+| --- | --- | --- | --- |
+| HTTP async | None | Accepted | RuntimeError: no request container |
+| HTTP async | Unrelated valid graph | Accepted | NoFactoryError |
+| HTTP async | APP or REQUEST Store | Accepted | 200; provider opened/closed |
+| Finite async SSE | None or unrelated graph | Accepted | 200 with terminal canon.problem |
+| Finite async SSE | APP Store | Accepted | Event and canon.complete; provider cleanup |
+| Finite async SSE | REQUEST Store | Accepted | Terminal canon.problem; Store body never constructed |
+
+HTTP REQUEST scopes already close before streaming. This ticket validates the
+available phase; it does not retain REQUEST resources across a stream. Sync
+stream arguments cannot extend a resource's lifetime either. Supporting a new
+stream-owned resource lifetime would require a separate contract.
 
 Add preflight coverage for HTTP/SSE endpoint Inject and FromDishka roots only.
 Keep FastAPI Depends/Security functions, custom route classes and separately
