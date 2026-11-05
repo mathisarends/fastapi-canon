@@ -50,6 +50,11 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Breaking changes
 
+- MCP installation rejects existing application and feature HTTP routes or mounts
+  that shadow its endpoint, including router prefixes and catch-all paths. Move
+  those routes or select a distinct `McpOptions(path=...)` before upgrading to
+  0.16.0. Preflight reports `canon.mcp.E001` before application mutation.
+
 - `fastapi-canon skill install` now creates both
   `.agents/skills/build-canon-backend` and `.claude/skills/build-canon-backend`.
   Use `--destination .agents/skills/build-canon-backend` to retain the previous
