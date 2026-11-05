@@ -76,6 +76,7 @@ def test_composed_channels_resolve_services_and_close_their_scopes(
     )
     app = FastAPI()
     assert not composition.check(app).has_errors
+    assert opened == closed == []
     composition.build(app)
 
     async def scenario() -> None:
@@ -94,7 +95,10 @@ def test_composed_channels_resolve_services_and_close_their_scopes(
     assert opened == closed == ([1, 2] if scope is Scope.REQUEST else [1])
 
 
-def test_composed_channels_preserve_an_explicit_resolver() -> None:
+@pytest.mark.parametrize("include_provider", [False, True])
+def test_composed_channels_preserve_an_explicit_resolver(
+    include_provider: bool,
+) -> None:
     class Stores(Provider):
         @provide(scope=Scope.APP)
         def store(self) -> Store:
@@ -112,9 +116,23 @@ def test_composed_channels_preserve_an_explicit_resolver() -> None:
 
     router = APIRouter()
     router.include_channel(channel, path="/session", resolver=resolve)
-    app = Composition(
-        features=[Feature(name="stores", routers=[router], providers=[Stores()])]
-    ).build(FastAPI())
+    composition = Composition(
+        features=[
+            Feature(
+                name="stores",
+                routers=[router],
+                providers=[Stores()] if include_provider else [],
+            )
+        ]
+    )
+    app = FastAPI()
+    report = composition.check(app)
+    assert not report.has_errors
+    assert any(
+        check.name.startswith("rpc.method_dependencies:") and check.status == "skipped"
+        for check in report.checks
+    )
+    composition.build(app)
 
     async def scenario() -> int:
         async with (
@@ -125,6 +143,48 @@ def test_composed_channels_preserve_an_explicit_resolver() -> None:
             return (await _receive(outgoing))["result"]
 
     assert asyncio.run(scenario()) == 42
+
+
+def test_rpc_preflight_accepts_context_and_hook_values_without_providers() -> None:
+    events: list[str] = []
+
+    async def store_hook() -> Store:
+        events.append("hook")
+        return Store(42)
+
+    async def context(store: Inject[Store]) -> Rename:
+        events.append("context")
+        return Rename(title=str(store.identifier))
+
+    channel = RpcChannel()
+
+    @channel.method("read")
+    async def read(
+        store: Inject[Store], data: Inject[Rename], connection: Inject[RpcConnection]
+    ) -> str:
+        return f"{store.identifier}:{data.title}:{connection.path}"
+
+    router = APIRouter()
+    router.include_channel(
+        channel, path="/session", context=context, hooks=(store_hook,)
+    )
+    composition = Composition(features=[Feature(name="stores", routers=[router])])
+    app = FastAPI()
+    report = composition.check(app)
+    assert report.complete and not report.has_errors
+    composition.build(app)
+    assert events == []
+
+    async def scenario() -> str:
+        async with (
+            app.router.lifespan_context(app),
+            _connection(app, "/session") as (incoming, outgoing),
+        ):
+            await _send(incoming, 1, "read")
+            return str((await _receive(outgoing))["result"])
+
+    assert asyncio.run(scenario()) == "42:42:/session"
+    assert events == ["hook", "context"]
 
 
 def test_composed_channels_share_one_connection_and_keep_path_context() -> None:

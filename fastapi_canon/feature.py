@@ -7,7 +7,7 @@ from dataclasses import dataclass, field, replace
 from inspect import iscoroutine, iscoroutinefunction
 from typing import TYPE_CHECKING, Any
 
-from dishka import AsyncContainer, Provider, make_async_container
+from dishka import AsyncContainer, Provider, Scope, make_async_container
 from dishka.entities.key import DependencyKey
 from dishka.exceptions import DishkaError  # type: ignore[attr-defined]  # not exported
 from fastapi import APIRouter, FastAPI
@@ -582,12 +582,18 @@ def _prepare_composition(app: FastAPI, composition: Composition) -> _Preparation
         "Use compatible error definitions and one explicit application type base.",
         lambda: _prepare_registry(app, composition),
     )
-    container, _ = attempt(
+    container, container_ok = attempt(
         "providers",
         "canon.providers.E001",
         "Check the named provider sources and supply the missing Dishka bindings.",
         lambda: _prepare_container(app, composition),
     )
+    if routers_ok and routers is not None and container_ok:
+        _check_rpc_dependencies(
+            app, composition.features, routers, container, issues, checks
+        )
+    else:
+        checks.append(CheckResult("rpc.method_dependencies", "skipped"))
     mcp_runtime = None
     if composition.mcp is not None and not missing_dependencies:
         from fastapi_canon.integrations.mcp.configuration import prepare_runtime
@@ -838,6 +844,104 @@ def _prepare_container(app: FastAPI, composition: Composition) -> AsyncContainer
             "features with providers must be installed before the app starts"
         )
     return container
+
+
+def _check_rpc_dependencies(
+    app: FastAPI,
+    features: tuple[Feature, ...],
+    routers: tuple[APIRouter, ...],
+    container: AsyncContainer | None,
+    issues: list[CheckIssue],
+    checks: list[CheckResult],
+) -> None:
+    attribute = "__canon_rpc_dependency_roots__"
+    entries = [
+        ("<application>", path, route.endpoint)
+        for path, route in iter_contract_routes(app.router.routes, include_mounts=False)
+        if hasattr(getattr(route, "endpoint", None), attribute)
+    ]
+    wrapper = APIRouter(prefix=app.router.prefix)
+    for router in routers:
+        wrapper.include_router(router)
+    owners = [
+        feature.name
+        for feature in features
+        for router in feature.routers
+        for _, route in iter_contract_routes(router.routes, include_mounts=False)
+        if hasattr(getattr(route, "endpoint", None), attribute)
+    ]
+    effective = [
+        (path, route.endpoint)
+        for path, route in iter_contract_routes(wrapper.routes, include_mounts=False)
+        if hasattr(getattr(route, "endpoint", None), attribute)
+    ]
+    entries.extend(
+        (owner, path, endpoint)
+        for owner, (path, endpoint) in zip(owners, effective, strict=True)
+    )
+    external_container = (
+        container is None and getattr(app.state, "dishka_container", None) is not None
+    )
+    for owner, path, endpoint in entries:
+        try:
+            requirements = getattr(endpoint, attribute)()
+        except Exception:
+            issues.append(
+                CheckIssue(
+                    "canon.providers.E002",
+                    f"RPC dependencies at {path!r} could not be inspected",
+                    "Check the mounted channel declarations and handler signatures.",
+                    feature_names=(owner,),
+                    locations=(f"WEBSOCKET {path}",),
+                )
+            )
+            checks.append(
+                CheckResult(f"rpc.method_dependencies:{owner}:{path}", "incomplete")
+            )
+            continue
+        for method, dependencies in requirements:
+            name = f"rpc.method_dependencies:{owner}:{path}:{method}"
+            if dependencies is None or (dependencies and external_container):
+                checks.append(CheckResult(name, "skipped"))
+                continue
+            missing = [
+                dependency
+                for dependency in dependencies
+                if not _rpc_dependency_available(container, dependency)
+            ]
+            for dependency in missing:
+                qualified = _qualified_name(dependency)
+                issues.append(
+                    CheckIssue(
+                        "canon.providers.E002",
+                        f"RPC method {method!r} injects {qualified} without an APP/SESSION/REQUEST binding",
+                        "Register the default-component service in a feature provider, or configure an explicit resolver that owns it.",
+                        feature_names=(owner,),
+                        locations=(f"WEBSOCKET {path} ({method})", qualified),
+                    )
+                )
+            checks.append(CheckResult(name, "failed" if missing else "passed"))
+
+
+def _rpc_dependency_available(
+    container: AsyncContainer | None, dependency: type[Any]
+) -> bool:
+    if container is None:
+        return False
+    key = DependencyKey(dependency, "")
+    parent: AsyncContainer | None = container
+    while parent is not None:
+        if parent.registry.get_factory(key) is not None:
+            return True
+        parent = parent.parent_container
+    registry = container.registry.child_registry
+    while registry is not None:
+        if registry.get_factory(key) is not None:
+            return True
+        if registry.scope is Scope.REQUEST:
+            break
+        registry = registry.child_registry
+    return False
 
 
 def _check_operations(

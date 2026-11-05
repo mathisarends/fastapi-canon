@@ -1,6 +1,6 @@
 # DX-004: Validate RPC handler dependency roots during composition preflight
 
-- Status: Open
+- Status: In progress
 - Priority: P1
 - Kind: Verified coverage gap
 - Baseline: `a366702` (2026-11-05)
@@ -48,12 +48,12 @@ universal transport validation. Preserve custom resolver ownership.
 
 ## Acceptance criteria
 
-- [ ] An unresolved application-service Inject in a mounted RPC method produces a preflight diagnostic with the service type, endpoint/method and feature.
-- [ ] Exercise both no-container and missing-binding-in-an-existing-container cases.
-- [ ] Framework-provided connection values and typed hook/context results are not mistaken for missing application providers.
-- [ ] Explicit custom resolvers remain supported; do not reject their dependencies by inspecting only the Dishka graph.
-- [ ] Checking never resolves providers, enters lifespans or starts resources; APP/SESSION/REQUEST scope rules remain respected.
-- [ ] Add migration notes for configurations now rejected; document the precise supported preflight scope.
+- [x] An unresolved application-service Inject in a mounted RPC method produces a preflight diagnostic with the service type, endpoint/method and feature.
+- [x] Exercise both no-container and missing-binding-in-an-existing-container cases.
+- [x] Framework-provided connection values and typed hook/context results are not mistaken for missing application providers.
+- [x] Explicit custom resolvers remain supported; do not reject their dependencies by inspecting only the Dishka graph.
+- [x] Checking never resolves providers, enters lifespans or starts resources; APP/SESSION/REQUEST scope rules remain respected.
+- [x] Add migration notes for configurations now rejected; document the precise supported preflight scope.
 
 ## Verification
 
@@ -63,6 +63,20 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
 
 ## Completion
 
-- Implementation or decision PR:
-- Final commit and verification:
-- Remaining follow-ups:
+- Implementation or decision PR: [#84](https://github.com/mathisarends/fastapi-canon/pull/84),
+  stacked on [#83](https://github.com/mathisarends/fastapi-canon/pull/83).
+- Final commit and verification: implementation `2729ebf`; verified parent-sync
+  source `151635a99af2eb224635e4da16a86864a226dfe9` includes the parent CI fix.
+  Exact missing-Store repro rejects with canon.providers.E002 before installation.
+  Full root pytest after synchronization: 2,457 passed, 26 skipped, 153 warnings
+  on Windows/Python 3.14; PostgreSQL cases require an external database.
+  Focused composed-RPC/routing/context/introspection suites: 100 passed.
+  Full types gate passed, including installed-wheel public RPC completeness
+  (94.8%, minimum 92%), reference application and WebRTC checks.
+  Python 3.12 installed-wheel telemetry matrix passed for FastAPI 0.143.0 and
+  locked 0.143.3. Mypy, Ruff, changed Smelt and full pre-commit passed.
+  Standalone browser/minimum-distribution matrices were not run.
+  Status stays In progress until the implementation lands.
+- Remaining follow-ups: custom/external resolution and non-method transport
+  roots remain explicitly skipped; admission-service roots are outside this
+  slice. HTTP/SSE roots remain DX-005 and broader inspection remains DX-029.

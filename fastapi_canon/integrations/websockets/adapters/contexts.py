@@ -27,6 +27,7 @@ class ContextDependencies:
         self._compiled: dict[Callable[..., Any], Callable[..., Any]] = {}
         self._visiting: set[Callable[..., Any]] = set()
         self._getters: dict[type[Any], Callable[..., Any]] = {}
+        self._provided: dict[Callable[..., Any], tuple[type[Any], ...]] = {}
         self._adapt = adapt
 
         async def preparation(websocket: WebSocket) -> AsyncGenerator[_Preparation]:
@@ -43,6 +44,11 @@ class ContextDependencies:
         for hook in hooks:
             self._compile(hook)
         self.dependency = self._compile(context, root=True)
+        self._provided_types = self._provided[context]
+
+    @property
+    def provided_types(self) -> tuple[type[Any], ...]:
+        return self._provided_types
 
     def _compile(
         self, function: Callable[..., Any], *, root: bool = False
@@ -52,6 +58,7 @@ class ContextDependencies:
         if not root and function in self._compiled:
             return self._compiled[function]
         result_type = _result_type(function)
+        provided = [result_type]
         self._visiting.add(function)
         adapted = self._adapt(function)
         signature = inspect.signature(adapted)
@@ -75,6 +82,8 @@ class ContextDependencies:
                     if hook is not None
                     else self._getter(injected.dependency)
                 )
+                if hook is not None:
+                    provided.extend(self._provided[hook])
                 annotation = Annotated[Any, Depends(dependency)]
                 parameter = parameter.replace(default=inspect.Parameter.empty)
             parameters.append(parameter.replace(annotation=annotation))
@@ -110,6 +119,7 @@ class ContextDependencies:
         }
         invoke.__annotations__["return"] = dict if root else result_type
         self._visiting.remove(function)
+        self._provided[function] = tuple(dict.fromkeys(provided))
         if not root:
             self._compiled[function] = invoke
         return invoke

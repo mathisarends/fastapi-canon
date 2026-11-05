@@ -65,7 +65,7 @@ records each check's `name` and `status`:
 | --- | --- |
 | `passed` | Finished without errors; warnings may still be present. |
 | `failed` | Finished and found an error. |
-| `skipped` | A prerequisite failed, so this check could not run. |
+| `skipped` | A prerequisite failed or dependency resolution belongs to an external/unsupported profile. |
 | `incomplete` | A feature check could not produce a valid result. |
 
 `report.has_errors` and `report.complete` answer separate questions. A fully
@@ -85,6 +85,7 @@ application behavior. Independent failures can appear together.
 | `canon.handlers.E001` | Exception-handler conflicts. |
 | `canon.errors.E001` | Incompatible feature/policy error catalogs. |
 | `canon.providers.E001` | Provider sources, instrumentation declarations or the Dishka graph are invalid. |
+| `canon.providers.E002` | A mounted JSON-RPC method has a missing service root or unreadable dependency declarations. |
 | `canon.description.E001` | HTTP metadata cannot be described against the composed catalog. |
 | `canon.contracts.E001` | HTTP/OpenAPI response contracts cannot be compiled. |
 | `canon.checks.E001` | A feature check failed to return valid findings. |
@@ -122,6 +123,36 @@ WebSocket routes use another ASGI scope and do not collide with HTTP routes.
 Mounted subapplications retain their separate ownership boundary. Resolve an
 `E003` finding by changing a path/method or removing the duplicate registration;
 distinct operation IDs and schema visibility do not change request dispatch.
+
+## RPC method dependency preflight
+
+For mounted JSON-RPC methods using Canon's automatic Dishka resolver, preflight
+checks each application-service `Inject[T]` root against the prepared container's
+default component, through APP, SESSION and REQUEST scope. A provider in ACTION
+or STEP is not available to an ordinary RPC call. Missing bindings produce
+`canon.providers.E002` with the feature, effective WebSocket path, method and
+qualified service type, including when no container or only unrelated providers
+exist. Register the service in `Feature(providers=[...])`; the provider graph
+checks its own dependency edges. No service is resolved and no scope or lifespan
+is entered. Checking snapshots channels without freezing caller-owned declarations.
+
+`RpcConnection`, typed path models, the declared connection context and hook
+results actually reachable from that context are supplied by the adapter.
+An unused registered hook does not supply its result to method injection.
+Context/hook **service inputs**, FastAPI admission dependencies and runtime
+activation conditions are outside this method-root check.
+
+Each `rpc.method_dependencies:<feature>:<path>:<method>` result describes this
+bounded check. Explicit resolvers (including explicit Dishka adapters), custom
+resolver scopes/handlers, dynamic `before_accept` values and externally installed
+containers retain their ownership; application roots that cannot be verified
+without executing them are `skipped`. Injected notification/subscription roots
+and binary/raw endpoint profiles are also skipped. They add no missing-binding
+error, so `build()` remains supported, but make a preflight report incomplete.
+An unreadable declaration is an incomplete error without exposing exception
+details. `--require-complete` rejects an incomplete report; it does not execute
+external resolvers to establish coverage. Installed-app checks retain their
+HTTP snapshot profile. This is not a claim of complete transport/runtime validation.
 
 ## Explain the installed HTTP composition
 
