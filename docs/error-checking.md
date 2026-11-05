@@ -15,7 +15,7 @@ Multiple roots are accepted when they contain different modules. In this
 workspace, run:
 
 ```console
-uv run --locked python -m fastapi_canon.check_error_contracts examples/reference-service/src --strict
+uv run --frozen fastapi-canon check errors examples/reference-service/src --strict
 ```
 
 The checker is included in Canon and needs no extra dependencies or annotations
@@ -103,8 +103,8 @@ Add `--require-complete` to fail for incomplete operations or a scan containing 
 supported operations. Use both flags when both conditions should fail CI:
 
 ```console
-python -m fastapi_canon.check_error_contracts src --strict --require-complete
-python -m fastapi_canon.check_error_contracts src --strict --format json
+fastapi-canon check errors src --strict --require-complete
+fastapi-canon check errors src --strict --format json
 ```
 
 Invalid roots, duplicate module names, unreadable files and syntax errors exit
@@ -112,6 +112,13 @@ two. JSON output includes each operation's `transport` (`http`, `sse`, `webrtc`
 or `rpc`), its diagnostics, a `complete` flag,
 `contract_gaps` and `incomplete_operations`. An operation can be fully analyzed
 and still contain a contract gap. An empty result does not establish coverage.
+
+`--strict` and `--require-complete` are independent: the former checks
+CAN001/CAN002 contract gaps; the latter checks CAN003 or an empty supported scan.
+Run `fastapi-canon check errors --help` for these defaults and exit codes. The
+module entry point `python -m fastapi_canon.check_error_contracts` remains
+supported. Application code is never imported by source analysis, and a complete
+result covers its supported explicit paths rather than all runtime exceptions.
 
 When an error catalog or `raises` sequence cannot be resolved, the checker reports
 incomplete analysis instead of guessing which errors are missing.

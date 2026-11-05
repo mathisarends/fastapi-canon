@@ -159,6 +159,11 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Fixed
 
+- CLI help explains target/factory syntax, default and repeatable target
+  selection, JSON/text modes, import/lifespan behavior and command-specific
+  exit policies. Source read errors identify the invoked public command.
+  Parsing, supported forms, defaults and exit conditions are unchanged.
+
 - `Composition.inspect(app).operation(events)` retains the declared SSE callable
   through terminal processing and automatic injection wrappers, including sync
   generators and nested prefixes. Explicit user decorators retain their own

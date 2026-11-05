@@ -13,7 +13,11 @@ from fastapi_canon._version import __version__
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="fastapi-canon")
+    parser = argparse.ArgumentParser(
+        prog="fastapi-canon",
+        description="Declare and check Canon applications, export contracts and generate domain SDKs.",
+        epilog="Use COMMAND --help for target syntax, defaults, side effects and exit policies.",
+    )
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
     for name, description in (
@@ -66,7 +70,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def _check_main(argv: Sequence[str]) -> int:
-    parser = argparse.ArgumentParser(prog="fastapi-canon check")
+    parser = argparse.ArgumentParser(
+        prog="fastapi-canon check",
+        description="Source error checking never imports application code; composition checking imports its target modules.",
+    )
     commands = parser.add_subparsers(dest="kind", required=True)
     commands.add_parser("errors", help="Check source error contracts", add_help=False)
     commands.add_parser(

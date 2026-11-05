@@ -306,6 +306,14 @@ enters lifespan. See the shared [target loading rules](contracts.md#application-
 Imports and
 user factories execute application code; this is not an import-free mode.
 
+Use `fastapi-canon inspect --help` or
+`fastapi-canon check composition --help` for target syntax and policy defaults.
+Composition defaults to `--fail-on error`; choose `warning` to include warning
+findings in exit 1. `--require-complete` independently rejects skipped or
+incomplete checks with exit 2. It does not run unmodeled runtime behavior or
+establish complete exception coverage. The source check's `--require-complete`
+policy uses exit 1; see [source checking](error-checking.md).
+
 JSON output has `schema_version: 1` and the corresponding dataclass fields.
 Check reports also include `has_errors` and `complete`. Exit codes are 0 for
 success, 1 for findings at the selected threshold, and 2 for invalid targets or

@@ -102,3 +102,75 @@ def test_skill_install_restores_previous_tree_when_replacement_fails(
     assert existing.read_text("utf-8") == "Previous skill"
     assert list(destination.iterdir()) == [existing]
     assert list(tmp_path.iterdir()) == [destination]
+
+
+def test_generate_help_explains_selection_json_and_exit_policy(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    text = _help_text(["generate", "--help"], capsys)
+    assert "repeat for several targets" in text
+    assert "default: all targets" in text
+    assert "text (default)" in text and "versioned json" in text
+    assert "implies --check" in text
+    assert "without importing application code" in text
+    assert "live sources import application code" in text
+    assert "lifespan is never entered" in text
+    assert "1 drift" in text and "2 invalid configuration" in text
+
+
+def test_composition_help_explains_target_defaults_threshold_and_completeness(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    text = _help_text(["check", "composition", "--help"], capsys)
+    assert "composition instance" in text and "dotted attributes" in text
+    assert "synchronous factory called without arguments" in text
+    assert "default: a fresh fastapi app" in text
+    assert "error (default)" in text and "include warnings" in text
+    assert "exit 2 if a check is skipped or incomplete" in text
+    assert "not proof of runtime exception coverage" in text
+    assert "lifespan is never entered" in text
+
+
+def test_inspect_help_explains_automatic_factory_and_snapshot_scope(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    text = _help_text(["inspect", "--help"], capsys)
+    assert "installed http composition" in text
+    assert "module:app or module:factory" in text
+    assert "compatibility flag" in text and "accepted automatically" in text
+    assert "json snapshot/check report" in text
+    assert "imports and synchronous app factories execute application code" in text
+    assert "lifespan is never entered" in text
+    assert "2 invalid target" in text
+
+
+def test_error_check_help_distinguishes_independent_source_policies(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    text = _help_text(["check", "errors", "--help"], capsys)
+    assert "without importing application code" in text
+    assert "can001/can002 missing mappings or declarations" in text
+    assert "can003 incomplete analysis or no supported operations" in text
+    assert "independent of --strict" in text
+    assert "not proof of all runtime exception paths" in text
+    assert "2 invalid roots, source or arguments" in text
+
+
+def test_source_read_failure_uses_the_installed_command_name(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "broken.py").write_text("def broken(:\n", encoding="utf-8")
+    with pytest.raises(SystemExit) as error:
+        main(["check", "errors", str(tmp_path)])
+    assert error.value.code == 2
+    message = capsys.readouterr().err
+    assert message.startswith("fastapi-canon check errors:")
+    assert "broken.py" in message
+
+
+def _help_text(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> str:
+    with pytest.raises(SystemExit) as error:
+        main(arguments)
+    assert error.value.code == 0
+    return " ".join(capsys.readouterr().out.lower().split())

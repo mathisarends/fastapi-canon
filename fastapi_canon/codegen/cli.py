@@ -17,29 +17,43 @@ if TYPE_CHECKING:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="fastapi-canon generate")
+    parser = argparse.ArgumentParser(
+        prog="fastapi-canon generate",
+        description="Generate domain SDKs from live application exports or saved contracts.",
+        epilog="Live sources import application code and call explicitly selected factories; lifespan is never entered. "
+        "Exit codes: 0 successful generation or clean check; 1 drift in check/diff mode; 2 invalid configuration or generation failure.",
+    )
     parser.add_argument(
         "--config",
         type=Path,
-        help="Configuration path (default: fastapi-canon.toml, then pyproject.toml)",
+        help="Configuration path (default in the working directory: fastapi-canon.toml, otherwise pyproject.toml)",
     )
-    parser.add_argument("--target", action="append", default=[])
+    parser.add_argument(
+        "--target",
+        action="append",
+        default=[],
+        help="Select a configured target name; repeat for several targets (default: all targets)",
+    )
     parser.add_argument(
         "--format",
         choices=("text", "json"),
         default="text",
-        help="Diagnostic output format; JSON uses a versioned envelope on stdout",
+        help="Diagnostics: text (default) or a versioned JSON envelope on stdout",
     )
     parser.add_argument(
         "--offline",
         action="store_true",
-        help="Read saved contracts without importing application code",
+        help="Read saved input/output contracts without importing application code",
     )
     parser.add_argument(
-        "--check", action="store_true", help="Check for drift without writing"
+        "--check",
+        action="store_true",
+        help="Check contract/SDK drift without writing; exit 1 when output differs",
     )
     parser.add_argument(
-        "--diff", action="store_true", help="Show the proposed diff; implies --check"
+        "--diff",
+        action="store_true",
+        help="Show a unified diff (JSON diff field in JSON mode); implies --check",
     )
     args = parser.parse_args(argv)
     checked = args.check or args.diff

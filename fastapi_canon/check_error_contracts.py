@@ -16,6 +16,9 @@ def _main(
     parser = argparse.ArgumentParser(
         prog=prog,
         description="Check explicit application exceptions against HTTP, SSE, WebRTC and RPC raises declarations without importing application code.",
+        epilog="This is bounded source analysis, not proof of all runtime exception paths. "
+        "Use --strict and --require-complete together to reject both contract gaps and incomplete analysis. "
+        "Exit codes: 0 selected policy passes; 1 policy findings; 2 invalid roots, source or arguments.",
     )
     parser.add_argument(
         "roots",
@@ -26,19 +29,24 @@ def _main(
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="exit 1 for missing declarations or mappings",
+        help="Exit 1 for CAN001/CAN002 missing mappings or declarations (default: report gaps without failing)",
     )
     parser.add_argument(
         "--require-complete",
         action="store_true",
-        help="also exit 1 for incomplete analysis",
+        help="Exit 1 for CAN003 incomplete analysis or no supported operations; independent of --strict",
     )
-    parser.add_argument("--format", choices=("text", "json"), default="text")
+    parser.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="Output format: text (default) or a JSON source-analysis report",
+    )
     args = parser.parse_args(arguments)
     try:
         report = _check_error_contracts(args.roots)
     except (OSError, SyntaxError, UnicodeError, ValueError) as error:
-        parser.exit(2, f"error-contract check: {error}\n")
+        parser.exit(2, f"{prog}: {error}\n")
     if args.format == "json":
         print(json.dumps(report.as_dict(), indent=2))
     else:

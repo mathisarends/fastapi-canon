@@ -16,24 +16,59 @@ from fastapi_canon.feature import Composition, _installed_description
 
 def _main(arguments: Sequence[str], *, inspect: bool = False) -> int:
     command = "inspect" if inspect else "check composition"
-    parser = argparse.ArgumentParser(prog=f"fastapi-canon {command}")
-    parser.add_argument(
-        "target", help="module:app" if inspect else "module:composition"
+    parser = argparse.ArgumentParser(
+        prog=f"fastapi-canon {command}",
+        description=(
+            "Describe an installed HTTP composition from an application or synchronous app factory."
+            if inspect
+            else "Preflight a Composition against a fresh or configured FastAPI application without installing it."
+        ),
+        epilog=(
+            "Imports and synchronous app factories execute application code; lifespan is never entered. "
+            + (
+                "Exit codes: 0 success; 2 invalid target or unavailable snapshot."
+                if inspect
+                else "Exit codes: 0 success; 1 findings at the selected threshold; 2 invalid target or incomplete report when required. "
+                "Preflight is bounded validation, not proof of runtime exception coverage."
+            )
+        ),
     )
-    parser.add_argument("--format", choices=("text", "json"), default="text")
+    parser.add_argument(
+        "target",
+        help=(
+            "module:app or module:factory; dotted attributes are supported"
+            if inspect
+            else "module:composition resolving to a Composition instance; dotted attributes are supported"
+        ),
+    )
+    parser.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="Output format: text (default) or a JSON snapshot/check report",
+    )
     if inspect:
         parser.add_argument(
             "--factory",
             action="store_true",
-            help="Compatibility flag: synchronous zero-argument app factories are accepted automatically",
+            help="Compatibility flag: synchronous app factories are accepted automatically and called without arguments",
         )
     else:
         parser.add_argument(
             "--app",
-            help="Check against module:app or a synchronous zero-argument app factory",
+            help="Check against module:app or a synchronous factory called without arguments (default: a fresh FastAPI app)",
         )
-        parser.add_argument("--require-complete", action="store_true")
-        parser.add_argument("--fail-on", choices=("error", "warning"), default="error")
+        parser.add_argument(
+            "--require-complete",
+            action="store_true",
+            help="Exit 2 if a check is skipped or incomplete; does not execute unmodeled runtime behavior",
+        )
+        parser.add_argument(
+            "--fail-on",
+            choices=("error", "warning"),
+            default="error",
+            help="Finding threshold for exit 1: error (default), or warning to include warnings",
+        )
     args = parser.parse_args(arguments)
     try:
         if inspect:

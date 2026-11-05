@@ -44,7 +44,9 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
 
 ## Completion
 
-- Implementation or decision PR: [#91](https://github.com/mathisarends/fastapi-canon/pull/91).
+- Implementation or decision PR: [#91](https://github.com/mathisarends/fastapi-canon/pull/91),
+  merged as `9af03f3`; final installation-hint/documentation follow-up
+  [#92](https://github.com/mathisarends/fastapi-canon/pull/92).
 - Final commit and verification: implementation `e5e5b30`, merged main through
   DX-010 in `887ff97`, installed-core dependency-hint follow-up `b140ceb`.
   Focused CLI/planner/render/consumer suites: 150 passed. All eight new JSON
