@@ -46,13 +46,16 @@ def select_operations(
                     operations.append((operation["name"], selected[key], operation))
     except (KeyError, TypeError, AttributeError) as exc:
         raise GenerationError(
-            f"Source {config.name}: invalid operation catalog"
+            f"Source {config.name}: invalid operation catalog",
+            source=config.name,
         ) from exc
     names = [name for name, _, _ in operations]
     if any(not isinstance(name, str) or not name for name in names) or len(
         set(names)
     ) != len(names):
-        raise GenerationError(f"Source {config.name}: operations require unique IDs")
+        raise GenerationError(
+            f"Source {config.name}: operations require unique IDs", source=config.name
+        )
     known = set(names)
     include = (
         set(config.include_operations)
@@ -63,15 +66,20 @@ def select_operations(
     unknown = (include | exclude | config.operations.keys()) - known
     if unknown:
         raise GenerationError(
-            f"Source {config.name}: unknown operation IDs: {sorted(unknown)}"
+            f"Source {config.name}: unknown operation IDs: {sorted(unknown)}",
+            source=config.name,
         )
     if config.include_operations is not None and include & exclude:
         raise GenerationError(
-            f"Source {config.name}: cannot include and exclude the same operation"
+            f"Source {config.name}: cannot include and exclude the same operation",
+            source=config.name,
         )
     keep = include - exclude
     if not keep:
-        raise GenerationError(f"Source {config.name}: selection contains no operations")
+        raise GenerationError(
+            f"Source {config.name}: selection contains no operations",
+            source=config.name,
+        )
     for name, owner, key in operations:
         if name not in keep:
             if isinstance(owner, dict):

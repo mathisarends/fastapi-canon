@@ -10,12 +10,22 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from fastapi_canon.codegen.config import TargetConfig
-from fastapi_canon.codegen.ir import GenerationError, Operation, Plan
+from fastapi_canon.codegen.ir import (
+    GenerationError,
+    Operation,
+    Plan,
+    _GenerationWarning,
+)
 from fastapi_canon.codegen.names import camel, model_field, pascal, snake
 from fastapi_canon.codegen.problems import problem_runtime
 
 
-def render(plan: Plan, target: TargetConfig) -> dict[str, str]:
+def render(
+    plan: Plan,
+    target: TargetConfig,
+    *,
+    diagnostics: list[_GenerationWarning] | None = None,
+) -> dict[str, str]:
     from fastapi_canon.integrations.sse.codegen.enums import with_enums
     from fastapi_canon.integrations.sse.codegen.ir import Contract, Declaration, _Types
     from fastapi_canon.integrations.sse.codegen.python import _Models
@@ -97,9 +107,27 @@ def render(plan: Plan, target: TargetConfig) -> dict[str, str]:
                 operation.binding.protocol == "sse" for operation in source.operations
             ):
                 continue
+            from fastapi_canon.integrations.sse.codegen.diagnostics import (
+                GenerationDiagnostic,
+            )
             from fastapi_canon.integrations.sse.codegen.ir import build_ir
 
-            ir = build_ir(source.document, target=target.language)
+            found: list[GenerationDiagnostic] | None = (
+                [] if diagnostics is not None else None
+            )
+            ir = build_ir(source.document, target=target.language, diagnostics=found)
+            if diagnostics is not None and found:
+                diagnostics.extend(
+                    _GenerationWarning(
+                        f"{item.keyword}: {item.message}",
+                        source.name,
+                        item.operation_id,
+                        f"{item.method} {item.path}",
+                        target.name,
+                        item.pointer,
+                    )
+                    for item in found
+                )
             # Only an actual stream creates an SSE binding/runtime.
             if not ir.operations:
                 continue
