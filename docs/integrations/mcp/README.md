@@ -88,8 +88,8 @@ options = McpOptions(auth_factory=PortfolioVerifier)
 ```
 
 Register the application's `TokenAuthentication` implementation at APP scope.
-Auth services resolved from the borrowed APP container must be APP-scoped. If verification
-needs REQUEST resources, open and close an explicit short Dishka scope inside
+Auth services resolved from the borrowed APP container must be APP-scoped. If
+verification needs REQUEST resources, open and close an explicit short Dishka scope inside
 `verify_token` and return detached identity data.
 
 Factories run during preflight, before installation mutates the application.
