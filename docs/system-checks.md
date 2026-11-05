@@ -216,9 +216,12 @@ and `operation_by_id("projects.get")` for external IDs. Both reject missing or
 ambiguous matches. Callable lookup uses identity and never invokes the endpoint;
 decorated routes use the callable registered with the router. Runtime lookup
 references are excluded from dataclass/JSON exports.
-Canon routers retain the declared HTTP symbol across framework wrappers such as
+Canon routers retain the declared HTTP/SSE symbol across framework wrappers such as
 `DishkaRoute` or Canon's own injection, so injection does not change the
 lookup reference.
+For SSE, use the generator callable passed to the stream declaration, including
+when automatic injection and terminal processing wrap it. Explicit user decorators
+keep the registered callable's identity; lookup does not unwrap those decorators.
 
 Origins distinguish `application`, `composition.router_policy`,
 `composition.router_factory`, `router.include_router`, `router.policy`, `router`,

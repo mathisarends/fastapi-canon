@@ -1,6 +1,6 @@
 # DX-005: Validate HTTP and SSE injected dependency roots before serving
 
-- Status: In progress
+- Status: Done
 - Priority: P1
 - Kind: Coverage improvement
 - Baseline: `a366702` (2026-11-05)
@@ -74,7 +74,7 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
   dependency combinations passed on Python 3.12, including core imports/help and
   generated consumers; the inventory remains in ignored dist/.
   Mypy, Ruff, changed Smelt and full pre-commit passed. Standalone real-browser
-  checks were not run. Status stays In progress until merge.
+  checks were not run. Merged into main in `1819cf7`.
 - Remaining follow-ups: FastAPI dependency-function roots, custom route classes
   and external containers retain their documented ownership/coverage limits.
   A new stream-owned REQUEST lifetime is outside this validation ticket.

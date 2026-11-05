@@ -359,7 +359,7 @@ class _RouteMetadata(dict[str, Any]):
             (int(key), value) for key, value in dependencies.items()
         )
         self._error_origins = tuple(errors.items())
-        self._endpoint = endpoint
+        self._endpoint = getattr(endpoint, "__canon_declared_endpoint__", endpoint)
         self._error_registry = registry
 
 
