@@ -62,8 +62,9 @@ connections and I/O out of imports, declarations and app construction; open owne
 resources in yielding providers or lifespans. Do not add a second `setup_dishka`
 or manually install the same error registry.
 
-HTTP handlers use `DishkaRoute` and `FromDishka[T]`; SSE endpoints use `@inject`.
-JSON-RPC methods use `Inject[T]`; Composition's container resolves them.
+HTTP handlers, SSE endpoints and JSON-RPC methods use `Inject[T]`;
+Composition's container resolves them. FastAPI dependency functions that use
+`FromDishka[T]` still need `@inject`.
 APP resources own pools and
 factories; REQUEST resources own a single operation. See the
 [HTTP walkthrough](http-feature.md) for the complete router/service/provider and

@@ -103,7 +103,6 @@ router = APIRouter(
     dependencies=[Depends(require_existing_run)],
     operation_id="run_events",
 )
-@inject
 async def events(
     run_id: str, runs: FromDishka[ServiceScope[RunService]]
 ) -> AsyncIterator[RunEvent]:
@@ -141,10 +140,12 @@ closing it before yielding frames. For an unbounded stream, fetch short batches
 in separate scopes rather than materializing the entire stream or keeping a
 database session open. APP-scoped services can also be injected directly.
 
-Place `@inject` directly above the function, below `@router.sse(...)`.
-Decorate the dependency function with `@inject` too. Run the resource check in
-`require_existing_run`: injecting the generator itself does not move checks
-or provider creation into the pre-response dependency phase. Resolve any
+`APIRouter` resolves `Inject[T]` and `FromDishka[T]` parameters of HTTP and SSE
+endpoints without `@inject`. FastAPI dependency functions such as
+`require_existing_run` are not endpoints, so decorate them with `@inject`.
+Run the resource check in that dependency: the generator's own parameters are
+resolved on its first iteration, after the response has started, and a failure
+there becomes a terminal stream problem rather than an HTTP problem. Resolve any
 service that must fail as an HTTP problem in a dependency first. See
 [Dishka's FastAPI integration](https://dishka.readthedocs.io/en/stable/integrations/fastapi.html)
 for `FromDishka` and dependency injection details.
@@ -177,7 +178,6 @@ from fastapi_canon import HTTPMethod
     dependencies=[Depends(require_existing_run)],
     operation_id="create_run_events",
 )
-@inject
 async def create_events(
     run_id: str, runs: FromDishka[RunService]
 ) -> AsyncIterator[RunEvent]:

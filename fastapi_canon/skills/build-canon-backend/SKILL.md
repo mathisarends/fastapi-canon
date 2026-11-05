@@ -38,9 +38,10 @@ them. Supporting references are installed beside this file for both agent tools.
 - Give each feature one `fastapi_canon.APIRouter` for HTTP, typed SSE
   (`@router.sse`), JSON-RPC channels (`router.include_channel`) and WebRTC
   (`@router.webrtc`). Contribute it once through `Feature(routers=[router])`.
-- Use Dishka for application dependencies. Put `DishkaRoute` on the router for
-  HTTP handlers using `FromDishka`; decorate SSE endpoints with `@inject`; mount
-  RPC methods request services with `Inject[T]`. Let `Composition` own the
+- Use Dishka for application dependencies. HTTP handlers, SSE endpoints and
+  RPC methods request services with `Inject[T]`; `APIRouter` needs no
+  `DishkaRoute` or `@inject` for endpoints. Decorate FastAPI dependency
+  functions that use `FromDishka` with `@inject`. Let `Composition` own the
   container and scope lifecycle.
 - Import Canon through `fastapi_canon`, `fastapi_canon.error` or documented
   `fastapi_canon.integrations.*` facades. Define each public problem once and

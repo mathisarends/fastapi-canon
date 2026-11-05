@@ -139,8 +139,7 @@ each standalone `open_engine()` or CLI operation gets its own engine context.
 
 ```python
 from dishka import Provider, Scope, provide
-from dishka.integrations.fastapi import DishkaRoute, FromDishka
-from fastapi_canon import APIRouter
+from fastapi_canon import APIRouter, Inject
 
 
 class OrdersProvider(Provider):
@@ -149,13 +148,13 @@ class OrdersProvider(Provider):
     order_service = provide(OrderService)
 
 
-router = APIRouter(prefix="/orders", route_class=DishkaRoute)
+router = APIRouter(prefix="/orders")
 
 
 @router.post("", status_code=201)
 async def create_order(
     command: CreateOrderCommand,
-    order_service: FromDishka[OrderService],
+    order_service: Inject[OrderService],
 ) -> OrderView:
     return await order_service.create(command)
 ```

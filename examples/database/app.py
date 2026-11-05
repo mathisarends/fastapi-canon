@@ -1,14 +1,13 @@
 from abc import ABC, abstractmethod
 
 from dishka import Provider, Scope, provide
-from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from examples.database.config import database
 from examples.database.schema import ItemRow
-from fastapi_canon import APIRouter, Composition, Feature
+from fastapi_canon import APIRouter, Composition, Feature, Inject
 
 
 class Item(BaseModel):
@@ -44,11 +43,11 @@ class ItemProvider(Provider):
     item_service = provide(ItemService)
 
 
-router = APIRouter(prefix="/items", route_class=DishkaRoute)
+router = APIRouter(prefix="/items")
 
 
 @router.post("", status_code=201)
-async def create_item(item: Item, item_service: FromDishka[ItemService]) -> Item:
+async def create_item(item: Item, item_service: Inject[ItemService]) -> Item:
     return await item_service.create(item)
 
 

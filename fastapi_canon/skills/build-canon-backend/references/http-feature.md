@@ -126,8 +126,7 @@ class ProjectResponse(BaseModel):
 ### `backend/features/projects/presentation/router.py`
 
 ```python
-from dishka.integrations.fastapi import DishkaRoute, FromDishka
-from fastapi_canon import APIRouter
+from fastapi_canon import APIRouter, Inject
 
 from backend.features.projects.application import ProjectService
 
@@ -138,7 +137,6 @@ router = APIRouter(
     namespace="projects",
     prefix="/projects",
     tags=["projects"],
-    route_class=DishkaRoute,
 )
 
 
@@ -149,7 +147,7 @@ router = APIRouter(
 )
 async def get(
     project_id: int,
-    project_service: FromDishka[ProjectService],
+    project_service: Inject[ProjectService],
 ) -> ProjectResponse:
     project = await project_service.get(project_id)
     return ProjectResponse(id=project.id, title=project.title)
