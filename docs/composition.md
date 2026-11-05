@@ -288,9 +288,10 @@ fastapi-canon check errors src --strict --require-complete
 ```
 
 `--strict` fails on mapping/declaration gaps. `--require-complete` also fails on
-incomplete analysis or no supported operations; unresolved calls and abstract
-ports remain visible as incomplete. This checks direct `APIRouter` HTTP
-operations; SSE, RPC and WebRTC handlers are outside its current scope.
+incomplete analysis or no supported operations. Calls on abstract ports follow
+the implementations bound by Dishka `Provider` classes in the scanned roots;
+unresolved calls and unbound ports remain visible as incomplete. It checks
+`APIRouter` HTTP, SSE and WebRTC operations and `RpcChannel` methods.
 
 Error contracts are implemented directly by `fastapi-canon`; no separate error
 library is required. Declare `Error` definitions with `raises=`; Composition
