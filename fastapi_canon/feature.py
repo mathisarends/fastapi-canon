@@ -684,7 +684,9 @@ def _validate_mcp_routes(
                         "method": method,
                     }
                     match, _ = route.matches(scope)
-                    if match is Match.FULL:
+                    if match is Match.FULL or (
+                        endpoint == path and match is Match.PARTIAL
+                    ):
                         raise FeatureConfigurationError(
                             f"MCP path {path!r} conflicts with an existing route "
                             f"matching {method} {endpoint}"
