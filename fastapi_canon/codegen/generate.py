@@ -3,6 +3,7 @@ from __future__ import annotations
 import difflib
 import hashlib
 import json
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
@@ -13,7 +14,7 @@ from fastapi_canon.application_loading import (
     _resolve_factory,
 )
 from fastapi_canon.codegen.config import Configuration
-from fastapi_canon.codegen.ir import GenerationError
+from fastapi_canon.codegen.ir import GenerationError, _GenerationWarning
 from fastapi_canon.codegen.planner import build_plan
 
 _MANIFEST = ".canon-codegen.json"
@@ -27,6 +28,28 @@ def generate(
     check: bool = False,
     diff: bool = False,
 ) -> tuple[bool, str]:
+    result = _generate(config, targets=targets, offline=offline, check=check, diff=diff)
+    return result.changed, result.report
+
+
+@dataclass(frozen=True)
+class _GenerationResult:
+    changed: bool
+    report: str
+    paths: tuple[str, ...]
+    targets: tuple[str, ...]
+    diagnostics: tuple[_GenerationWarning, ...] = ()
+
+
+def _generate(
+    config: Configuration,
+    *,
+    targets: tuple[str, ...] = (),
+    offline: bool = False,
+    check: bool = False,
+    diff: bool = False,
+    collect_diagnostics: bool = False,
+) -> _GenerationResult:
     from fastapi_canon.codegen.render import render
 
     selected = tuple(
@@ -39,28 +62,40 @@ def generate(
     writes: dict[Path, str] = {}
     deletes: set[Path] = set()
     loaded_sources: dict[tuple[str, bool], Any] = {}
+    diagnostics: list[_GenerationWarning] | None = [] if collect_diagnostics else None
     for source in config.sources:
         if source.name not in needed:
             continue
-        if source.input is not None or offline:
-            path = source.input or source.output
-            assert path is not None
-            try:
-                document = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, ValueError) as exc:
-                raise GenerationError(f"Cannot read contract {path}: {exc}") from exc
-        else:
-            assert source.source is not None and source.output is not None
-            document = _export(
-                source.source,
-                source.kind,
-                source.factory,
-                config.path.parent,
-                loaded_sources,
-            )
-            writes[source.output] = _json(document)
-        if not isinstance(document, dict):
-            raise GenerationError(f"Source {source.name} must be a JSON object")
+        try:
+            if source.input is not None or offline:
+                path = source.input or source.output
+                assert path is not None
+                try:
+                    document = json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, ValueError) as exc:
+                    raise GenerationError(
+                        f"Cannot read contract {path}: {exc}", path=str(path)
+                    ) from exc
+            else:
+                assert source.source is not None and source.output is not None
+                document = _export(
+                    source.source,
+                    source.kind,
+                    source.factory,
+                    config.path.parent,
+                    loaded_sources,
+                )
+                writes[source.output] = _json(document)
+            if not isinstance(document, dict):
+                raise GenerationError(f"Source {source.name} must be a JSON object")
+        except GenerationError as error:
+            error.source = error.source or source.name
+            raise
+        except Exception as error:
+            raise GenerationError(
+                f"Cannot export source {source.name!r} ({type(error).__name__}); check its application reference, factory selection and contract schema",
+                source=source.name,
+            ) from None
         documents[source.name] = document
     for target in selected:
         inputs = tuple(
@@ -68,7 +103,11 @@ def generate(
             for source in config.sources
             if source.name in target.sources
         )
-        files = render(build_plan(inputs), target)
+        try:
+            files = render(build_plan(inputs), target, diagnostics=diagnostics)
+        except GenerationError as error:
+            error.target = error.target or target.name
+            raise
         manifest = {
             "version": 1,
             "generator": {"name": "fastapi-canon", "version": __version__},
@@ -151,7 +190,13 @@ def generate(
             else:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(content, encoding="utf-8", newline="\n")
-    return bool(changed), report
+    return _GenerationResult(
+        bool(changed),
+        report,
+        tuple(sorted(str(path) for path, _, _ in changed)),
+        tuple(target.name for target in selected),
+        tuple(diagnostics or ()),
+    )
 
 
 def _export(
@@ -164,9 +209,12 @@ def _export(
     with _application_path(root):
         key = (reference, factory)
         if key not in loaded_sources:
-            value = _load_reference(reference, root=root)
-            if factory:
-                value = _resolve_factory(value, reference)
+            try:
+                value = _load_reference(reference, root=root)
+                if factory:
+                    value = _resolve_factory(value, reference)
+            except (TypeError, ValueError) as error:
+                raise GenerationError(str(error)) from None
             loaded_sources[key] = value
         value = loaded_sources[key]
         from fastapi import FastAPI

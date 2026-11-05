@@ -12,6 +12,22 @@ type Protocol = Literal["http", "sse", "jsonrpc", "websocket", "webrtc"]
 class GenerationError(ValueError):
     """A contract or SDK configuration cannot be represented unambiguously."""
 
+    def __init__(
+        self,
+        *args: object,
+        code: str = "canon.codegen.E001",
+        source: str | None = None,
+        operation: str | None = None,
+        path: str | None = None,
+        target: str | None = None,
+    ) -> None:
+        super().__init__(*args)
+        self.code = code
+        self.source = source
+        self.operation = operation
+        self.path = path
+        self.target = target
+
 
 @dataclass(frozen=True)
 class Parameter:
@@ -66,3 +82,13 @@ class Plan:
     sources: tuple[Source, ...]
     operations: tuple[Operation, ...]
     models: tuple[Model, ...]
+
+
+@dataclass(frozen=True)
+class _GenerationWarning:
+    message: str
+    source: str
+    operation: str
+    path: str
+    target: str
+    schema_pointer: str

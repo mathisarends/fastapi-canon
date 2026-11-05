@@ -35,7 +35,9 @@ def build_plan(inputs: tuple[tuple[SourceConfig, dict[str, Any]], ...]) -> Plan:
                 for other in names
             ):
                 raise GenerationError(
-                    f"Public operation conflict at {'.'.join(name)} ({owner}); set an explicit operations mapping"
+                    f"Public operation conflict at {'.'.join(name)} ({owner}); set an explicit operations mapping",
+                    source=operation.binding.source,
+                    operation=operation.binding.operation,
                 )
             names[name] = owner
     return Plan(sources, operations, registry.models)

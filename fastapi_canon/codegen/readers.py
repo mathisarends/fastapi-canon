@@ -23,15 +23,20 @@ def read_source(config: SourceConfig, document: dict[str, Any]) -> Source:
             operations = _openrpc(config, document)
         else:
             operations = _webrtc(config, document)
+    except GenerationError as error:
+        error.source = error.source or config.name
+        raise
     except (KeyError, TypeError, AttributeError) as exc:
         raise GenerationError(
-            f"{config.name}: invalid {config.kind} contract: {exc}"
+            f"{config.name}: invalid {config.kind} contract ({type(exc).__name__})",
+            source=config.name,
         ) from exc
     known = {operation.binding.operation for operation in operations}
     missing = config.operations.keys() - known
     if missing:
         raise GenerationError(
-            f"Source {config.name}: operation mappings do not exist: {sorted(missing)}"
+            f"Source {config.name}: operation mappings do not exist: {sorted(missing)}",
+            source=config.name,
         )
     return Source(config.name, config.kind, document, tuple(operations))
 
@@ -67,13 +72,18 @@ def _openapi(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
             identity = raw.get("operationId")
             if not isinstance(identity, str) or not identity:
                 raise GenerationError(
-                    f"{config.name}: operations require unique operationId values ({method.upper()} {path})"
+                    f"{config.name}: operations require unique operationId values ({method.upper()} {path})",
+                    source=config.name,
+                    path=f"{method.upper()} {path}",
                 )
             location = f"{method.upper()} {path}"
             if identity in ids:
                 raise GenerationError(
                     f"{config.name}: duplicate operationId {identity!r} on "
-                    f"{ids[identity]} and {location}; declare distinct operation_id values"
+                    f"{ids[identity]} and {location}; declare distinct operation_id values",
+                    source=config.name,
+                    operation=identity,
+                    path=location,
                 )
             ids[identity] = location
             default = (
@@ -81,8 +91,8 @@ def _openapi(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
                 if "." in identity
                 else ".".join([*(raw.get("tags") or ["api"])[:1], identity])
             )
-            name = public_name(
-                config.operations.get(identity, raw.get("x-canon-operation", default))
+            name = _public_operation(
+                config, identity, raw.get("x-canon-operation", default)
             )
             parameters = []
             seen: dict[tuple[str, str], Any] = {}
@@ -95,12 +105,20 @@ def _openapi(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
             for (location, wire_name), value in seen.items():
                 if location not in {"path", "query", "header"} or "schema" not in value:
                     raise GenerationError(
-                        f"{config.name}:{identity}: unsupported parameter {wire_name}"
+                        f"{config.name}:{identity}: unsupported parameter {wire_name}",
+                        code="canon.codegen.E002",
+                        source=config.name,
+                        operation=identity,
+                        path=f"{method.upper()} {path}",
                     )
                 schema = value["schema"]
                 if not _http_parameter(schema, document, array=location == "query"):
                     raise GenerationError(
-                        f"{config.name}:{identity}: unsupported {location} parameter schema for {wire_name}"
+                        f"{config.name}:{identity}: unsupported {location} parameter schema for {wire_name}",
+                        code="canon.codegen.E002",
+                        source=config.name,
+                        operation=identity,
+                        path=f"{method.upper()} {path}",
                     )
                 style = value.get(
                     "style", "form" if location in {"query", "cookie"} else "simple"
@@ -114,7 +132,11 @@ def _openapi(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
                     )
                 ):
                     raise GenerationError(
-                        f"{config.name}:{identity}: unsupported parameter serialization for {wire_name}"
+                        f"{config.name}:{identity}: unsupported parameter serialization for {wire_name}",
+                        code="canon.codegen.E002",
+                        source=config.name,
+                        operation=identity,
+                        path=f"{method.upper()} {path}",
                     )
                 parameters.append(
                     Parameter(
@@ -131,7 +153,11 @@ def _openapi(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
                 media = body.get("content", {})
                 if set(media) != {"application/json"}:
                     raise GenerationError(
-                        f"{config.name}:{identity}: only JSON request bodies are supported"
+                        f"{config.name}:{identity}: only JSON request bodies are supported",
+                        code="canon.codegen.E002",
+                        source=config.name,
+                        operation=identity,
+                        path=f"{method.upper()} {path}",
                     )
                 parameters.append(
                     Parameter(
@@ -159,12 +185,19 @@ def _openapi(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
                     successes[status] = content["application/json"].get("schema", {})
                 else:
                     raise GenerationError(
-                        f"{config.name}:{identity}: unsupported success response media type"
+                        f"{config.name}:{identity}: unsupported success response media type",
+                        code="canon.codegen.E002",
+                        source=config.name,
+                        operation=identity,
+                        path=f"{method.upper()} {path}",
                     )
             if streams:
                 if len(streams) != 1 or successes:
                     raise GenerationError(
-                        f"{config.name}:{identity}: ambiguous streaming response"
+                        f"{config.name}:{identity}: ambiguous streaming response",
+                        source=config.name,
+                        operation=identity,
+                        path=f"{method.upper()} {path}",
                     )
                 profile = raw.get("x-canon-stream")
                 envelope = (
@@ -178,7 +211,11 @@ def _openapi(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
                     or "contentSchema" not in data
                 ):
                     raise GenerationError(
-                        f"{config.name}:{identity}: streams require a typed JSON-data SSE contract"
+                        f"{config.name}:{identity}: streams require a typed JSON-data SSE contract",
+                        code="canon.codegen.E002",
+                        source=config.name,
+                        operation=identity,
+                        path=f"{method.upper()} {path}",
                     )
                 result = data["contentSchema"]
                 binding = Binding(
@@ -218,7 +255,10 @@ def _openapi(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
             else:
                 if not successes:
                     raise GenerationError(
-                        f"{config.name}:{identity}: no documented successful response"
+                        f"{config.name}:{identity}: no documented successful response",
+                        source=config.name,
+                        operation=identity,
+                        path=f"{method.upper()} {path}",
                     )
                 result = _union(list(successes.values()))
                 binding = Binding(
@@ -258,7 +298,9 @@ def _openrpc(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
         for server in ir.servers
     ):
         raise GenerationError(
-            f"{config.name}: this implementation binds JSON-RPC to WebSocket"
+            f"{config.name}: this implementation binds JSON-RPC to WebSocket",
+            code="canon.codegen.E002",
+            source=config.name,
         )
     schemas = document.get("components", {}).get("schemas", {})
     operations = []
@@ -323,7 +365,7 @@ def _openrpc(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
                     Parameter(variable.name, variable.name, {"type": "string"}, False)
                 )
         _parameter_names(parameters, config.name, name)
-        public = public_name(config.operations.get(name, name))
+        public = _public_operation(config, name, name)
         metadata["backend_method"] = route.operation_name
         metadata["python_arguments"] = {
             param.name: python_identifier(param.wire_name) for param in parameters
@@ -365,8 +407,8 @@ def _webrtc(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
     operations = []
     for session in document["sessions"]:
         identity = session["name"]
-        name = public_name(
-            config.operations.get(identity, session.get("x-canon-operation", identity))
+        name = _public_operation(
+            config, identity, session.get("x-canon-operation", identity)
         )
         # A session remains an explicit object with its own channel/media contract.
         operations.append(
@@ -386,6 +428,17 @@ def _webrtc(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
     return operations
 
 
+def _public_operation(
+    config: SourceConfig, identity: str, default: Any
+) -> tuple[str, ...]:
+    try:
+        return public_name(config.operations.get(identity, default))
+    except GenerationError as error:
+        error.source = error.source or config.name
+        error.operation = error.operation or identity
+        raise
+
+
 def _parameter_names(parameters: list[Parameter], source: str, operation: str) -> None:
     for convert in (camel, snake):
         names = [convert(parameter.name) for parameter in parameters]
@@ -393,7 +446,9 @@ def _parameter_names(parameters: list[Parameter], source: str, operation: str) -
             name in {"options", "self"} for name in names
         ):
             raise GenerationError(
-                f"{source}:{operation}: ambiguous or reserved public parameter names"
+                f"{source}:{operation}: ambiguous or reserved public parameter names",
+                source=source,
+                operation=operation,
             )
 
 
