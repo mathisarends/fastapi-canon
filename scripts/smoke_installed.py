@@ -68,6 +68,7 @@ def _main() -> None:
 
         _cli("generate")
         _cli("db")
+        _skill_check()
         _shared_problem_check()
         http = CanonRouter()
 
@@ -499,6 +500,37 @@ def _canon_check() -> None:
             check=True,
             timeout=30,
         )
+
+
+def _skill_check() -> None:
+    with tempfile.TemporaryDirectory(prefix="canon-skill-") as temporary:
+        root = Path(temporary)
+        command = [sys.executable, "-I", "-m", "fastapi_canon", "skill", "install"]
+        subprocess.run(command, cwd=root, check=True, capture_output=True, timeout=30)
+        agents = root / ".agents/skills/build-canon-backend"
+        claude = root / ".claude/skills/build-canon-backend"
+        expected = {
+            path.relative_to(agents): path.read_bytes()
+            for path in agents.rglob("*")
+            if path.is_file()
+        }
+        assert Path("SKILL.md") in expected
+        assert Path("references/components.md") in expected
+        (agents / "references/components.md").unlink()
+        (claude / "obsolete.md").write_text("Remove on refresh", encoding="utf-8")
+        subprocess.run(
+            [*command, "--force"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            timeout=30,
+        )
+        for directory in (agents, claude):
+            assert {
+                path.relative_to(directory): path.read_bytes()
+                for path in directory.rglob("*")
+                if path.is_file()
+            } == expected
 
 
 def _cli(name: str) -> None:

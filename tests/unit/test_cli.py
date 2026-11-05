@@ -48,3 +48,28 @@ def test_module_entry_point_checks_errors_without_importing_application(
     )
     assert result.returncode == 0, result.stderr
     assert "Analyzed 1 operations" in result.stdout
+
+
+def test_skill_install_restores_previous_tree_when_replacement_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    destination = tmp_path / "skill"
+    destination.mkdir()
+    existing = destination / "SKILL.md"
+    existing.write_text("Previous skill", encoding="utf-8")
+    rename = Path.rename
+
+    def fail_install(path: Path, target: str | Path) -> Path:
+        if path.name == "skill" and Path(target) == destination:
+            raise PermissionError("Destination is busy")
+        return rename(path, target)
+
+    monkeypatch.setattr(Path, "rename", fail_install)
+
+    result = main(["skill", "install", "--destination", str(destination), "--force"])
+
+    assert result == 2
+    assert "Destination is busy" in capsys.readouterr().err
+    assert existing.read_text("utf-8") == "Previous skill"
+    assert list(destination.iterdir()) == [existing]
+    assert list(tmp_path.iterdir()) == [destination]

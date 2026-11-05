@@ -4,8 +4,10 @@ import argparse
 import shutil
 import sys
 from collections.abc import Sequence
+from contextlib import ExitStack
 from importlib.resources import as_file, files
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from fastapi_canon._version import __version__
 
@@ -79,16 +81,75 @@ def _skill_main(argv: Sequence[str]) -> int:
     install.add_argument(
         "--destination",
         type=Path,
-        default=Path(".agents/skills/build-canon-backend"),
-        help="Skill directory to create (must not exist)",
+        help="Install only into this skill directory instead of .agents and .claude",
+    )
+    install.add_argument(
+        "--force",
+        action="store_true",
+        help="Replace existing skill directories, including obsolete resources",
     )
     args = parser.parse_args(argv)
+    destinations = (
+        [args.destination]
+        if args.destination is not None
+        else [
+            Path(".agents/skills/build-canon-backend"),
+            Path(".claude/skills/build-canon-backend"),
+        ]
+    )
     source = files("fastapi_canon").joinpath("skills", "build-canon-backend")
     try:
         with as_file(source) as source_path:
-            shutil.copytree(source_path, args.destination)
+            _install_skill(source_path, destinations, force=args.force)
     except OSError as exc:
         print(f"Could not install skill: {exc}", file=sys.stderr)
         return 2
-    print(f"Installed build-canon-backend in {args.destination.resolve()}")
+    for destination in destinations:
+        print(
+            f"Installed build-canon-backend (Canon {__version__}) "
+            f"in {destination.resolve()}"
+        )
     return 0
+
+
+def _install_skill(source: Path, destinations: Sequence[Path], *, force: bool) -> None:
+    resolved = [destination.resolve() for destination in destinations]
+    if len(set(resolved)) != len(resolved):
+        raise OSError("Skill destinations must be distinct directories")
+    current = Path.cwd().resolve()
+    for destination, target in zip(destinations, resolved, strict=True):
+        if destination.is_symlink() or destination.is_junction():
+            raise OSError(f"Skill destination must not be a link: {destination}")
+        if current.is_relative_to(target) or source.resolve().is_relative_to(target):
+            raise OSError(f"Skill destination contains the project or bundle: {target}")
+        if destination.exists() and (not force or not destination.is_dir()):
+            raise FileExistsError(
+                f"{destination} already exists; use --force to replace a skill directory"
+            )
+
+    # Stage every copy before replacing any destination. Keep the previous trees
+    # until all replacements succeed so an installation error can restore them.
+    with ExitStack() as stack:
+        prepared: list[tuple[Path, Path, Path]] = []
+        for destination in destinations:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            temporary = Path(
+                stack.enter_context(
+                    TemporaryDirectory(prefix=".canon-skill-", dir=destination.parent)
+                )
+            )
+            staged, backup = temporary / "skill", temporary / "previous"
+            shutil.copytree(source, staged)
+            prepared.append((destination, staged, backup))
+        try:
+            for destination, staged, backup in prepared:
+                if destination.exists():
+                    destination.rename(backup)
+                staged.rename(destination)
+        except OSError:
+            for destination, staged, backup in reversed(prepared):
+                if not staged.exists():
+                    destination.rename(staged)
+                if backup.exists():
+                    backup.rename(destination)
+            raise
