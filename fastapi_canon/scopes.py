@@ -1,7 +1,8 @@
 """Short service scopes and HTTP resource lifetimes owned by composition."""
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from inspect import getattr_static, iscoroutinefunction
 
 from dishka import AsyncContainer, Scope
 from dishka.integrations.starlette import ContainerMiddleware
@@ -33,6 +34,36 @@ class ServiceScope[ServiceT]:
     async def __call__(self) -> AsyncGenerator[ServiceT]:
         async with self._container(scope=Scope.REQUEST) as scoped:
             yield await scoped.get(self._service, component=self._component)
+
+
+class Scoped[UseCaseT]:
+    """Execute one async callable use case in a fresh ServiceScope per call.
+
+    Register at APP scope with the application container. The result is returned
+    only after scope cleanup succeeds. Database transaction behavior belongs to
+    the configured providers. Return materialized values, not scoped resources.
+    """
+
+    def __init__(
+        self,
+        container: AsyncContainer,
+        use_case: type[UseCaseT],
+        *,
+        component: str = "",
+    ) -> None:
+        if container.scope is not Scope.APP:
+            raise ValueError("Scoped requires the application APP container")
+        if not iscoroutinefunction(getattr_static(use_case, "__call__", None)):
+            raise TypeError("Scoped requires a use case with async __call__")
+        self._scope = ServiceScope(container, use_case, component=component)
+
+    async def __call__[**Parameters, ResultT](
+        self: "Scoped[Callable[Parameters, Awaitable[ResultT]]]",
+        *args: Parameters.args,
+        **kwargs: Parameters.kwargs,
+    ) -> ResultT:
+        async with self._scope() as use_case:
+            return await use_case(*args, **kwargs)
 
 
 class _SocketScopeMiddleware(ContainerMiddleware):

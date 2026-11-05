@@ -65,7 +65,7 @@ for media sessions, `aiortc` for the reference media engine, or `otel` for
 telemetry. The optional `otel-httpx` and `otel-sqlalchemy` extras enable
 [explicit resource adapters](docs/telemetry.md#explicit-resource-adapters).
 See [installation and migration](docs/package-migration.md).
-Python 3.12Ã¢â‚¬â€œ3.14 is supported; see [compatibility](docs/compatibility.md).
+Python 3.12–3.14 is supported; see [compatibility](docs/compatibility.md).
 
 ## Core API: routes, errors and composition
 

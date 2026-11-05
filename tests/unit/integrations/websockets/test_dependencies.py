@@ -6,8 +6,6 @@ from typing import Annotated, Any
 import pytest
 from fastapi_canon.integrations.websockets import Inject
 from fastapi_canon.integrations.websockets.dependencies import (
-    # Verify identity of the internal injection sentinel.
-    _INJECT,  # smelt: ignore[SMT420] -- unit seam
     ContextResolver,
     EmptyResolver,
     RpcInjectedParameter,
@@ -137,7 +135,7 @@ def test_injected_parameter_recognizes_only_concrete_injected_types() -> None:
         dependency=Value,
     )
     assert injected_parameter(
-        "value", Annotated[Value, _INJECT]
+        "value", Annotated[Inject[Value], "metadata"]
     ) == RpcInjectedParameter(
         name="value",
         dependency=Value,
@@ -146,4 +144,4 @@ def test_injected_parameter_recognizes_only_concrete_injected_types() -> None:
     with pytest.raises(TypeError, match="concrete dependency type"):
         injected_parameter("values", Inject[list[str]])
     with pytest.raises(TypeError, match="concrete dependency type"):
-        injected_parameter("values", Annotated[list[str], _INJECT])
+        injected_parameter("values", Annotated[Inject[list[str]], "metadata"])

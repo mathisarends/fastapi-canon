@@ -132,16 +132,21 @@ without `--check` is rejected with exit code 2.
 Configure the schema and its clients once in `pyproject.toml` (or another TOML
 file passed with `--config`):
 
+The former `[tool.fastapi-streams]` table and its client tables remain accepted
+for one transition release with a visible deprecation warning. Rename them to
+`[tool.fastapi-canon.sse]` and `[[tool.fastapi-canon.sse.clients]]`. If both
+configurations exist, the Canon table takes precedence.
+
 ```toml
-[tool.fastapi-streams]
+[tool.fastapi-canon.sse]
 app = "myapp.main:app"            # optional; omit for an externally supplied schema
 schema = "contracts/openapi.json"
 
-[[tool.fastapi-streams.clients]]
+[[tool.fastapi-canon.sse.clients]]
 language = "typescript"
 output = "web/src/generated"
 
-[[tool.fastapi-streams.clients]]
+[[tool.fastapi-canon.sse.clients]]
 language = "python"
 output = "sdk/generated"
 python-http-client = "httpx"      # optional, Python only
@@ -170,8 +175,11 @@ fail explicitly.
 
 ### SDK provenance
 
-CLI generation always writes `.fastapi-streams.json` alongside the SDK. Commit
-this file with the generated sources. Its existing `files` list still controls
+CLI generation always writes `.fastapi-canon-sse.json` alongside the SDK. Commit
+this file with the generated sources. Existing `.fastapi-streams.json` ownership
+is read during migration; regeneration removes that old manifest and stale owned
+files while preserving handwritten files. `--check` reports migration as drift
+without writing anything. Its existing `files` list still controls
 ownership and cleanup; the additional `generation` object contains the same
 provenance as an optional diagnostic report:
 
