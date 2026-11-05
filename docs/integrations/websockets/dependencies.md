@@ -59,8 +59,8 @@ class Resolver:
     async def resolve[T](self, dependency: type[T]) -> T: ...
 ```
 
-Pass it as `resolver=` to `CanonWebSocketRouter`, `CanonWebSocketRouter.serve()`, an endpoint,
-or `create_server()`. A synchronous or asynchronous callable taking the
+Pass it as `resolver=` to `include_channel`, a protocol-level endpoint, or
+`create_server()`. A synchronous or asynchronous callable taking the
 requested type is accepted as a lightweight alternative.
 
 Context values take precedence over the resolver. `RpcConnection` is also made
@@ -97,13 +97,12 @@ resolver = DishkaResolver(container)
 ```
 
 The adapter maps a connection to Dishka's `SESSION` scope and each RPC call to
-a child scope. Pass `resolver=Dishka()` to the router to read the app's root
-container at connection time.
+a child scope. Endpoints without an explicit resolver read the app's root
+container at connection time when one is installed, as `Composition` does.
 
 ```python
 from dishka.integrations.fastapi import FromDishka
-from fastapi_canon.integrations.websockets import CanonWebSocketRouter
-from fastapi_canon.integrations.websockets.adapters.dishka import Dishka
+from fastapi_canon import APIRouter
 
 
 async def open_session(
@@ -114,19 +113,17 @@ async def open_session(
     return await sessions.get_authorized(session_id, actor)
 
 
-rpc = CanonWebSocketRouter(
+router = APIRouter()
+router.include_channel(
+    session_events,
+    path="/sessions/{session_id}/events",
     context=open_session,
-    resolver=Dishka(),
     rejects=[session_not_found],
 )
-rpc.stream("/sessions/{session_id}/screencast", frames)
-rpc.socket("/sessions/{session_id}/events", channels=[session_events])
-web.include_router(rpc)
 ```
 
 The context function can declare `FromDishka[T]` parameters without `@inject`.
-Install Dishka through `Composition` and feature providers, or configure
-`setup_dishka()` and the container lifespan explicitly. A manually constructed
+`Composition` installs Dishka from feature providers. A manually constructed
 `DishkaResolver` needs the APP container.
 
 Handlers receive the session as `Inject[Session]` and everything else from
@@ -148,9 +145,7 @@ Register reusable context hooks once by function; their concrete return
 annotations supply the lookup keys:
 
 ```python
-from fastapi_canon import Inject
-from fastapi_canon.integrations.websockets import CanonWebSocketRouter
-from fastapi_canon.integrations.websockets.adapters.dishka import Dishka
+from fastapi_canon import APIRouter, Inject
 
 
 async def authorized_project(
@@ -174,29 +169,16 @@ async def screencast_connection(
     )
 
 
-routes = CanonWebSocketRouter(
-    context=screencast_connection,
-    resolver=Dishka(),
-    hooks=(authorized_project,),
-)
-```
-
-The application supplies the domain types and service methods in this example.
-The shared application router forwards the same options for a JSON-RPC channel:
-
-```python
-from fastapi_canon import APIRouter
-
 router = APIRouter(prefix="/projects")
 router.include_channel(
     session_events,
     path="/{project_id}/sessions/{session_id}",
     context=screencast_connection,
-    resolver=Dishka(),
     hooks=(authorized_project,),
 )
 ```
 
+The application supplies the domain types and service methods in this example.
 Binary streams and raw sockets retain their specialized WebSocket endpoints.
 Hooks can use normal FastAPI dependencies and path/header/query annotations.
 Their injected dependencies form a graph, independent of tuple order. Each
@@ -205,7 +187,7 @@ result. Duplicate hook result types, dependency cycles and generator hooks fail
 at registration. A registered hook takes precedence over DI for its result type;
 its errors propagate without a fallback. Unused hooks are not executed.
 
-`Dishka()` enters a REQUEST scope for the entire context preparation and closes
+Dishka context preparation enters a REQUEST scope for the entire preparation and closes
 it before acceptance, including on failure or cancellation. An existing
 middleware SESSION is borrowed; its container is restored after preparation.
 Application generator providers acquire and clean up resources in that REQUEST
@@ -215,12 +197,12 @@ resource decorator. A resource required until disconnect belongs in SESSION.
 Context and hook results must remain usable after preparation ends. Handlers
 can inject them by their declared types, including using them as SESSION
 `from_context` inputs. REQUEST-owned objects themselves must not escape through
-these results. The same preparation applies to RPC sockets, binary stream
-endpoints and custom handlers mounted on this router.
+these results. The same preparation applies to binary stream endpoints and
+custom handlers declared with the same `context=` and `hooks=`.
 
 ## Authenticated connections
 
-Use `CanonWebSocketRouter(context=async_dependency, resolver=Dishka(), rejects=[...])`
+Use `router.include_channel(channel, path=..., context=async_dependency, rejects=[...])`
 when authentication needs FastAPI dependencies, cookies, origins or path values.
 The context return annotation supplies its injection type.
 
