@@ -137,6 +137,14 @@ def _verify() -> None:
         with tracer.get_tracer("owner").start_as_current_span("owner"):
             pass
         assert exporter.get_finished_spans()[-1].name == "owner"
+        # Minimum FastAPI can expose telemetry route contexts without a cached
+        # regex. Repeated builds and collision checks must retain converter rules.
+        app.get("/{alias:str}", operation_id="late.alias")(lambda alias: "late")
+        report = composition.check(app)
+        assert report.has_errors
+        [issue] = report.issues
+        assert issue.code == "canon.routing.E003"
+        assert issue.locations == ("GET /{name}", "GET /{alias}")
     finally:
         tracer.shutdown()
         meter.shutdown()

@@ -924,7 +924,8 @@ def _check_http_paths(
         )
         owner = installed.get((identity, path, methods), owner)
         # Erase parameter names, retaining the exact converter regex and literals.
-        pattern = re.sub(r"\(\?P<[^>]+>", "(?:", route.path_regex.pattern)
+        path_regex = route.path_regex or compile_path(route.path)[0]
+        pattern = re.sub(r"\(\?P<[^>]+>", "(?:", path_regex.pattern)
         for method in methods:
             key = (method, pattern)
             previous = seen.get(key)
