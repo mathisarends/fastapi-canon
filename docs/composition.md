@@ -249,6 +249,39 @@ it during application shutdown. Existing application lifespans are composed
 automatically. Applications should treat the exposed container as
 composition-owned and not close it independently.
 
+### Overriding providers in tests
+
+`composition.override(*providers)` returns a copy of the composition whose
+providers are added after every feature provider, so their bindings replace the
+feature bindings. The original composition is unchanged:
+
+```python
+from dishka import Provider, Scope, provide
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from app.main import composition
+
+
+class FakeProjectProvider(Provider):
+    scope = Scope.APP
+
+    @provide
+    def repository(self) -> ProjectRepository:
+        return InMemoryProjectRepository()
+
+
+def test_lists_projects() -> None:
+    app = composition.override(FakeProjectProvider).build(FastAPI())
+    with TestClient(app) as client:
+        assert client.get("/projects").json() == []
+```
+
+Overrides accept the same provider instances, classes and factories as
+`Feature(providers=...)`. An override may only replace bindings that a feature
+already provides; a binding for any other type fails with
+`canon.providers.E001`, which catches typos and stale fakes.
+
 ## Error contracts
 
 The optional [source checker](error-checking.md) finds explicit application
@@ -463,7 +496,9 @@ router's registry when the route is registered, including routes excluded with
 every installed operation against the composed error catalog on a temporary
 application, before anything is installed; a mismatch is reported as
 `canon.contracts.E001` and makes `apply` raise `FeatureConfigurationError`.
-`composition.validate(app)` repeats the check on the installed application.
+`composition.build(app)` applies the composition and repeats the check on the
+installed application, including OpenAPI compilation. Prefer it over `apply`
+followed by a separate `composition.validate(app)`.
 
 For explicit method lists, import the string enum `HTTPMethod` from
 `fastapi_canon`, for example `methods=[HTTPMethod.POST]`. Canon re-exports

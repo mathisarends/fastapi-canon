@@ -32,9 +32,7 @@ def create_app(  # smelt: ignore[SMT429] -- external API
         errors=ErrorOptions(type_base="https://api.example.test/problems"),
         telemetry=telemetry,
     )
-    composition.apply(app)
-    composition.validate(app)
-    return app
+    return composition.build(app)
 
 
 app = create_app()

@@ -7,6 +7,7 @@ from inspect import iscoroutine, iscoroutinefunction
 from typing import TYPE_CHECKING, Any
 
 from dishka import AsyncContainer, Provider, make_async_container
+from dishka.entities.key import DependencyKey
 from dishka.exceptions import DishkaError  # type: ignore[attr-defined]  # not exported
 from fastapi import APIRouter, FastAPI
 from starlette.routing import Match
@@ -124,7 +125,7 @@ class Feature:
             routers, APIRouter, f"feature {normalized_name!r} routers"
         )
         normalized_providers = _unique_provider_sources(
-            providers, feature_name=normalized_name
+            providers, owner=f"feature {normalized_name!r} providers"
         )
         normalized_instrumentation = tuple(instrumentation)
         if normalized_instrumentation:
@@ -221,6 +222,7 @@ class Composition:
     telemetry: Telemetry | None
     request_logging: bool
     mcp: McpOptions | None
+    overrides: tuple[ProviderSource, ...]
 
     def __init__(
         self,
@@ -269,11 +271,35 @@ class Composition:
         object.__setattr__(self, "errors", errors or ErrorOptions())
         object.__setattr__(self, "router_factory", router_factory)
         object.__setattr__(self, "router_policy", router_policy)
+        object.__setattr__(self, "overrides", ())
 
     def apply(self, app: FastAPI) -> FastAPI:
         """Apply this composition to *app* exactly once and return the app."""
         _apply_composition(app, self)
         return app
+
+    def build(self, app: FastAPI) -> FastAPI:
+        """Apply this composition to *app*, validate it and return the app."""
+        self.apply(app)
+        self.validate(app)
+        return app
+
+    def override(self, *providers: ProviderSource) -> Composition:
+        """Return a copy whose *providers* replace existing Dishka bindings.
+
+        Overrides are added after every feature provider, so their bindings win.
+        Each override may only provide types that a feature already provides.
+        """
+        if not providers:
+            raise FeatureConfigurationError("override expects at least one provider")
+        overrides = _unique_provider_sources(
+            (*self.overrides, *providers), owner="Composition overrides"
+        )
+        copy = object.__new__(Composition)
+        for name in Composition.__dataclass_fields__:
+            object.__setattr__(copy, name, getattr(self, name))
+        object.__setattr__(copy, "overrides", overrides)
+        return copy
 
     def validate(self, app: FastAPI) -> None:
         """Raise for system-check errors in this applied composition."""
@@ -323,6 +349,7 @@ class _Installation:
     telemetry_id: int | None
     request_logging: bool
     mcp: McpOptions | None
+    override_ids: tuple[int, ...]
     container: AsyncContainer | None = field(compare=False)
     description: CompositionInfo | None = field(default=None, compare=False)
 
@@ -366,6 +393,7 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
             if composition.router_factory is not None
             else None
         ),
+        override_ids=tuple(id(source) for source in composition.overrides),
         container=None,
         router_policy=composition.router_policy,
         router_policy_id=(
@@ -456,6 +484,7 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         router_factory_id=requested.router_factory_id,
         router_policy=policy,
         router_policy_id=requested.router_policy_id,
+        override_ids=requested.override_ids,
         container=container,
         description=prepared.description,
     )
@@ -744,6 +773,16 @@ def _prepare_container(app: FastAPI, composition: Composition) -> AsyncContainer
             *providers,
             *_instrumentation_providers(instrumentation, composition.telemetry),
         )
+    if composition.overrides:
+        materialized_overrides = _materialize_providers(
+            tuple(("overrides", source) for source in composition.overrides)
+        )
+        _reject_duplicate_materialized_providers(
+            (*materialized, *materialized_overrides)
+        )
+        overrides = tuple(item.provider for item in materialized_overrides)
+        _reject_unmatched_overrides(providers, overrides)
+        providers = (*providers, *overrides)
     container = _make_container(providers, composition.telemetry)
     if container is not None and app.middleware_stack is not None:
         raise FeatureConfigurationError(
@@ -919,6 +958,8 @@ def _validate_applied_composition(app: object, composition: Composition) -> None
         != (id(composition.telemetry) if composition.telemetry is not None else None)
         or installed.errors != composition.errors
         or installed.request_logging != composition.request_logging
+        or installed.override_ids
+        != tuple(id(source) for source in composition.overrides)
         or installed.router_factory_id != expected_router_factory_id
         or installed.router_policy_id
         != (
@@ -994,7 +1035,7 @@ def _flatten_routers(features: tuple[Feature, ...]) -> tuple[APIRouter, ...]:
 
 
 def _unique_provider_sources(
-    values: Sequence[ProviderSource], *, feature_name: str
+    values: Sequence[ProviderSource], *, owner: str
 ) -> tuple[ProviderSource, ...]:
     result: list[ProviderSource] = []
     seen: set[int] = set()
@@ -1002,15 +1043,12 @@ def _unique_provider_sources(
         raw_value: object = value
         if not isinstance(raw_value, Provider) and not callable(raw_value):
             msg = (
-                f"feature {feature_name!r} providers[{index}] must be a Provider "
+                f"{owner}[{index}] must be a Provider "
                 "instance, Provider class, or zero-argument provider factory"
             )
             raise FeatureConfigurationError(msg)
         if id(value) in seen:
-            msg = (
-                f"feature {feature_name!r} providers[{index}] duplicates an "
-                "earlier provider source"
-            )
+            msg = f"{owner}[{index}] duplicates an earlier provider source"
             raise FeatureConfigurationError(msg)
         seen.add(id(value))
         result.append(value)
@@ -1089,6 +1127,29 @@ def _reject_duplicate_materialized_providers(
             )
             raise FeatureConfigurationError(msg)
         seen[id(contribution.provider)] = contribution.feature_name
+
+
+def _reject_unmatched_overrides(
+    providers: tuple[Provider, ...], overrides: tuple[Provider, ...]
+) -> None:
+    provided = {key for provider in providers for key in _provided_keys(provider)}
+    for override in overrides:
+        for key in _provided_keys(override):
+            if key not in provided:
+                msg = (
+                    f"override {type(override).__name__} provides "
+                    f"{_qualified_name(key.type_hint)}, which no feature provides"
+                )
+                raise FeatureConfigurationError(msg)
+
+
+def _provided_keys(provider: Provider) -> tuple[DependencyKey, ...]:
+    keys = (
+        *(factory.provides for factory in provider.factories),
+        *(alias.provides for alias in provider.aliases),
+        *(variable.provides for variable in provider.context_vars),
+    )
+    return tuple(key.with_component(provider.component) for key in keys)
 
 
 def _prepare_routers(

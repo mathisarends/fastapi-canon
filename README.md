@@ -120,13 +120,11 @@ async def get_project(project_id: int) -> dict[str, int]:
 
 
 feature = Feature(name="projects", routers=[router])
-composition = Composition(features=(feature,))
-app = composition.apply(FastAPI())
-composition.validate(app)
+app = Composition(features=(feature,)).build(FastAPI())
 ```
 
-`apply` checks every operation contract before installing the feature;
-`validate` confirms the installed app compiles to valid OpenAPI.
+`build` checks every operation contract before installing the feature, then
+confirms the installed app compiles to valid OpenAPI.
 `GET /projects/1` returns `{"id": 1}`. `GET /projects/0` returns a 404
 `application/problem+json` response with the stable type
 `https://api.example.com/problems/project_missing` and code `project_missing`.

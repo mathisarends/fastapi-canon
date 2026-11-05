@@ -18,6 +18,13 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- `Composition.build(app)` applies a composition and validates the installed
+  application in one call, replacing `apply(app)` followed by `validate(app)`.
+
+- `Composition.override(*providers)` returns a copy whose Dishka providers
+  replace existing feature bindings, for example fakes in tests. Overrides that
+  provide a type no feature provides fail with `canon.providers.E001`.
+
 - `McpOptions(auth_factory=..., middleware_factory=...)` builds app-specific
   FastMCP adapters from the borrowed Dishka APP container. Synchronous factories
   are validated during composition preflight before application mutation.

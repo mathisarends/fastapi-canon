@@ -120,9 +120,7 @@ async def events(
 
 
 feature = Feature(name="runs", routers=[router], providers=[RunProvider])
-composition = Composition(features=(feature,))
-app = composition.apply(FastAPI())
-composition.validate(app)
+app = Composition(features=(feature,)).build(FastAPI())
 ```
 
 Request `GET /runs/demo/events` with `Authorization: Bearer demo` to receive SSE.
