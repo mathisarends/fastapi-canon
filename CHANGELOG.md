@@ -142,6 +142,14 @@ The next release containing the breaking changes below must be 0.16.0.
   shadowing. Intentional static/parameter overlap remains supported; see
   [HTTP path checks](docs/system-checks.md#findings-and-coverage).
 
+- Provider-factory analysis in `fastapi-canon check errors` now follows local
+  reassignments, aliases and conditional return/yield paths in execution order.
+  Strict checks can fail for previously missed implementation errors; unmodeled
+  factory control flow remains incomplete (`CAN003`). Before adopting 0.16.0,
+  declare the actual implementation errors in `raises=` (and map them to `Error`
+  values), or simplify opaque factories to explicit supported bindings. Do not
+  rely on an earlier assignment or an unreachable return to establish coverage.
+
 - Automatic HTTP/SSE operation IDs now use the endpoint function name, optionally
   prefixed by the declaring router's `namespace`, instead of FastAPI's default
   function/path/method combination. This changes exported OpenAPI and generated
