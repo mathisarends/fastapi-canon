@@ -23,7 +23,7 @@ from typing import Any
 from packaging.requirements import Requirement
 from packaging.version import Version
 
-__all__ = [  # smelt: ignore[SMT330] -- Release workflows consume this module's API.
+__all__ = [
     "Package",
     "packages",
     "validate_release",

@@ -22,7 +22,7 @@ if TYPE_CHECKING:
         OpenTelemetry,
     )
 
-__all__ = [  # smelt: ignore[SMT330] -- Preserve the runtime-free declaration API.
+__all__ = [
     "Instrumentation",
     "Telemetry",
     "instrument",

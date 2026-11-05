@@ -21,7 +21,7 @@ from fastapi_canon.integrations.webrtc.router import WebRtcRouter
 from fastapi_canon.policy import normalize_raises as _normalize_raises
 from fastapi_canon.router import CanonRouter, _distinct
 
-__all__ = [  # smelt: ignore[SMT330] -- Preserve the router module's star imports.
+__all__ = [
     "CanonWebRtcRouter",
 ]
 

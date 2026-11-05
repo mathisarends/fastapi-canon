@@ -31,7 +31,7 @@ from fastapi_canon.integrations.websockets.websocket import (
 
 _CLOSED = object()
 
-__all__ = [  # smelt: ignore[SMT330] -- The documented testing API is module-owned.
+__all__ = [
     "InMemorySocket",
     "InMemoryClientSocket",
     "InMemorySocketFactory",

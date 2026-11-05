@@ -3,7 +3,7 @@
 import sqlalchemy as sa
 from alembic import op
 
-__all__ = [  # smelt: ignore[SMT330] -- Alembic loads revision-module entrypoints.
+__all__ = [
     "downgrade",
     "upgrade",
 ]

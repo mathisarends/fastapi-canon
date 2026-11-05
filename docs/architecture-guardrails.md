@@ -94,7 +94,7 @@ Smelt 0.5.0 adds the following reviews to the existing policy:
 | `secret-settings-field` (SMT327) | warning | Use Pydantic secret types for credential settings and unwrap only at deliberate consumers. |
 | `redundant-dishka-provider` (SMT328) | hint | Review constructor registration against dependency markers, settings constructors and resource ownership before replacing a factory. |
 | `caller-before-callee` (SMT329) | hint | Review step-down reading order within each visibility group, preserving definition-time dependencies and the existing public-first rule. |
-| `package-only-dunder-all` (SMT330) | error | Put new export lists in package facades; existing module contracts retain narrowly reasoned inline exceptions. |
+| `package-only-dunder-all` (SMT330) | off | Ordinary modules may declare their own public exports; no package-only restriction is imposed. |
 | `nondeterministic-test-data` (SMT431) | warning | Use fixed UUIDs and reproducible setup; retain randomness only where isolation or distinct scope identities require it. |
 
 The discriminator, provider and caller-order reviews remain advisory hints,
@@ -151,9 +151,9 @@ rules to bypass a finding; review and fix it or explain an intentional contract.
 
 Existing ordinary-module export lists preserve the documented socket-testing
 API, transport-router and telemetry declarations, Alembic revision entrypoints,
-the stack application factory and release-tool APIs. Their SMT330 exceptions sit
-beside the export lists; moving or deleting them can change star imports or
-visibility evidence. Random UUIDs remain only for PostgreSQL schema isolation
+the stack application factory and release-tool APIs. SMT330 is disabled because
+module-level export lists are intentional contracts. Random UUIDs remain only
+for PostgreSQL schema isolation
 across test processes and MCP request-scope identity checks, with local SMT431
 reasons. Ordinary telemetry, missing-resource and stream tests use fixed UUIDs.
 

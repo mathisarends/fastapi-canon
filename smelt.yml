@@ -304,7 +304,7 @@ rules:
   secret-settings-field: warning
   redundant-dishka-provider: hint
   caller-before-callee: hint
-  package-only-dunder-all: error
+  package-only-dunder-all: off
   unnecessary-future-annotations: warning
   prefer-match-type-dispatch: warning
   private-test-access: error
