@@ -79,7 +79,7 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
 
 ## Completion
 
-- Implementation or decision PR:
+- Implementation or decision PR: [#87](https://github.com/mathisarends/fastapi-canon/pull/87).
 - Final commit and verification: implementation `f933f76`, merged current
   `origin/main` after DX-006 landed. Focused injection, introspection and
   operation-ID suites: 86 passed on both Python 3.12 and 3.14. Full root pytest:
