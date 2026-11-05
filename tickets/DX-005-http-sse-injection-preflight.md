@@ -1,0 +1,48 @@
+# DX-005: Validate HTTP and SSE injected dependency roots before serving
+
+- Status: Open
+- Priority: P1
+- Kind: Coverage improvement
+- Baseline: `a366702` (2026-11-05)
+- Depends on: None
+- Earlier review: Additional scope of review finding about missing DI roots; D1/C3.
+
+## Problem and reproduction
+
+Inspect [container preparation](../fastapi_canon/feature.py) and
+[endpoint injection](../fastapi_canon/injected_route.py). Composition validates
+the provider graph but does not explicitly validate every injected endpoint root.
+
+To establish the current behavior, declare `async def read(store: Inject[Store])`
+on an HTTP router with no Store provider, then compare check(), build() and an
+actual request. Repeat for a finite SSE generator and for an unrelated valid
+provider graph. The demonstrated missing-RPC-binding case is tracked separately
+in [DX-004](DX-004-rpc-injection-preflight.md); do not assume identical HTTP behavior
+without running these cases.
+
+## Scope
+
+Add preflight coverage for HTTP/SSE endpoint Inject and FromDishka roots only.
+Keep FastAPI Depends/Security functions, custom route classes and separately
+configured containers explicit; do not resolve services to discover graph edges.
+
+## Acceptance criteria
+
+- [ ] Record the baseline cases before implementing; turn confirmed missing endpoint bindings into stable preflight findings with route, feature and type.
+- [ ] Valid Inject and FromDishka endpoints remain absent from public request schemas.
+- [ ] Cover HTTP async/sync handlers and finite SSE generators with configured APP/REQUEST providers.
+- [ ] Provider bodies and lifespans are not executed by check(); unrelated FastAPI dependencies are not treated as Dishka services.
+- [ ] Define behavior for explicit custom route classes or externally installed containers without breaking their ownership silently.
+- [ ] Document coverage limits and classify stricter configuration validation under the release policy.
+
+## Verification
+
+Use real containers and bounded HTTP/SSE requests in the injected-route and feature-check suites. Coordinate diagnostics with DX-004 without requiring one shared abstraction.
+
+Apply the [shared completion and release rules](README.md#shared-acceptance-and-verification-rules).
+
+## Completion
+
+- Implementation or decision PR:
+- Final commit and verification:
+- Remaining follow-ups:
