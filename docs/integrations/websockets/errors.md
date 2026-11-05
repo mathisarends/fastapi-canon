@@ -57,7 +57,7 @@ tasks = RpcChannel("tasks", raises=(PermissionDeniedError,))
 
 Operation-level declarations extend the channel-level set. A local binding
 replaces an inherited binding for the same domain exception class. With
-`CanonWebSocketRouter(strict_errors=True)`, an application error absent from the
+`include_channel(..., strict_errors=True)`, an application error absent from the
 method's `raises=` declaration becomes an internal error and is logged.
 Subclasses of a declared `RpcError` are accepted. Error bindings always require
 an operation declaration, regardless of `strict_errors`.
@@ -154,9 +154,8 @@ different bindings for the same exception on the same level are an error.
 OpenRPC documents and generated clients describe a binding exactly like an
 `RpcError` subclass with the same settings.
 
-`CanonWebSocketRouter(errors=...)`, `RpcChannel.create_server(errors=...)`, and
-`CanonWebSocketRouter.errors` have been removed. Declare bindings on the operations that
-can return them. `error_mapper` remains available for failures that need code
+Declare bindings on the operations that can return them; there is no router- or
+server-wide error list. `error_mapper` remains available for failures that need code
 to decide.
 
 For `details=Model`, required model fields must appear in the exception's

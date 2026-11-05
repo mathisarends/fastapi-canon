@@ -47,8 +47,8 @@ checks. Bound ticket expiry by login/session expiry; do not issue long-lived acc
 tokens as query values. Redact ticket query parameters in application and proxy
 logs and avoid returning internal connection URLs.
 
-Declare the same named Canon errors on the HTTP route and optional
-`CanonWebRtcRouter` session. Expected admission failures remain HTTP problems;
+Declare the same named Canon errors on the HTTP route and the
+`@router.webrtc(...)` session of the same `APIRouter`. Expected admission failures remain HTTP problems;
 accepted-session failures retain WebRTC error framing. The ticket endpoint makes
 its own HTTP response readable, while a subsequent failed WebSocket handshake can
 still appear as `connection_failed` to the browser.

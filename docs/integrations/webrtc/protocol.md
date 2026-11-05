@@ -89,5 +89,5 @@ least one second, even when cancelled handlers used up
 `shutdown_timeout_seconds`. A signaling loss shorter than
 `signaling_loss_grace_seconds` and a
 transport interruption shorter than `transport_loss_grace_seconds` do not end
-the session. `WebRtcRouter.aclose()` runs at application shutdown and closes
+the session. At application shutdown, Canon closes
 every session with `shutdown`.

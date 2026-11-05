@@ -11,9 +11,9 @@ and declaration provenance.
 
 ```python
 from fastapi import FastAPI
-from fastapi_canon import CanonRouter, Composition, Feature
+from fastapi_canon import APIRouter, Composition, Feature
 
-projects = CanonRouter(prefix="/projects")
+projects = APIRouter(prefix="/projects")
 
 
 @projects.get("/{project_id}", operation_id="projects.get")

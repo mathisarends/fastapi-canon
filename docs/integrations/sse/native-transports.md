@@ -1,7 +1,7 @@
 # Native SSE transports and mixed client generation
 
 An authoritative OpenAPI 3.2 contract can describe an existing SSE endpoint.
-`fastapi-canon sse generate --schema` does not require `StreamRouter`, a running
+`fastapi-canon sse generate --schema` does not require `APIRouter.sse()`, a running
 server or replacement of the application's stream implementation.
 
 The executable [native proxy example](../../../examples/sse/native_proxy.py) declares an

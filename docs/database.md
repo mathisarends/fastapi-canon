@@ -1,9 +1,5 @@
 # Databases and migrations
 
-This integration is available in Canon 0.13.0.
-The startup-check option, engine context and explicit downgrade commands described
-below are planned for 0.14.0 (unreleased).
-
 Install `fastapi-canon[sqlite,migrations]` or
 `fastapi-canon[postgres,migrations]`. Add `sqlmodel` when using SQLModel sessions.
 The `database` extra installs async SQLAlchemy without choosing a driver. Base
@@ -22,7 +18,7 @@ All integration modules ship in the same Canon distribution; extras select
 third-party dependencies. A PostgreSQL server remains separately operated.
 For a SQLModel application using PostgreSQL and Alembic, install
 `uv add "fastapi-canon[postgres,sqlmodel,migrations]"`; add `sqlite` if needed for
-local development or tests. These dependencies were already optional in 0.13.0.
+local development or tests.
 
 Database ownership is opt-in through `database.feature`. Applications can keep
 their own Dishka providers and Feature lifespans for engines, sessions and
@@ -144,7 +140,7 @@ each standalone `open_engine()` or CLI operation gets its own engine context.
 ```python
 from dishka import Provider, Scope, provide
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
-from fastapi_canon import CanonRouter
+from fastapi_canon import APIRouter
 
 
 class OrdersProvider(Provider):
@@ -153,7 +149,7 @@ class OrdersProvider(Provider):
     order_service = provide(OrderService)
 
 
-router = CanonRouter(prefix="/orders", route_class=DishkaRoute)
+router = APIRouter(prefix="/orders", route_class=DishkaRoute)
 
 
 @router.post("", status_code=201)
@@ -234,8 +230,7 @@ open a fresh scope instead.
 
 ## Short use-case calls
 
-Available in the next release (currently unreleased), `Scoped[UseCase]` is a
-callable wrapper for one short asynchronous application operation. Each invocation
+`Scoped[UseCase]` is a callable wrapper for one short asynchronous application operation. Each invocation
 opens a fresh `ServiceScope`, resolves the use case, awaits its `__call__`, and
 finishes resource cleanup before returning the result. Positional and keyword
 arguments and the result retain the use case's types.
