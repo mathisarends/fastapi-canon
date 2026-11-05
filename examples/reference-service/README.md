@@ -45,7 +45,7 @@ For the opt-in demo, run from the repository root:
 
 ```console
 uv sync --frozen --all-groups
-docker compose -f examples/reference-service/compose.telemetry.yaml up -d
+docker compose -f examples/reference-service/compose.telemetry.yml up -d
 uv run --frozen --directory examples/reference-service --project ../.. python -m app.schema
 ```
 
@@ -94,7 +94,7 @@ To find the correlated records:
    `duration_ms`, `trace_id` and `span_id`. Normal task routes also show
    `problem_code` when a Canon problem is returned, plus repository/SQL spans.
 
-The mounted [Grafana provisioning](grafana-datasources.yaml) configures both
+The mounted [Grafana provisioning](grafana-datasources.yml) configures both
 Loki derived fields and Tempo `tracesToLogsV2`; the two-second time margin includes
 completion records around the span boundary. It follows
 [Grafana's correlation configuration](https://grafana.com/docs/grafana/latest/datasources/tempo/configure-tempo-data-source/configure-trace-to-logs/).
@@ -114,5 +114,5 @@ Resources and SDK providers remain application-owned.
 Stop the collector with:
 
 ```console
-docker compose -f examples/reference-service/compose.telemetry.yaml down
+docker compose -f examples/reference-service/compose.telemetry.yml down
 ```

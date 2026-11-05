@@ -21,7 +21,7 @@ async def database(
     url = os.environ.get("CANON_TEST_POSTGRES_URL")
     if url is None:
         pytest.skip("Set CANON_TEST_POSTGRES_URL to run real PostgreSQL contracts")
-    schema = "canon_" + uuid4().hex
+    schema = "canon_" + uuid4().hex  # smelt: ignore[SMT431] -- Parallel DB isolation.
     engine = create_async_engine(url)
     async with asyncio.timeout(15), engine.begin() as connection:
         await connection.execute(text(f'CREATE SCHEMA "{schema}"'))

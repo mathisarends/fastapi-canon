@@ -2,7 +2,7 @@ services:
   telemetry:
     image: grafana/otel-lgtm:0.30.0
     volumes:
-      - ./grafana-datasources.yaml:/otel-lgtm/grafana/conf/provisioning/datasources/grafana-datasources.yaml:ro
+      - ./grafana-datasources.yml:/otel-lgtm/grafana/conf/provisioning/datasources/grafana-datasources.yml:ro
     ports:
       - "127.0.0.1:3000:3000"
       - "127.0.0.1:4318:4318"

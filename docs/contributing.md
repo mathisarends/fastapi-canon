@@ -6,6 +6,10 @@ Install pnpm following its [installation guide](https://pnpm.io/installation);
 Run commands from the repository root; the repository has one Python environment
 and `uv.lock`, plus one `pnpm-lock.yaml` for all TypeScript tooling.
 
+Use `.yml` for repository-owned YAML configuration files. Keep tool-defined
+filenames such as `pnpm-lock.yaml` and skill metadata `agents/openai.yaml`.
+Smelt 0.5.0 does not check YAML filename extensions.
+
 ```console
 git clone https://github.com/mathisarends/fastapi_canon.git
 cd fastapi_canon

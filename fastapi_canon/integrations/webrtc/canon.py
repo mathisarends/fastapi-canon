@@ -21,7 +21,9 @@ from fastapi_canon.integrations.webrtc.router import WebRtcRouter
 from fastapi_canon.policy import normalize_raises as _normalize_raises
 from fastapi_canon.router import CanonRouter, _distinct
 
-__all__ = ["CanonWebRtcRouter"]
+__all__ = [
+    "CanonWebRtcRouter",
+]
 
 Factory = TypeVar("Factory", bound=Callable[..., Any])
 
