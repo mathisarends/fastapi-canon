@@ -9,6 +9,24 @@ from typing import Self
 type _FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 type _Environment = dict[str, str]
 
+_PROVIDERS = frozenset({"dishka.Provider", "dishka.provider.Provider"})
+_PROVIDE = frozenset(
+    {
+        "dishka.provide",
+        "dishka.provider.provide",
+        "dishka.alias",
+        "dishka.provider.alias",
+    }
+)
+_PROTOCOLS = frozenset({"typing.Protocol", "typing_extensions.Protocol"})
+# Bases that add no application methods or exceptions to their subclasses.
+_MARKER_BASES = _PROTOCOLS | {"abc.ABC", "typing.Generic", "typing_extensions.Generic"}
+_ITERATORS = frozenset(
+    f"{module}.{name}"
+    for module in ("collections.abc", "typing")
+    for name in ("Iterator", "AsyncIterator", "Generator", "AsyncGenerator")
+)
+
 
 def _walk_error(error: OSError) -> None:
     raise error
@@ -35,6 +53,8 @@ class _Source:
     _mros: dict[str, tuple[tuple[str, ...] | None, frozenset[str]]] = field(
         default_factory=dict
     )
+    # Port -> (implementation, or None when unresolved; provider module).
+    _ports: dict[str, list[tuple[str | None, str]]] | None = None
 
     @classmethod
     def read(cls, roots: list[Path]) -> Self:
@@ -328,11 +348,18 @@ class _Source:
             value = getattr(builtins, name.split(".")[1], None)
             if isinstance(value, type):
                 return [f"builtins.{base.__name__}" for base in value.__mro__]
+        if name in _MARKER_BASES:
+            return [name, "builtins.object"]
         definition = self.definitions.get(name)
         if definition is None or not isinstance(definition.node, ast.ClassDef):
             return None
         bases = [
-            self.resolve(base, definition.module) for base in definition.node.bases
+            # A parametrized generic base has the methods of its origin class.
+            self.resolve(
+                base.value if isinstance(base, ast.Subscript) else base,
+                definition.module,
+            )
+            for base in definition.node.bases
         ]
         if not bases:
             bases = ["builtins.object"]
@@ -372,6 +399,160 @@ class _Source:
     def exception(self, name: str) -> bool:
         return "builtins.Exception" in (self.mro(name) or [])
 
+    def abstract(self, function: _Definition) -> bool:
+        """Whether *function* is an abstract method or a Protocol member."""
+        node = function.node
+        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            return False
+        if any(
+            self.resolve(decorator, function.module) == "abc.abstractmethod"
+            for decorator in node.decorator_list
+        ):
+            return True
+        owner = self.definitions.get(function.owner or "")
+        return (
+            owner is not None
+            and isinstance(owner.node, ast.ClassDef)
+            and any(
+                self.resolve(
+                    base.value if isinstance(base, ast.Subscript) else base,
+                    owner.module,
+                )
+                in _PROTOCOLS
+                for base in owner.node.bases
+            )
+        )
+
+    def implementations(self, port: str) -> tuple[str | None, ...]:
+        """Classes that Dishka providers in the source bind to *port*.
+
+        ``None`` marks a binding whose implementation is not statically known.
+        """
+        if self._ports is None:
+            previous = self.touched
+            self._ports = {}
+            try:
+                for definition in list(self.definitions.values()):
+                    if isinstance(definition.node, ast.ClassDef) and self._provider(
+                        definition.name
+                    ):
+                        self._bind(definition.module, definition.node)
+            finally:
+                self.touched = previous
+        bound = self._ports.get(port, [])
+        self.touched.update(module for _, module in bound)
+        return tuple(dict.fromkeys(implementation for implementation, _ in bound))
+
+    def subclasses(self, owner: str) -> list[str]:
+        """Classes in the source that inherit from *owner*."""
+        return [
+            name
+            for name, definition in self.definitions.items()
+            if name != owner
+            and isinstance(definition.node, ast.ClassDef)
+            and owner in (self.mro(name) or ())
+        ]
+
+    def _provider(self, name: str, seen: frozenset[str] = frozenset()) -> bool:
+        definition = self.definitions.get(name)
+        if definition is None or not isinstance(definition.node, ast.ClassDef):
+            return False
+        for base in definition.node.bases:
+            resolved = self.resolve(base, definition.module)
+            if resolved in _PROVIDERS or (
+                resolved is not None
+                and resolved not in seen
+                and self._provider(resolved, seen | {name})
+            ):
+                return True
+        return False
+
+    def _bind(self, module: str, provider: ast.ClassDef) -> None:
+        assert self._ports is not None
+        for member in provider.body:
+            provides: ast.expr | None = None
+            implementations: list[str | None] = []
+            if isinstance(member, ast.Assign | ast.AnnAssign) and isinstance(
+                member.value, ast.Call
+            ):
+                call = member.value
+                if self.resolve(call.func, module) not in _PROVIDE:
+                    continue
+                provides = _keyword(call, "provides")
+                source = call.args[0] if call.args else _keyword(call, "source")
+                if source is not None:
+                    implementations.append(self._class(source, module))
+            elif isinstance(member, ast.FunctionDef | ast.AsyncFunctionDef):
+                decorator = next(
+                    (
+                        item
+                        for item in member.decorator_list
+                        if self.resolve(
+                            item.func if isinstance(item, ast.Call) else item, module
+                        )
+                        in _PROVIDE
+                    ),
+                    None,
+                )
+                if decorator is None:
+                    continue
+                if isinstance(decorator, ast.Call):
+                    provides = _keyword(decorator, "provides")
+                provides = provides or self._provided(member.returns, module)
+                implementations.extend(self._constructed(member, module))
+            port = self.annotation(provides, module) if provides else None
+            if port:
+                self._ports.setdefault(port, []).extend(
+                    (implementation, module) for implementation in implementations
+                )
+
+    def _provided(self, node: ast.expr | None, module: str) -> ast.expr | None:
+        # Generator factories annotate Iterator[T] and similar; they provide T.
+        if isinstance(node, ast.Subscript) and (
+            self.resolve(node.value, module) in _ITERATORS
+        ):
+            if isinstance(node.slice, ast.Tuple):
+                return node.slice.elts[0]
+            return node.slice
+        return node
+
+    def _constructed(self, factory: _FunctionNode, module: str) -> list[str | None]:
+        # Classes constructed by the values a provider factory returns or yields.
+        assigned: dict[str, ast.expr] = {}
+        values: list[ast.expr] = []
+        pending: list[ast.AST] = list(factory.body)
+        while pending:
+            node = pending.pop()
+            if isinstance(
+                node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda
+            ):
+                continue
+            if (
+                isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+            ):
+                assigned[node.targets[0].id] = node.value
+            if isinstance(node, ast.Return | ast.Yield) and node.value is not None:
+                values.append(node.value)
+            pending.extend(ast.iter_child_nodes(node))
+        result: list[str | None] = []
+        for value in values:
+            if isinstance(value, ast.Name):
+                value = assigned.get(value.id, value)
+            if isinstance(value, ast.Await):
+                value = value.value
+            result.append(
+                self._class(value.func, module) if isinstance(value, ast.Call) else None
+            )
+        return result or [None]
+
+    def _class(self, node: ast.expr, module: str) -> str | None:
+        definition = self.definitions.get(self.resolve(node, module) or "")
+        if definition is not None and isinstance(definition.node, ast.ClassDef):
+            return definition.name
+        return None
+
     def environment(self, function: _Definition) -> _Environment:
         assert isinstance(function.node, ast.FunctionDef | ast.AsyncFunctionDef)
         env: _Environment = {}
@@ -406,3 +587,7 @@ class _Source:
                                 if isinstance(target, ast.Attribute):
                                     env[self.key(target)] = resolved
         return env
+
+
+def _keyword(node: ast.Call, name: str) -> ast.expr | None:
+    return next((item.value for item in node.keywords if item.arg == name), None)

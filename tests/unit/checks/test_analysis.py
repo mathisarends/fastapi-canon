@@ -199,7 +199,7 @@ async def endpoint(service: Service) -> None:
     )
     assert set(codes(report)) == {"CAN001", "CAN003"}
     assert any(
-        item.message == "abstract implementation"
+        item.message.startswith("abstract implementation without Dishka binding")
         for item in report.operations[0].diagnostics
     )
 

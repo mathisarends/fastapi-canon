@@ -36,6 +36,15 @@ The next release containing the breaking changes below must be 0.16.0.
   declarations. Loops are now analyzed, and iterating a generator follows
   its body. JSON reports include each operation's `transport`.
 
+- `fastapi-canon check errors` resolves abstract Dishka ports statically. Calls on
+  an abstract method or `Protocol` member follow the implementations bound by
+  `Provider` classes in the scanned roots (`@provide` factories and
+  `provide(Impl, provides=Port)`); several bindings contribute the union of their
+  errors. Abstract calls on `self` follow concrete subclasses, and generic or
+  `ABC` base classes no longer hide inherited methods. Unbound ports still
+  produce `CAN003`, now reported as
+  `abstract implementation without Dishka binding: <method>`.
+
 - `Composition.override(*providers)` returns a copy whose Dishka providers
   replace existing feature bindings, for example fakes in tests. Overrides that
   provide a type no feature provides fail with `canon.providers.E001`.
