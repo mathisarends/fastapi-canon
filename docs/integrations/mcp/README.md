@@ -53,6 +53,53 @@ endpoint. Namespaces are explicit public API identifiers, independent of feature
 names. Duplicate namespaces or server instances fail during composition.
 Contributing mounts requires explicit `Composition(mcp=McpOptions())` activation.
 
+When auth or root middleware depends on application services, use
+`McpOptions(auth_factory=..., middleware_factory=...)`. Each synchronous factory
+receives the borrowed Dishka APP container and returns a native FastMCP
+`AuthProvider` or a sequence of native FastMCP middleware instances. Supply
+either `auth` or `auth_factory`. Factories require features with Dishka providers.
+
+```python
+from abc import ABC, abstractmethod
+
+from dishka import AsyncContainer
+from fastmcp.server.auth import AccessToken, TokenVerifier
+
+
+class TokenAuthentication(ABC):
+    @abstractmethod
+    async def user_for_token(self, token: str) -> str | None: ...
+
+
+class PortfolioVerifier(TokenVerifier):
+    def __init__(self, container: AsyncContainer) -> None:
+        super().__init__()
+        self.container = container
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        authentication = await self.container.get(TokenAuthentication)
+        user_id = await authentication.user_for_token(token)
+        if user_id is None:
+            return None
+        return AccessToken(token=token, client_id=user_id, scopes=[])
+
+
+options = McpOptions(auth_factory=PortfolioVerifier)
+```
+
+Register the application's `TokenAuthentication` implementation at APP scope.
+Auth services resolved from the borrowed APP container must be APP-scoped. If
+verification needs REQUEST resources, open and close an explicit short Dishka scope inside
+`verify_token` and return detached identity data.
+
+Factories run during preflight, before installation mutates the application.
+They may be called again by `check()` or a separate application; keep construction
+deterministic and free of dependency resolution, tasks or opened resources.
+Adapters resolve services asynchronously at request time, without retaining a
+FastAPI app or reading `app.state`. Canon retains ownership of the container and
+closes it after MCP lifespan cleanup. Factory output failures report
+`canon.mcp.E002`.
+
 Configure the common root with `McpOptions(stateless_http=True,
 mask_error_details=True, middleware=(audit_middleware,))` when replacing a
 custom FastMCP HTTP adapter. Both boolean options default to `None`, which

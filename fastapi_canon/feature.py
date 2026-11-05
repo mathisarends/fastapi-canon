@@ -40,6 +40,7 @@ from fastapi_canon.scopes import _install_scopes
 
 if TYPE_CHECKING:
     from fastapi_canon.integrations.mcp import McpMount, McpOptions
+    from fastapi_canon.integrations.mcp.configuration import McpRuntime
     from fastapi_canon.integrations.opentelemetry import Instrumentation, Telemetry
 
 
@@ -335,6 +336,7 @@ class _Preparation:
     policy_operations: frozenset[str]
     description: CompositionInfo | None
     missing_dependency: ModuleNotFoundError | None
+    mcp_runtime: McpRuntime | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -423,7 +425,12 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
     if composition.mcp is not None:
         from fastapi_canon.integrations.mcp.runtime import install_mcp
 
-        lifespans = (*lifespans, install_mcp(app, mounts, composition.mcp, container))
+        if prepared.mcp_runtime is None:
+            raise FeatureConfigurationError("MCP runtime configuration is unavailable")
+        lifespans = (
+            *lifespans,
+            install_mcp(app, mounts, composition.mcp, container, prepared.mcp_runtime),
+        )
     app.router.lifespan_context = _compose_lifespan(
         original_lifespan,
         # include_router merged these into the app context after we captured
@@ -547,6 +554,17 @@ def _prepare_composition(app: FastAPI, composition: Composition) -> _Preparation
         "Check the named provider sources and supply the missing Dishka bindings.",
         lambda: _prepare_container(app, composition),
     )
+    mcp_runtime = None
+    if composition.mcp is not None and not missing_dependencies:
+        from fastapi_canon.integrations.mcp.configuration import prepare_runtime
+
+        mcp_options = composition.mcp
+        mcp_runtime, _ = attempt(
+            "mcp.runtime",
+            "canon.mcp.E002",
+            "Use synchronous factories that borrow the APP container without starting resources.",
+            lambda: prepare_runtime(mcp_options, container),
+        )
     policy_operations: frozenset[str] = frozenset()
     description = None
     if routers_ok and registry_ok and handlers_ok and routers is not None:
@@ -613,6 +631,7 @@ def _prepare_composition(app: FastAPI, composition: Composition) -> _Preparation
         policy_operations,
         description,
         missing_dependencies[0] if missing_dependencies else None,
+        mcp_runtime,
     )
 
 

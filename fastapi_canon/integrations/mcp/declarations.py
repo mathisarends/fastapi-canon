@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from inspect import iscoroutinefunction
 from typing import TYPE_CHECKING
 
 from fastapi_canon.error.types import FeatureConfigurationError
 
 if TYPE_CHECKING:
+    from dishka import AsyncContainer
     from fastmcp import FastMCP
     from fastmcp.server.auth import AuthProvider
     from fastmcp.server.middleware import Middleware
@@ -44,8 +47,22 @@ class McpOptions:
     stateless_http: bool | None = None
     mask_error_details: bool | None = None
     middleware: tuple[Middleware, ...] = ()
+    auth_factory: Callable[[AsyncContainer], AuthProvider] | None = None
+    middleware_factory: Callable[[AsyncContainer], Sequence[Middleware]] | None = None
 
     def __post_init__(self) -> None:
+        if self.auth is not None and self.auth_factory is not None:
+            raise FeatureConfigurationError("Choose MCP auth or auth_factory, not both")
+        for parameter in ("auth_factory", "middleware_factory"):
+            factory = getattr(self, parameter)
+            if factory is not None and (
+                not callable(factory)
+                or iscoroutinefunction(factory)
+                or iscoroutinefunction(type(factory).__call__)
+            ):
+                raise FeatureConfigurationError(
+                    f"MCP {parameter} must be a synchronous callable or None"
+                )
         for parameter in ("stateless_http", "mask_error_details"):
             value = getattr(self, parameter)
             if value is not None and not isinstance(value, bool):

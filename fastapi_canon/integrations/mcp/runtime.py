@@ -10,6 +10,7 @@ from starlette.types import Lifespan
 from fastapi_canon.error.types import FeatureConfigurationError
 from fastapi_canon.integrations.mcp import McpMount, McpOptions, McpScope
 from fastapi_canon.integrations.mcp.component_validation import ComponentValidation
+from fastapi_canon.integrations.mcp.configuration import McpRuntime
 
 
 def install_mcp(
@@ -17,17 +18,18 @@ def install_mcp(
     mounts: Sequence[McpMount],
     options: McpOptions,
     container: AsyncContainer | None,
+    configuration: McpRuntime,
 ) -> Lifespan[FastAPI]:
     server = FastMCP(
         options.name or app.title,
         on_duplicate="error",
-        auth=options.auth,
+        auth=configuration.auth,
         mask_error_details=options.mask_error_details,
     )
     if container is not None:
         server.add_middleware(_DishkaScope(container))
     server.add_middleware(ComponentValidation(server))
-    for middleware in options.middleware:
+    for middleware in (*options.middleware, *configuration.middleware):
         server.add_middleware(middleware)
     for mount in mounts:
         server.mount(mount.server, namespace=mount.namespace)
