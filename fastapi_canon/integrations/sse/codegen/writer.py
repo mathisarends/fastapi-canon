@@ -4,7 +4,8 @@ from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
-MANIFEST = ".fastapi-streams.json"
+MANIFEST = ".fastapi-canon-sse.json"
+_LEGACY_MANIFEST = ".fastapi-streams.json"
 
 
 def write_files(
@@ -19,16 +20,20 @@ def write_files(
     Check mode is read-only, including when output does not yet exist.
     """
     expected = planned_files(files, generation=generation)
-    manifest = _owned_path(output, MANIFEST)
     previous: set[str] = set()
-    if manifest.exists():
+    for name in (MANIFEST, _LEGACY_MANIFEST):
+        manifest = _owned_path(output, name)
+        if not manifest.exists():
+            continue
         value = json.loads(manifest.read_text(encoding="utf-8"))
         names = value.get("files")
         if not isinstance(names, list) or not all(
             isinstance(name, str) for name in cast(list[Any], names)
         ):
             raise ValueError(f"Invalid generated manifest: {manifest}")
-        previous = set(cast(list[str], names))
+        previous.update(cast(list[str], names))
+        if name == _LEGACY_MANIFEST:
+            previous.add(name)
     # Preflight every target, including stale paths, before modifying anything.
     paths = {name: _owned_path(output, name) for name in set(expected) | previous}
     changed: list[Path] = []
@@ -62,8 +67,9 @@ def planned_files(
 ) -> dict[str, str]:
     """Return the generated files plus the ownership manifest, keyed by path."""
     expected = dict(files)
-    if MANIFEST in expected:
-        raise ValueError(f"{MANIFEST} is reserved")
+    for name in (MANIFEST, _LEGACY_MANIFEST):
+        if name in expected:
+            raise ValueError(f"{name} is reserved")
     metadata: dict[str, Any] = {"files": sorted(files)}
     if generation is not None:
         metadata["generation"] = dict(generation)

@@ -197,8 +197,9 @@ uv run fastapi-canon webrtc generate --contract contracts/webrtc.json --output f
 
 `python -m fastapi_canon` accepts the same arguments as `fastapi-canon`. Each transport
 retains its existing command options, strict diagnostics, configuration format
-and owned output directory. SSE's `[tool.fastapi-streams]` table and WebSocket
-`rpcgen.toml` are retained for this first packaging step. Update command names
+and owned output directory. SSE uses `[tool.fastapi-canon.sse]`; its former
+`[tool.fastapi-streams]` table remains accepted for one transition release with
+a deprecation warning. WebSocket `rpcgen.toml` is retained. Update command names
 and application imports, then regenerate all clients to update their manifests.
 Binding plugins must declare `fastapi_canon.integrations.websockets.socket_bindings` entry
 points and import the Canon binding APIs.

@@ -553,7 +553,7 @@ class CanonWebSocketRouter(APIRouter):
     async def _preparation_scope(
         self, websocket: WebSocket
     ) -> AsyncGenerator[RpcResolver]:
-        adapter = self._websocket_resolver
+        adapter = self._adapter_for(websocket)
         prepare = getattr(adapter, "preparation_scope", None)
         if prepare is not None:
             async with prepare(websocket) as resolver:
@@ -564,6 +564,24 @@ class CanonWebSocketRouter(APIRouter):
         )
         async with call_scope(resolver) as scoped:
             yield scoped
+
+    def _adapter_for(self, websocket: WebSocket) -> FastApiResolver | None:
+        if self._websocket_resolver is not None:
+            return self._websocket_resolver
+        if (
+            self._resolver is None
+            and getattr(websocket.app.state, "dishka_container", None) is not None
+        ):
+            from fastapi_canon.integrations.websockets.adapters.dishka import Dishka
+
+            return Dishka()
+        return None
+
+    def _resolver_for(self, websocket: WebSocket) -> RpcResolverLike | None:
+        adapter = self._adapter_for(websocket)
+        return (
+            adapter.for_websocket(websocket) if adapter is not None else self._resolver
+        )
 
     def _check_context(self, endpoint: RpcAnyEndpoint) -> None:
         declared = endpoint.context
@@ -596,11 +614,7 @@ class CanonWebSocketRouter(APIRouter):
             await serve_websocket(
                 endpoint,
                 websocket,
-                resolver=(
-                    self._websocket_resolver.for_websocket(websocket)
-                    if self._websocket_resolver is not None
-                    else self._resolver
-                ),
+                resolver=self._resolver_for(websocket),
                 context=context,
                 error_mapper=None
                 if endpoint.service is self._definition
@@ -717,11 +731,7 @@ class CanonWebSocketRouter(APIRouter):
                     **context,
                     endpoint.context: context[self._context_type],
                 }
-            resolver = as_resolver(
-                self._websocket_resolver.for_websocket(websocket)
-                if self._websocket_resolver is not None
-                else self._resolver
-            )
+            resolver = as_resolver(self._resolver_for(websocket))
             async with connection_scope(resolver, context) as scoped:
                 for parameter in injected:
                     arguments[parameter.name] = await scoped.resolve(

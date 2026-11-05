@@ -28,6 +28,35 @@ def test_version_is_shared_by_all_features() -> None:
     assert sse_version == webrtc_version == websockets_version == __version__
 
 
+@pytest.mark.parametrize("kind", ["errors", "composition"])
+def test_check_help_describes_the_selected_subcommand(
+    kind: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        main(["check", kind, "--help"])
+    assert exit_info.value.code == 0
+    output = capsys.readouterr().out
+    assert f"usage: fastapi-canon check {kind}" in output
+    assert ("--strict" if kind == "errors" else "--require-complete") in output
+
+
+def test_check_errors_missing_roots_uses_the_public_command_name(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        main(["check", "errors"])
+    assert exit_info.value.code == 2
+    assert "usage: fastapi-canon check errors" in capsys.readouterr().err
+
+
+def test_check_help_lists_its_subcommands(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        main(["check", "--help"])
+    assert exit_info.value.code == 0
+    output = capsys.readouterr().out
+    assert "errors" in output and "composition" in output
+
+
 def test_module_entry_point_checks_errors_without_importing_application(
     tmp_path: Path,
 ) -> None:
