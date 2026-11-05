@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from fastapi_canon.integrations.sse.codegen.diagnostics import GenerationDiagnostic
 
 _CONFIG_KEYS = {"app", "schema", "clients"}
+_CONFIG_TABLE = "tool.fastapi-canon.sse"
 _CLIENT_KEYS = {
     "language",
     "output",
@@ -80,13 +81,13 @@ def main(argv: list[str] | None = None) -> int:
     sync = commands.add_parser(
         "sync",
         help="Export the schema and generate every client configured in "
-        "[tool.fastapi-streams]",
+        f"[{_CONFIG_TABLE}]",
     )
     sync.add_argument(
         "--config",
         type=Path,
         default=Path("pyproject.toml"),
-        help="TOML file with a [tool.fastapi-streams] table (default: pyproject.toml)",
+        help=f"TOML file with a [{_CONFIG_TABLE}] table (default: pyproject.toml)",
     )
     sync.add_argument("--check", action="store_true")
     _add_diff(sync)
@@ -273,27 +274,34 @@ def _load_config(path: Path) -> dict[str, Any]:
     except tomllib.TOMLDecodeError as exc:
         raise ContractError(f"Invalid TOML in {path}: {exc}") from exc
     tool: object = document.get("tool", {})
-    config: object = (
-        cast(dict[str, Any], tool).get("fastapi-streams")
-        if isinstance(tool, dict)
-        else None
-    )
+    tables = cast(dict[str, Any], tool) if isinstance(tool, dict) else {}
+    raw_canon: object = tables.get("fastapi-canon", {})
+    canon = cast(dict[str, Any], raw_canon) if isinstance(raw_canon, dict) else {}
+    config: object = canon.get("sse")
+    if "fastapi-streams" in tables:
+        print(
+            "DeprecationWarning: [tool.fastapi-streams] is deprecated; "
+            f"use [{_CONFIG_TABLE}] (legacy support lasts one transition release).",
+            file=sys.stderr,
+        )
+        if "sse" not in canon:
+            config = tables["fastapi-streams"]
     if not isinstance(config, dict):
-        raise ContractError(f"{path} has no [tool.fastapi-streams] table")
+        raise ContractError(f"{path} has no [{_CONFIG_TABLE}] table")
     config = cast(dict[str, Any], config)
     if unknown := set(config) - _CONFIG_KEYS:
         raise ContractError(
-            f"Unknown [tool.fastapi-streams] keys: {', '.join(sorted(unknown))}"
+            f"Unknown [{_CONFIG_TABLE}] keys: {', '.join(sorted(unknown))}"
         )
     if not isinstance(config.get("schema"), str):
-        raise ContractError("[tool.fastapi-streams] requires schema = '<path>'")
+        raise ContractError(f"[{_CONFIG_TABLE}] requires schema = '<path>'")
     if "app" in config and not isinstance(config["app"], str):
-        raise ContractError("[tool.fastapi-streams] app must be 'module:attribute'")
+        raise ContractError(f"[{_CONFIG_TABLE}] app must be 'module:attribute'")
     clients = config.get("clients", [])
     if not isinstance(clients, list):
-        raise ContractError("Use [[tool.fastapi-streams.clients]] tables for clients")
+        raise ContractError(f"Use [[{_CONFIG_TABLE}.clients]] tables for clients")
     for index, client in enumerate(cast(list[Any], clients)):
-        where = f"tool.fastapi-streams.clients[{index}]"
+        where = f"{_CONFIG_TABLE}.clients[{index}]"
         if not isinstance(client, dict):
             raise ContractError(f"{where} must be a table")
         client = cast(dict[str, Any], client)
@@ -309,7 +317,7 @@ def _load_config(path: Path) -> dict[str, Any]:
         if not isinstance(client.get("strict", False), bool):
             raise ContractError(f"{where}.strict must be a boolean")
     if not clients and "app" not in config:
-        raise ContractError("[tool.fastapi-streams] configures neither app nor clients")
+        raise ContractError(f"[{_CONFIG_TABLE}] configures neither app nor clients")
     return {**config, "clients": clients}
 
 
