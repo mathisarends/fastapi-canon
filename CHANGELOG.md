@@ -22,6 +22,13 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- Common SDK generation supports `--format json` with a versioned envelope for
+  success, drift, source-located validation warnings and preflight errors.
+  Operation/source/target metadata is reported where available; `--diff` stays
+  read-only and puts its diff in a separate JSON field. App stdout cannot mix
+  into JSON reports. The Python `(changed, report)` return and specialized
+  generators retain their contracts.
+
 - Application CLI targets share dotted-reference and synchronous zero-argument
   factory loading. `inspect` and `check composition --app` accept app factories
   automatically; `inspect --factory` remains accepted. App instances are never
@@ -164,6 +171,13 @@ The next release containing the breaking changes below must be 0.16.0.
   declared path instead of failing with an AttributeError.
 
 ### Breaking changes
+
+- Unexpected common-generation failures now omit raw exception contents in
+  text/JSON diagnostics. Before adopting 0.16.0, update parsers that depended on
+  arbitrary stderr text to use the documented JSON `schema_version`, code and
+  location fields. Known validation messages remain readable; source warnings
+  report constraint locations without copying schema values. See
+  [generation diagnostics](docs/unified-canon-concept.md#json-generation-diagnostics).
 
 - CLI target loading rejects async/generator factories, awaitable/generator
   results and uninspectable or required-argument factory signatures consistently.

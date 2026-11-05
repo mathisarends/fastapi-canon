@@ -10,6 +10,7 @@ The generated public API follows domain names; protocol clients live under
 - [From server declarations to domain methods](#from-server-declarations-to-domain-methods)
 - [Configuration](#configuration)
 - [Commands and ownership](#commands-and-ownership)
+- [JSON generation diagnostics](#json-generation-diagnostics)
 - [Consumer API](#consumer-api)
 - [Names and shared models](#names-and-shared-models)
 - [Connections and supported scope](#connections-and-supported-scope)
@@ -157,6 +158,74 @@ overlap or traverse symlinks/junctions. Use a fresh output when replacing a
 specialized SDK; old manifests are not adopted automatically. Generation does
 not install dependencies or publish SDKs.
 
+## JSON generation diagnostics
+
+Use `--format json` for common generation and read-only CI checks:
+
+```console
+fastapi-canon generate --format json
+fastapi-canon generate --format json --check --target browser
+fastapi-canon generate --format json --diff --offline
+```
+
+Stdout contains one JSON document with `schema_version: 1`. Application stdout
+from imports/factories is suppressed in this mode. Structured SSE constraint
+warnings are included without copying schema values; specialized generators keep
+their existing diagnostics and commands. Text remains the default format.
+
+| Field | Meaning |
+| --- | --- |
+| `status` | `success`, `drift` or `error`. |
+| `changed` | Whether generated artifacts differ; `null` when generation fails. |
+| `check`, `offline` | Effective read-only and saved-contract modes; `--diff` implies check. |
+| `targets` | Selected configuration target names, or requested names if selection failed. |
+| `changes` | Sorted artifact paths for generated changes, including removals. |
+| `diagnostics` | Entries with stable `severity`, `code`, `message` and `locations` fields. A clean success can have an empty list. |
+| `diff` | Unified diff text when requested, otherwise `null`. |
+
+Locations include `source`, wire `operation`, `target`, `path` and
+`schema_pointer` when known. A path identifies an artifact or a method/route such
+as `POST /upload`; a schema pointer identifies a constraint within its source.
+Global configuration failures can have no location. Invalid/unsupported
+operations identify their source and operation where the common planner owns
+that information. Imported application exceptions and other unexpected failures
+report their type and a corrective hint without their raw contents.
+
+| Code | Severity | Meaning |
+| --- | --- | --- |
+| `canon.codegen.I001` | info | Generated artifacts were updated. |
+| `canon.codegen.W001` | warning | Check/diff found artifact drift. |
+| `canon.codegen.W002` | warning | A specialized SSE binding reports a validation constraint limitation. |
+| `canon.codegen.E001` | error | Configuration, target loading, contract/planning or artifact ownership failed. |
+| `canon.codegen.E002` | error | An operation requests an unsupported binding feature, such as multipart input. |
+
+Exit codes remain 0 for successful generation or a clean check, 1 for drift and
+2 for invalid configuration/generation. Constraint warnings alone do not change
+the exit code. Preflight failures complete before any contracts or SDK files are
+written, even when an earlier target planned successfully. Check/diff never
+write files. The Python `generate()` API retains its `(changed, report)` return.
+
+For example, a CI step can inspect diagnostics and preserve the command's exit
+policy without parsing human-readable messages:
+
+```python
+import json
+import subprocess
+
+result = subprocess.run(
+    ["fastapi-canon", "generate", "--format", "json", "--check"],
+    capture_output=True,
+    text=True,
+    check=False,
+    timeout=120,
+)
+report = json.loads(result.stdout)
+assert report["schema_version"] == 1
+for diagnostic in report["diagnostics"]:
+    print(diagnostic["severity"], diagnostic["code"], diagnostic["locations"])
+raise SystemExit(result.returncode)
+```
+
 ## Consumer API
 
 ```typescript
@@ -290,8 +359,8 @@ both language targets, including RPC primitive results. Python names use snake
 case and TypeScript operation arguments use camel case; binding wire names stay
 explicit. Python uses Pydantic validation. TypeScript models are static types, with runtime
 checks for standard problem members and SSE controls, not a full JSON Schema
-validator. Replay, automatic manifest migration and structured JSON diagnostics
-remain future work.
+validator. Common generation provides [JSON diagnostics](#json-generation-diagnostics).
+Replay and automatic manifest migration remain future work.
 
 Python string constraints use Pydantic's default regex engine where supported,
 with compiled Python patterns for lookarounds and backreferences. This includes

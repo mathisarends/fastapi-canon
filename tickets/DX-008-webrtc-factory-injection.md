@@ -1,6 +1,6 @@
 # DX-008: Make WebRTC factory injection consistent with the shared router
 
-- Status: In progress
+- Status: Done
 - Priority: P2
 - Kind: Verified integration gap
 - Baseline: `a366702` (2026-11-05)
@@ -82,5 +82,4 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
 - Remaining follow-ups: arbitrary nested FastAPI dependencies, converted
   synchronous Dishka Depends wrappers and externally owned containers retain
   their documented validation limits. Per-message REQUEST scopes are explicit;
-  no session lifetime or callback injection redesign is included. Status remains
-  In progress until merge.
+  no session lifetime or callback injection redesign is included. Merged into main as `65a1811`.

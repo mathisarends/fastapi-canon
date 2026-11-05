@@ -1,6 +1,6 @@
 # DX-009: Correct remaining release identity, links and working-directory guidance
 
-- Status: In progress
+- Status: Done
 - Priority: P2
 - Kind: Verified documentation bugs
 - Baseline: `a366702` (2026-11-05)
@@ -58,7 +58,6 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
   Search results now contain only the valid historical Streams tag. Full
   pre-commit passed Smelt and lint/format policy. Runtime tests and publication
   matrices were not repeated for prose/link changes; no runtime code changed.
-  Historical changelogs and published release evidence were preserved. Status
-  remains In progress until merge.
+  Historical changelogs and published release evidence were preserved. Merged into main as `3d56f54`.
 - Remaining follow-ups: the dependency overview is separately scoped in DX-028;
   this ticket does not change dependency minimums or published versions.
