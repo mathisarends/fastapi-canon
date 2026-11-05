@@ -85,6 +85,35 @@ runs after result conversion, including exceptions and cancellation. The MCP
 lifespan runs inside the composition lifecycle; MCP does not close the borrowed
 APP container. Child server declarations do not store application containers.
 
+For an application-owned operation that must outlive an HTTP response, register
+`McpScope` at APP scope and enter it inside the operation's task:
+
+```python
+from dishka import AsyncContainer
+from fastapi_canon.integrations.mcp import McpScope
+
+
+class OperationProvider(Provider):
+    @provide(scope=Scope.APP)
+    def operation_scope(self, container: AsyncContainer) -> McpScope:
+        return McpScope(container)
+
+
+async def execute(scope: McpScope) -> dict[str, str]:
+    async with scope() as scoped:
+        service = await scoped.get(PortfolioService)
+        return await service.get("p1")
+```
+
+Within that context, `Inject[T]` also resolves against the same container when
+executing a registered native tool. Keep execution and result conversion inside
+the context. Each entry owns a fresh REQUEST scope; nested and concurrent entries
+restore the previous injection context on exit. The factory never closes the APP
+container. Applications own their tasks, cancellation/shielding and logical-call
+deduplication. Create and enter the operation scope inside a shielded task rather
+than borrowing resources from its caller's transport scope. `McpScope` itself does
+not require FastMCP to be installed.
+
 FastAPI router dependencies and `RouterPolicy` do not protect mounted MCP routes.
 Pass a native FastMCP auth provider through `McpOptions(auth=...)` and enforce
 domain authorization in shared application services. Auth configured on a child

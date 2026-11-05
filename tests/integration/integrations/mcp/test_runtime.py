@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import httpx2
 import pytest
-from dishka import Provider, Scope, provide
+from dishka import Provider, Scope, make_async_container, provide
 from fastapi import FastAPI
 from fastmcp import Client, FastMCP
 from fastmcp.client.transports import StreamableHttpTransport
@@ -15,7 +15,13 @@ from fastmcp.utilities.asgi_transport import StreamingASGITransport
 from mcp import MCPError
 
 from fastapi_canon import Composition, Feature, FeatureConfigurationError
-from fastapi_canon.integrations.mcp import Inject, McpMount, McpOptions, McpServer
+from fastapi_canon.integrations.mcp import (
+    Inject,
+    McpMount,
+    McpOptions,
+    McpScope,
+    McpServer,
+)
 
 
 class Service:
@@ -350,6 +356,97 @@ async def test_root_http_auth_rejects_unauthenticated_requests() -> None:
             "/mcp/", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
         )
         assert response.status_code == 401
+
+
+async def test_public_scope_shares_native_injection_and_restores_nested_context() -> (
+    None
+):
+    events: list[str] = []
+    container = make_async_container(Services(events))
+    scope = McpScope(container)
+    server = McpServer("Operations")
+
+    @server.tool
+    async def identify(service: Inject[Service]) -> str:
+        return service.identifier
+
+    try:
+        async with scope() as outer:
+            first = await outer.get(Service)
+            assert (await server.call_tool("identify")).structured_content == {
+                "result": first.identifier
+            }
+            async with scope() as inner:
+                second = await inner.get(Service)
+                assert second is not first
+                assert (await server.call_tool("identify")).structured_content == {
+                    "result": second.identifier
+                }
+            assert (await server.call_tool("identify")).structured_content == {
+                "result": first.identifier
+            }
+        assert events == ["open", "open", "commit", "close", "commit", "close"]
+        async with scope() as fresh:
+            assert (await fresh.get(Service)).identifier != first.identifier
+    finally:
+        await container.close()
+
+
+async def test_shielded_operation_owns_resources_after_its_waiter_is_cancelled() -> (
+    None
+):
+    events: list[str] = []
+    container = make_async_container(Services(events))
+    scope = McpScope(container)
+    started, finish = asyncio.Event(), asyncio.Event()
+
+    async def execute() -> str:
+        async with scope() as scoped:
+            service = await scoped.get(Service)
+            started.set()
+            async with asyncio.timeout(5):
+                await finish.wait()
+            assert events == ["open"]
+            return service.identifier
+
+    task = asyncio.create_task(execute())
+
+    async def wait_for_result() -> str:
+        return await asyncio.shield(task)
+
+    waiter = asyncio.create_task(wait_for_result())
+    try:
+        async with asyncio.timeout(5):
+            await started.wait()
+            waiter.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await waiter
+            assert not task.done()
+            finish.set()
+            assert await task
+        assert events == ["open", "commit", "close"]
+    finally:
+        finish.set()
+        task.cancel()
+        await asyncio.gather(task, waiter, return_exceptions=True)
+        await container.close()
+
+
+async def test_failed_public_operation_scope_rolls_back_and_remains_reusable() -> None:
+    events: list[str] = []
+    container = make_async_container(Services(events))
+    scope = McpScope(container)
+    try:
+        with pytest.raises(ValueError, match="operation rejected"):
+            async with scope() as scoped:
+                await scoped.get(Service)
+                raise ValueError("operation rejected")
+        assert events == ["open", "rollback", "close"]
+        async with scope() as scoped:
+            assert (await scoped.get(Service)).identifier
+        assert events == ["open", "rollback", "close", "open", "commit", "close"]
+    finally:
+        await container.close()
 
 
 @pytest.mark.parametrize("stateless", [False, True])

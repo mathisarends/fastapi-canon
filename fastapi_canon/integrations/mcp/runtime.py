@@ -8,9 +8,8 @@ from fastmcp.server.middleware import Middleware, MiddlewareContext
 from starlette.types import Lifespan
 
 from fastapi_canon.error.types import FeatureConfigurationError
-from fastapi_canon.integrations.mcp import McpMount, McpOptions
+from fastapi_canon.integrations.mcp import McpMount, McpOptions, McpScope
 from fastapi_canon.integrations.mcp.component_validation import ComponentValidation
-from fastapi_canon.integrations.mcp.dependencies import request_scope
 
 
 def install_mcp(
@@ -64,17 +63,17 @@ class _DishkaScope(Middleware):
     async def on_call_tool(
         self, context: MiddlewareContext[Any], call_next: Any
     ) -> Any:
-        async with request_scope(self._container):
+        async with McpScope(self._container)():
             return await call_next(context)
 
     async def on_read_resource(
         self, context: MiddlewareContext[Any], call_next: Any
     ) -> Any:
-        async with request_scope(self._container):
+        async with McpScope(self._container)():
             return await call_next(context)
 
     async def on_get_prompt(
         self, context: MiddlewareContext[Any], call_next: Any
     ) -> Any:
-        async with request_scope(self._container):
+        async with McpScope(self._container)():
             return await call_next(context)

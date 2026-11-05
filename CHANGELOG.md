@@ -18,6 +18,11 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- Public `fastapi_canon.integrations.mcp.McpScope` opens an independent Dishka
+  REQUEST scope for native MCP injection and returns its container. Applications
+  can retain operation-owned resources through shielded execution without
+  importing Canon's implementation helpers.
+
 - `McpOptions` accepts `stateless_http`, `mask_error_details` and root
   `middleware`. Both boolean options default to `None`, preserving native
   FastMCP settings. Middleware wraps mounted feature execution inside Canon's
@@ -79,6 +84,11 @@ The next release containing the breaking changes below must be 0.16.0.
   Python APIs in text or versioned JSON, separately from import-free source checks.
 
 ### Breaking changes
+
+- The MCP facade adds the public `McpScope` API for 0.16.0. Replace custom imports
+  of `integrations.mcp.dependencies.request_scope` and `inject_handler` used to
+  obtain a scoped container with `async with McpScope(app_container)() as scoped`.
+  Normal composed MCP calls retain their existing scope behavior.
 
 - The new MCP option fields extend the public `McpOptions` constructor for
   0.16.0. Existing declarations retain their behavior. To preserve a previous
