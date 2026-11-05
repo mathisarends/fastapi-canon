@@ -50,6 +50,7 @@ architecture:
     fastapi_canon.introspection: composition
     fastapi_canon.composition_cli: generation
     fastapi_canon.scopes: composition
+    fastapi_canon.injection: values
     fastapi_canon.integrations.database: persistence
 
     fastapi_canon.request_logging: composition

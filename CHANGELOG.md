@@ -8,6 +8,11 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- Root `Inject[T]` is shared by WebSocket and MCP integrations. WebSocket
+  context functions support `Inject[T]` and reusable `hooks=(function, ...)`
+  registrations keyed by return type. Hooks can combine injected services with
+  FastAPI path, header and dependency parameters; their results are available
+  to connection handlers without becoming public protocol parameters.
 - Public `fastapi_canon.export_contracts(app)` and `Contracts` snapshot API for
   HTTP/SSE OpenAPI, mounted RPC OpenRPC and WebRTC session contracts. RPC paths
   come from the registered routes, including nested router and mount prefixes;
@@ -37,6 +42,12 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Breaking changes
 
+- WebSocket context preparation with `resolver=Dishka()` now owns a short
+  REQUEST scope and closes it before acceptance. Return independently usable
+  context data; put connection-lifetime resources in SESSION-scoped providers.
+  Existing `FromDishka[T]` context parameters remain supported. Generator
+  resources belong in Dishka providers, not in `hooks=`. RPC wire formats and
+  generated clients are unchanged.
 - Duplicate HTTP operation IDs now fail composition installation. Assign distinct
   `operation_id` values, including across existing app routes and features.
   Split multi-method routes when they would export the same operation ID twice.

@@ -28,6 +28,7 @@ from .feature import (
     ProviderSource,
     RouterFactory,
 )
+from .injection import Inject
 from .integrations.database import __getattr__ as __getattr__
 from .openapi import install_openapi_contracts, validate_openapi_contracts
 from .policy import RouterPolicy
@@ -67,6 +68,7 @@ __all__ = [
     "FeatureConfigurationError",
     "FeatureInfo",
     "HTTPMethod",
+    "Inject",
     "OperationInfo",
     "Problem",
     "ProviderFactory",
