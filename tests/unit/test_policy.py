@@ -264,7 +264,9 @@ def test_composition_policy_rejects_manual_collision_before_installation() -> No
     assert app.openapi_schema is None
 
 
-def test_dependency_only_policy_needs_no_registry_and_deduplicates_execution() -> None:
+def test_dependency_only_policy_preserves_normalizers_and_deduplicates_execution() -> (
+    None
+):
     calls: list[str] = []
 
     async def prerequisite() -> None:
@@ -278,7 +280,9 @@ def test_dependency_only_policy_needs_no_registry_and_deduplicates_execution() -
     ).apply(FastAPI())
     assert TestClient(app).get("/items").status_code == 200
     assert calls == ["called"]
-    assert "Problem" not in app.openapi()["components"]["schemas"]
+    assert app.openapi()["paths"]["/items"]["get"]["responses"]["500"]["content"][
+        "application/problem+json"
+    ]["schema"] == {"$ref": "#/components/schemas/InternalServerProblem"}
 
 
 def test_existing_parent_raises_remain_local_to_parent_operations() -> None:
@@ -292,7 +296,7 @@ def test_existing_parent_raises_remain_local_to_parent_operations() -> None:
     assert "403" not in app.openapi()["paths"]["/child"]["get"]["responses"]
 
 
-def test_composition_policy_422_replaces_automatic_validation() -> None:
+def test_composition_policy_422_includes_automatic_validation() -> None:
     invalid = Error(ValueError, status=422, code="invalid_input", title="Invalid input")
     policy = RouterPolicy(
         error_registry=ErrorRegistry(errors=[invalid], type_base=AUTH_ERRORS.type_base),
@@ -309,5 +313,15 @@ def test_composition_policy_422_replaces_automatic_validation() -> None:
     ).apply(FastAPI())
     response = app.openapi()["paths"]["/items/{item_id}"]["get"]["responses"]["422"]
     assert response["content"]["application/problem+json"]["schema"] == {
-        "$ref": "#/components/schemas/InvalidInputProblem"
+        "oneOf": [
+            {"$ref": "#/components/schemas/InvalidInputProblem"},
+            {"$ref": "#/components/schemas/RequestValidationProblem"},
+        ],
+        "discriminator": {
+            "propertyName": "code",
+            "mapping": {
+                "invalid_input": "#/components/schemas/InvalidInputProblem",
+                "request_validation_error": "#/components/schemas/RequestValidationProblem",
+            },
+        },
     }

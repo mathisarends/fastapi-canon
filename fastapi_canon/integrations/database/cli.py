@@ -44,7 +44,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         sys.path.insert(0, str(config_path.parent))
         module, attribute = target.split(":")
         database = getattr(importlib.import_module(module), attribute)
-        from fastapi_canon import Database
+        from fastapi_canon.integrations.database import Database
 
         if not isinstance(database, Database) or database.migrations is None:
             raise ValueError("Target must be a Database with AlembicMigrations")

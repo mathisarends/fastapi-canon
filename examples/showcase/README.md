@@ -64,3 +64,15 @@ all of those pieces together.
 
 To turn a feature off, remove `catalog_feature` from `Composition` in `app.py`.
 Its routes and error definitions disappear together.
+
+The routes declare stable `operation_id` values for client generation. Export the
+compiled HTTP contract from the repository root:
+
+```console
+uv run python -c "import json; from pathlib import Path; from examples.showcase.app import app, composition; composition.validate(app); Path('openapi.json').write_text(json.dumps(app.openapi(), indent=2), encoding='utf-8')"
+```
+
+Use that document as input to your OpenAPI client generator. It includes domain
+problems, normalized request validation, and internal failures. Application
+startup validates the same document automatically. See the
+[concept guide](../../CONCEPTS.md) for the ownership and transport contracts.
