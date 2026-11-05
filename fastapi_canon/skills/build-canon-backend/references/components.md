@@ -18,7 +18,7 @@ uv run python -c "import inspect; from fastapi_canon import Composition, Feature
 | `RouterPolicy` | Reusable HTTP prerequisites and documented failures | Router `policy=` or composition `router_policy=` |
 | Dishka `Provider` | Bind application services and ports to their implementations | `Feature(providers=[ProviderClass])` |
 | `Feature` | Immutable contributions of one feature: routers, providers, errors, lifespan, checks, instrumentation, MCP mounts | Ordered `Composition(features=(...))` |
-| `Composition` | Install routes, error contracts and one Dishka container; own startup and cleanup | `composition.apply(FastAPI())` |
+| `Composition` | Install routes, error contracts and one Dishka container; own startup and cleanup | `composition.build(FastAPI())` |
 | `Database`, `AlembicMigrations` | Optional engine, sessions, transactions and migration configuration | `database.feature` before consuming features |
 | `ServiceScope[T]` | An independent short dependency graph for a worker/stream operation | APP-scoped provider; `async with scope() as service:` |
 | `Telemetry`, `instrument` | Optional tracing/metrics and observed application ports | `Composition(telemetry=...)`, `Feature(instrumentation=...)` |
@@ -52,10 +52,10 @@ def create_app() -> FastAPI:
         errors=ErrorOptions(type_base="https://api.example.com/problems"),
         router_factory=lambda: APIRouter(prefix="/api/v1"),
     )
-    return composition.apply(FastAPI(title="Projects API"))
+    return composition.build(FastAPI(title="Projects API"))
 ```
 
-`apply()` validates before installing. Composition creates the container during
+`build()` validates before and after installing. Composition creates the container during
 lifespan, starts features in declaration order and shuts them down in reverse.
 Feature lifespans may borrow dependencies while the container is alive. Keep
 connections and I/O out of imports, declarations and app construction; open owned

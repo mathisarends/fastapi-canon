@@ -104,12 +104,12 @@ def test_override_rejects_duplicate_sources() -> None:
         composition.override(FakeGreeterProvider)
 
 
-def test_validate_rejects_a_different_override_set() -> None:
+def test_build_rejects_a_different_override_set() -> None:
     composition = _composition()
     app = composition.override(FakeGreeterProvider).build(FastAPI())
 
-    with pytest.raises(FeatureConfigurationError, match="must be applied"):
-        composition.validate(app)
+    with pytest.raises(FeatureConfigurationError, match="different composition"):
+        composition.build(app)
 
 
 def test_build_validates_the_installed_application() -> None:

@@ -69,7 +69,7 @@ The routes declare stable `operation_id` values for client generation. Export th
 compiled HTTP contract from the repository root:
 
 ```console
-uv run python -c "import json; from pathlib import Path; from examples.showcase.app import app, composition; composition.validate(app); Path('openapi.json').write_text(json.dumps(app.openapi(), indent=2), encoding='utf-8')"
+uv run python -c "import json; from pathlib import Path; from examples.showcase.app import app; Path('openapi.json').write_text(json.dumps(app.openapi(), indent=2), encoding='utf-8')"
 ```
 
 Use that document as input to your OpenAPI client generator. It includes domain

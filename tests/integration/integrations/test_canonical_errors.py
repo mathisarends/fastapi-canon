@@ -120,7 +120,7 @@ def test_sse_raises_registers_shared_and_local_processing_errors(
     app = Composition(
         features=[Feature(name="events", routers=[router])],
         errors=ErrorOptions(type_base="urn:stream:problem"),
-    ).apply(FastAPI())
+    ).build(FastAPI())
     with TestClient(app) as client:
         response = client.get("/events")
     assert response.status_code == 200
@@ -143,10 +143,10 @@ def test_nested_plain_router_keeps_declarations_isolated_between_applications() 
     feature = Feature(name="projects", routers=[parent])
     first = Composition(
         features=[feature], errors=ErrorOptions(type_base="urn:first:problem")
-    ).apply(FastAPI())
+    ).build(FastAPI())
     second = Composition(
         features=[feature], errors=ErrorOptions(type_base="urn:second:problem")
-    ).apply(FastAPI())
+    ).build(FastAPI())
     with TestClient(first) as client:
         response = client.get("/nested/projects/0")
         terminal = client.get("/nested/projects/2/events")
@@ -205,7 +205,7 @@ async def test_rpc_router_contributes_catalog_and_uses_composition_type_base() -
     app = Composition(
         features=(Feature(name="projects", routers=[router]),),
         errors=ErrorOptions(type_base="urn:application:problems"),
-    ).apply(FastAPI())
+    ).build(FastAPI())
     async with (
         asyncio.timeout(15),
         serve(app) as base_url,
@@ -267,7 +267,7 @@ async def test_rpc_router_serves_all_endpoint_kinds_with_one_contract() -> None:
     router.stream("/frames", frames)
     router.socket("/echo", echo)
     router.socket("/custom", channels=[RpcChannel("custom")], serve=custom)
-    app = Composition(features=[Feature(name="demo", routers=[router])]).apply(
+    app = Composition(features=[Feature(name="demo", routers=[router])]).build(
         FastAPI()
     )
     async with asyncio.timeout(15), serve(app) as base_url:
@@ -438,7 +438,7 @@ def test_stream_shared_declarations_and_safe_renderer_failures() -> None:
         finally:
             closed.append(True)
 
-    app = Composition(features=(Feature(name="events", routers=[router]),)).apply(
+    app = Composition(features=(Feature(name="events", routers=[router]),)).build(
         FastAPI()
     )
     response = TestClient(app).get("/events")
@@ -468,7 +468,7 @@ async def test_cancelled_server_stream_runs_cleanup_without_terminal_problem() -
         finally:
             closed.append(True)
 
-    app = Composition(features=(Feature(name="events", routers=[router]),)).apply(
+    app = Composition(features=(Feature(name="events", routers=[router]),)).build(
         FastAPI()
     )
 

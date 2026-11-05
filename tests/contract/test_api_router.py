@@ -43,7 +43,7 @@ def test_one_router_exports_http_sse_rpc_and_webrtc_with_effective_paths() -> No
 
     parent = APIRouter(prefix="/v1")
     parent.include_router(router)
-    app = Composition(features=[Feature(name="projects", routers=[parent])]).apply(
+    app = Composition(features=[Feature(name="projects", routers=[parent])]).build(
         FastAPI()
     )
     contracts = export_contracts(app)

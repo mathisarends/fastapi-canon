@@ -74,7 +74,7 @@ def test_check_collects_independent_failures_without_installing() -> None:
     assert app.openapi_schema is None
     assert not hasattr(app.state, "dishka_container")
     with pytest.raises(FeatureConfigurationError, match="same router"):
-        composition.apply(app)
+        composition.build(app)
     assert tuple(app.routes) == routes
 
 
@@ -102,7 +102,7 @@ def test_check_materializes_factories_without_starting_resources() -> None:
     assert report.complete and not report.has_errors
     assert events == ["factory"]
 
-    composition.apply(app)
+    composition.build(app)
     assert events == ["factory", "factory"]
     assert composition.check(app).complete
     assert events == ["factory", "factory"]
@@ -137,7 +137,7 @@ def test_duplicate_operation_ids_name_both_features_and_routes() -> None:
     assert issue.locations == ("GET /projects", "GET /archive")
     assert "operation_id" in issue.hint
     with pytest.raises(FeatureConfigurationError, match="Duplicate operation ID"):
-        composition.apply(app)
+        composition.build(app)
     assert not hasattr(app.state, "dishka_container")
 
 
@@ -165,8 +165,7 @@ def test_feature_checks_receive_detached_context_and_run_during_validation() -> 
     report = composition.check(app)
     assert report.complete and not report.has_errors
     assert report.issues[0].feature_names == ("reports",)
-    composition.apply(app)
-    composition.validate(app)
+    composition.build(app)
     assert calls == ["reports", "reports", "reports"]
 
 
@@ -183,11 +182,11 @@ def test_broken_feature_check_is_incomplete_and_blocks_installation() -> None:
     assert report.checks[-1].status == "incomplete"
     assert "secret" not in report.issues[0].message
     with pytest.raises(FeatureConfigurationError, match="did not complete"):
-        composition.apply(app)
+        composition.build(app)
 
 
 def test_check_on_another_installed_composition_reports_conflict() -> None:
-    app = Composition(features=(Feature(name="first"),)).apply(FastAPI())
+    app = Composition(features=(Feature(name="first"),)).build(FastAPI())
     report = Composition(features=(Feature(name="second"),)).check(app)
     assert report.has_errors
     assert report.issues[0].code == "canon.composition.E001"
@@ -219,12 +218,13 @@ def test_check_detects_operation_ids_added_after_installation() -> None:
     router = APIRouter()
     router.get("/projects", operation_id="projects.get")(lambda: "projects")
     composition = Composition(features=(Feature(name="projects", routers=[router]),))
-    app = composition.apply(FastAPI())
+    app = composition.build(FastAPI())
+    schema = app.openapi_schema
     app.get("/later", operation_id="projects.get")(lambda: "later")
     report = composition.check(app)
     assert report.has_errors and not report.complete
     assert report.issues[0].code == "canon.routing.E002"
     assert report.issues[0].locations == ("GET /projects", "GET /later")
-    assert app.openapi_schema is None
+    assert app.openapi_schema is schema
     with pytest.raises(FeatureConfigurationError, match="Duplicate operation ID"):
-        composition.validate(app)
+        composition.build(app)

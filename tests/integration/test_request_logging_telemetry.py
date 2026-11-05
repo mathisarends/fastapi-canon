@@ -48,7 +48,7 @@ async def test_overlapping_requests_correlate_with_exported_server_spans(
                 logs=False,
                 problem_details=problem_details,
             ),
-        ).apply(app)
+        ).build(app)
         async with (
             httpx.AsyncClient(
                 transport=httpx.ASGITransport(app, raise_app_exceptions=False),

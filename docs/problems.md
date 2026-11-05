@@ -109,7 +109,7 @@ router.include_channel(projects, path="/ws")
 app = Composition(
     features=(Feature(name="projects", routers=[router]),),
     errors=ErrorOptions(type_base="https://api.example.com/problems"),
-).apply(FastAPI(title="Projects"))
+).build(FastAPI(title="Projects"))
 
 contracts = export_contracts(app, base_url="wss://api.example.com")
 ```

@@ -12,7 +12,7 @@ composition = Composition(
     errors=ErrorOptions(type_base="https://api.example.test/problems"),
 )
 
-app = composition.apply(
+app = composition.build(
     FastAPI(
         title="fastapi-canon showcase",
         version="0.1.0",

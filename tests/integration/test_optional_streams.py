@@ -29,7 +29,7 @@ def test_core_import_runtime_and_missing_extra_diagnostic() -> None:
         async def health() -> dict[str, str]:
             return {"status": "ok"}
 
-        app = Composition(features=(Feature(name="health", routers=[router]),)).apply(FastAPI())
+        app = Composition(features=(Feature(name="health", routers=[router]),)).build(FastAPI())
         with TestClient(app) as client:
             assert client.get("/health").json() == {"status": "ok"}
         assert "/health" in app.openapi()["paths"]

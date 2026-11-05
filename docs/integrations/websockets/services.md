@@ -45,7 +45,7 @@ async def health() -> None:
 router = APIRouter()
 router.include_channel(tasks, path="/rpc")
 feature = Feature(name="tasks", routers=[router])
-app = Composition(features=(feature,)).apply(FastAPI(title="Tasks"))
+app = Composition(features=(feature,)).build(FastAPI(title="Tasks"))
 contract = export_contracts(
     app, kinds=("openrpc",), base_url="wss://api.example.com"
 ).openrpc

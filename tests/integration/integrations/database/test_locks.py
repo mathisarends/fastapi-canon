@@ -20,7 +20,7 @@ async def test_postgres_advisory_lock_follows_its_scoped_transaction(
     async with asyncio.timeout(15), database.open_engine() as observer_engine:
         if observer_engine.dialect.name != "postgresql":
             pytest.skip("Cross-process advisory lock semantics require PostgreSQL")
-        app = Composition(features=[database.feature]).apply(FastAPI())
+        app = Composition(features=[database.feature]).build(FastAPI())
         async with (
             app.router.lifespan_context(app),
             observer_engine.begin() as observer,
@@ -58,7 +58,7 @@ async def test_sqlite_advisory_lock_omission_requires_explicit_configuration(
     tmp_path: Path,
 ) -> None:
     database = Database(url=f"sqlite:///{tmp_path / 'locks.db'}")
-    app = Composition(features=[database.feature]).apply(FastAPI())
+    app = Composition(features=[database.feature]).build(FastAPI())
     async with (
         asyncio.timeout(10),
         app.router.lifespan_context(app),
@@ -70,7 +70,7 @@ async def test_sqlite_advisory_lock_omission_requires_explicit_configuration(
     explicit = Database(
         url=f"sqlite:///{tmp_path / 'locks.db'}", sqlite_advisory_locks="ignore"
     )
-    permitted = Composition(features=[explicit.feature]).apply(FastAPI())
+    permitted = Composition(features=[explicit.feature]).build(FastAPI())
     async with (
         asyncio.timeout(10),
         permitted.router.lifespan_context(permitted),

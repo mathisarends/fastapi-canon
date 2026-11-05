@@ -22,9 +22,6 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
-- `Composition.build(app)` applies a composition and validates the installed
-  application in one call, replacing `apply(app)` followed by `validate(app)`.
-
 - `fastapi-canon check errors` also checks `APIRouter.sse()` streams,
   `APIRouter.webrtc()` sessions and `RpcChannel` methods against their `raises=`
   declarations. Loops are now analyzed, and iterating a generator follows
@@ -105,6 +102,14 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Breaking changes
 
+- `Composition.build(app)` replaces `Composition.apply(app)` and
+  `Composition.validate(app)`. It installs the composition, checks the installed
+  application including OpenAPI and returns it, so an application can no longer
+  start unvalidated. Replace `composition.apply(app)` and any following
+  `composition.validate(app)` with `composition.build(app)`; register plain
+  FastAPI routes before calling `build`, or call `build` again after adding them.
+  `Composition.check(app)` remains the non-raising report. This change belongs to
+  the next minor release, 0.16.0.
 - SSE removes `stream_raises=` from `CanonStreamRouter` and its stream decorators,
   including `APIRouter.sse()`. Merge previous `raises` and `stream_raises` values
   into one `raises=[...]` declaration. Router-level and operation-level errors now

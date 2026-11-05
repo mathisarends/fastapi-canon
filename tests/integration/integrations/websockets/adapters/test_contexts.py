@@ -125,7 +125,7 @@ def test_hooks_share_values_and_close_resources_before_serving(transport: str) -
         features=(
             Feature(name="projects", routers=(router,), providers=(Resources(),)),
         )
-    ).apply(FastAPI())
+    ).build(FastAPI())
 
     with TestClient(app) as client:
         with client.websocket_connect(
@@ -201,7 +201,7 @@ def test_failed_preparation_cleans_up_without_di_fallback(failure: str) -> None:
         features=(
             Feature(name="projects", routers=(router,), providers=(Resources(),)),
         )
-    ).apply(FastAPI())
+    ).build(FastAPI())
     if failure == "cleanup":
         with (
             TestClient(app) as client,
@@ -243,7 +243,7 @@ async def test_cancelled_preparation_releases_request_resources() -> None:
         features=(
             Feature(name="projects", routers=(router,), providers=(Resources(),)),
         )
-    ).apply(FastAPI())
+    ).build(FastAPI())
     received: list[dict[str, Any]] = []
 
     async def receive() -> dict[str, Any]:

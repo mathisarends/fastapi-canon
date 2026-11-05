@@ -8,7 +8,6 @@ from fastapi_canon import (
     ErrorOptions,
     ErrorRegistry,
     Feature,
-    FeatureConfigurationError,
     validate_openapi_contracts,
 )
 
@@ -54,16 +53,12 @@ def test_validate_openapi_contracts_runs_installed_contract_checks() -> None:
         validate_openapi_contracts(app)
 
 
-def test_composition_validate_requires_and_validates_its_application() -> None:
+def test_composition_build_validates_its_application() -> None:
     composition = Composition(
         features=(Feature(name="health"),),
         errors=ErrorOptions(type_base="https://example.test/problems"),
     )
-    app = FastAPI()
 
-    with pytest.raises(FeatureConfigurationError, match="must be applied"):
-        composition.validate(app)
+    app = composition.build(FastAPI())
 
-    composition.apply(app)
-    composition.validate(app)
     assert app.openapi_schema is not None

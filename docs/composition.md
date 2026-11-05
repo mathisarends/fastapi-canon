@@ -147,7 +147,7 @@ composition = Composition(
 )
 ```
 
-The factory is called during `apply()` and must return a fresh, empty router.
+The factory is called during `build()` and must return a fresh, empty router.
 Omitting it installs feature routers directly on the app.
 
 ### Router policies
@@ -236,7 +236,7 @@ feature = Feature(
 )
 ```
 
-Classes and factories are materialized once per application during `apply()`;
+Classes and factories are materialized once per application during `build()`;
 instances are used as supplied. The providers from every feature are validated
 together and used to build one `AsyncContainer`.
 
@@ -477,13 +477,12 @@ to pass through unchanged.
 
 Contracts are checked in two places. Each declaration validates its error
 definitions when the route is registered, including routes excluded with
-`include_in_schema=False`. `Composition.check(app)` and `apply(app)` then compile
+`include_in_schema=False`. `Composition.check(app)` and `build(app)` then compile
 every installed operation against the composed error catalog on a temporary
 application, before anything is installed; a mismatch is reported as
-`canon.contracts.E001` and makes `apply` raise `FeatureConfigurationError`.
-`composition.build(app)` applies the composition and repeats the check on the
-installed application, including OpenAPI compilation. Prefer it over `apply`
-followed by a separate `composition.validate(app)`.
+`canon.contracts.E001` and makes `build` raise `FeatureConfigurationError`.
+After installation, `build` repeats the checks on the installed application,
+including OpenAPI compilation.
 
 For explicit method lists, import the string enum `HTTPMethod` from
 `fastapi_canon`, for example `methods=[HTTPMethod.POST]`. Canon re-exports

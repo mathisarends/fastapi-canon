@@ -12,7 +12,7 @@ def test_telemetry_requires_native_fastapi_support(
     app = FastAPI()
     monkeypatch.delattr(app, "_telemetry")
     with pytest.raises(FeatureConfigurationError, match=r"FastAPI >=0\.143"):
-        Composition(telemetry=Telemetry()).apply(app)
+        Composition(telemetry=Telemetry()).build(app)
 
 
 def test_telemetry_rejects_unsupported_fastapi_version(
@@ -20,7 +20,7 @@ def test_telemetry_rejects_unsupported_fastapi_version(
 ) -> None:
     monkeypatch.setattr(native, "version", lambda name: "0.142.0")
     with pytest.raises(FeatureConfigurationError, match=r"FastAPI >=0\.143"):
-        Composition(telemetry=Telemetry()).apply(FastAPI())
+        Composition(telemetry=Telemetry()).build(FastAPI())
 
 
 def test_telemetry_rejects_changed_native_configuration(
@@ -29,4 +29,4 @@ def test_telemetry_rejects_changed_native_configuration(
     app = FastAPI()
     monkeypatch.setattr(app, "_telemetry", {})
     with pytest.raises(FeatureConfigurationError, match="fields changed"):
-        Composition(telemetry=Telemetry()).apply(app)
+        Composition(telemetry=Telemetry()).build(app)

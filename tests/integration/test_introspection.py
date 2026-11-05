@@ -69,7 +69,7 @@ def test_snapshot_records_effective_paths_dependencies_and_error_origins() -> No
             dependencies=[Depends(require_authenticated_user)],
         ),
     )
-    app = composition.apply(FastAPI())
+    app = composition.build(FastAPI())
 
     snapshot = composition.inspect(app)
     operation = snapshot.operation_by_id("projects.get")
@@ -132,7 +132,7 @@ def test_nested_router_prefixes_and_hidden_routes_are_described() -> None:
         features=(Feature(name="projects", routers=[parent]),),
         router_factory=lambda: CanonRouter(prefix="/api"),
     )
-    app = composition.apply(FastAPI())
+    app = composition.build(FastAPI())
 
     info = composition.inspect(app)
     operation = info.operation_by_id("projects.list")
@@ -153,7 +153,7 @@ def test_inspect_requires_the_matching_installation_and_keeps_a_snapshot() -> No
     app = FastAPI()
     with pytest.raises(FeatureConfigurationError, match="must be applied"):
         composition.inspect(app)
-    composition.apply(app)
+    composition.build(app)
     snapshot = composition.inspect(app)
     router.get("/later", operation_id="later")(lambda: "later")
     assert composition.inspect(app) == snapshot
@@ -176,7 +176,7 @@ def test_application_and_factory_dependencies_keep_their_origins() -> None:
             prefix="/api", dependencies=[Depends(require_project)]
         ),
     )
-    composition.apply(app)
+    composition.build(app)
     operation = composition.inspect(app).operation_by_id("projects.list")
     assert operation.path == "/api/projects"
     assert [
@@ -207,7 +207,7 @@ def test_path_converters_share_openapi_paths_and_policy_contracts() -> None:
         features=(Feature(name="files", routers=[router]),),
         router_policy=RouterPolicy(error_registry=registry, raises=[failure]),
     )
-    app = composition.apply(FastAPI())
+    app = composition.build(FastAPI())
     operation = composition.inspect(app).operation_by_id("files.get")
     assert operation.path == "/files/{path}"
     assert operation.errors[0].code == "authentication_required"
@@ -221,7 +221,7 @@ def test_mounted_applications_keep_their_own_ownership_boundary() -> None:
     router.get("/projects", operation_id="projects.list")(lambda: [])
     router.mount("/mounted", external)
     composition = Composition(features=(Feature(name="projects", routers=[router]),))
-    app = composition.apply(FastAPI())
+    app = composition.build(FastAPI())
     description = composition.inspect(app)
     assert tuple(op.operation_id for op in description.operations) == ("projects.list",)
     assert composition.check(app).complete
@@ -245,7 +245,7 @@ def test_endpoint_lookup_uses_the_registered_symbol_and_keeps_exports_data_only(
     parent = APIRouter(prefix="/v1")
     parent.include_router(child)
     composition = Composition(features=(Feature(name="projects", routers=[parent]),))
-    app = composition.apply(FastAPI())
+    app = composition.build(FastAPI())
     description = composition.inspect(app)
 
     operation = description.operation(wrapped_project)
@@ -270,7 +270,7 @@ def test_endpoint_lookup_reports_every_ambiguous_registration() -> None:
     router.get("/projects", operation_id="projects.get")(get_project)
     router.get("/archive", operation_id="archive.get")(get_project)
     composition = Composition(features=(Feature(name="projects", routers=[router]),))
-    description = composition.inspect(composition.apply(FastAPI()))
+    description = composition.inspect(composition.build(FastAPI()))
 
     with pytest.raises(LookupError, match="found 2: GET /projects, GET /archive"):
         description.operation(get_project)
@@ -289,7 +289,7 @@ def test_endpoint_lookup_keeps_the_declared_symbol_with_dishka_routes() -> None:
     composition = Composition(
         features=(Feature(name="projects", routers=[router], providers=[provider]),)
     )
-    app = composition.apply(FastAPI())
+    app = composition.build(FastAPI())
     operation = composition.inspect(app).operation(get_project)
     assert operation.operation_id == "projects.get"
     assert operation.path == "/projects"

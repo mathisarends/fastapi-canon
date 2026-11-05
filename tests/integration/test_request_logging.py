@@ -39,7 +39,7 @@ def application(*, enabled: bool = True) -> FastAPI:
             Error(TaskNotFound, status=404, code="task_not_found", title="Missing")
         ],
     ).install(app)
-    return Composition(request_logging=enabled).apply(app)
+    return Composition(request_logging=enabled).build(app)
 
 
 @pytest.mark.parametrize(
@@ -81,7 +81,7 @@ def test_completion_fields(
 
 def test_disabled_by_default(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.INFO, logger="fastapi_canon.access")
-    with TestClient(Composition().apply(FastAPI())) as client:
+    with TestClient(Composition().build(FastAPI())) as client:
         assert client.get("/absent").status_code == 404
     assert not [r for r in caplog.records if r.name == "fastapi_canon.access"]
 
@@ -100,7 +100,7 @@ def test_included_router_logs_complete_template_without_telemetry(
         features=(Feature(name="tasks", routers=[router]),),
         router_factory=lambda: CanonRouter(prefix="/api/v1"),
         request_logging=True,
-    ).apply(FastAPI())
+    ).build(FastAPI())
     with TestClient(app) as client:
         assert client.get("/api/v1/tasks/17").json() == 17
     records = [r for r in caplog.records if r.name == "fastapi_canon.access"]
@@ -131,7 +131,7 @@ def test_stream_duration_stops_before_background_tasks(
         return StreamingResponse(chunks(), background=BackgroundTask(background))
 
     ErrorRegistry(errors=[], type_base="https://example.test/problems").install(app)
-    Composition(request_logging=True).apply(app)
+    Composition(request_logging=True).build(app)
     with TestClient(app) as client:
         assert client.get("/stream").content == b"firstlast"
     assert len(background_records) == 1
@@ -156,7 +156,7 @@ def test_stream_failure_after_headers_is_aborted(
         return StreamingResponse(chunks())
 
     ErrorRegistry(errors=[], type_base="https://example.test/problems").install(app)
-    Composition(request_logging=True).apply(app)
+    Composition(request_logging=True).build(app)
     with TestClient(app, raise_server_exceptions=False) as client:
         assert client.get("/stream").status_code == 200
     records = [r for r in caplog.records if r.name == "fastapi_canon.access"]
@@ -178,7 +178,7 @@ async def test_send_failure_records_only_successfully_sent_status(
     async def index() -> Response:
         return Response(b"ok", status_code=201)
 
-    Composition(request_logging=True).apply(app)
+    Composition(request_logging=True).build(app)
     scope: Scope = {
         "type": "http",
         "asgi": {"version": "3.0"},
@@ -209,15 +209,14 @@ async def test_send_failure_records_only_successfully_sent_status(
 
 def test_composition_logging_identity_and_late_installation() -> None:
     composition = Composition(request_logging=True)
-    app = composition.apply(FastAPI())
-    assert composition.apply(app) is app
-    composition.validate(app)
+    app = composition.build(FastAPI())
+    assert composition.build(app) is app
     with pytest.raises(FeatureConfigurationError, match="different composition"):
-        Composition().apply(app)
+        Composition().build(app)
     with TestClient(FastAPI()) as client:
         assert client.get("/").status_code == 404
         with pytest.raises(FeatureConfigurationError, match="before the app starts"):
-            Composition(request_logging=True).apply(client.app)
+            Composition(request_logging=True).build(client.app)
 
 
 @pytest.mark.parametrize("failure", ["renderer", "response_validation"])
@@ -248,7 +247,7 @@ def test_consumed_exceptions_retain_one_diagnostic(
             )
         ],
     ).install(app)
-    Composition(request_logging=True).apply(app)
+    Composition(request_logging=True).build(app)
     with TestClient(app) as client:
         response = client.get("/broken")
     assert response.status_code == 500
@@ -334,7 +333,7 @@ def test_request_logging_without_optional_telemetry_runtimes() -> None:
         logger = logging.getLogger('fastapi_canon.access')
         logger.setLevel(logging.INFO)
         logger.addHandler(Capture())
-        app = Composition(request_logging=True).apply(FastAPI())
+        app = Composition(request_logging=True).build(FastAPI())
         with TestClient(app) as client:
             assert client.get('/missing').status_code == 404
         assert len(records) == 1

@@ -274,15 +274,16 @@ class Composition:
         object.__setattr__(self, "router_policy", router_policy)
         object.__setattr__(self, "overrides", ())
 
-    def apply(self, app: FastAPI) -> FastAPI:
-        """Apply this composition to *app* exactly once and return the app."""
-        _apply_composition(app, self)
-        return app
-
     def build(self, app: FastAPI) -> FastAPI:
-        """Apply this composition to *app*, validate it and return the app."""
-        self.apply(app)
-        self.validate(app)
+        """Install this composition into *app*, validate it and return the app.
+
+        Building the same composition again only repeats validation.
+        """
+        _apply_composition(app, self)
+        _raise_check_errors(self.check(app))
+        # Regenerate OpenAPI so routes added since an earlier build are included.
+        app.openapi_schema = None
+        validate_openapi_contracts(app)
         return app
 
     def override(self, *providers: ProviderSource) -> Composition:
@@ -301,12 +302,6 @@ class Composition:
             object.__setattr__(copy, name, getattr(self, name))
         object.__setattr__(copy, "overrides", overrides)
         return copy
-
-    def validate(self, app: FastAPI) -> None:
-        """Raise for system-check errors in this applied composition."""
-        _validate_applied_composition(app, self)
-        _raise_check_errors(self.check(app))
-        validate_openapi_contracts(app)
 
     def check(self, app: FastAPI) -> CheckReport:
         """Check configuration without starting lifespans or resolving services."""

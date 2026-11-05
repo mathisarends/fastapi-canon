@@ -101,7 +101,7 @@ def test_auto_registration_preserves_inheritance_and_operation_local_errors(
     )
     router.get("/tasks")(lambda: [])
     router.post("/tasks/completion", raises=[SESSION_NOT_FOUND])(lambda: None)
-    app = Composition(features=[Feature(name="tasks", routers=[router])]).apply(
+    app = Composition(features=[Feature(name="tasks", routers=[router])]).build(
         FastAPI()
     )
     paths = app.openapi()["paths"]
