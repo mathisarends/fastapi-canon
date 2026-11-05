@@ -43,7 +43,7 @@ The next release containing the breaking changes below must be 0.16.0.
   deferred to OpenAPI generation can now occur during application construction.
 - `Composition.validate(app)` also runs registered feature checks. Keep checks
   deterministic and free of startup work; migrate configuration diagnostics to
-  the structured `check(app)` report. Installation failures remain subclasses of
+  the structured `check(app)` report. Configuration failures remain subclasses of
   `FeatureConfigurationError` and include finding codes and remediation hints.
 
 ### Migration

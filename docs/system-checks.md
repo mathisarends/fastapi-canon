@@ -3,6 +3,9 @@
 Use `Composition.check(app)` before installation to inspect configuration problems,
 and `Composition.inspect(app)` after installation to explain the effective HTTP
 composition. Both use immutable values exported from `fastapi_canon`.
+For HTTP/SSE, RPC and WebRTC schema documents, use the complementary
+[application contract export](contracts.md); introspection describes ownership
+and declaration provenance.
 
 ## Check before installation
 
@@ -43,6 +46,8 @@ preparations, so factories execute once in each call. A check of an already
 installed composition reuses its installation snapshot and does not rematerialize
 providers. `validate(app)` still requires the matching installed composition;
 it validates OpenAPI and raises for system-check errors, including custom checks.
+Missing optional runtimes appear as findings in `check`; `apply` retains its
+existing `ModuleNotFoundError` contract for those missing dependencies.
 
 Invalid constructor arguments still fail at construction time. A report is
 available for a successfully constructed `Composition`, including configurations
@@ -123,6 +128,9 @@ The description is a detached snapshot recorded during installation. Later route
 mutations do not rewrite it; build a new application for a new composition.
 Routes outside the composition participate in collision checks but are not listed
 as feature contributions in the snapshot. Checks label their owner `<application>`.
+Mounted subapplications are separate ownership boundaries and are not traversed
+by this HTTP composition profile. Custom OpenAPI rewrites are not reflected in
+the installation snapshot.
 
 ## Add a feature check
 

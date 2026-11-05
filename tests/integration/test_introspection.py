@@ -179,3 +179,39 @@ def test_application_and_factory_dependencies_keep_their_origins() -> None:
         app.openapi()["paths"][operation.path]["get"]["operationId"]
         == operation.operation_id
     )
+
+
+def test_path_converters_share_openapi_paths_and_policy_contracts() -> None:
+    failure = Error(
+        NotAuthenticated,
+        code="authentication_required",
+        status=401,
+        title="Authentication required",
+    )
+    registry = ErrorRegistry(
+        errors=[failure], type_base="https://example.test/problems"
+    )
+    router = CanonRouter()
+    router.get("/files/{path:path}", operation_id="files.get")(lambda path: path)
+    composition = Composition(
+        features=(Feature(name="files", routers=[router]),),
+        router_policy=RouterPolicy(error_registry=registry, raises=[failure]),
+    )
+    app = composition.apply(FastAPI())
+    operation = composition.inspect(app).operation("files.get")
+    assert operation.path == "/files/{path}"
+    assert operation.errors[0].code == "authentication_required"
+    assert "401" in app.openapi()["paths"][operation.path]["get"]["responses"]
+
+
+def test_mounted_applications_keep_their_own_ownership_boundary() -> None:
+    external = FastAPI()
+    external.get("/external", operation_id="external.get")(lambda: "external")
+    router = CanonRouter()
+    router.get("/projects", operation_id="projects.list")(lambda: [])
+    router.mount("/mounted", external)
+    composition = Composition(features=(Feature(name="projects", routers=[router]),))
+    app = composition.apply(FastAPI())
+    description = composition.inspect(app)
+    assert tuple(op.operation_id for op in description.operations) == ("projects.list",)
+    assert composition.check(app).complete

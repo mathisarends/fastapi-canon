@@ -886,8 +886,13 @@ def test_declarations_and_disabled_composition_import_no_otel_runtime() -> None:
             name="test", providers=[Dependencies], instrumentation=instrument(Port)
         ),)).apply(FastAPI())
         assert not any(name.startswith("opentelemetry") for name in sys.modules)
+        composition = Composition(telemetry=Telemetry())
+        report = composition.check(FastAPI())
+        assert report.has_errors
+        assert report.issues[0].code == "canon.composition.E001"
+        assert "fastapi-canon[otel]" in report.issues[0].message
         try:
-            Composition(telemetry=Telemetry()).apply(FastAPI())
+            composition.apply(FastAPI())
         except ModuleNotFoundError as error:
             assert "fastapi-canon[otel]" in str(error)
         else:

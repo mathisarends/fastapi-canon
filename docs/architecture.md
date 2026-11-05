@@ -45,7 +45,8 @@ the runtime package and may orchestrate its supported integrations.
 contract renderers with native HTTP/SSE OpenAPI. This adds an explicit composition
 dependency on WebRTC and its AnyIO lifecycle types; consumers of the root facade
 inherit that declared direction. No transport imports another transport.
-`contract_routes.py` is an adapter shared by RPC and WebRTC for effective paths.
+`contract_routes.py` is an adapter shared by RPC, WebRTC and HTTP introspection
+for effective paths.
 OpenAPI copying/promotion lives in the core adapter; optional JSON Schema validation
 stays in generation, keeping root imports free of generator dependencies.
 

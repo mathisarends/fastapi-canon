@@ -58,6 +58,13 @@ def test_check_collects_independent_failures_without_installing() -> None:
     }
     assert report.has_errors
     assert not report.complete
+    provider_issue = next(
+        issue for issue in report.issues if issue.code == "canon.providers.E001"
+    )
+    assert provider_issue.feature_names == ("projects",)
+    assert provider_issue.locations == (
+        f"{BrokenProvider.__module__}.{BrokenProvider.__qualname__}",
+    )
     assert ("http.contracts", "skipped") in {
         (check.name, check.status) for check in report.checks
     }
@@ -206,3 +213,18 @@ def test_async_feature_checks_are_rejected_before_they_create_coroutines() -> No
 
     with pytest.raises(FeatureConfigurationError, match="synchronous"):
         Feature(name="reports", checks=[check])  # type: ignore[list-item]  # Verify invalid runtime input.
+
+
+def test_check_detects_operation_ids_added_after_installation() -> None:
+    router = APIRouter()
+    router.get("/projects", operation_id="projects.get")(lambda: "projects")
+    composition = Composition(features=(Feature(name="projects", routers=[router]),))
+    app = composition.apply(FastAPI())
+    app.get("/later", operation_id="projects.get")(lambda: "later")
+    report = composition.check(app)
+    assert report.has_errors and not report.complete
+    assert report.issues[0].code == "canon.routing.E002"
+    assert report.issues[0].locations == ("GET /projects", "GET /later")
+    assert app.openapi_schema is None
+    with pytest.raises(FeatureConfigurationError, match="Duplicate operation ID"):
+        composition.validate(app)

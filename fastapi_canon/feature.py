@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field, replace
-from inspect import iscoroutinefunction
+from inspect import iscoroutine, iscoroutinefunction
 from typing import TYPE_CHECKING, Any
 
 from dishka import AsyncContainer, Provider, make_async_container
@@ -263,8 +263,8 @@ class Composition:
     def validate(self, app: FastAPI) -> None:
         """Raise for system-check errors in this applied composition."""
         _validate_applied_composition(app, self)
-        validate_openapi_contracts(app)
         _raise_check_errors(self.check(app))
+        validate_openapi_contracts(app)
 
     def check(self, app: FastAPI) -> CheckReport:
         """Check configuration without starting lifespans or resolving services."""
@@ -320,6 +320,7 @@ class _Preparation:
     container: AsyncContainer | None
     policy_operations: frozenset[str]
     description: CompositionInfo | None
+    missing_dependency: ModuleNotFoundError | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -365,6 +366,8 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         return
 
     prepared = _prepare_composition(app, composition)
+    if prepared.missing_dependency is not None:
+        raise prepared.missing_dependency
     _raise_check_errors(prepared.report)
     if prepared.description is None:
         raise FeatureConfigurationError("Composition description is unavailable")
@@ -443,15 +446,52 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
 def _prepare_composition(app: FastAPI, composition: Composition) -> _Preparation:
     issues: list[CheckIssue] = []
     checks: list[CheckResult] = []
+    missing_dependencies: list[ModuleNotFoundError] = []
     names = tuple(feature.name for feature in composition.features)
+    participants = {
+        "providers": tuple(
+            feature.name
+            for feature in composition.features
+            if feature.providers or feature.instrumentation
+        ),
+        "handlers": tuple(
+            feature.name
+            for feature in composition.features
+            if feature.exception_handlers
+        ),
+        "http.routers": tuple(
+            feature.name for feature in composition.features if feature.routers
+        ),
+        "errors": tuple(
+            feature.name
+            for feature in composition.features
+            if feature.errors is not None
+        ),
+    }
 
     def attempt[ResultT](
         name: str, code: str, hint: str, action: Callable[[], ResultT]
     ) -> tuple[ResultT | None, bool]:
         try:
             result = action()
-        except ErrorConfigurationError as error:
-            issues.append(CheckIssue(code, str(error), hint, feature_names=names))
+        except (ErrorConfigurationError, ModuleNotFoundError) as error:
+            if isinstance(error, ModuleNotFoundError):
+                missing_dependencies.append(error)
+            issues.append(
+                CheckIssue(
+                    code,
+                    str(error),
+                    hint,
+                    feature_names=participants.get(name, names),
+                    locations=tuple(
+                        _qualified_name(source)
+                        for feature in composition.features
+                        for source in feature.providers
+                    )
+                    if name == "providers"
+                    else (),
+                )
+            )
             checks.append(CheckResult(name, "failed"))
             return None, False
         checks.append(CheckResult(name, "passed"))
@@ -552,6 +592,7 @@ def _prepare_composition(app: FastAPI, composition: Composition) -> _Preparation
         container,
         policy_operations,
         description,
+        missing_dependencies[0] if missing_dependencies else None,
     )
 
 
@@ -684,9 +725,15 @@ def _run_feature_checks(
         for check in feature.checks:
             name = f"{feature.name}:{_qualified_name(check)}"
             try:
-                findings = tuple(check(CheckContext(description, info)))
-                if not all(isinstance(issue, CheckIssue) for issue in findings):
+                result: object = check(CheckContext(description, info))
+                if iscoroutine(result):
+                    result.close()
+                    raise TypeError("checks must be synchronous")
+                if not isinstance(result, (list, tuple)) or not all(
+                    isinstance(issue, CheckIssue) for issue in result
+                ):
                     raise TypeError("checks must return CheckIssue objects")
+                findings: tuple[CheckIssue, ...] = tuple(result)
             except Exception:
                 issues.append(
                     CheckIssue(
@@ -722,22 +769,25 @@ def _check_installed(
     _check_operations(
         _operation_headers(app.router, description.operations), issues, checks
     )
-    cached = app.openapi_schema
-    try:
-        validate_openapi_contracts(app)
-    except ErrorConfigurationError as error:
-        issues.append(
-            CheckIssue(
-                "canon.contracts.E001",
-                str(error),
-                "Match route response contracts to the composed error catalog.",
-            )
-        )
-        checks.append(CheckResult("http.contracts", "failed"))
+    if any(issue.code == "canon.routing.E002" for issue in issues):
+        checks.append(CheckResult("http.contracts", "skipped"))
     else:
-        checks.append(CheckResult("http.contracts", "passed"))
-    finally:
-        app.openapi_schema = cached
+        cached = app.openapi_schema
+        try:
+            validate_openapi_contracts(app)
+        except ErrorConfigurationError as error:
+            issues.append(
+                CheckIssue(
+                    "canon.contracts.E001",
+                    str(error),
+                    "Match route response contracts to the composed error catalog.",
+                )
+            )
+            checks.append(CheckResult("http.contracts", "failed"))
+        else:
+            checks.append(CheckResult("http.contracts", "passed"))
+        finally:
+            app.openapi_schema = cached
     _run_feature_checks(features, description, issues, checks)
     return CheckReport(tuple(issues), tuple(checks))
 

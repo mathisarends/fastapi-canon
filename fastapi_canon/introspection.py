@@ -1,12 +1,15 @@
 """Adapt effective FastAPI HTTP routes into detached composition metadata."""
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi import APIRouter
+from fastapi.dependencies.models import Dependant
 from fastapi.params import Depends
 from fastapi.routing import APIRoute
 
+from fastapi_canon.contract_routes import iter_contract_routes
 from fastapi_canon.diagnostics import (
     CompositionInfo,
     DependencyInfo,
@@ -21,6 +24,20 @@ from fastapi_canon.error.contracts import (
 from fastapi_canon.error.types import FeatureConfigurationError
 from fastapi_canon.policy import RouterPolicy
 from fastapi_canon.router import CanonRouter
+
+
+@dataclass(frozen=True, slots=True)
+class _HttpRoute:
+    path: str
+    operation_id: str | None
+    unique_id: str
+    methods: tuple[str, ...]
+    include_in_schema: bool
+    responses: Mapping[str, Any]
+    dependencies: tuple[Depends, ...]
+    dependant: Dependant | None
+    openapi_extra: Mapping[str, Any] | None
+    original_route: APIRoute
 
 
 def _describe(
@@ -100,18 +117,22 @@ def _describe(
     )
 
 
-def _http_routes(router: APIRouter) -> Iterator[Any]:
-    for route in router.routes:
-        if isinstance(route, APIRoute):
-            yield route
-        else:
-            # FastAPI >=0.135 keeps inclusions lazy. Use its effective contexts
-            # so prefixes, dependencies and generated IDs agree with dispatch.
-            contexts = getattr(route, "effective_route_contexts", None)
-            if contexts is not None:
-                for context in contexts():
-                    if isinstance(context.original_route, APIRoute):
-                        yield context
+def _http_routes(router: APIRouter) -> Iterator[_HttpRoute]:
+    for path, route in iter_contract_routes(router.routes, include_mounts=False):
+        original = getattr(route, "original_route", route)
+        if isinstance(original, APIRoute):
+            yield _HttpRoute(
+                path,
+                route.operation_id,
+                route.unique_id,
+                tuple(sorted(route.methods)),
+                route.include_in_schema,
+                route.responses,
+                tuple(route.dependencies),
+                route.dependant,
+                route.openapi_extra,
+                original,
+            )
 
 
 def _operation_headers(
@@ -135,8 +156,8 @@ def _operation_headers(
 
 
 def _dependencies(
-    route: Any,
-    source: Any,
+    route: _HttpRoute,
+    source: _HttpRoute,
     router: APIRouter,
     policy: RouterPolicy | None,
     application_dependencies: Sequence[Depends],
@@ -173,11 +194,11 @@ def _dependencies(
     # Depends/Security declarations, without resolving or invoking any of them.
     pending = list(route.dependant.dependencies) if route.dependant is not None else []
     while pending:
-        dependency = pending.pop(0)
-        name = _qualified_name(dependency.call)
+        parameter_dependency = pending.pop(0)
+        name = _qualified_name(parameter_dependency.call)
         if not any(item.name == name for item in result):
             result.append(DependencyInfo(name, "dependency"))
-        pending.extend(dependency.dependencies)
+        pending.extend(parameter_dependency.dependencies)
     return tuple(result)
 
 
