@@ -77,6 +77,7 @@ application behavior. Independent failures can appear together.
 | `canon.composition.E001` | Installation timing, conflicting installation or integration options. |
 | `canon.routing.E001` | Repeated router contributions or an invalid router factory. |
 | `canon.routing.E002` | Duplicate HTTP operation IDs, including collisions with existing app routes. |
+| `canon.mcp.E001` | An application or feature HTTP route shadows the MCP endpoint. |
 | `canon.handlers.E001` | Exception-handler conflicts. |
 | `canon.errors.E001` | Incompatible feature/policy error catalogs. |
 | `canon.providers.E001` | Provider sources, instrumentation declarations or the Dishka graph are invalid. |

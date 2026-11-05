@@ -60,6 +60,17 @@ The next release containing the breaking changes below must be 0.16.0.
   custom stateless endpoint when adopting Canon, set
   `McpOptions(stateless_http=True)` explicitly.
 
+- MCP discovery and execution reject duplicate public component identities across
+  mounted servers, including collisions produced by namespace concatenation.
+  Rename local tools/prompts or their mount namespaces before upgrading to
+  0.16.0. Distinct FastMCP versions remain supported. Validation uses the live,
+  caller-visible catalog and does not query authenticated providers at startup.
+
+- MCP installation rejects existing application and feature HTTP routes or mounts
+  that shadow its endpoint, including router prefixes and catch-all paths. Move
+  those routes or select a distinct `McpOptions(path=...)` before upgrading to
+  0.16.0. Preflight reports `canon.mcp.E001` before application mutation.
+
 - `fastapi-canon skill install` now creates both
   `.agents/skills/build-canon-backend` and `.claude/skills/build-canon-backend`.
   Use `--destination .agents/skills/build-canon-backend` to retain the previous

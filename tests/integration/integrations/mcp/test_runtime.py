@@ -453,3 +453,144 @@ async def test_root_masks_forwarded_execution_failures_when_requested(
         result = await client.call_tool("native_greet", raise_on_error=False)
     assert result.is_error
     assert ("private-operation-detail" in str(result.content)) is not masked
+
+
+async def test_concatenated_tool_names_cannot_be_discovered(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    first, second = FastMCP("First"), FastMCP("Second")
+
+    @first.tool(name="b_c")
+    async def one() -> str:
+        return "first"
+
+    @second.tool(name="c")
+    async def two() -> str:
+        return "second"
+
+    feature = Feature(
+        name="collision",
+        mcp=[
+            McpMount(server=first, namespace="a"),
+            McpMount(server=second, namespace="a_b"),
+        ],
+    )
+    app = Composition(features=[feature], mcp=McpOptions()).apply(FastAPI())
+
+    async with connected(app) as client:
+        with pytest.raises(MCPError, match="Internal server error"):
+            await client.list_tools()
+    assert "Duplicate MCP component 'tool:a_b_c@'" in caplog.text
+
+
+async def test_ambiguous_tool_call_is_rejected_before_either_handler_runs() -> None:
+    calls: list[str] = []
+    first, second = FastMCP("First"), FastMCP("Second")
+
+    @first.tool(name="b_c")
+    async def one() -> str:
+        calls.append("first")
+        return "first"
+
+    @second.tool(name="c")
+    async def two() -> str:
+        calls.append("second")
+        return "second"
+
+    feature = Feature(
+        name="collision",
+        mcp=[
+            McpMount(server=first, namespace="a"),
+            McpMount(server=second, namespace="a_b"),
+        ],
+    )
+    app = Composition(features=[feature], mcp=McpOptions()).apply(FastAPI())
+
+    async with connected(app) as client:
+        with pytest.raises(MCPError, match="Internal server error"):
+            await client.call_tool("a_b_c", raise_on_error=False)
+    assert calls == []
+
+
+async def test_concatenated_prompt_names_cannot_be_discovered(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    first, second = FastMCP("First"), FastMCP("Second")
+
+    @first.prompt(name="b_c")
+    async def one() -> str:
+        return "first"
+
+    @second.prompt(name="c")
+    async def two() -> str:
+        return "second"
+
+    feature = Feature(
+        name="collision",
+        mcp=[
+            McpMount(server=first, namespace="a"),
+            McpMount(server=second, namespace="a_b"),
+        ],
+    )
+    app = Composition(features=[feature], mcp=McpOptions()).apply(FastAPI())
+
+    async with connected(app) as client:
+        with pytest.raises(MCPError, match="Internal server error"):
+            await client.list_prompts()
+    assert "Duplicate MCP component 'prompt:a_b_c@'" in caplog.text
+
+
+async def test_distinct_versions_of_a_public_tool_name_remain_supported() -> None:
+    first, second = FastMCP("First"), FastMCP("Second")
+
+    @first.tool(name="b_c", version="1")
+    async def one() -> str:
+        return "first"
+
+    @second.tool(name="c", version="2")
+    async def two() -> str:
+        return "second"
+
+    feature = Feature(
+        name="versions",
+        mcp=[
+            McpMount(server=first, namespace="a"),
+            McpMount(server=second, namespace="a_b"),
+        ],
+    )
+    app = Composition(features=[feature], mcp=McpOptions()).apply(FastAPI())
+
+    async with connected(app) as client:
+        assert [tool.name for tool in await client.list_tools()] == ["a_b_c"]
+        assert (await client.call_tool("a_b_c")).data == "second"
+
+
+async def test_late_tool_registration_cannot_introduce_an_ambiguous_call() -> None:
+    first, second = FastMCP("First"), FastMCP("Second")
+    calls: list[str] = []
+
+    @first.tool(name="b_c")
+    async def one() -> str:
+        calls.append("first")
+        return "first"
+
+    feature = Feature(
+        name="dynamic",
+        mcp=[
+            McpMount(server=first, namespace="a"),
+            McpMount(server=second, namespace="a_b"),
+        ],
+    )
+    app = Composition(features=[feature], mcp=McpOptions()).apply(FastAPI())
+
+    async with connected(app) as client:
+        assert [tool.name for tool in await client.list_tools()] == ["a_b_c"]
+
+        @second.tool(name="c")
+        async def two() -> str:
+            calls.append("second")
+            return "second"
+
+        with pytest.raises(MCPError, match="Internal server error"):
+            await client.call_tool("a_b_c", raise_on_error=False)
+    assert calls == []
