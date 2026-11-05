@@ -1,6 +1,6 @@
 # DX-010: Unify app and factory resolution across CLI entry points
 
-- Status: In progress
+- Status: Done
 - Priority: P2
 - Kind: Feature
 - Baseline: `a366702` (2026-11-05)
@@ -65,7 +65,7 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
   ran root, inspect, composition, contracts-export and generate help without
   importing optional generator/media/MCP/telemetry runtimes. All changed local
   Markdown links/anchors resolved. Full dependency/browser matrices were not
-  repeated for target loading. Status remains In progress until merge.
+  repeated for target loading. Merged into main as `12c3aca`.
 - Remaining follow-ups: common codegen keeps its explicit factory selector and
   standalone contract targets; this does not redesign specialized emitters or
   configuration. JSON generation diagnostics and broader help are DX-011/DX-012.

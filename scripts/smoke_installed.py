@@ -67,6 +67,11 @@ def _main() -> None:
         from fastapi_canon import CanonRouter
 
         _cli("generate")
+        if not (
+            importlib.util.find_spec("jsonschema")
+            and importlib.util.find_spec("jinja2")
+        ):
+            _core_generation_diagnostics()
         _cli("db")
         _skill_check()
         _shared_problem_check()
@@ -540,6 +545,46 @@ def _cli(name: str) -> None:
     subprocess.run(
         [str(executable), name, "--help"], check=True, capture_output=True, timeout=30
     )
+
+
+def _core_generation_diagnostics() -> None:
+    with tempfile.TemporaryDirectory(prefix="canon-core-generation-") as temporary:
+        root = Path(temporary)
+        (root / "minimal_app.py").write_text(
+            "from fastapi import FastAPI\napp = FastAPI()\n"
+            "@app.get('/health')\ndef health() -> str: return 'ok'\n",
+            encoding="utf-8",
+        )
+        (root / "fastapi-canon.toml").write_text(
+            '[codegen]\nversion = 1\n[codegen.sources.api]\nkind = "openapi"\n'
+            'source = "minimal_app:app"\noutput = "contracts/api.json"\n'
+            '[codegen.targets.python]\nlanguage = "python"\nsources = ["api"]\n'
+            'output = "sdk"\n',
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-I",
+                "-m",
+                "fastapi_canon",
+                "generate",
+                "--format",
+                "json",
+            ],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+        assert result.returncode == 2, result.stderr
+        report = json.loads(result.stdout)
+        assert report["schema_version"] == 1 and report["status"] == "error"
+        (diagnostic,) = report["diagnostics"]
+        assert diagnostic["code"] == "canon.codegen.E001"
+        assert "fastapi-canon[codegen]" in diagnostic["message"]
+        assert not (root / "contracts").exists() and not (root / "sdk").exists()
 
 
 def _offline_sse_codegen() -> None:

@@ -195,4 +195,6 @@ def _json_report(
 def _failure_message(error: Exception) -> str:
     if isinstance(error, GenerationError):
         return str(error)
+    if isinstance(error, ImportError):
+        return "Generation dependencies are unavailable; install fastapi-canon[codegen]"
     return f"Generation failed ({type(error).__name__}); check the configuration and application export"

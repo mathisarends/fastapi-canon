@@ -1,6 +1,6 @@
 # DX-007: Support injected callable objects and partial endpoints
 
-- Status: In progress
+- Status: Done
 - Priority: P2
 - Kind: Verified bug
 - Baseline: `a366702` (2026-11-05)
@@ -89,6 +89,7 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
   including the installed-wheel RPC completeness check (94.8%). The runnable
   documentation example and exact ticket reproduction passed. Standalone
   browser and minimum-dependency matrices were not repeated for this adapter.
+  Merged into main as `13099ff`.
 - Remaining follow-ups: none in scope. Opaque or variadic non-function callables
   require a typed named-parameter wrapper; bind positional-only arguments first.
   Constructor injection requires a callable instance or typed function. These
