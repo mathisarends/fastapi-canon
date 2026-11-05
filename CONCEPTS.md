@@ -11,7 +11,7 @@ generation. There is no separate Canon schema language or server scaffolder.
 | Application exception | A domain failure, independent of FastAPI and transport |
 | `Error` | Maps one exception class to a stable code, status, title, public fields, and headers |
 | `ErrorRegistry` | An immutable catalog; validates collisions and resolves exceptions by Python MRO |
-| `CanonRouter` | Declares operation errors and success responses using familiar FastAPI decorators |
+| `APIRouter` | Declares a feature's HTTP, SSE, JSON-RPC and WebRTC operations with their errors, using familiar FastAPI decorators |
 | `CanonResponse` | Describes a success contract; endpoints still return FastAPI-compatible values or responses |
 | `Feature` | Owns routers, registries, Dishka providers, handlers, and a lifespan |
 | `Composition` | Installs features and owns app-wide normalization, validation, and container lifecycle |
@@ -32,7 +32,7 @@ Unexpected HTTP failures become safe internal problems by default.
 
 ```python
 from fastapi import FastAPI
-from fastapi_canon import CanonRouter, Composition, Error, ErrorRegistry, Feature
+from fastapi_canon import APIRouter, Composition, Error, ErrorRegistry, Feature
 
 
 class ProjectMissing(Exception):
@@ -46,7 +46,7 @@ project_missing = Error(
     title="Project missing",
 )
 registry = ErrorRegistry(errors=[project_missing])
-router = CanonRouter(prefix="/projects", error_registry=registry)
+router = APIRouter(prefix="/projects", error_registry=registry)
 
 
 @router.get("/{project_id}", operation_id="get_project", raises=[project_missing])
@@ -65,10 +65,10 @@ the same definitions into OpenAPI. Shared definitions are reused by identity;
 separate definitions colliding on code, exception class, type URI, or schema name
 fail configuration. Build routers before creating their features.
 
-Compose Canon routers through `include_router()` to retain registry ownership.
-Router-level `raises=` and `http_statuses=` belong to operations declared directly
-on that router. Included routers keep their own contracts. Ordinary FastAPI
-routers remain available; contribute their catalogs through `Feature(errors=...)`.
+Give each feature one `APIRouter`. Router-level `raises=` and `http_statuses=`
+apply to every operation declared directly on it, including SSE streams. Routers
+added with `include_router()` keep their own contracts. Ordinary FastAPI routers
+remain available; contribute their catalogs through `Feature(errors=...)`.
 
 `http_statuses=[401, 403]` documents generic normalized `HTTPException` failures.
 It does not introduce authentication or authorization behavior. A domain error
@@ -96,11 +96,13 @@ handle all Canon configuration failures at a build or tooling boundary.
 
 ## Code generation and agents
 
-1. Import or build the application and install the complete composition.
-2. Call `composition.validate(app)` in the application factory or CI.
-3. Export `app.openapi()` as JSON using `json.dump` or `json.dumps`.
-4. Give that compiled document to the chosen OpenAPI client generator.
-5. Test important runtime payloads against their generated response schemas.
+1. Build the application through `Composition.apply()`, which checks every
+   operation contract before installation.
+2. Export the composed app with `export_contracts(app)` or
+   `fastapi-canon contracts export --app backend.app:app --output-dir contracts`.
+3. Generate clients with `fastapi-canon generate --config fastapi-canon.toml`, or
+   give the OpenAPI document to the chosen generator.
+4. Test important runtime payloads against their generated response schemas.
 
 Use stable, unique `operation_id=` values for public client methods. FastAPI's
 default IDs include routing details; changing paths can change those IDs. Canon

@@ -66,10 +66,12 @@ represent another PyPI distribution.
 | Typed transport dependencies and context hooks | `fastapi_canon.Inject` | [Dependency injection](integrations/websockets/dependencies.md) |
 | Composition checks and installed HTTP descriptions | `fastapi_canon.CheckReport`, `CheckIssue`, `CheckContext`, `CompositionInfo`, `FeatureInfo`, `OperationInfo` | [System checks](system-checks.md) |
 | Database ownership, migrations, locks and short service scopes | `fastapi_canon.Database`, `AlembicMigrations`, `TransactionLocks`, `Scoped`, `ServiceScope` | [Databases](database.md) |
-| HTTP routes and contracts | `fastapi_canon.CanonRouter`, `RouterPolicy`, `Error`, `ErrorRegistry`, `CanonResponse` | [HTTP contracts](composition.md#error-contracts) |
-| SSE with Canon HTTP contracts | `fastapi_canon.integrations.sse.CanonStreamRouter` | [SSE contracts](streams.md) |
-| WebSocket RPC, messages and binary streams | `fastapi_canon.integrations.websockets.RpcChannel`, `CanonWebSocketRouter`, `RpcSocket` | [WebSockets](integrations/websockets/index.md) |
-| WebRTC with Canon admission errors | `fastapi_canon.integrations.webrtc.CanonWebRtcRouter`, `Session` | [WebRTC admission](webrtc.md) |
+| HTTP routes and contracts | `fastapi_canon.APIRouter`, `RouterPolicy`, `Error`, `ErrorRegistry`, `CanonResponse` | [HTTP contracts](composition.md#error-contracts) |
+| Typed SSE | `APIRouter.sse()` | [SSE contracts](streams.md) |
+| WebSocket JSON-RPC | `APIRouter.include_channel()` with `fastapi_canon.RpcChannel` | [WebSockets](integrations/websockets/index.md) |
+| Raw WebSocket messages and binary streams | `fastapi_canon.integrations.websockets.CanonWebSocketRouter`, `RpcSocket` | [Sockets](integrations/websockets/sockets.md) |
+| WebRTC with Canon admission errors | `APIRouter.webrtc()`, `fastapi_canon.integrations.webrtc.Session` | [WebRTC admission](webrtc.md) |
+| Contract export | `fastapi_canon.export_contracts`, `fastapi-canon contracts export` | [Application export](contracts.md) |
 | Telemetry declarations | `fastapi_canon.integrations.opentelemetry.Telemetry`, `instrument` | [Telemetry](telemetry.md) |
 | SQLAlchemy engine instrumentation declaration | `fastapi_canon.integrations.opentelemetry.sqlalchemy.SqlAlchemyInstrumentation` | [Engine lifetime](database.md#engine-instrumentation-lifetime) |
 
@@ -81,15 +83,11 @@ from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
 from fastapi_canon.integrations.webrtc import Session
 ```
 
-The lower-level `fastapi_canon.integrations.sse.StreamRouter` and
-`fastapi_canon.integrations.webrtc.WebRtcRouter` remain available for direct FastAPI use.
-Their Canon counterparts add error-registry and composition contracts. Core
-imports do not eagerly load either transport. Import the aiortc adapter only
-when choosing that engine.
-
-For new feature code, use `APIRouter.sse()`, `APIRouter.include_channel()` and
-`APIRouter.webrtc()` on the same router. Existing specialized Canon routers remain
-available for applications which already configure those adapters directly.
+Core imports do not eagerly load any transport. `APIRouter.sse()`,
+`include_channel()` and `webrtc()` import their integration on first use; import
+the aiortc adapter only when choosing that engine. Raw sockets and binary
+WebSocket streams are not JSON-RPC channels and keep their own
+`CanonWebSocketRouter` declarations.
 
 WebSocket class names retain `Rpc` when they describe RPC or its declared socket
 contracts. The namespace names the transport; it does not make every WebSocket
