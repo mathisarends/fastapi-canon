@@ -281,6 +281,9 @@ class _Source:
                 "typing_extensions.Annotated",
                 "dishka.FromDishka",
                 "dishka.integrations.fastapi.FromDishka",
+                "fastapi_canon.Inject",
+                "fastapi_canon.injection.Inject",
+                "fastapi_canon.integrations.websockets.Inject",
             }:
                 first = (
                     node.slice.elts[0]

@@ -1,7 +1,8 @@
 # Optional error-contract checking
 
-Run the source checker to find application exceptions missing from a direct
-`APIRouter` operation's `raises=` declaration:
+Run the source checker to find application exceptions missing from the
+`raises=` declarations of `APIRouter` operations, SSE streams and WebRTC
+sessions, and of `RpcChannel` methods:
 
 ```console
 fastapi-canon check errors src
@@ -71,9 +72,8 @@ provides a minimal example: `get_project` calls `require_project`, which raises
 and exits one. Remove that exception's registry mapping instead and it reports
 `CAN002`. Restore both to obtain zero gaps for that supported HTTP path.
 
-The stream and RPC additions in the walkthrough remain outside this check's
-scope. A successful check covers supported HTTP source paths, not all transports
-or arbitrary runtime exceptions.
+A successful check covers the supported source paths of the transports listed
+under [Transports](#transports), not arbitrary runtime exceptions.
 
 Given a service method that raises `TaskNotFound`, an endpoint calling that method
 must declare its mapped `task_not_found` error, either locally or on its router.
@@ -101,7 +101,8 @@ python -m fastapi_canon.check_error_contracts src --strict --format json
 ```
 
 Invalid roots, duplicate module names, unreadable files and syntax errors exit
-two. JSON output includes each operation's diagnostics, a `complete` flag,
+two. JSON output includes each operation's `transport` (`http`, `sse`, `webrtc`
+or `rpc`), its diagnostics, a `complete` flag,
 `contract_gaps` and `incomplete_operations`. An operation can be fully analyzed
 and still contain a contract gap. An empty result does not establish coverage.
 
@@ -148,6 +149,25 @@ and fresh CLI processes separately, and records Python/platform metadata. Use
 verify that shared helpers are analyzed once and cached results preserve
 completeness, rather than asserting machine-dependent wall-clock thresholds.
 
+## Transports
+
+| Declaration | Compared with |
+| --- | --- |
+| `@router.get(...)` and other HTTP methods | Endpoint and dependency failures against policy, router and operation `raises=`. |
+| `@router.sse(...)` | Dependency failures against `raises=`; failures of the stream body, including iterated service generators, against `stream_raises=`. |
+| `@router.webrtc(...)` | Session factory and dependency failures against router and session `raises=`. |
+| `@channel.method` on an `RpcChannel` | Method failures against the channel's `error_registry` and the channel and method `raises=`. |
+
+SSE bodies run after the response has started, so a failure there becomes a
+terminal `canon.problem` event only when it is declared in `stream_raises=`.
+An error declared only in `raises=` does not cover the stream body.
+
+For RPC, the checker reads `RpcChannel(error_registry=..., raises=[...])` and
+`Error` declarations. `RpcError` subclasses and `RpcErrorBinding` declarations are
+reported as unresolved contracts (`CAN003`). Contracts of channels included into
+other channels do not propagate, like router contracts.
+`.method` decorators on other objects are ignored.
+
 ## Supported source patterns
 
 The checker follows direct `APIRouter` declarations with ordinary route
@@ -184,9 +204,10 @@ Explicit built-in exceptions are outside the application-error comparison.
 
 Unresolved calls, abstract ports, external constructors, custom decorators,
 recursive calls, dynamic contracts, nested route factories, deferred coroutine
-execution and unsupported control flow produce `CAN003`. Loops, context managers,
-comprehensions, `match` and `except*` are currently outside the supported flow
-analysis. Reassigned module declarations and detected contract mutations also
+execution and unsupported control flow produce `CAN003`. `for`, `async for` and
+`while` loops are analyzed like branches that may run; iterating a call to a
+generator follows the generator's body. Context managers, comprehensions,
+`match` and `except*` are currently outside the supported flow analysis. Reassigned module declarations and detected contract mutations also
 prevent a complete result, including assignments with type annotations. Expanded
 `ErrorRegistry(**config)` arguments are unresolved contracts: the checker reports
 `CAN003` and suppresses guessed gaps for those operations. Dishka provider bindings

@@ -347,7 +347,8 @@ machine-readable report for tooling and agents.
 
 This checks supported explicit source paths, not every possible runtime failure.
 Abstract Dishka ports and dynamic code can leave analysis incomplete. The checker
-covers HTTP operations declared on `APIRouter`, not SSE, RPC or WebRTC handlers.
+covers `APIRouter` HTTP operations, `.sse()` streams and `.webrtc()` sessions,
+and `RpcChannel` methods. SSE stream bodies are compared with `stream_raises=`.
 Keep runtime contract validation and behavioral tests. See
 [error checking](docs/error-checking.md) for boundaries and
 CI options.

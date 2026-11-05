@@ -169,12 +169,12 @@ Python stream problems are validated against the operation's declared models.
 TypeScript follows the generator's existing static model validation policy;
 standard problem members and stream control messages are checked at runtime.
 
-The [source checker](error-checking.md) can additionally find missing HTTP
+The [source checker](error-checking.md) can additionally find missing
 registry mappings (`CAN002`) and `raises=` entries (`CAN001`) along supported
 explicit source paths. Run `fastapi-canon check errors src --strict` in CI;
 add `--require-complete` to fail for unresolved paths or an empty supported scan.
-It reports incomplete analysis as `CAN003` and currently excludes SSE/RPC/WebRTC
-handlers. Runtime mapping, document validation and source analysis cover distinct
+It reports incomplete analysis as `CAN003` and covers HTTP operations, SSE
+streams, WebRTC sessions and RPC methods. Runtime mapping, document validation and source analysis cover distinct
 parts of the contract.
 
 ```typescript

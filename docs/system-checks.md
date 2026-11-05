@@ -46,6 +46,7 @@ preparations, so factories execute once in each call. A check of an already
 installed composition reuses its installation snapshot and does not rematerialize
 providers. `validate(app)` still requires the matching installed composition;
 it validates OpenAPI and raises for system-check errors, including custom checks.
+`build(app)` runs `apply` and `validate` together and returns the application.
 Missing optional runtimes appear as findings in `check`; `apply` retains its
 existing `ModuleNotFoundError` contract for those missing dependencies.
 

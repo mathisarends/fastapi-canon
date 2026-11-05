@@ -21,6 +21,11 @@ The next release containing the breaking changes below must be 0.16.0.
 - `Composition.build(app)` applies a composition and validates the installed
   application in one call, replacing `apply(app)` followed by `validate(app)`.
 
+- `fastapi-canon check errors` also checks `APIRouter.sse()` streams (body
+  failures against `stream_raises=`), `APIRouter.webrtc()` sessions and
+  `RpcChannel` methods. Loops are now analyzed, and iterating a generator follows
+  its body. JSON reports include each operation's `transport`.
+
 - `Composition.override(*providers)` returns a copy whose Dishka providers
   replace existing feature bindings, for example fakes in tests. Overrides that
   provide a type no feature provides fail with `canon.providers.E001`.
