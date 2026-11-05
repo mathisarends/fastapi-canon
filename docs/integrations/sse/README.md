@@ -223,8 +223,10 @@ and committed OpenAPI regression fixtures in `tests/fixtures/sse/`. Verify all g
 
 ## Documentation
 
-See the [changelog and upgrade steps](../../history/fastapi-streams.md) when updating the library
-and regenerating committed clients.
+See the [Canon changelog](../../../CHANGELOG.md) and
+[upgrade steps](../../package-migration.md) when updating the library and
+regenerating committed clients. The [standalone Streams changelog](../../history/fastapi-streams.md)
+preserves earlier release history.
 
 | Guide | Topics |
 | --- | --- |
@@ -233,10 +235,10 @@ and regenerating committed clients.
 | [Client usage](clients.md) | Enums, authentication, cancellation, and errors. |
 | [Architecture](architecture.md) | Native SSE, shared IR, templates, and transports. |
 | [Development](development.md) | Tests, supported scope, and roadmap. |
-| [Releasing](releasing.md) | Workspace release process and package-prefixed tags. |
+| [Releasing](releasing.md) | Unified Canon release process and `fastapi-canon-v` tags. |
 
 The current release supports GET/POST JSON SSE streams. Ordinary REST endpoints
 stay in the contract for your existing REST SDK. See the
-[supported scope](development.md#supported-scope-and-roadmap).
+[supported scope](development.md#supported-scope).
 
 Python 3.12+ · FastAPI 0.143.3+ · Pydantic v2 · [MIT](../../history/fastapi-streams-LICENSE)

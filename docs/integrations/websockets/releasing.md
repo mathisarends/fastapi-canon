@@ -4,7 +4,7 @@ The WebSocket implementation now ships in the single `fastapi-canon`
 distribution. This directory retains its feature-specific tests, examples,
 guides and historical changelog. It is no longer a release target.
 
-Follow the workspace [release policy](../../releases.md) and the
+Follow the repository [release policy](../../releases.md) and the
 [package migration guide](../../package-migration.md).
 Use Canon's project version, `fastapi_canon/_version.py`, changelog and
 `fastapi-canon-vX.Y.Z` tag. Regenerate clients through the Canon generators and

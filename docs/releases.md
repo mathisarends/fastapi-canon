@@ -4,9 +4,11 @@ Release the unified `fastapi-canon` distribution from `mathisarends/fastapi_cano
 The root project is the sole publication target; the reference service is an
 installable example. `release.toml` maps package
 names, directories, modules and tag prefixes; `scripts/release.py` validates them.
-Published versions and their GitHub/PyPI assets are listed in the
-[README](../README.md#current-releases). Package changelogs contain migration notes;
-GitHub Releases and Actions retain publication evidence.
+Published versions and their GitHub/PyPI assets are recorded under
+[current versions](#current-versions). The root [changelog](../CHANGELOG.md)
+contains migration notes; linked GitHub Releases and Actions retain publication
+evidence. Run all development and release-preparation commands below from the
+repository root.
 The [repository migration](repository-migration.md) records the cutover. The
 historical runs, tags and assets linked below remain in their original repositories.
 

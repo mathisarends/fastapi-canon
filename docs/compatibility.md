@@ -52,6 +52,10 @@ Use `--fastapi VERSION` repeatedly to check additional releases explicitly.
 
 ## Package versions
 
+Only `fastapi-canon` is an active release target. The standalone transport rows
+below record historical publications; their versions do not select the current
+integration implementations, which share Canon's version.
+
 | Package | Published |
 | --- | --- |
 | `fastapi-canon` | 0.15.0 |
@@ -101,7 +105,8 @@ error exports and wire behavior are unchanged. See the
 [0.11.0 migration notes](../CHANGELOG.md#0110---2026-11-01)
 and [verified publication record](releases.md#current-versions).
 
-Published versions and assets are linked in the [README](../README.md#current-releases).
+Published versions and assets are linked in the
+[verified release records](releases.md#current-versions).
 Canon 0.10.0 was published on 2026-11-01. It includes the unpublished 0.9.0
 consolidation; follow the [package migration guide](package-migration.md)
 and regenerate clients using the 0.10.0 changelog notes.
