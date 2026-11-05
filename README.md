@@ -21,8 +21,6 @@ The generated API follows your domain: `client.projects.get()`,
 - [Generate and use the SDK](#generate-and-use-the-sdk)
 - [Check that errors are mapped and declared](#check-that-errors-are-mapped-and-declared)
 - [Documentation](#documentation)
-- [Repository](#repository)
-- [Current releases](#current-releases)
 - [Repository layout](#repository-layout)
 
 ## Core features
@@ -400,42 +398,6 @@ wiring, folder structure, HTTP features, resources, transports/SDKs and testing.
 | Upgrade an existing application | [Package migration](docs/package-migration.md), [RPC migration](docs/integrations/websockets/migration.md) |
 | Run a complete application | [Reference service](examples/reference-service/README.md), [HTTP/SSE/RPC example](examples/stack_service.py) |
 | Contribute or prepare a release | [Contributing](docs/contributing.md), [guardrails](docs/architecture-guardrails.md), [compatibility](docs/compatibility.md), [releases](docs/releases.md) |
-
-## Repository
-
-The canonical home for development, issues and future releases is
-[`mathisarends/fastapi_canon`](https://github.com/mathisarends/fastapi_canon).
-The consolidated source returns from `mathisarends/canon` with its complete Git
-history. The PyPI project remains `fastapi-canon`, and Python imports remain
-`fastapi_canon`. There is one maintained source repository, not a mirrored pair.
-See the [repository migration](docs/repository-migration.md) for the cutover
-sequence, publisher setup and historical release locations.
-
-## Current releases
-
-Canon **0.15.0** is the current published unified distribution.
-It adds the unified WebSocket stream API, managed Python and TypeScript SDK stream
-resources, and optional FastMCP feature mounts with Dishka injection. Regenerate
-both SDKs and upgrade them with the server; stream decorators, controls and limits
-have changed. See the
-[upgrade guide](docs/package-migration.md#upgrade-to-0150),
-[migration notes](CHANGELOG.md#0150---2026-11-04)
-and [publication record](docs/releases.md#current-versions).
-The other names below are historical releases from the earlier four-distribution
-layout; use Canon's feature extras for current development.
-
-| Package | Version | GitHub | PyPI |
-| --- | --- | --- | --- |
-| `fastapi-canon` | 0.15.0 | [Release notes and artifacts](https://github.com/mathisarends/fastapi_canon/releases/tag/fastapi-canon-v0.15.0) | [Install](https://pypi.org/project/fastapi-canon/0.15.0/) |
-| `fastapi-streams` | 0.5.0 | [Release notes and artifacts](https://github.com/mathisarends/canon/releases/tag/fastapi-streams-v0.5.0) | [Install](https://pypi.org/project/fastapi-streams/0.5.0/) |
-| `fastapi-rpckit` | 0.4.1 | [Release notes and artifacts](https://github.com/mathisarends/canon/releases/tag/fastapi-rpckit-v0.4.1) | [Install](https://pypi.org/project/fastapi-rpckit/0.4.1/) |
-| `fastapi-webrtc` | 0.3.0 | [Release notes and artifacts](https://github.com/mathisarends/canon/releases/tag/fastapi-webrtc-v0.3.0) | [Install](https://pypi.org/project/fastapi-webrtc/0.3.0/) |
-
-Canon releases use this repository's
-[release list](https://github.com/mathisarends/fastapi_canon/releases), one Canon
-version, tag, changelog and artifact set. Historical release URLs and assets stay
-in the former [`canon` release list](https://github.com/mathisarends/canon/releases)
-and their original repositories.
 
 ## Repository layout
 
