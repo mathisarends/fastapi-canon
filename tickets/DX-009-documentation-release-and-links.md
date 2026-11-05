@@ -50,7 +50,7 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
 
 ## Completion
 
-- Implementation or decision PR:
+- Implementation or decision PR: [#89](https://github.com/mathisarends/fastapi-canon/pull/89), stacked on DX-008 #88.
 - Final commit and verification: documentation `61ef765`. Checked all 116 local
   links/heading anchors in the nine changed guides; all resolve. Imported the
   authenticated WebSocket demo from the root successfully. Compared installed
