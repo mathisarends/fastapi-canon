@@ -16,6 +16,61 @@ or `webrtc` extra for the transports you use. `aiortc` selects the reference
 WebRTC engine. Core router imports do not load these optional runtimes or SDK
 generators. Existing specialized routers remain supported.
 
+## Typed callable endpoints
+
+The default router resolves `Inject[T]` and `FromDishka[T]` for ordinary functions,
+typed callable instances, bound methods and `functools.partial`. Async and sync
+forms keep their execution behavior; DI values stay out of the public request
+schema. Module/class future annotations and inherited call methods are supported.
+
+```python
+from functools import partial
+
+from dishka import Provider, Scope
+from fastapi import FastAPI
+from fastapi_canon import APIRouter, Composition, Feature, Inject
+
+
+class Store:
+    async def read(self) -> str:
+        return "ok"
+
+
+class Read:
+    async def __call__(self, store: Inject[Store]) -> str:
+        return await store.read()
+
+
+async def read_prefixed(prefix: str, store: Inject[Store]) -> str:
+    return prefix + await store.read()
+
+
+router = APIRouter()
+router.get("/read", operation_id="store.read")(Read())
+router.get("/cached", operation_id="store.cached")(partial(read_prefixed, "cached:"))
+bindings = Provider()
+bindings.provide(Store, scope=Scope.REQUEST)
+app = Composition(
+    features=[Feature(name="store", routers=[router], providers=[bindings])]
+).build(FastAPI())
+```
+
+Only parameters left in a partial's signature participate in injection and
+request parsing. Bound positional parameters disappear; keyword-bound business
+parameters retain Python's overridable defaults. Parameters still marked for
+injection resolve from DI. Automatic names retain the callable's existing name
+(the class name for an instance, or `partial` for a partial); explicit IDs give
+stable domain names. Callable lookup uses the original registered object.
+
+Non-function callables need positional-or-keyword or keyword-only parameters.
+Give opaque/variadic forms a typed named-parameter wrapper, and bind remaining
+positional-only arguments before registration. Constructors needing injection
+require a function or callable instance. Unsupported forms receive a setup error
+without executing the handler. Ordinary functions, existing `@inject` wrappers
+and explicit `route_class` declarations keep their existing ownership; a custom
+route class replaces Canon's automatic wiring. See [dependency preflight](system-checks.md#http-and-sse-endpoint-dependency-preflight)
+for supported scopes and configuration checks.
+
 ## Automatic HTTP and SSE operation names
 
 Declare a stable namespace once per router. Canon derives an omitted
