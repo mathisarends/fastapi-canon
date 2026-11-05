@@ -344,22 +344,22 @@ engine factories process-wide, and `uninstrument()` removes its instrumentation
 globally. Those semantics belong to the direct contrib API, not Canon's
 engine-local adapter. Do not combine them on the same engine.
 
-WebSocket controller tracing is configured explicitly on `CanonWebSocketRouter`:
+WebSocket controller tracing is configured explicitly when a channel is mounted:
 
 ```python
 from fastapi import FastAPI
-from fastapi_canon import Composition, Feature
+from fastapi_canon import APIRouter, Composition, Feature
 from fastapi_canon.integrations.opentelemetry import Telemetry
-from fastapi_canon.integrations.websockets import CanonWebSocketRouter
 
 telemetry = Telemetry(tracer_provider=tracer_provider, meter_provider=meter_provider)
-router = CanonWebSocketRouter(
-    "/ws",
-    channels=(browser_channel,),
+router = APIRouter()
+router.include_channel(
+    browser_channel,
+    path="/ws",
     middleware=(telemetry.websocket_middleware(),),
 )
 app = Composition(
-    features=(Feature(name="browser", routers=(router,)),),
+    features=(Feature(name="browser", routers=[router]),),
     telemetry=telemetry,
 ).apply(FastAPI())
 ```
