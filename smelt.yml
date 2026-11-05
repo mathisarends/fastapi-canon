@@ -46,6 +46,9 @@ architecture:
     fastapi_canon.openapi: adapters
     fastapi_canon.router: routing
     fastapi_canon.feature: composition
+    fastapi_canon.diagnostics: values
+    fastapi_canon.introspection: composition
+    fastapi_canon.composition_cli: generation
     fastapi_canon.scopes: composition
     fastapi_canon.integrations.database: persistence
 

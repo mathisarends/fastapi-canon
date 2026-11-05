@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from inspect import iscoroutine, iscoroutinefunction
 from typing import TYPE_CHECKING, Any
 
 from dishka import AsyncContainer, Provider, make_async_container
@@ -10,12 +11,21 @@ from dishka.exceptions import DishkaError  # type: ignore[attr-defined]  # not e
 from fastapi import APIRouter, FastAPI
 from starlette.types import ExceptionHandler, Lifespan
 
+from fastapi_canon.diagnostics import (
+    CheckContext,
+    CheckIssue,
+    CheckReport,
+    CheckResult,
+    CompositionInfo,
+    FeatureCheck,
+    OperationInfo,
+)
 from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
-from fastapi_canon.error.contracts import iter_operations
 from fastapi_canon.error.openapi import install_policy_contracts
 from fastapi_canon.error.types import (
     FeatureConfigurationError as FeatureConfigurationError,
 )
+from fastapi_canon.introspection import _describe, _operation_headers, _qualified_name
 from fastapi_canon.openapi import (
     install_openapi_contracts,
     validate_openapi_contracts,
@@ -72,6 +82,7 @@ class Feature:
     errors: ErrorRegistry | None
     exception_handlers: tuple[ExceptionHandlerSpec, ...]
     lifespan: FeatureLifespan | None
+    checks: tuple[FeatureCheck, ...]
 
     def __init__(
         self,
@@ -84,7 +95,19 @@ class Feature:
         errors: ErrorRegistry | None = None,
         exception_handlers: Sequence[ExceptionHandlerSpec] = (),
         lifespan: FeatureLifespan | None = None,
+        checks: Sequence[FeatureCheck] = (),
     ) -> None:
+        normalized_checks = tuple(checks)
+        if not all(
+            callable(check)
+            and not iscoroutinefunction(check)
+            and not iscoroutinefunction(type(check).__call__)
+            for check in normalized_checks
+        ):
+            raise FeatureConfigurationError(
+                "checks must contain synchronous callable functions"
+            )
+        object.__setattr__(self, "checks", normalized_checks)
         normalized_mcp = tuple(mcp)
         if normalized_mcp:
             from fastapi_canon.integrations.mcp import McpMount
@@ -238,9 +261,38 @@ class Composition:
         return app
 
     def validate(self, app: FastAPI) -> None:
-        """Validate the OpenAPI contracts of this applied composition."""
+        """Raise for system-check errors in this applied composition."""
         _validate_applied_composition(app, self)
+        _raise_check_errors(self.check(app))
         validate_openapi_contracts(app)
+
+    def check(self, app: FastAPI) -> CheckReport:
+        """Check configuration without starting lifespans or resolving services."""
+        if not isinstance(app, FastAPI):
+            raise FeatureConfigurationError("app must be a FastAPI instance")
+        installed = getattr(app.state, _INSTALLATION_STATE_KEY, None)
+        if installed is not None:
+            try:
+                _validate_applied_composition(app, self)
+            except FeatureConfigurationError as error:
+                return CheckReport(
+                    (
+                        CheckIssue(
+                            "canon.composition.E001",
+                            str(error),
+                            "Use the composition installed on this application.",
+                        ),
+                    ),
+                    (CheckResult("installation", "failed"),),
+                )
+            assert isinstance(installed, _Installation)
+            return _check_installed(app, installed.description, self.features)
+        return _prepare_composition(app, self).report
+
+    def inspect(self, app: FastAPI) -> CompositionInfo:
+        """Return the detached HTTP snapshot recorded at installation time."""
+        _validate_applied_composition(app, self)
+        return _installed_description(app)
 
 
 @dataclass(frozen=True, slots=True)
@@ -257,6 +309,18 @@ class _Installation:
     request_logging: bool
     mcp: McpOptions | None
     container: AsyncContainer | None = field(compare=False)
+    description: CompositionInfo | None = field(default=None, compare=False)
+
+
+@dataclass(frozen=True, slots=True)
+class _Preparation:
+    report: CheckReport
+    routers: tuple[APIRouter, ...]
+    registry: ErrorRegistry | None
+    container: AsyncContainer | None
+    policy_operations: frozenset[str]
+    description: CompositionInfo | None
+    missing_dependency: ModuleNotFoundError | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -301,90 +365,25 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
             raise FeatureConfigurationError(msg)
         return
 
-    mounts = tuple(mount for feature in composition.features for mount in feature.mcp)
-    if mounts or composition.mcp is not None:
-        try:
-            from fastapi_canon.integrations.mcp.runtime import validate_mounts
-        except ModuleNotFoundError as error:
-            if error.name != "fastmcp":
-                raise
-            raise FeatureConfigurationError(
-                "Install fastapi-canon[mcp] to enable MCP"
-            ) from error
-
-        validate_mounts(mounts, composition.mcp)
-        if app.middleware_stack is not None:
-            raise FeatureConfigurationError("install MCP before the app starts")
-        if composition.mcp is not None and any(
-            getattr(route, "path", None) == composition.mcp.path for route in app.routes
-        ):
-            raise FeatureConfigurationError("MCP path conflicts with an existing route")
+    prepared = _prepare_composition(app, composition)
+    if prepared.missing_dependency is not None:
+        raise prepared.missing_dependency
+    _raise_check_errors(prepared.report)
+    if prepared.description is None:
+        raise FeatureConfigurationError("Composition description is unavailable")
     telemetry = composition.telemetry
-    if composition.request_logging and app.middleware_stack is not None:
-        raise FeatureConfigurationError("install request logging before the app starts")
-    if telemetry is not None:
-        telemetry._prepare(app)
-    routers = _flatten_routers(composition.features)
-    provider_sources = _flatten_provider_sources(composition.features)
+    mounts = tuple(mount for feature in composition.features for mount in feature.mcp)
     handler_specs = _flatten_handlers(composition.features)
     lifespans = tuple(
         feature.lifespan
         for feature in composition.features
         if feature.lifespan is not None
     )
-    _reject_duplicate_contributions(composition.features, "routers", "router")
-    _reject_duplicate_contributions(
-        composition.features, "providers", "provider source"
-    )
-    materialized_providers = _materialize_providers(provider_sources)
-    _reject_duplicate_materialized_providers(materialized_providers)
-    _validate_handlers(app, composition.features)
-    installed_routers = _prepare_routers(
-        routers, composition.router_factory, composition.router_policy
-    )
-
-    registries = tuple(
-        (feature.name, feature.errors)
-        for feature in composition.features
-        if feature.errors is not None
-    )
+    installed_routers = prepared.routers
+    registry = prepared.registry
     policy = composition.router_policy
-    if policy is not None and policy.error_registry is not None:
-        registries = (("router policy", policy.error_registry), *registries)
-    registry = _merge_errors(
-        registries,
-        name=composition.errors.registry_name,
-        type_base=composition.errors.type_base,
-    )
-    providers = tuple(contribution.provider for contribution in materialized_providers)
-    instrumentation = tuple(
-        (feature.name, spec)
-        for feature in composition.features
-        for spec in feature.instrumentation
-    )
-    if instrumentation:
-        from fastapi_canon.integrations.opentelemetry.declarations import (
-            _instrumentation_providers,
-        )
-
-        providers = (
-            *providers,
-            *_instrumentation_providers(instrumentation, telemetry),
-        )
-    container = _make_container(providers, telemetry)
-    policy_operations = _validate_error_installation(
-        app,
-        installed_routers,
-        handler_specs,
-        registry,
-        include_validation_error=composition.errors.include_validation_error,
-        include_http_exceptions=composition.errors.include_http_exceptions,
-        include_unhandled_error=composition.errors.include_unhandled_error,
-        router_policy=policy,
-    )
-    if container is not None and app.middleware_stack is not None:
-        msg = "features with providers must be installed before the app starts"
-        raise FeatureConfigurationError(msg)
+    container = prepared.container
+    policy_operations = prepared.policy_operations
 
     if telemetry is not None:
         from fastapi_canon.integrations.opentelemetry.native import install
@@ -439,8 +438,378 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         router_policy=policy,
         router_policy_id=requested.router_policy_id,
         container=container,
+        description=prepared.description,
     )
     setattr(app.state, _INSTALLATION_STATE_KEY, completed)
+
+
+def _prepare_composition(app: FastAPI, composition: Composition) -> _Preparation:
+    issues: list[CheckIssue] = []
+    checks: list[CheckResult] = []
+    missing_dependencies: list[ModuleNotFoundError] = []
+    names = tuple(feature.name for feature in composition.features)
+    participants = {
+        "providers": tuple(
+            feature.name
+            for feature in composition.features
+            if feature.providers or feature.instrumentation
+        ),
+        "handlers": tuple(
+            feature.name
+            for feature in composition.features
+            if feature.exception_handlers
+        ),
+        "http.routers": tuple(
+            feature.name for feature in composition.features if feature.routers
+        ),
+        "errors": tuple(
+            feature.name
+            for feature in composition.features
+            if feature.errors is not None
+        ),
+    }
+
+    def attempt[ResultT](
+        name: str, code: str, hint: str, action: Callable[[], ResultT]
+    ) -> tuple[ResultT | None, bool]:
+        try:
+            result = action()
+        except (ErrorConfigurationError, ModuleNotFoundError) as error:
+            if isinstance(error, ModuleNotFoundError):
+                missing_dependencies.append(error)
+            issues.append(
+                CheckIssue(
+                    code,
+                    str(error),
+                    hint,
+                    feature_names=participants.get(name, names),
+                    locations=tuple(
+                        _qualified_name(source)
+                        for feature in composition.features
+                        for source in feature.providers
+                    )
+                    if name == "providers"
+                    else (),
+                )
+            )
+            checks.append(CheckResult(name, "failed"))
+            return None, False
+        checks.append(CheckResult(name, "passed"))
+        return result, True
+
+    attempt(
+        "installation",
+        "canon.composition.E001",
+        "Install before startup and OpenAPI generation; check integration options.",
+        lambda: _validate_runtime_options(app, composition),
+    )
+    routers, routers_ok = attempt(
+        "http.routers",
+        "canon.routing.E001",
+        "Contribute each router once and return a fresh empty application router.",
+        lambda: _prepare_feature_routers(composition),
+    )
+    _, handlers_ok = attempt(
+        "handlers",
+        "canon.handlers.E001",
+        "Keep one handler per exception across the application and its features.",
+        lambda: _validate_handlers(app, composition.features),
+    )
+    registry, registry_ok = attempt(
+        "errors",
+        "canon.errors.E001",
+        "Use compatible error definitions and one explicit application type base.",
+        lambda: _prepare_registry(composition),
+    )
+    container, _ = attempt(
+        "providers",
+        "canon.providers.E001",
+        "Check the named provider sources and supply the missing Dishka bindings.",
+        lambda: _prepare_container(app, composition),
+    )
+    policy_operations: frozenset[str] = frozenset()
+    description = None
+    if routers_ok and registry_ok and handlers_ok and routers is not None:
+        description, described = attempt(
+            "http.description",
+            "canon.description.E001",
+            "Ensure declared HTTP errors are present in the composed catalog.",
+            lambda: _describe(
+                tuple(
+                    (
+                        feature.name,
+                        feature.routers,
+                        tuple(_qualified_name(p) for p in feature.providers),
+                    )
+                    for feature in composition.features
+                ),
+                routers,
+                registry,
+                composition.router_policy,
+                app.router,
+            ),
+        )
+        if described and description is not None:
+            _check_operations(
+                (*_operation_headers(app.router), *description.operations),
+                issues,
+                checks,
+            )
+        if not any(issue.code == "canon.routing.E002" for issue in issues):
+            operations, _ = attempt(
+                "http.contracts",
+                "canon.contracts.E001",
+                "Match route response contracts to the composed error catalog.",
+                lambda: _validate_error_installation(
+                    app,
+                    routers,
+                    _flatten_handlers(composition.features),
+                    registry,
+                    include_validation_error=composition.errors.include_validation_error,
+                    include_http_exceptions=composition.errors.include_http_exceptions,
+                    include_unhandled_error=composition.errors.include_unhandled_error,
+                    router_policy=composition.router_policy,
+                ),
+            )
+            policy_operations = operations or frozenset()
+        else:
+            checks.append(CheckResult("http.contracts", "skipped"))
+    else:
+        checks.extend(
+            (
+                CheckResult("http.contracts", "skipped"),
+                CheckResult("http.description", "skipped"),
+            )
+        )
+    if description is not None:
+        _run_feature_checks(composition.features, description, issues, checks)
+    elif any(feature.checks for feature in composition.features):
+        checks.append(CheckResult("feature.checks", "skipped"))
+    return _Preparation(
+        CheckReport(tuple(issues), tuple(checks)),
+        routers or (),
+        registry,
+        container,
+        policy_operations,
+        description,
+        missing_dependencies[0] if missing_dependencies else None,
+    )
+
+
+def _validate_runtime_options(app: FastAPI, composition: Composition) -> None:
+    if app.openapi_schema is not None:
+        raise FeatureConfigurationError(
+            "install features before generating or caching OpenAPI"
+        )
+    mounts = tuple(mount for feature in composition.features for mount in feature.mcp)
+    if mounts or composition.mcp is not None:
+        try:
+            from fastapi_canon.integrations.mcp.runtime import validate_mounts
+        except ModuleNotFoundError as error:
+            if error.name != "fastmcp":
+                raise
+            raise FeatureConfigurationError(
+                "Install fastapi-canon[mcp] to enable MCP"
+            ) from error
+        validate_mounts(mounts, composition.mcp)
+        if app.middleware_stack is not None:
+            raise FeatureConfigurationError("install MCP before the app starts")
+        if composition.mcp is not None and any(
+            getattr(route, "path", None) == composition.mcp.path for route in app.routes
+        ):
+            raise FeatureConfigurationError("MCP path conflicts with an existing route")
+    if composition.request_logging and app.middleware_stack is not None:
+        raise FeatureConfigurationError("install request logging before the app starts")
+    if composition.telemetry is not None:
+        composition.telemetry._prepare(app)
+
+
+def _prepare_feature_routers(composition: Composition) -> tuple[APIRouter, ...]:
+    _reject_duplicate_contributions(composition.features, "routers", "router")
+    return _prepare_routers(
+        _flatten_routers(composition.features),
+        composition.router_factory,
+        composition.router_policy,
+    )
+
+
+def _prepare_registry(composition: Composition) -> ErrorRegistry | None:
+    registries = tuple(
+        (feature.name, feature.errors)
+        for feature in composition.features
+        if feature.errors is not None
+    )
+    policy = composition.router_policy
+    if policy is not None and policy.error_registry is not None:
+        registries = (("router policy", policy.error_registry), *registries)
+    return _merge_errors(
+        registries,
+        name=composition.errors.registry_name,
+        type_base=composition.errors.type_base,
+    )
+
+
+def _prepare_container(app: FastAPI, composition: Composition) -> AsyncContainer | None:
+    _reject_duplicate_contributions(
+        composition.features, "providers", "provider source"
+    )
+    materialized = _materialize_providers(
+        _flatten_provider_sources(composition.features)
+    )
+    _reject_duplicate_materialized_providers(materialized)
+    providers = tuple(item.provider for item in materialized)
+    instrumentation = tuple(
+        (feature.name, spec)
+        for feature in composition.features
+        for spec in feature.instrumentation
+    )
+    if instrumentation:
+        from fastapi_canon.integrations.opentelemetry.declarations import (
+            _instrumentation_providers,
+        )
+
+        providers = (
+            *providers,
+            *_instrumentation_providers(instrumentation, composition.telemetry),
+        )
+    container = _make_container(providers, composition.telemetry)
+    if container is not None and app.middleware_stack is not None:
+        raise FeatureConfigurationError(
+            "features with providers must be installed before the app starts"
+        )
+    return container
+
+
+def _check_operations(
+    operations: tuple[OperationInfo, ...],
+    issues: list[CheckIssue],
+    checks: list[CheckResult],
+) -> None:
+    seen: dict[str, tuple[OperationInfo, str]] = {}
+    failed = False
+    for operation, method in (
+        (candidate, verb) for candidate in operations for verb in candidate.methods
+    ):
+        if not operation.include_in_schema or operation.operation_id is None:
+            continue
+        previous = seen.get(operation.operation_id)
+        if previous is not None:
+            failed = True
+            issues.append(
+                CheckIssue(
+                    "canon.routing.E002",
+                    f"Duplicate operation ID {operation.operation_id!r}",
+                    "Set distinct operation_id values on these operations.",
+                    feature_names=tuple(
+                        dict.fromkeys(
+                            (previous[0].feature_name, operation.feature_name)
+                        )
+                    ),
+                    locations=(
+                        f"{previous[1]} {previous[0].path}",
+                        f"{method} {operation.path}",
+                    ),
+                )
+            )
+        seen[operation.operation_id] = (operation, method)
+    checks.append(CheckResult("http.operation_ids", "failed" if failed else "passed"))
+
+
+def _run_feature_checks(
+    features: tuple[Feature, ...],
+    description: CompositionInfo,
+    issues: list[CheckIssue],
+    checks: list[CheckResult],
+) -> None:
+    for feature, info in zip(features, description.features, strict=True):
+        for check in feature.checks:
+            name = f"{feature.name}:{_qualified_name(check)}"
+            try:
+                result: object = check(CheckContext(description, info))
+                if iscoroutine(result):
+                    result.close()
+                    raise TypeError("checks must be synchronous")
+                if not isinstance(result, (list, tuple)) or not all(
+                    isinstance(issue, CheckIssue) for issue in result
+                ):
+                    raise TypeError("checks must return CheckIssue objects")
+                findings: tuple[CheckIssue, ...] = tuple(result)
+            except Exception:
+                issues.append(
+                    CheckIssue(
+                        "canon.checks.E001",
+                        f"Feature check {name!r} did not complete",
+                        "Fix the check function; it must return a finite sequence of CheckIssue objects.",
+                        feature_names=(feature.name,),
+                    )
+                )
+                checks.append(CheckResult(name, "incomplete"))
+                continue
+            issues.extend(
+                replace(issue, feature_names=issue.feature_names or (feature.name,))
+                for issue in findings
+            )
+            checks.append(
+                CheckResult(
+                    name,
+                    "failed"
+                    if any(issue.severity == "error" for issue in findings)
+                    else "passed",
+                )
+            )
+
+
+def _check_installed(
+    app: FastAPI, description: CompositionInfo | None, features: tuple[Feature, ...]
+) -> CheckReport:
+    if description is None:
+        raise FeatureConfigurationError("Composition description is unavailable")
+    issues: list[CheckIssue] = []
+    checks: list[CheckResult] = []
+    _check_operations(
+        _operation_headers(app.router, description.operations), issues, checks
+    )
+    if any(issue.code == "canon.routing.E002" for issue in issues):
+        checks.append(CheckResult("http.contracts", "skipped"))
+    else:
+        cached = app.openapi_schema
+        try:
+            validate_openapi_contracts(app)
+        except ErrorConfigurationError as error:
+            issues.append(
+                CheckIssue(
+                    "canon.contracts.E001",
+                    str(error),
+                    "Match route response contracts to the composed error catalog.",
+                )
+            )
+            checks.append(CheckResult("http.contracts", "failed"))
+        else:
+            checks.append(CheckResult("http.contracts", "passed"))
+        finally:
+            app.openapi_schema = cached
+    _run_feature_checks(features, description, issues, checks)
+    return CheckReport(tuple(issues), tuple(checks))
+
+
+def _raise_check_errors(report: CheckReport) -> None:
+    if report.has_errors:
+        raise FeatureConfigurationError(
+            "\n".join(
+                f"{issue.code}: {issue.message}\nHint: {issue.hint}"
+                for issue in report.issues
+                if issue.severity == "error"
+            )
+        )
+
+
+def _installed_description(app: FastAPI) -> CompositionInfo:
+    installed = getattr(app.state, _INSTALLATION_STATE_KEY, None)
+    if not isinstance(installed, _Installation) or installed.description is None:
+        raise FeatureConfigurationError(
+            "Apply a Composition before inspecting the application"
+        )
+    return installed.description
 
 
 def _unique_instances[ItemT](
@@ -794,9 +1163,11 @@ def _validate_error_installation(
     if app.openapi_schema is not None:
         msg = "install features before generating or caching OpenAPI"
         raise FeatureConfigurationError(msg)
-    if registry is None:
-        return frozenset()
-    validation_app = FastAPI()
+    validation_app = FastAPI(
+        dependencies=list(app.router.dependencies),
+        generate_unique_id_function=app.router.generate_unique_id_function,
+    )
+    validation_app.router.routes = list(app.router.routes)
     validation_app.exception_handlers.update(app.exception_handlers)
     for router in routers:
         validation_app.include_router(router)
@@ -804,20 +1175,28 @@ def _validate_error_installation(
         validation_app.add_exception_handler(spec.exception, spec.handler)
     operations: frozenset[str] = frozenset()
     if router_policy is not None and router_policy.raises:
+        policy_router = APIRouter()
+        for router in routers:
+            policy_router.include_router(router)
         operations = frozenset(
-            path for path, _ in iter_operations(validation_app.openapi())
+            f"{method} {operation.path}"
+            for operation in _operation_headers(policy_router)
+            if operation.include_in_schema
+            for method in operation.methods
         )
-        validation_app.openapi_schema = None
     try:
-        registry.install(
-            validation_app,
-            include_validation_error=include_validation_error,
-            include_http_exceptions=include_http_exceptions,
-            include_unhandled_error=include_unhandled_error,
-        )
+        if registry is not None:
+            registry.install(
+                validation_app,
+                include_validation_error=include_validation_error,
+                include_http_exceptions=include_http_exceptions,
+                include_unhandled_error=include_unhandled_error,
+            )
+        else:
+            install_openapi_contracts(validation_app)
         if router_policy is not None and router_policy.raises:
             install_policy_contracts(validation_app, router_policy.raises, operations)
-            validation_app.openapi()
+        validation_app.openapi()
     except ErrorConfigurationError as error:
         raise FeatureConfigurationError(str(error)) from error
     return operations

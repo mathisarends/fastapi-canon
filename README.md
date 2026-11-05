@@ -36,6 +36,7 @@ The generated API follows your domain: `client.projects.get()`,
 | `fastapi-canon generate` | One domain SDK per target, shared models/errors, internal protocol bindings and drift checks. |
 | `export_contracts(app)` / `fastapi-canon contracts export` | Export registered HTTP/SSE, RPC and WebRTC contracts from one composed app. |
 | `fastapi-canon check errors` | Source analysis for missing error mappings/declarations, with explicit incomplete-analysis diagnostics. |
+| `Composition.check()` / `.inspect()` | Structured configuration diagnostics and immutable installed HTTP snapshots, also available through the CLI. |
 | Optional WebRTC and telemetry | Typed media-session contracts and explicit OpenTelemetry instrumentation at the composition boundary. |
 
 The [public API guide](docs/canon.md) maps these responsibilities to imports.
@@ -372,6 +373,7 @@ for folder structure, HTTP features, resources, transports/SDKs and testing.
 | Choose canonical imports and ownership boundaries | [Public API](docs/canon.md) |
 | Map domain errors across HTTP, SSE and RPC | [Shared problems](docs/problems.md) |
 | Check mapping/declaration coverage | [Error checking](docs/error-checking.md) |
+| Diagnose composition and explain installed HTTP operations | [System checks and introspection](docs/system-checks.md) |
 | Generate Python and TypeScript domain SDKs | [Codegen workflow](docs/unified-canon-concept.md) |
 | Export schemas without handwritten URL maps or runtime secrets | [Application contracts](docs/contracts.md) |
 | Build typed SSE streams | [Stream contracts](docs/streams.md), [SSE guide index](docs/integrations/sse/index.md) |

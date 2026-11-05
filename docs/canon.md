@@ -62,6 +62,7 @@ represent another PyPI distribution.
 | Responsibility | Public imports | Guide |
 | --- | --- | --- |
 | Application composition and Dishka lifecycle | `fastapi_canon.Composition`, `Feature` | [Composition](composition.md#feature-composition) |
+| Composition checks and installed HTTP descriptions | `fastapi_canon.CheckReport`, `CheckIssue`, `CheckContext`, `CompositionInfo`, `FeatureInfo`, `OperationInfo` | [System checks](system-checks.md) |
 | Database ownership, migrations, locks and short service scopes | `fastapi_canon.Database`, `AlembicMigrations`, `TransactionLocks`, `ServiceScope` | [Databases](database.md) |
 | HTTP routes and contracts | `fastapi_canon.CanonRouter`, `RouterPolicy`, `Error`, `ErrorRegistry`, `CanonResponse` | [HTTP contracts](composition.md#error-contracts) |
 | SSE with Canon HTTP contracts | `fastapi_canon.integrations.sse.CanonStreamRouter` | [SSE contracts](streams.md) |

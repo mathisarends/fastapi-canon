@@ -5,6 +5,18 @@ from typing import TYPE_CHECKING
 
 from ._version import __version__
 from .contracts import Contracts, export_contracts
+from .diagnostics import (
+    CheckContext,
+    CheckIssue,
+    CheckReport,
+    CheckResult,
+    CompositionInfo,
+    DependencyInfo,
+    ErrorInfo,
+    FeatureCheck,
+    FeatureInfo,
+    OperationInfo,
+)
 from .error import Error, ErrorConfigurationError, ErrorRegistry, Problem
 from .feature import (
     Composition,
@@ -35,17 +47,27 @@ __all__ = [
     "AlembicMigrations",
     "CanonResponse",
     "CanonRouter",
+    "CheckContext",
+    "CheckIssue",
+    "CheckReport",
+    "CheckResult",
     "Composition",
+    "CompositionInfo",
     "Contracts",
     "Database",
+    "DependencyInfo",
     "Error",
     "ErrorConfigurationError",
+    "ErrorInfo",
     "ErrorOptions",
     "ErrorRegistry",
     "ExceptionHandlerSpec",
     "Feature",
+    "FeatureCheck",
     "FeatureConfigurationError",
+    "FeatureInfo",
     "HTTPMethod",
+    "OperationInfo",
     "Problem",
     "ProviderFactory",
     "ProviderSource",

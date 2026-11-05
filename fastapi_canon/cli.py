@@ -19,7 +19,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         ("sse", "Export SSE contracts and generate Python or TypeScript clients"),
         ("websockets", "Export OpenRPC contracts and generate WebSocket clients"),
         ("webrtc", "Export WebRTC contracts and generate browser clients"),
-        ("check", "Check application contracts without importing application code"),
+        ("check", "Check source contracts or an imported application composition"),
+        ("inspect", "Describe an installed application composition"),
         ("generate", "Generate one domain SDK from configured application contracts"),
         ("db", "Manage database revisions with Alembic"),
         ("skill", "Install the bundled backend-building skill in your project"),
@@ -30,6 +31,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         from fastapi_canon.contract_cli import main as contracts_main
 
         return contracts_main(remaining)
+    elif args.command == "inspect":
+        from fastapi_canon.composition_cli import _main as inspect_main
+
+        return inspect_main(remaining, inspect=True)
     elif args.command == "skill":
         return _skill_main(remaining)
     elif args.command == "db":
@@ -55,8 +60,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         return webrtc_main(remaining)
     else:
+        if remaining and remaining[0] == "composition":
+            from fastapi_canon.composition_cli import _main as composition_main
+
+            return composition_main(remaining[1:])
         checker = argparse.ArgumentParser(prog="fastapi-canon check")
-        checker.add_argument("kind", choices=("errors",))
+        checker.add_argument("kind", choices=("errors", "composition"))
         _, remaining = checker.parse_known_args(remaining)
         from fastapi_canon.check_error_contracts import _main as check_main
 
