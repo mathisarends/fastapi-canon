@@ -58,6 +58,21 @@ def test_existing_parent_mount_cannot_shadow_mcp() -> None:
         Composition(mcp=McpOptions()).apply(app)
 
 
+def test_another_http_method_cannot_block_the_slashless_mcp_redirect() -> None:
+    router = APIRouter()
+
+    @router.put("/mcp")
+    async def conflict() -> str:
+        return "wrong endpoint"
+
+    composition = Composition(
+        features=[Feature(name="conflict", routers=[router])], mcp=McpOptions()
+    )
+
+    with pytest.raises(FeatureConfigurationError, match=r"MCP path.*conflicts"):
+        composition.apply(FastAPI())
+
+
 def test_neighboring_http_route_remains_accessible() -> None:
     router = APIRouter()
 
