@@ -14,6 +14,7 @@ from starlette.routing import WebSocketRoute
 
 from fastapi_canon.contract_routes import iter_contract_routes
 from fastapi_canon.exceptions import ConfigurationError
+from fastapi_canon.injected_route import InjectedRoute, inject_endpoint
 from fastapi_canon.router import CanonRouter
 
 if TYPE_CHECKING:
@@ -22,7 +23,16 @@ if TYPE_CHECKING:
 
 
 class APIRouter(CanonRouter):
-    """Compose HTTP, SSE, JSON-RPC channels and WebRTC sessions by feature."""
+    """Compose HTTP, SSE, JSON-RPC channels and WebRTC sessions by feature.
+
+    HTTP and SSE endpoints resolve ``Inject[T]`` and ``FromDishka[T]`` parameters
+    without ``route_class=DishkaRoute`` or ``@inject``. An explicit
+    ``route_class`` replaces this behavior.
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("route_class", InjectedRoute)
+        super().__init__(**kwargs)
 
     def add_api_websocket_route(
         self,
@@ -140,7 +150,12 @@ class APIRouter(CanonRouter):
         register = adapter.stream(path, **options)
 
         def decorate(endpoint: Endpoint) -> Endpoint:
-            register(endpoint)
+            # Inject the generator itself, so resolution failures become
+            # terminal problems like other processing failures.
+            if issubclass(self.route_class, InjectedRoute):
+                register(inject_endpoint(endpoint))
+            else:
+                register(endpoint)
             self.include_router(adapter)
             return endpoint
 
