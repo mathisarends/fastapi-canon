@@ -1,6 +1,6 @@
 # DX-004: Validate RPC handler dependency roots during composition preflight
 
-- Status: In progress
+- Status: Done
 - Priority: P1
 - Kind: Verified coverage gap
 - Baseline: `a366702` (2026-11-05)
@@ -76,7 +76,7 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
   Python 3.12 installed-wheel telemetry matrix passed for FastAPI 0.143.0 and
   locked 0.143.3. Mypy, Ruff, changed Smelt and full pre-commit passed.
   Standalone browser/minimum-distribution matrices were not run.
-  Status stays In progress until the implementation lands.
+  Merged into main in `f1cc05f`.
 - Remaining follow-ups: custom/external resolution and non-method transport
   roots remain explicitly skipped; admission-service roots are outside this
   slice. HTTP/SSE roots remain DX-005 and broader inspection remains DX-029.
