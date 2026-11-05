@@ -4,15 +4,17 @@ from contextlib import asynccontextmanager
 
 import pytest
 from dishka import Provider, Scope, provide
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, WebSocket
 from httpx import ASGITransport, AsyncClient
 
+from fastapi_canon import APIRouter as ApplicationRouter
 from fastapi_canon import (
     CheckContext,
     CheckIssue,
     Composition,
     Feature,
     FeatureConfigurationError,
+    RpcChannel,
 )
 
 
@@ -347,3 +349,78 @@ def test_http_path_check_runs_after_installation() -> None:
     assert app.openapi_schema is schema
     with pytest.raises(FeatureConfigurationError, match="Ambiguous HTTP route"):
         composition.build(app)
+
+
+@pytest.mark.parametrize("existing", [False, True], ids=["features", "application"])
+@pytest.mark.parametrize("shared_prefix", ["", "/api"], ids=["direct", "factory"])
+@pytest.mark.parametrize(
+    ("native", "first_path", "second_path"),
+    [
+        (False, "/rpc", "/rpc"),
+        (False, "/{item_id}/rpc", "/{other_id}/rpc"),
+        (True, "/rpc", "/rpc"),
+        (True, "/{item_id}/rpc", "/{other_id}/rpc"),
+        (True, "/{item_id:str}/rpc", "/{other_id}/rpc"),
+    ],
+    ids=[
+        "rpc-literal",
+        "rpc-parameters",
+        "native-literal",
+        "native-parameters",
+        "native-default-converter",
+    ],
+)
+def test_websocket_paths_are_checked_across_composition_boundaries(
+    native: bool,
+    existing: bool,
+    shared_prefix: str,
+    first_path: str,
+    second_path: str,
+) -> None:
+    first = ApplicationRouter(prefix=shared_prefix + "/v1" if existing else "/v1")
+    if native:
+
+        @first.websocket(first_path, name="first")
+        async def raw(websocket: WebSocket) -> None:
+            await websocket.accept()
+    else:
+        first.include_channel(RpcChannel(), path=first_path, name="first")
+    second = ApplicationRouter()
+    second.include_channel(RpcChannel(), path=second_path, name="second")
+    parent = ApplicationRouter(prefix="/v1")
+    parent.include_router(second)
+    app = FastAPI()
+    features = [Feature(name="two", routers=[parent])]
+    if existing:
+        app.include_router(first)
+    else:
+        features.insert(0, Feature(name="one", routers=[first]))
+    factory_calls: list[str] = []
+
+    def router_factory() -> ApplicationRouter:
+        factory_calls.append("router")
+        return ApplicationRouter(prefix=shared_prefix)
+
+    composition = Composition(
+        features=features, router_factory=router_factory if shared_prefix else None
+    )
+    routes = tuple(app.routes)
+    handlers = dict(app.exception_handlers)
+    lifespan = app.router.lifespan_context
+
+    [issue] = composition.check(app).issues
+
+    assert issue.code == "canon.routing.E004"
+    assert issue.feature_names == ("<application>" if existing else "one", "two")
+    assert issue.locations == (
+        f"WEBSOCKET {shared_prefix}/v1{first_path.replace(':str', '')} (first)",
+        f"WEBSOCKET {shared_prefix}/v1{second_path} (second)",
+    )
+    assert factory_calls == (["router"] if shared_prefix else [])
+    with pytest.raises(FeatureConfigurationError, match="Duplicate WebSocket path"):
+        composition.build(app)
+    assert tuple(app.routes) == routes
+    assert app.exception_handlers == handlers
+    assert app.router.lifespan_context is lifespan
+    assert app.openapi_schema is None
+    assert not hasattr(app.state, "dishka_container")

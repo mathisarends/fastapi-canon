@@ -132,7 +132,22 @@ The next release containing the breaking changes below must be 0.16.0.
 - `fastapi-canon check composition` and `fastapi-canon inspect` expose the same
   Python APIs in text or versioned JSON, separately from import-free source checks.
 
+### Fixed
+
+- HTTP path collision checks retain converter matching when native telemetry
+  wrappers in FastAPI 0.143.0 omit their cached route regex. Repeated composition
+  builds and late collision checks reconstruct the regex from the effective
+  declared path instead of failing with an AttributeError.
+
 ### Breaking changes
+
+- Composition preflight rejects duplicate effective WebSocket paths across
+  features and existing application routes with `canon.routing.E004`, including
+  native WebSockets colliding with JSON-RPC channels and equivalent parameter
+  names/converters. Before adopting 0.16.0, give each contribution a distinct
+  effective path or remove the duplicate. Changing the endpoint name or channel
+  namespace does not change dispatch. HTTP and WebSocket routes can still share
+  a URL. See [path validation](docs/system-checks.md#findings-and-coverage).
 
 - Composition now rejects ambiguous HTTP method/path contributions with
   `canon.routing.E003`, including hidden routes, existing application routes and

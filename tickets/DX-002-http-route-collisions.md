@@ -1,6 +1,6 @@
 # DX-002: Reject ambiguous HTTP method and path contributions
 
-- Status: In progress
+- Status: Done
 - Priority: P1
 - Kind: Verified bug
 - Baseline: `a366702` (2026-11-05)
@@ -76,6 +76,7 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
   153 warnings on Windows/Python 3.14; PostgreSQL cases need an external database.
   Mypy, Ruff lint/format, changed Smelt and full pre-commit including full Smelt
   passed. Standalone distribution/browser matrices were not run for this
-  composition-validation change. Status stays In progress until merge.
+  composition-validation change. Merged into main in `66afb39`. The combined DX-001/DX-002 suite at
+  merge commit `25a1be9` passed 2,428 tests (26 skipped, 153 warnings).
 - Remaining follow-ups: WebSocket collision validation remains DX-003;
   arbitrary regex-overlap analysis is intentionally outside this check.
