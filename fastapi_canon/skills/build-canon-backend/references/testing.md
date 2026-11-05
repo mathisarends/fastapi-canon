@@ -46,6 +46,32 @@ clients when the public contract or generation behavior changes.
 
 ## Verification decisions
 
+### Composition and operation IDs
+
+The [HTTP walkthrough](http-feature.md) exposes its declaration as
+`backend.app:composition`. Check it before installation:
+
+```console
+uv run fastapi-canon check composition backend.app:composition --format json
+```
+
+Use the actual module exporting a `Composition` object, not an app factory.
+The command imports that module and checks a fresh app without entering lifespan
+or resolving resources. `canon.routing.E002` reports duplicate HTTP/SSE operation
+IDs, their owning features, both effective method/path locations and a hint to
+set distinct `operation_id` values. Text output is also available. Collisions
+exit 1; adding `--require-complete` exits 2 if dependent checks were skipped.
+`Composition.build(app)` raises for these errors as well.
+
+Check both automatic IDs and explicit overrides. Reusing a handler or mounting a
+router under a new URL prefix does not give it a new ID. Rename the function,
+choose a distinct router namespace or explicitly name the separate operation;
+do not append disambiguating suffixes automatically. `fastapi-canon generate`
+also rejects duplicate IDs and SDK naming conflicts before writing output,
+including generation from saved contracts.
+
+### Application gates and error declarations
+
 In the consumer, run the existing lint, typing, test and architecture gates. Where
 Smelt is configured, inspect the affected context before implementation and run
 changed-file plus full policy checks afterwards. Do not transplant Canon's
@@ -58,8 +84,9 @@ uv run fastapi-canon check errors src --strict --require-complete
 ```
 
 Use the actual consumer source root (for example `backend/src`). The checker
-covers direct `APIRouter` HTTP operations; it does not analyze SSE, RPC
-channels or dynamic call graphs. Abstract Dishka ports can leave analysis incomplete. Inspect
+covers supported source paths in `APIRouter` HTTP/SSE/WebRTC operations and
+`RpcChannel` methods. Dynamic calls and abstract Dishka ports can leave analysis
+incomplete. This source analysis is separate from imported composition checks. Inspect
 `CAN001` (missing declaration), `CAN002` (missing mapping) and `CAN003` (unresolved
 analysis) using [error-checking.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/error-checking.md); do not claim complete coverage by
 dropping the completeness flag or adding broad suppressions.

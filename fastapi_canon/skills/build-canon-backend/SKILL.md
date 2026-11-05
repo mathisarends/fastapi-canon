@@ -46,7 +46,11 @@ them. Supporting references are installed beside this file for both agent tools.
   `fastapi_canon.integrations.*` facades. Define each public problem once and
   declare failures with `raises=`, which automatically registers their errors.
 - Use `Composition(features=(...))`; composition arguments are keyword-only.
-  Give operations stable explicit IDs and concrete input/output models.
+  Build the app with `composition.build(app)` and use concrete input/output models.
+- Give HTTP/SSE routers a stable `namespace=` and derive operation IDs from
+  endpoint names. Pin existing public IDs with `operation_id=` when refactoring.
+  Follow [operation naming](references/http-feature.md#operation-ids) and
+  [CLI collision checks](references/testing.md#composition-and-operation-ids).
 - Keep request resources out of streams and background tasks. Load the resource
   reference before changing ownership or transaction boundaries.
 

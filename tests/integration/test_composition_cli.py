@@ -174,3 +174,67 @@ def test_cli_rejects_targets_without_an_installed_composition(
     )
     assert result.returncode == 2
     assert "FastAPI application" in json.loads(result.stdout)["error"]
+
+
+@pytest.mark.parametrize("namespace", [None, "projects"])
+@pytest.mark.parametrize("output_format", ["text", "json"])
+def test_cli_reports_automatic_http_sse_id_collisions(
+    tmp_path: Path, namespace: str | None, output_format: str
+) -> None:
+    (tmp_path / "collision.py").write_text(
+        dedent(f"""
+        from collections.abc import AsyncIterator
+        from fastapi_canon import APIRouter, Composition, Feature
+
+        first = APIRouter(namespace={namespace!r}, prefix="/projects")
+        second = APIRouter(namespace={namespace!r}, prefix="/archive")
+        @first.get("/current")
+        def events() -> str:
+            return "current"
+        @second.sse("/events")
+        async def events() -> AsyncIterator[str]:
+            yield "updated"
+        parent = APIRouter(namespace="ignored", prefix="/v1")
+        parent.include_router(second)
+        composition = Composition(features=[
+            Feature(name="projects", routers=[first]),
+            Feature(name="archive", routers=[parent]),
+        ])
+        """),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "fastapi_canon",
+            "check",
+            "composition",
+            "collision:composition",
+            "--format",
+            output_format,
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 1, result.stdout + result.stderr
+    identity = "projects.events" if namespace is not None else "events"
+    if output_format == "json":
+        report = json.loads(result.stdout)
+        assert report["has_errors"] is True
+        (issue,) = report["issues"]
+        assert issue["code"] == "canon.routing.E002"
+        assert issue["message"] == f"Duplicate operation ID {identity!r}"
+        assert issue["feature_names"] == ["projects", "archive"]
+        assert issue["locations"] == ["GET /projects/current", "GET /v1/archive/events"]
+        assert "operation_id" in issue["hint"]
+    else:
+        assert (
+            f"canon.routing.E002: Duplicate operation ID {identity!r}" in result.stdout
+        )
+        assert "GET /projects/current" in result.stdout
+        assert "GET /v1/archive/events" in result.stdout
+        assert "operation_id" in result.stdout
