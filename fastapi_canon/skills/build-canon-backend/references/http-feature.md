@@ -1,6 +1,6 @@
 # A complete HTTP feature
 
-Runnable Canon 0.13 example; paths are relative to the application's `src/`.
+Runnable HTTP example; paths are relative to the application's `src/`.
 Create empty `__init__.py` files for the other packages. The fixed-record demo
 repository stands in for a persistent adapter. Requires `fastapi-canon` and
 `uvicorn` in the consumer environment.
@@ -162,7 +162,7 @@ public failures. Keep arbitrary exception text out of public details. For shared
 auth use `RouterPolicy` with real dependencies; declarations do not authorize
 requests. For empty/binary success use `CanonResponse.empty()` /
 `CanonResponse.binary(...)` and return the matching response. Details:
-[problems.md](https://github.com/mathisarends/fastapi_canon/blob/fastapi-canon-v0.13.0/docs/problems.md) and [composition.md](https://github.com/mathisarends/fastapi_canon/blob/fastapi-canon-v0.13.0/docs/composition.md).
+[problems.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/problems.md) and [composition.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/composition.md).
 
 ## Feature and application composition
 

@@ -1,7 +1,7 @@
 # Resources, persistence and scopes
 
 Use this before adding a database, changing transactions or moving work into a
-stream, socket or worker. The detailed API authority is [database.md](https://github.com/mathisarends/fastapi_canon/blob/fastapi-canon-v0.13.0/docs/database.md).
+stream, socket or worker. The detailed API authority is [database.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/database.md).
 
 ## Ownership map
 
@@ -11,7 +11,7 @@ stream, socket or worker. The detailed API authority is [database.md](https://gi
 | HTTP function / `Scope.REQUEST` | Session/transaction, repositories, request workflow | Directly injected HTTP service |
 | Independent short scope | Fresh service/repository/session graph for one operation | Stream iteration, worker or long-lived runtime |
 
-In Canon 0.13, HTTP resources close after handler and response validation, before
+HTTP resources close after handler and response validation, before
 the response is sent. The database integration commits a successful scope and
 rolls back an escaping exception, including an exception rendered as a Canon
 problem. Returning an error `Response` is still a successful exit; raise an
