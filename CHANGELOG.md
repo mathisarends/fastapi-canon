@@ -6,6 +6,16 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 The next release containing the breaking changes below must be 0.16.0.
 
+### TL;DR
+
+- Register reusable WebSocket admission functions with `hooks=(function, ...)`.
+  `Inject[T]` obtains their results by return type or resolves application services
+  through DI. The shared `APIRouter.include_channel(...)` forwards these options;
+  specialized WebSocket routers remain supported.
+- Dishka owns resources. Canon closes the admission REQUEST scope before
+  acceptance. Return independently usable context data and put resources needed
+  until disconnect in SESSION-scoped providers.
+
 ### Added
 
 - Root `Inject[T]` is shared by WebSocket and MCP integrations. WebSocket
@@ -13,6 +23,13 @@ The next release containing the breaking changes below must be 0.16.0.
   registrations keyed by return type. Hooks can combine injected services with
   FastAPI path, header and dependency parameters; their results are available
   to connection handlers without becoming public protocol parameters.
+- A shared root `APIRouter` with typed `sse(...)`, reusable
+  `include_channel(..., path=...)` and managed `webrtc(...)` declarations.
+  `RpcChannel()` supports anonymous groups and snapshot-based
+  `include_channel(..., namespace=...)` composition. Existing specialized routers,
+  wire controls and generated-client runtimes remain supported. See
+  [the shared router guide](docs/routers.md).
+
 - Public `fastapi_canon.export_contracts(app)` and `Contracts` snapshot API for
   HTTP/SSE OpenAPI, mounted RPC OpenRPC and WebRTC session contracts. RPC paths
   come from the registered routes, including nested router and mount prefixes;
@@ -45,9 +62,12 @@ The next release containing the breaking changes below must be 0.16.0.
 - WebSocket context preparation with `resolver=Dishka()` now owns a short
   REQUEST scope and closes it before acceptance. Return independently usable
   context data; put connection-lifetime resources in SESSION-scoped providers.
-  Existing `FromDishka[T]` context parameters remain supported. Generator
-  resources belong in Dishka providers, not in `hooks=`. RPC wire formats and
-  generated clients are unchanged.
+  Context `FromDishka[T]` parameters also resolve in this short scope, so code
+  retaining admission resources through an accepted connection must migrate.
+  Existing `FromDishka[T]` syntax remains supported. Move resource ownership to
+  the appropriate Dishka provider and pass immutable IDs or other independent
+  values through the context. Generator resources belong in Dishka providers,
+  not in `hooks=`. RPC wire formats and generated clients are unchanged.
 - Duplicate HTTP operation IDs now fail composition installation. Assign distinct
   `operation_id` values, including across existing app routes and features.
   Split multi-method routes when they would export the same operation ID twice.
@@ -59,8 +79,50 @@ The next release containing the breaking changes below must be 0.16.0.
   the structured `check(app)` report. Configuration failures remain subclasses of
   `FeatureConfigurationError` and include finding codes and remediation hints.
 
+- Composed applications now install the configured validation, HTTP-exception
+  and unhandled-error normalizers even without a domain registry. The fallback
+  problem type base is `urn:fastapi-canon:problem`. To retain application-owned
+  framework handlers, disable the corresponding normalizers through `ErrorOptions`;
+  an already installed registry must use the same options as the composition.
+- Install compositions and error registries before application startup. OpenAPI
+  is validated before application resources open, and operation IDs must be unique.
+  Explicit feature registries supplement automatically collected router registries.
+- Normalized validation and internal failures participate in the documented
+  422/500 problem unions. Regenerate SDKs when adopting these response contracts.
+  These changes require the next minor release when this unreleased work ships.
+- Error installation rejects domain exception classes and codes reserved by the
+  enabled normalizers (`request_validation_error` and `internal_server_error`).
+  Rename domain codes, use application-specific exception classes, or disable the
+  relevant normalizer. Normalization flags must be booleans, and `ErrorOptions`
+  now validates registry names and absolute, query-free, fragment-free type bases
+  at construction instead of accepting invalid values until installation.
+
+### Fixed
+
+- Generated TypeScript SDKs resolve endpoint wire names independently of their
+  camelCase helper exports, including automatically named channel endpoints and
+  explicit names such as `project_session`. Regenerate SDKs to pick up the fix.
+- Handler conflicts are checked before error installation changes the app.
+  Domain errors on ordinary WebSockets use an HTTP problem denial before accept
+  when the server supports it; otherwise they close with 1008 (client failures)
+  or 1011 (server failures), preserving the problem code as the close reason.
+  RPC method failures retain their JSON-RPC problem envelopes.
+- Composition validates contracts before opening lifespan resources and keeps
+  the dependency container alive through feature and router cleanup.
+
 ### Migration
 
+- Use `from fastapi_canon import APIRouter, RpcChannel` for a feature's shared
+  HTTP, SSE, RPC and WebRTC declarations. Mount reusable channel groups with
+  `router.include_channel(channel, path=...)`; the mount captures a snapshot, so
+  later changes to the source group do not alter existing endpoints. Grouped
+  methods share the mounted socket and its path context. For different project
+  IDs, create separately bound SDK clients rather than passing an HTTP path
+  argument to retarget an existing RPC connection. See [routers](docs/routers.md).
+- If an application owns its framework exception handlers, set
+  `ErrorOptions(include_validation_error=False, include_http_exceptions=False,
+  include_unhandled_error=False)` on the composition. Otherwise remove conflicting
+  handlers and let the composed catalog provide the normalized problem responses.
 - Replace application-specific OpenAPI scripts and handwritten mounted RPC URL
   maps with the application export command or root Python API. Existing transport
   commands and standalone `RpcContract` sources remain supported; this addition

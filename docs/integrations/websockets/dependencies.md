@@ -182,6 +182,22 @@ routes = CanonWebSocketRouter(
 ```
 
 The application supplies the domain types and service methods in this example.
+The shared application router forwards the same options for a JSON-RPC channel:
+
+```python
+from fastapi_canon import APIRouter
+
+router = APIRouter(prefix="/projects")
+router.include_channel(
+    session_events,
+    path="/{project_id}/sessions/{session_id}",
+    context=screencast_connection,
+    resolver=Dishka(),
+    hooks=(authorized_project,),
+)
+```
+
+Binary streams and raw sockets retain their specialized WebSocket endpoints.
 Hooks can use normal FastAPI dependencies and path/header/query annotations.
 Their injected dependencies form a graph, independent of tuple order. Each
 reachable hook runs once per context preparation; shared dependencies reuse its

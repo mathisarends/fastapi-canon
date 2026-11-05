@@ -44,10 +44,11 @@ Do not add a Canon UnitOfWork abstraction, an InUnitOfWork annotation, a Hook
 configuration wrapper or a separate resource decorator. Generator providers
 already express resource acquisition and cleanup in Dishka.
 
-## Resume after upstream merges
+## Shared router integration
 
-Refresh origin/main and reconcile the local prototype with the merged router,
-transport and composition APIs before completing implementation. Revisit the
-integration points against that source rather than relying on earlier API
-sketches. Complete documentation and the required verification before opening
-the requested pull request.
+The shared `APIRouter.include_channel(...)` forwards `context=`, `resolver=` and
+`hooks=` to the WebSocket adapter. Applications can use that entry point for
+JSON-RPC channels while retaining specialized endpoints for binary streams and
+raw sockets. The admission graph and resource boundaries are the same for both
+registration styles. Integration tests cover hook reuse, route/header inputs,
+independent connections and cleanup before acceptance through the shared router.

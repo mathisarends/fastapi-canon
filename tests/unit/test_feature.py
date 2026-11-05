@@ -410,8 +410,8 @@ def test_router_lifespans_run_inside_feature_and_dependency_lifetimes() -> None:
         "resource-open",
         "router-stop",
         "feature-stop",
-        "resource-close",
         "app-stop",
+        "resource-close",
     ]
 
 
@@ -578,9 +578,9 @@ def test_composition_installs_success_openapi_without_an_error_registry() -> Non
 
     schema = app.openapi()
 
-    assert schema["paths"]["/ready"]["get"]["responses"] == {
-        "307": {"description": "No content"}
-    }
+    responses = schema["paths"]["/ready"]["get"]["responses"]
+    assert responses["307"] == {"description": "No content"}
+    assert "500" in responses
     assert "x-fastapi-canon" not in str(schema)
 
 

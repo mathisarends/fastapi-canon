@@ -4,7 +4,7 @@ import logging
 from collections.abc import Mapping
 from typing import cast
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket
 from fastapi.exception_handlers import (
     http_exception_handler,
     request_validation_exception_handler,
@@ -14,8 +14,10 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 from starlette.responses import Response
 from starlette.types import ExceptionHandler
+from starlette.websockets import WebSocketState
 
 from fastapi_canon.error.contracts import (
+    INSTALLED_HANDLERS_STATE_KEY,
     INSTALLED_REGISTRY_STATE_KEY,
     ErrorCatalog,
 )
@@ -39,8 +41,30 @@ def install_handlers(
     include_unhandled_error: bool,
 ) -> None:
     """Install handlers once while preserving user-owned handler conflicts."""
+    if not isinstance(app, FastAPI):
+        raise ErrorConfigurationError("app must be a FastAPI instance")
+    options = (
+        include_validation_error,
+        include_http_exceptions,
+        include_unhandled_error,
+    )
+    for name, value in zip(
+        (
+            "include_validation_error",
+            "include_http_exceptions",
+            "include_unhandled_error",
+        ),
+        options,
+        strict=True,
+    ):
+        if not isinstance(value, bool):
+            raise ErrorConfigurationError(f"{name} must be a bool")
     installed = getattr(app.state, INSTALLED_REGISTRY_STATE_KEY, None)
     if installed is registry:
+        if getattr(app.state, INSTALLED_HANDLERS_STATE_KEY, None) != options:
+            raise ErrorConfigurationError(
+                "ErrorRegistry is already installed with different normalization options"
+            )
         return
     if installed is not None:
         msg = "a different ErrorRegistry is already installed on this application"
@@ -48,6 +72,8 @@ def install_handlers(
     if app.openapi_schema is not None:
         msg = "install ErrorRegistry before generating or caching OpenAPI"
         raise ErrorConfigurationError(msg)
+    if app.middleware_stack is not None:
+        raise ErrorConfigurationError("install ErrorRegistry before the app starts")
 
     registry.require_resolved()
     if (
@@ -65,39 +91,71 @@ def install_handlers(
     for exception_class in domain_classes:
         _ensure_handler_available(app, exception_class)
 
-    domain_handler = _domain_handler(registry)
-    for exception_class in domain_classes:
-        app.add_exception_handler(exception_class, domain_handler)
-
     if include_http_exceptions:
         _ensure_default_or_available(app, HTTPException, http_exception_handler)
-        app.add_exception_handler(HTTPException, _http_exception_handler)
     if include_validation_error:
         _ensure_default_or_available(
             app, RequestValidationError, request_validation_exception_handler
         )
-        app.add_exception_handler(
-            RequestValidationError, _request_validation_handler(registry)
-        )
         _ensure_handler_available(app, ResponseValidationError)
-        app.add_exception_handler(
-            ResponseValidationError, _response_validation_handler(registry)
-        )
     if include_unhandled_error:
         _ensure_handler_available(app, Exception)
-        app.add_exception_handler(Exception, _unhandled_handler(registry))
+
+    reserved: set[type[Exception]] = set()
+    if include_http_exceptions:
+        reserved.add(HTTPException)
+    if include_validation_error:
+        reserved.update((RequestValidationError, ResponseValidationError))
+    if include_unhandled_error:
+        reserved.add(Exception)
+    overlap = domain_classes & reserved
+    if overlap:
+        names = ", ".join(sorted(exception.__qualname__ for exception in overlap))
+        raise ErrorConfigurationError(
+            f"domain exceptions conflict with enabled normalization handlers: {names}"
+        )
+    builtin_codes = set()
+    if include_validation_error:
+        builtin_codes.add("request_validation_error")
+    if include_validation_error or include_unhandled_error:
+        builtin_codes.add("internal_server_error")
+    for error in registry.errors:
+        if error.code in builtin_codes:
+            raise ErrorConfigurationError(
+                f"domain error code {error.code!r} conflicts with enabled normalization"
+            )
 
     install_openapi(
         registry,
         app,
         include_validation_error=include_validation_error,
         include_http_exceptions=include_http_exceptions,
+        include_internal_error=include_validation_error or include_unhandled_error,
     )
+    domain_handler = _domain_handler(registry)
+    for exception_class in domain_classes:
+        app.add_exception_handler(exception_class, domain_handler)
+    if include_http_exceptions:
+        app.add_exception_handler(
+            HTTPException, cast(ExceptionHandler, _http_exception_handler)
+        )
+    if include_validation_error:
+        app.add_exception_handler(
+            RequestValidationError, _request_validation_handler(registry)
+        )
+        app.add_exception_handler(
+            ResponseValidationError, _response_validation_handler(registry)
+        )
+    if include_unhandled_error:
+        app.add_exception_handler(Exception, _unhandled_handler(registry))
     setattr(app.state, INSTALLED_REGISTRY_STATE_KEY, registry)
+    setattr(app.state, INSTALLED_HANDLERS_STATE_KEY, options)
 
 
 def _domain_handler(registry: ErrorCatalog) -> ExceptionHandler:
-    async def handler(connection: Request, exception: Exception) -> Response:
+    async def handler(
+        connection: Request | WebSocket, exception: Exception
+    ) -> Response | None:
         error = registry.resolve(exception)
         if error is None:
             raise exception
@@ -115,15 +173,25 @@ def _domain_handler(registry: ErrorCatalog) -> ExceptionHandler:
                     "exception_class": type(exception).__qualname__,
                 },
             )
-            return _internal_error_response(registry, connection)
-        return _problem_response(
-            connection, problem.as_dict(), error.status, headers=headers
+            return await _connection_response(
+                connection,
+                _internal_error_response(registry, connection),
+                code="internal_server_error",
+            )
+        return await _connection_response(
+            connection,
+            _problem_response(
+                connection, problem.as_dict(), error.status, headers=headers
+            ),
+            code=error.code,
         )
 
     return cast(ExceptionHandler, handler)
 
 
-async def _http_exception_handler(request: Request, exception: Exception) -> Response:
+async def _http_exception_handler(
+    request: Request | WebSocket, exception: Exception
+) -> Response | None:
     if not isinstance(exception, HTTPException):
         raise exception
     status = exception.status_code
@@ -137,11 +205,15 @@ async def _http_exception_handler(request: Request, exception: Exception) -> Res
     }
     if detail is not None:
         payload["detail"] = detail
-    return _problem_response(request, payload, status, headers=exception.headers)
+    return await _connection_response(
+        request,
+        _problem_response(request, payload, status, headers=exception.headers),
+        code=f"http_{status}",
+    )
 
 
 def _request_validation_handler(registry: ErrorCatalog) -> ExceptionHandler:
-    async def handler(request: Request, exception: Exception) -> Response:
+    async def handler(request: Request | WebSocket, exception: Exception) -> Response:
         if not isinstance(exception, RequestValidationError):
             raise exception
         errors: list[JsonValue] = []
@@ -160,7 +232,7 @@ def _request_validation_handler(registry: ErrorCatalog) -> ExceptionHandler:
 
 
 def _response_validation_handler(registry: ErrorCatalog) -> ExceptionHandler:
-    async def handler(request: Request, exception: Exception) -> Response:
+    async def handler(request: Request | WebSocket, exception: Exception) -> Response:
         if not isinstance(exception, ResponseValidationError):
             raise exception
         logger.error(
@@ -173,7 +245,7 @@ def _response_validation_handler(registry: ErrorCatalog) -> ExceptionHandler:
 
 
 def _unhandled_handler(registry: ErrorCatalog) -> ExceptionHandler:
-    async def handler(request: Request, exception: Exception) -> Response:
+    async def handler(request: Request | WebSocket, exception: Exception) -> Response:
         # ServerErrorMiddleware re-raises after sending this response; Uvicorn
         # owns that traceback. Only exceptions consumed here need a local log.
         return _internal_error_response(registry, request)
@@ -202,7 +274,9 @@ def _escape_pointer(value: object) -> str:
     return str(value).replace("~", "~0").replace("/", "~1")
 
 
-def _internal_error_response(registry: ErrorCatalog, request: Request) -> Response:
+def _internal_error_response(
+    registry: ErrorCatalog, request: Request | WebSocket
+) -> Response:
     return _problem_response(
         request,
         {
@@ -223,7 +297,7 @@ def _builtin_type(registry: ErrorCatalog, code: str) -> str:
 
 
 def _problem_response(
-    request: Request,
+    request: Request | WebSocket,
     payload: dict[str, JsonValue],
     status: int,
     *,
@@ -264,3 +338,24 @@ def _ensure_default_or_available(
             f"{exception_class.__qualname__}"
         )
         raise ErrorConfigurationError(msg)
+
+
+async def _connection_response(
+    connection: Request | WebSocket, response: Response, *, code: str
+) -> Response | None:
+    if not isinstance(connection, WebSocket):
+        return response
+    if connection.application_state == WebSocketState.DISCONNECTED:
+        return None
+    if (
+        connection.application_state == WebSocketState.CONNECTING
+        and "websocket.http.response" in connection.scope.get("extensions", {})
+    ):
+        await connection.send_denial_response(response)
+    else:
+        # A WebSocket close is a different transport from an HTTP response.
+        # Preserve the stable problem code without inventing an application frame.
+        await connection.close(
+            code=1011 if response.status_code >= 500 else 1008, reason=code[:123]
+        )
+    return None

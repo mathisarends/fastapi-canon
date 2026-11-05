@@ -41,6 +41,21 @@ has its own role and must not import sibling transports or eagerly load optional
 engines. Generators may read protocol contracts. Repository scripts sit outside
 the runtime package and may orchestrate its supported integrations.
 
+`api_router.py` belongs to composition. Its public `APIRouter` builds on the core
+HTTP router and lazily delegates SSE, RPC and WebRTC declarations to their existing
+adapters. Composition explicitly permits the SSE dependency alongside RPC and
+WebRTC. Core routing does not depend back on transports. Included RPC channels
+are independent snapshots, preserving their functions, errors and resolver scopes.
+The application layer retains the corresponding transitive SSE edge when
+consuming the root facade, alongside its existing RPC and WebRTC edges.
+`public_exports.py` owns lazy root lookups for optional integrations. Its outer
+exports role may reach the integrations it exposes. Applications, showcases and
+development/generation entrypoints may consume that role; lower runtime layers
+cannot. Database implementation modules import their lower-level definitions
+directly instead of depending back on the root's optional export lookup. The root
+remains a re-export-only facade, and core imports do not load RPC, database or
+media runtimes.
+
 `contracts.py` belongs to composition and coordinates the existing RPC and WebRTC
 contract renderers with native HTTP/SSE OpenAPI. This adds an explicit composition
 dependency on WebRTC and its AnyIO lifecycle types; consumers of the root facade

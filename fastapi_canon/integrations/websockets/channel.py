@@ -89,15 +89,15 @@ class RpcChannel:
         raises: Iterable[RpcErrorDeclaration] = (),
         resolver_scope: RpcResolverScope = call_scope,
     ) -> None:
-        if name is None and namespace is None:
-            raise ProtocolDefinitionError("RpcChannel needs a name or namespace")
         resolved_namespace = (
-            normalize_namespace(name)
+            (normalize_namespace(name) if name is not None else "")
             if namespace is None
             else normalize_namespace(namespace)
         )
         self._name = (
-            normalize_namespace(name) if name is not None else resolved_namespace
+            normalize_namespace(name)
+            if name is not None
+            else resolved_namespace or "channel"
         )
         if not self._name:
             raise ProtocolDefinitionError("RPC channel name cannot be empty")
@@ -518,6 +518,43 @@ class RpcChannel:
         self._children.append(child)
         return child
 
+    def include_channel(self, channel: "RpcChannel", *, namespace: str = "") -> None:
+        """Include an independent snapshot under a relative namespace.
+
+        The namespace replaces the included channel's root namespace. Nested
+        child namespaces, handler functions, error mappings and scopes are kept.
+        Later registrations on the original channel do not change this snapshot.
+        """
+        self._ensure_mutable()
+        if not isinstance(channel, RpcChannel):
+            raise ProtocolDefinitionError("include_channel expects an RpcChannel")
+        if channel is self:
+            raise ProtocolDefinitionError("A channel cannot include itself")
+        if not isinstance(namespace, str):
+            raise ProtocolDefinitionError("RPC namespace must be a string")
+        namespace = normalize_namespace(namespace)
+        snapshot = channel._snapshot(join_rpc_name(self.namespace, namespace))
+        names = _channel_names(self)
+        included = _channel_names(snapshot)
+        duplicates = names.intersection(included)
+        if duplicates:
+            raise ProtocolDefinitionError(
+                f"Duplicate RPC route: {', '.join(sorted(duplicates))}"
+            )
+        combined = names | included
+        for name in combined:
+            segments = name.split(".")
+            if any(".".join(segments[:i]) in combined for i in range(1, len(segments))):
+                raise ProtocolDefinitionError(
+                    f"RPC name {name!r} conflicts with an operation namespace"
+                )
+        controls = _channel_controls(self) | _channel_controls(snapshot)
+        if overlap := controls.intersection(combined):
+            raise ProtocolDefinitionError(
+                f"RPC stream control collides with an operation: {sorted(overlap)[0]}"
+            )
+        self._children.append(snapshot)
+
     def freeze(self) -> RpcProtocol:
         if self._protocol is None:
             definitions = [
@@ -596,9 +633,46 @@ class RpcChannel:
         )
 
     def _reserve(self, name: str) -> None:
-        if name in self._names:
+        included_controls = set().union(
+            *(_channel_controls(child) for child in self.children)
+        )
+        if name in _channel_names(self) or name in included_controls:
             raise ProtocolDefinitionError(f"Duplicate RPC route: {name}")
         self._names.add(name)
+
+    def _snapshot(self, namespace: str) -> "RpcChannel":
+        snapshot = RpcChannel(
+            self.name,
+            namespace=namespace,
+            error_registry=self.error_registry,
+            raises=self.raises,
+            resolver_scope=self.resolver_scope,
+        )
+
+        def rename(name: str) -> str:
+            local = name[len(self.namespace) + 1 :] if self.namespace else name
+            return join_rpc_name(namespace, local)
+
+        snapshot._routes = [
+            replace(route, name=rename(route.name)) for route in self.routes
+        ]
+        snapshot._events = [
+            replace(event, name=rename(event.name)) for event in self.events
+        ]
+        snapshot._subscriptions = [
+            replace(stream, name=rename(stream.name)) for stream in self.subscriptions
+        ]
+        snapshot._streams = [
+            replace(stream, name=rename(stream.name)) for stream in self.streams
+        ]
+        snapshot._sockets = [
+            replace(socket, name=rename(socket.name)) for socket in self.sockets
+        ]
+        snapshot._names = {rename(name) for name in self._names}
+        snapshot._children = [
+            child._snapshot(rename(child.namespace)) for child in self.children
+        ]
+        return snapshot
 
     def _validate_function(self, function: Any, kind: str, *, coroutine: bool) -> None:
         if not isinstance(function, FunctionType) or not _is_free_function(function):
@@ -641,6 +715,18 @@ def _name(value: object, kind: str) -> str:
     ):
         raise ProtocolDefinitionError(f"Invalid RPC {kind}: {value!r}")
     return value
+
+
+def _channel_names(channel: RpcChannel) -> set[str]:
+    return channel._names.union(*(_channel_names(child) for child in channel.children))
+
+
+def _channel_controls(channel: RpcChannel) -> set[str]:
+    return {
+        f"{stream.name}.{suffix}"
+        for stream in channel.subscriptions
+        for suffix in ("open", "cancel")
+    }.union(*(_channel_controls(child) for child in channel.children))
 
 
 def _is_free_function(function: FunctionType) -> bool:

@@ -9,7 +9,7 @@ from fastapi import FastAPI, Header, WebSocket
 from fastapi.testclient import TestClient
 from starlette.testclient import WebSocketDenialResponse
 
-from fastapi_canon import Composition, Feature, Inject
+from fastapi_canon import APIRouter, Composition, Feature, Inject
 from fastapi_canon.integrations.websockets import (
     CanonWebSocketRouter,
     RpcChannel,
@@ -37,7 +37,7 @@ class Denied(Exception):
     pass
 
 
-@pytest.mark.parametrize("transport", ["rpc", "stream", "custom"])
+@pytest.mark.parametrize("transport", ["rpc", "stream", "custom", "shared"])
 def test_hooks_share_values_and_close_resources_before_serving(transport: str) -> None:
     events: list[str] = []
     resources: list[Resolver] = []
@@ -81,7 +81,9 @@ def test_hooks_share_values_and_close_resources_before_serving(transport: str) -
         assert connection.access is access
         return access.project_id
 
-    @channel.stream(content_type="application/octet-stream")
+    streams = RpcChannel("frames")
+
+    @streams.stream(content_type="application/octet-stream")
     async def frames(connection: Inject[Connection]) -> AsyncIterator[bytes]:
         yield str(connection.access.project_id).encode()
 
@@ -91,20 +93,32 @@ def test_hooks_share_values_and_close_resources_before_serving(transport: str) -
         await websocket.send_json(connection.access.project_id)
         await websocket.close()
 
-    router = CanonWebSocketRouter(
-        context=context,
-        hooks=(authorize,),
-        resolver=Dishka(),
-        before_accept=before_accept,
-    )
-    if transport == "stream":
-        router.stream("/projects/{project_id}", frames)
-    else:
-        router.socket(
-            "/projects/{project_id}",
-            channels=(channel,),
-            serve=serve if transport == "custom" else None,
+    router: APIRouter | CanonWebSocketRouter
+    if transport == "shared":
+        router = APIRouter(prefix="/projects")
+        router.include_channel(
+            channel,
+            path="/{project_id}",
+            context=context,
+            hooks=(authorize,),
+            resolver=Dishka(),
+            before_accept=before_accept,
         )
+    else:
+        router = CanonWebSocketRouter(
+            context=context,
+            hooks=(authorize,),
+            resolver=Dishka(),
+            before_accept=before_accept,
+        )
+        if transport == "stream":
+            router.stream("/projects/{project_id}", frames)
+        else:
+            router.socket(
+                "/projects/{project_id}",
+                channels=(channel,),
+                serve=serve if transport == "custom" else None,
+            )
     app = Composition(
         features=(
             Feature(name="projects", routers=(router,), providers=(Resources(),)),
@@ -115,7 +129,7 @@ def test_hooks_share_values_and_close_resources_before_serving(transport: str) -
         with client.websocket_connect(
             "/projects/7", headers={"X-Token": "allowed"}
         ) as socket:
-            if transport == "rpc":
+            if transport in ("rpc", "shared"):
                 socket.send_json(
                     {"jsonrpc": "2.0", "id": 1, "method": "projects.identifier"}
                 )
@@ -127,7 +141,7 @@ def test_hooks_share_values_and_close_resources_before_serving(transport: str) -
         with client.websocket_connect(
             "/projects/8", headers={"X-Token": "allowed"}
         ) as socket:
-            if transport == "rpc":
+            if transport in ("rpc", "shared"):
                 socket.send_json(
                     {"jsonrpc": "2.0", "id": 2, "method": "projects.identifier"}
                 )

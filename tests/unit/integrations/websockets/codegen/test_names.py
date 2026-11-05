@@ -1,4 +1,8 @@
+import json
+import shutil
+import subprocess
 from copy import deepcopy
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -23,6 +27,84 @@ def test_identifier_styles_handle_acronyms_stably() -> None:
     assert snake_case("HTTPStatus") == "http_status"
     assert camel_case("parseURL") == "parseUrl"
     assert pascal_case("browser-nav") == "BrowserNav"
+
+
+def test_typescript_resolves_wire_server_names_and_preserves_public_helpers(
+    document: dict[str, Any],
+    tmp_path: Path,
+) -> None:
+    deployed = deepcopy(document)
+    deployed["servers"] = [
+        {
+            "name": name,
+            "url": f"wss://example.test/{{project_id}}/{name}",
+            "variables": {"project_id": {"default": "42"}},
+        }
+        for name in (
+            "primary",
+            "project_session",
+            "task-session",
+            "rpc_projects_project_id_session",
+        )
+    ]
+    files = render_typescript_client(deployed, TypeScriptClientOptions())
+    endpoint_source = tmp_path / "endpoints.ts"
+    endpoint_source.write_text(files["endpoints.ts"], encoding="utf-8")
+    (tmp_path / "package.json").write_text('{"type":"commonjs"}', encoding="utf-8")
+    node = shutil.which("node")
+    compiler = Path(__file__).resolve().parents[5] / "node_modules/typescript/bin/tsc"
+    if node is None or not compiler.is_file():
+        pytest.skip("Node.js and the installed TypeScript compiler are required")
+    compiled = subprocess.run(
+        [
+            node,
+            str(compiler),
+            "--strict",
+            "--target",
+            "ES2022",
+            "--module",
+            "commonjs",
+            "--lib",
+            "ES2022,DOM",
+            "--outDir",
+            str(tmp_path / "js"),
+            str(endpoint_source),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert compiled.returncode == 0, compiled.stdout + compiled.stderr
+    runner = tmp_path / "check.cjs"
+    runner.write_text(
+        'const {resolveEndpoints, servers, endpoints} = require("./js/endpoints.js");\n'
+        "console.log(JSON.stringify({\n"
+        "  resolved: Object.fromEntries(\n"
+        '    resolveEndpoints({project_id: "42"}).map(e => [e.server, e.url])),\n'
+        "  publicName: servers.projectSession.name,\n"
+        '  helperName: endpoints.projectSession({project_id: "42"}).server,\n'
+        "}));\n",
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [node, str(runner)],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert json.loads(result.stdout) == {
+        "resolved": {
+            "primary": "wss://example.test/42/primary",
+            "project_session": "wss://example.test/42/project_session",
+            "task-session": "wss://example.test/42/task-session",
+            "rpc_projects_project_id_session": "wss://example.test/42/rpc_projects_project_id_session",
+        },
+        "publicName": "project_session",
+        "helperName": "project_session",
+    }
 
 
 def test_api_aliases_cannot_merge_distinct_wire_paths(

@@ -30,9 +30,10 @@ The generated API follows your domain: `client.projects.get()`,
 | --- | --- |
 | `Feature` + `Composition` | Ordered router/provider installation, one Dishka container and managed startup/shutdown. |
 | `Error` + `ErrorRegistry` + `raises=` | Shared public problem definitions for runtime responses, contracts and generated SDKs. |
-| `CanonRouter` + `CanonResponse` | Familiar FastAPI routes with composable error and success contracts, including JSON, empty and binary responses. |
-| `CanonStreamRouter` | Typed SSE events, declared terminal problems and explicit completion, consumed through async iteration. |
-| `RpcChannel` + `CanonWebSocketRouter` | Typed WebSocket RPC methods, notifications, message streams and declared socket/binary sessions. |
+| `APIRouter` + `CanonResponse` | Familiar FastAPI routes with composable error and success contracts, including JSON, empty and binary responses. |
+| `router.sse(...)` | Typed SSE events, declared terminal problems and explicit completion, consumed through async iteration. |
+| `RpcChannel` + `router.include_channel(...)` | Compose methods and message streams under namespaces, then mount them on one WebSocket path. |
+| `router.webrtc(...)` | WebRTC session factories with signaling, admission and resource cleanup. |
 | `fastapi-canon generate` | One domain SDK per target, shared models/errors, internal protocol bindings and drift checks. |
 | `export_contracts(app)` / `fastapi-canon contracts export` | Export registered HTTP/SSE, RPC and WebRTC contracts from one composed app. |
 | `fastapi-canon check errors` | Source analysis for missing error mappings/declarations, with explicit incomplete-analysis diagnostics. |
@@ -40,6 +41,8 @@ The generated API follows your domain: `client.projects.get()`,
 | Optional WebRTC and telemetry | Typed media-session contracts and explicit OpenTelemetry instrumentation at the composition boundary. |
 
 The [public API guide](docs/canon.md) maps these responsibilities to imports.
+The [shared router guide](docs/routers.md) shows HTTP, SSE, RPC and WebRTC on one
+`from fastapi_canon import APIRouter`, including reusable channel composition.
 
 ## Install
 
@@ -73,7 +76,7 @@ mapping drives both the HTTP response and the exported operation contract.
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from fastapi_canon import CanonRouter, Composition, Error, ErrorRegistry, Feature
+from fastapi_canon import APIRouter, Composition, Error, ErrorRegistry, Feature
 
 
 class ProjectMissing(Exception):
@@ -94,7 +97,7 @@ project_missing = Error(
 errors = ErrorRegistry(
     errors=[project_missing], type_base="https://api.example.com/problems"
 )
-http = CanonRouter(error_registry=errors)
+http = APIRouter(error_registry=errors)
 
 
 def require_project(project_id: int) -> None:
@@ -141,16 +144,13 @@ Add a stream to `src/app.py`, reusing the error registry and lookup above:
 from collections.abc import AsyncIterator
 
 from fastapi import Depends
-from fastapi_canon.integrations.sse import CanonStreamRouter
-
-streams = CanonStreamRouter(error_registry=errors)
 
 
 class ProjectEvent(BaseModel):
     sequence: int
 
 
-@streams.stream(
+@http.sse(
     "/projects/{project_id}/events",
     operation_id="projects.events",
     dependencies=[Depends(require_project)],
@@ -184,7 +184,7 @@ See [Canon stream contracts](docs/streams.md),
 Add a WebSocket method using the same public error definition:
 
 ```python
-from fastapi_canon.integrations.websockets import RpcChannel, CanonWebSocketRouter
+from fastapi_canon import RpcChannel
 
 projects = RpcChannel("projects", error_registry=errors)
 
@@ -198,20 +198,17 @@ async def cancel(params: CancelProject) -> None:
     require_project(params.project_id)
 
 
-websockets = CanonWebSocketRouter("/ws", channels=[projects])
+http.include_channel(projects, path="/ws")
 ```
 
 After all route declarations, replace the original composition block with this
-one to install all three routers and expose the OpenRPC source for generation:
+one to install the shared router for HTTP, SSE and RPC:
 
 ```python
-feature = Feature(name="projects", routers=[http, streams, websockets])
+feature = Feature(name="projects", routers=[http])
 composition = Composition(features=(feature,))
 app = composition.apply(FastAPI())
 composition.validate(app)
-contract = websockets.contract(
-    title="Projects", base_url="ws://localhost:8000", app=app
-)
 ```
 
 Install a server and run the application from the project root:
@@ -247,7 +244,7 @@ output = "contracts/openapi.json"
 
 [codegen.sources.control]
 kind = "openrpc"
-source = "src.app:contract"
+source = "src.app:app"
 output = "contracts/openrpc.json"
 
 [codegen.targets.browser]

@@ -4,6 +4,7 @@ from http import HTTPMethod
 from typing import TYPE_CHECKING
 
 from ._version import __version__
+from .api_router import APIRouter
 from .contracts import Contracts, export_contracts
 from .diagnostics import (
     CheckContext,
@@ -18,6 +19,7 @@ from .diagnostics import (
     OperationInfo,
 )
 from .error import Error, ErrorConfigurationError, ErrorRegistry, Problem
+from .exceptions import ConfigurationError
 from .feature import (
     Composition,
     ErrorOptions,
@@ -29,9 +31,9 @@ from .feature import (
     RouterFactory,
 )
 from .injection import Inject
-from .integrations.database import __getattr__ as __getattr__
 from .openapi import install_openapi_contracts, validate_openapi_contracts
 from .policy import RouterPolicy
+from .public_exports import __getattr__ as __getattr__
 from .response import CanonResponse, ResponseConfigurationError, ResponseHeaders
 from .router import CanonRouter
 from .scopes import ServiceScope
@@ -43,8 +45,10 @@ if TYPE_CHECKING:
         TransactionLocks,
         run_alembic_environment,
     )
+    from .integrations.websockets import RpcChannel
 
 __all__ = [
+    "APIRouter",
     "AlembicMigrations",
     "CanonResponse",
     "CanonRouter",
@@ -54,6 +58,7 @@ __all__ = [
     "CheckResult",
     "Composition",
     "CompositionInfo",
+    "ConfigurationError",
     "Contracts",
     "Database",
     "DependencyInfo",
@@ -77,6 +82,7 @@ __all__ = [
     "ResponseHeaders",
     "RouterFactory",
     "RouterPolicy",
+    "RpcChannel",
     "ServiceScope",
     "TransactionLocks",
     "__version__",
