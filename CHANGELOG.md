@@ -134,6 +134,14 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Breaking changes
 
+- Composition preflight rejects duplicate effective WebSocket paths across
+  features and existing application routes with `canon.routing.E004`, including
+  native WebSockets colliding with JSON-RPC channels and equivalent parameter
+  names/converters. Before adopting 0.16.0, give each contribution a distinct
+  effective path or remove the duplicate. Changing the endpoint name or channel
+  namespace does not change dispatch. HTTP and WebSocket routes can still share
+  a URL. See [path validation](docs/system-checks.md#findings-and-coverage).
+
 - Provider-factory analysis in `fastapi-canon check errors` now follows local
   reassignments, aliases and conditional return/yield paths in execution order.
   Strict checks can fail for previously missed implementation errors; unmodeled

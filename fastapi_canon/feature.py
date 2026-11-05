@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field, replace
@@ -10,7 +11,7 @@ from dishka import AsyncContainer, Provider, make_async_container
 from dishka.entities.key import DependencyKey
 from dishka.exceptions import DishkaError  # type: ignore[attr-defined]  # not exported
 from fastapi import APIRouter, FastAPI
-from starlette.routing import Match
+from starlette.routing import Match, WebSocketRoute, compile_path
 from starlette.types import ExceptionHandler, Lifespan
 from starlette.types import Scope as ASGIScope
 
@@ -368,6 +369,12 @@ class _MaterializedProvider:
     provider: Provider
 
 
+class _WebSocketPathError(FeatureConfigurationError):
+    def __init__(self, issue: CheckIssue) -> None:
+        super().__init__(issue.message)
+        self.issue = issue
+
+
 def _apply_composition(app: FastAPI, composition: Composition) -> None:
     raw_app: object = app
     if not isinstance(raw_app, FastAPI):
@@ -521,8 +528,10 @@ def _prepare_composition(app: FastAPI, composition: Composition) -> _Preparation
         except (ErrorConfigurationError, ModuleNotFoundError) as error:
             if isinstance(error, ModuleNotFoundError):
                 missing_dependencies.append(error)
-            issues.append(
-                CheckIssue(
+            if isinstance(error, _WebSocketPathError):
+                issue = error.issue
+            else:
+                issue = CheckIssue(
                     code,
                     str(error),
                     hint,
@@ -535,7 +544,7 @@ def _prepare_composition(app: FastAPI, composition: Composition) -> _Preparation
                     if name == "providers"
                     else (),
                 )
-            )
+            issues.append(issue)
             checks.append(CheckResult(name, "failed"))
             return None, False
         checks.append(CheckResult(name, "passed"))
@@ -551,7 +560,7 @@ def _prepare_composition(app: FastAPI, composition: Composition) -> _Preparation
         "http.routers",
         "canon.routing.E001",
         "Contribute each router once and return a fresh empty application router.",
-        lambda: _prepare_feature_routers(composition),
+        lambda: _prepare_feature_routers(app, composition),
     )
     if routers_ok and routers is not None and composition.mcp is not None:
         mcp_path = composition.mcp.path
@@ -686,13 +695,51 @@ def _validate_runtime_options(app: FastAPI, composition: Composition) -> None:
         composition.telemetry._prepare(app)
 
 
-def _prepare_feature_routers(composition: Composition) -> tuple[APIRouter, ...]:
+def _prepare_feature_routers(
+    app: FastAPI, composition: Composition
+) -> tuple[APIRouter, ...]:
     _reject_duplicate_contributions(composition.features, "routers", "router")
     return _prepare_routers(
         _flatten_routers(composition.features),
         composition.router_factory,
         composition.router_policy,
+        lambda prefix: _validate_websocket_paths(app, composition.features, prefix),
     )
+
+
+def _validate_websocket_paths(
+    app: FastAPI, features: tuple[Feature, ...], prefix: str
+) -> None:
+    sources = [("<application>", "", app.router)]
+    sources.extend(
+        (feature.name, app.router.prefix + prefix, router)
+        for feature in features
+        for router in feature.routers
+    )
+    seen: dict[str, tuple[str, str, str]] = {}
+    for owner, shared_prefix, router in sources:
+        for path, route in iter_contract_routes(router.routes, include_mounts=False):
+            if not isinstance(getattr(route, "original_route", route), WebSocketRoute):
+                continue
+            path = shared_prefix + path
+            # Keep converter behavior while erasing declaration-only parameter names.
+            pattern = compile_path(shared_prefix + route.path)[0].pattern
+            key = re.sub(r"\(\?P<[^>]+>", "(?:", pattern)
+            name = route.name
+            location = f"WEBSOCKET {path} ({name})"
+            previous = seen.get(key)
+            if previous is not None:
+                raise _WebSocketPathError(
+                    CheckIssue(
+                        "canon.routing.E004",
+                        f"Duplicate WebSocket path {path!r}: {previous[0]!r} "
+                        f"({previous[2]}) and {owner!r} ({name})",
+                        "Use distinct effective WebSocket paths or remove the duplicate contribution.",
+                        feature_names=tuple(dict.fromkeys((previous[0], owner))),
+                        locations=(previous[1], location),
+                    )
+                )
+            seen[key] = (owner, location, name)
 
 
 def _validate_mcp_routes(
@@ -1158,8 +1205,9 @@ def _prepare_routers(
     routers: tuple[APIRouter, ...],
     router_factory: RouterFactory | None,
     router_policy: RouterPolicy | None,
+    validate_paths: Callable[[str], None],
 ) -> tuple[APIRouter, ...]:
-    prepared = _prepare_application_router(routers, router_factory)
+    prepared = _prepare_application_router(routers, router_factory, validate_paths)
     if router_policy is None or not router_policy.dependencies:
         return prepared
     wrapper = APIRouter(dependencies=list(router_policy.dependencies))
@@ -1169,9 +1217,12 @@ def _prepare_routers(
 
 
 def _prepare_application_router(
-    routers: tuple[APIRouter, ...], router_factory: RouterFactory | None
+    routers: tuple[APIRouter, ...],
+    router_factory: RouterFactory | None,
+    validate_paths: Callable[[str], None],
 ) -> tuple[APIRouter, ...]:
     if router_factory is None:
+        validate_paths("")
         return routers
     try:
         wrapper: object = router_factory()
@@ -1184,6 +1235,7 @@ def _prepare_application_router(
     if wrapper.routes:
         msg = "router_factory must return a fresh APIRouter without routes"
         raise FeatureConfigurationError(msg)
+    validate_paths(wrapper.prefix)
     try:
         for router in routers:
             wrapper.include_router(router)

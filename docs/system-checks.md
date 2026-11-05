@@ -78,6 +78,7 @@ application behavior. Independent failures can appear together.
 | `canon.composition.E001` | Installation timing, conflicting installation or integration options. |
 | `canon.routing.E001` | Repeated router contributions or an invalid router factory. |
 | `canon.routing.E002` | Duplicate HTTP operation IDs, including collisions with existing app routes. |
+| `canon.routing.E004` | Duplicate effective WebSocket paths across features or existing app routes. |
 | `canon.mcp.E001` | An application or feature HTTP route shadows the MCP endpoint. |
 | `canon.mcp.E002` | An MCP auth or middleware factory cannot be constructed. |
 | `canon.handlers.E001` | Exception-handler conflicts. |
@@ -87,12 +88,26 @@ application behavior. Independent failures can appear together.
 | `canon.contracts.E001` | HTTP/OpenAPI response contracts cannot be compiled. |
 | `canon.checks.E001` | A feature check failed to return valid findings. |
 
-Built-in checks validate composition configuration, the provider graph and HTTP
-contracts. They do not infer whether a dependency enforces authentication, require
+Built-in checks validate composition configuration, the provider graph, HTTP
+contracts and registered WebSocket path uniqueness during preflight. They do not
+infer whether a dependency enforces authentication, require
 authentication on every route, prove exception coverage, or validate the runtime
 behavior of RPC, SSE event bodies, WebRTC, MCP or application services. An SSE
 route's HTTP admission surface is included when represented by an HTTP route.
 Database/deployment probes remain explicit operations outside this profile.
+
+WebSocket path preflight includes native routes and JSON-RPC channels across
+features, nested routers and existing application routes. A shared
+`router_factory` prefix is included, and its factory is called only once per
+preparation. `canon.routing.E004` identifies both owners and endpoint names
+before routes or a container are installed. Parameter names do not distinguish
+routes; converter equivalence means identical compiled regex structure after
+named capture labels are removed. Default and explicit `str` converters are
+equivalent on native routes. This does not extend JSON-RPC's supported path syntax
+or attempt arbitrary overlap analysis. HTTP and WebSocket URLs are separate ASGI
+scope types. Mounted subapplications remain separate ownership boundaries.
+Checks of an already installed app retain the HTTP-oriented snapshot profile;
+declare WebSocket contributions before building a new app to run this preflight.
 
 ## Explain the installed HTTP composition
 

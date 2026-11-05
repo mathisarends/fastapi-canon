@@ -1,6 +1,6 @@
 # DX-003: Reject duplicate WebSocket paths across features
 
-- Status: Open
+- Status: In progress
 - Priority: P1
 - Kind: Verified bug
 - Baseline: `a366702` (2026-11-05)

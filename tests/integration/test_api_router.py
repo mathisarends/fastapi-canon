@@ -9,6 +9,7 @@ import pytest
 from dishka import Provider, Scope, provide
 from fastapi import Depends, FastAPI, WebSocket
 from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 from pydantic import BaseModel
 from starlette.types import Message
 
@@ -498,6 +499,48 @@ def test_duplicate_websocket_paths_fail_before_mutating_routes() -> None:
     with pytest.raises(ConfigurationError, match="Duplicate WebSocket path"):
         router.include_channel(RpcChannel(), path="/{other_id}/session")
     assert tuple(router.routes) == routes
+
+
+def test_separate_websocket_urls_and_shared_http_urls_remain_reachable() -> None:
+    first = APIRouter()
+    second = APIRouter()
+    first.get("/one", operation_id="http.one")(lambda: "http")
+    channel = RpcChannel()
+
+    @channel.method("read")
+    async def read() -> str:
+        return "rpc"
+
+    first.include_channel(channel, path="/one")
+
+    @second.websocket("/two")
+    async def native(websocket: WebSocket) -> None:
+        await websocket.accept()
+        await websocket.send_text("native")
+        await websocket.receive()
+
+    composition = Composition(
+        features=[
+            Feature(name="one", routers=[first]),
+            Feature(name="two", routers=[second]),
+        ]
+    )
+    app = composition.build(FastAPI())
+
+    async def scenario() -> None:
+        async with asyncio.timeout(5), app.router.lifespan_context(app):
+            async with _connection(app, "/one") as (incoming, outgoing):
+                await _send(incoming, 1, "read")
+                assert (await _receive(outgoing))["result"] == "rpc"
+            async with _connection(app, "/two") as (_, outgoing):
+                assert (await outgoing.get())["text"] == "native"
+            async with AsyncClient(
+                transport=ASGITransport(app), base_url="http://test", timeout=5
+            ) as client:
+                assert (await client.get("/one")).json() == "http"
+
+    asyncio.run(scenario())
+    assert not composition.check(app).has_errors
 
 
 def test_application_shutdown_closes_active_webrtc_sessions() -> None:
