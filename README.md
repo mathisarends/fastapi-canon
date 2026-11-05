@@ -17,6 +17,7 @@ The generated API follows your domain: `client.projects.get()`,
 - [Core API: routes, errors and composition](#core-api-routes-errors-and-composition)
 - [Streams: typed events from server to SDK](#streams-typed-events-from-server-to-sdk)
 - [WebSockets: RPC calls as domain methods](#websockets-rpc-calls-as-domain-methods)
+- [MCP features](#mcp-features)
 - [Generate and use the SDK](#generate-and-use-the-sdk)
 - [Check that errors are mapped and declared](#check-that-errors-are-mapped-and-declared)
 - [Documentation](#documentation)
@@ -70,7 +71,9 @@ Python 3.12–3.14 is supported; see [compatibility](docs/compatibility.md).
 ## Core API: routes, errors and composition
 
 Save this as `src/app.py`. A domain exception stays ordinary Python; its public
-mapping drives both the HTTP response and the exported operation contract.
+mapping drives both the HTTP response and the exported operation contract. The
+next sections add a stream and an RPC method to the same router; keep the
+composition block at the end of the file and add them above it.
 
 ```python
 from fastapi import FastAPI
@@ -97,7 +100,7 @@ project_missing = Error(
 errors = ErrorRegistry(
     errors=[project_missing], type_base="https://api.example.com/problems"
 )
-http = APIRouter(error_registry=errors)
+router = APIRouter(error_registry=errors)
 
 
 def require_project(project_id: int) -> None:
@@ -105,7 +108,7 @@ def require_project(project_id: int) -> None:
         raise ProjectMissing()
 
 
-@http.get(
+@router.get(
     "/projects/{project_id}",
     operation_id="projects.get",
     response_model=Project,
@@ -116,12 +119,14 @@ async def get_project(project_id: int) -> dict[str, int]:
     return {"id": project_id}
 
 
-feature = Feature(name="projects", routers=[http])
+feature = Feature(name="projects", routers=[router])
 composition = Composition(features=(feature,))
 app = composition.apply(FastAPI())
 composition.validate(app)
 ```
 
+`apply` checks every operation contract before installing the feature;
+`validate` confirms the installed app compiles to valid OpenAPI.
 `GET /projects/1` returns `{"id": 1}`. `GET /projects/0` returns a 404
 `application/problem+json` response with the stable type
 `https://api.example.com/problems/project_missing` and code `project_missing`.
@@ -138,7 +143,7 @@ error contracts. See the [core API guide](docs/composition.md),
 
 ## Streams: typed events from server to SDK
 
-Add a stream to `src/app.py`, reusing the error registry and lookup above:
+Add a stream to the same router, reusing the error registry and lookup above:
 
 ```python
 from collections.abc import AsyncIterator
@@ -150,7 +155,7 @@ class ProjectEvent(BaseModel):
     sequence: int
 
 
-@http.sse(
+@router.sse(
     "/projects/{project_id}/events",
     operation_id="projects.events",
     dependencies=[Depends(require_project)],
@@ -181,7 +186,8 @@ See [Canon stream contracts](docs/streams.md),
 
 ## WebSockets: RPC calls as domain methods
 
-Add a WebSocket method using the same public error definition:
+Add a WebSocket method using the same public error definition, and mount its
+channel on the same router:
 
 ```python
 from fastapi_canon import RpcChannel
@@ -198,20 +204,11 @@ async def cancel(params: CancelProject) -> None:
     require_project(params.project_id)
 
 
-http.include_channel(projects, path="/ws")
+router.include_channel(projects, path="/ws")
 ```
 
-After all route declarations, replace the original composition block with this
-one to install the shared router for HTTP, SSE and RPC:
-
-```python
-feature = Feature(name="projects", routers=[http])
-composition = Composition(features=(feature,))
-app = composition.apply(FastAPI())
-composition.validate(app)
-```
-
-Install a server and run the application from the project root:
+The composition block at the end of the file now installs HTTP, SSE and RPC from
+one feature router. Install a server and run the application from the project root:
 
 ```console
 uv add --dev uvicorn
@@ -219,14 +216,21 @@ uv run uvicorn src.app:app --reload
 ```
 
 The contract describes `projects.cancel` and its typed parameters and failures.
-Codegen handles request IDs, serialization, response correlation and typed problem
-errors; the consumer calls `client.projects.cancel(...)`. HTTP, SSE and RPC
+Methods request application services with `Inject[T]`, resolved from the
+composition's Dishka container. Codegen handles request IDs, serialization,
+response correlation and typed problem errors; the consumer calls `client.projects.cancel(...)`. HTTP, SSE and RPC
 share the SDK's public model/error runtime. Protocol bindings stay internal.
 
 WebSockets also support notifications, message streams, typed sockets and binary
 streams, with explicit session lifecycles. See [services and channels](docs/integrations/websockets/services.md),
 [generated clients](docs/integrations/websockets/clients.md) and
 [socket contracts](docs/integrations/websockets/sockets.md).
+
+## MCP features
+
+Install `fastapi-canon[mcp]` for FastMCP feature mounts with Dishka `Inject[T]`.
+See the [MCP guide](docs/integrations/mcp/README.md) for composition, namespaces,
+endpoint defaults and supported execution lifetimes.
 
 ## Generate and use the SDK
 
@@ -345,7 +349,7 @@ machine-readable report for tooling and agents.
 
 This checks supported explicit source paths, not every possible runtime failure.
 Abstract Dishka ports and dynamic code can leave analysis incomplete. The checker
-currently covers direct `CanonRouter` operations, not SSE/RPC/WebRTC handlers.
+covers HTTP operations declared on `APIRouter`, not SSE, RPC or WebRTC handlers.
 Keep runtime contract validation and behavioral tests. See
 [error checking](docs/error-checking.md) for boundaries and
 CI options.
@@ -359,7 +363,7 @@ for agents working on **your application**. From your backend project, run:
 uv run fastapi-canon skill install
 ```
 
-The next release installs identical copies, including all references, into
+The command installs identical copies, including all references, into
 `.agents/skills/build-canon-backend` and `.claude/skills/build-canon-backend`,
 creating missing directories. Existing destinations require `--force`. To update
 both copies to the bundle shipped with the newest compatible Canon release:
@@ -454,9 +458,3 @@ rules, [contributing](docs/contributing.md) for root commands,
 The imported repositories remain available in Git history. Current development
 and future releases use `mathisarends/fastapi_canon`; historical releases and
 predecessor repositories are preserved.
-
-### MCP features
-
-Install `fastapi-canon[mcp]` for FastMCP feature mounts with Dishka `Inject[T]`.
-See the [MCP guide](docs/integrations/mcp/README.md) for composition, namespaces,
-endpoint defaults and supported execution lifetimes.

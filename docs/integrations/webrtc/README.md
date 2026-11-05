@@ -29,6 +29,7 @@ from aiortc.contrib.media import MediaRelay
 from fastapi import Depends, FastAPI, HTTPException, Query
 from pydantic import BaseModel
 
+from fastapi_canon import APIRouter, Composition, Feature
 from fastapi_canon.integrations.webrtc import (
     DataChannelSpec,
     Direction,
@@ -36,7 +37,6 @@ from fastapi_canon.integrations.webrtc import (
     MediaPolicy,
     Peer,
     Session,
-    WebRtcRouter,
 )
 from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine
 
@@ -61,14 +61,16 @@ def lesson_access(lesson_id: str, token: Annotated[str, Query()]) -> str:
     return lesson_id
 
 
-rtc = WebRtcRouter(prefix="/rtc", engine=AiortcEngine(), max_sessions=50)
+router = APIRouter(prefix="/rtc")
 
 
-@rtc.session(
+@router.webrtc(
     "/lessons/{lesson_id}",
+    engine=AiortcEngine(),
     name="practice",
     media=MediaPolicy(audio=Direction.SEND_RECEIVE),
     data_channels=(MESSAGES,),
+    max_sessions=50,
 )
 def practice(lesson: Annotated[str, Depends(lesson_access)]) -> Session:
     relay = MediaRelay()
@@ -84,8 +86,7 @@ def practice(lesson: Annotated[str, Depends(lesson_access)]) -> Session:
     return Session(on_track=on_track, on_message={MESSAGES: on_prompt})
 
 
-app = FastAPI()
-app.include_router(rtc)
+app = Composition(features=[Feature(name="lessons", routers=[router])]).apply(FastAPI())
 ```
 
 A `Session` is assembled from handlers:
@@ -98,7 +99,7 @@ A `Session` is assembled from handlers:
   `DataChannelSpec` or its name. Without a handler, a channel can be consumed
   with `async for message in peer.channel(spec)`.
 - `on_close(peer, code)`: runs before the engine releases resources.
-- `tracks=[...]`: outgoing tracks. `ice_servers` overrides the router's ICE servers.
+- `tracks=[...]`: outgoing tracks. `ice_servers` overrides the declaration's ICE servers.
 
 `Peer` sends with `send_message`, `send_track` and `remove_track`, which
 renegotiate. `peer.channel(spec)` and `peer.send_message(spec, message)` are
@@ -184,7 +185,7 @@ your application. Two WebSocket properties need attention:
 
 - **Origins.** CORS does not apply to WebSocket handshakes, and browsers attach
   cookies to cross-site handshakes. If admission relies on cookies, pass
-  `WebRtcRouter(allowed_origins=["https://app.example.com"])`. Handshakes from
+  `@router.webrtc(..., allowed_origins=["https://app.example.com"])`. Handshakes from
   other origins are refused with HTTP 403 before the session factory runs.
   Requests without an `Origin` header come from non-browser clients and are not
   restricted by this check.

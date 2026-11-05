@@ -42,35 +42,31 @@ oversized fragmented messages against the actual backend during deployment.
 
 ## FastAPI
 
-`CanonWebSocketRouter` defines and mounts WebSocket endpoints. Include it directly in
-`Feature(routers=[rpc])` or `web.include_router(rpc)`.
+Mount JSON-RPC channels on the feature's `APIRouter` and contribute it through
+`Feature(routers=[router])`:
 
 ```python
 from fastapi import FastAPI
-from fastapi_canon.integrations.websockets import CanonWebSocketRouter
+from fastapi_canon import APIRouter, Composition, Feature, export_contracts
 
-rpc = CanonWebSocketRouter("/rpc", channels=[channel])
-web = FastAPI()
-web.include_router(rpc)
-contract = rpc.contract(title="Control", base_url="wss://api.example.com", app=web)
+router = APIRouter()
+router.include_channel(channel, path="/rpc")
+router.include_channel(projects, path="/projects/rpc")
+app = Composition(
+    features=(Feature(name="control", routers=[router]),),
+).apply(FastAPI(title="Control"))
+contract = export_contracts(
+    app, kinds=("openrpc",), base_url="wss://api.example.com"
+).openrpc
 ```
 
-For several paths in one contract, construct the router without a path, then
-register each endpoint. Both methods add the FastAPI route immediately.
-Finish channel declarations before including the router or exporting its contract.
-
-```python
-rpc = CanonWebSocketRouter()
-rpc.socket("/rpc", channels=[tasks, projects])
-rpc.stream("/frames", frames)
-rpc.socket("/browser/cdp", cdp)
-web.include_router(rpc)
-```
-
-Configure RPC limits, middleware, error mapping and handshake rejection defaults
-on `CanonWebSocketRouter`. Endpoint options override those defaults. A router `prefix=`
-is included in its endpoint paths and OpenRPC contract. A prefix applied later
-by `include_router()` belongs in the contract's `base_url`.
+Every mounted path appears in one OpenRPC contract. Declare channel operations
+before mounting; each call takes a snapshot. RPC limits, middleware, error
+mapping and handshake rejection options are passed to `include_channel` and
+configure that endpoint. A router `prefix=` is included in endpoint paths and the
+contract. Binary streams and raw sockets are not JSON-RPC channels; declare them
+on their own `CanonWebSocketRouter` as described in [streams](streams.md) and
+[sockets](sockets.md).
 
 ### Mount endpoints with FastAPI dependencies
 
@@ -79,32 +75,32 @@ the type injected into handlers as `Inject[T]`. The dependency can receive
 path parameters, FastAPI dependencies and Dishka services.
 
 ```python
-from fastapi_canon.integrations.websockets.adapters.dishka import Dishka
-
-
 async def open_job(job_id: str) -> Job:
     return await jobs.require(job_id)
 
 
-rpc = CanonWebSocketRouter(context=open_job, resolver=Dishka(), rejects=[job_not_found])
-rpc.socket("/jobs/{job_id}/rpc", channels=[job_events])
-rpc.stream("/jobs/{job_id}/output", output)
-web.include_router(rpc)
+router.include_channel(
+    job_events,
+    path="/jobs/{job_id}/rpc",
+    context=open_job,
+    rejects=[job_not_found],
+)
 ```
 
-Use `Composition` with feature providers to install and close the shared Dishka
-container, or configure Dishka's FastAPI middleware and lifespan explicitly.
-The context is resolved before acceptance. Declared `rejects=` and
+`Composition` installs and closes the shared Dishka container that resolves
+`Inject[T]` parameters and the context's own Dishka services. The context is resolved before acceptance. Declared `rejects=` and
 `rejections=` map its failures to HTTP denial responses when the ASGI server
 supports that extension. Otherwise the server returns its generic 403 denial.
 
-FastAPI dependencies on `include_router()` can also perform admission checks.
+FastAPI dependencies passed as `include_channel(..., dependencies=[...])` can also
+perform admission checks.
 Their return values reach RPC handlers through the configured context or resolver.
 
 ### Mount a custom connection handler
 
-Use `serve=` on an endpoint declaration for a custom FastAPI handler. It can
-declare `Inject[T]` arguments for the context and resolver dependencies.
+A custom FastAPI handler is a protocol-level endpoint: declare it with `serve=`
+on a `CanonWebSocketRouter` socket. It can declare `Inject[T]` arguments for the
+context and resolver dependencies.
 The same connection middleware and rejection policies wrap the handler.
 
 ```python
@@ -114,6 +110,7 @@ async def custom(websocket: WebSocket, job: Inject[Job]) -> None:
     await websocket.close()
 
 
+rpc = CanonWebSocketRouter(context=open_job)
 rpc.socket("/jobs/{job_id}/custom", channels=[job_events], serve=custom)
 ```
 
@@ -273,11 +270,12 @@ pre-stop endpoint and wait for completion before sending the termination signal:
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi_canon.integrations.websockets import RpcDrain, CanonWebSocketRouter
+from fastapi_canon import APIRouter
+from fastapi_canon.integrations.websockets import RpcDrain
 
 drain = RpcDrain()
-rpc = CanonWebSocketRouter(drain=drain)
-# Register rpc.socket(...) and rpc.stream(...) here.
+router = APIRouter()
+router.include_channel(tasks, path="/rpc", drain=drain)
 
 
 @asynccontextmanager
@@ -287,7 +285,7 @@ async def lifespan(web):
 
 
 web = FastAPI(lifespan=lifespan)
-web.include_router(rpc)
+web.include_router(router)
 
 
 @web.post("/internal/drain")  # Protect this with your deployment authentication.

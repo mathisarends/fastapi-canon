@@ -31,10 +31,9 @@ dependency. This implementation now ships in Canon; SSE uses `fastapi_canon.inte
 The existing dispatch engine, OpenRPC contracts, binary/raw channels, and client
 generators are retained. The old repository remains available.
 
-Current upgrades are covered by the [Canon changelog](../../../CHANGELOG.md),
-including the 0.13.0 `CanonWebSocketRouter` API. Earlier standalone
-releases have a [historical changelog](../../history/fastapi-rpckit.md); moving from
-`pyrpckit` is covered by the [migration guide](migration.md).
+Upgrades are covered by the [Canon changelog](../../../CHANGELOG.md). Earlier
+standalone releases have a [historical changelog](../../history/fastapi-rpckit.md);
+moving from `pyrpckit` is covered by the [migration guide](migration.md).
 
 ## The idea
 
@@ -52,10 +51,11 @@ async def updated(store: Inject[TaskStore]) -> AsyncIterator[TaskUpdated]:
         yield TaskUpdated(task=task)
 ```
 
-One command turns that into an OpenRPC document and clients in both languages:
+One command exports the composed app's OpenRPC document and generates clients
+in both languages:
 
 ```bash
-fastapi-canon websockets generate --config rpcgen.toml
+fastapi-canon generate --config fastapi-canon.toml
 ```
 
 And your frontend gets the whole API fully typed â€” no schema written twice, no
@@ -85,9 +85,11 @@ Code generation and OpenTelemetry dependencies remain optional extras.
 
 ## Serve with FastAPI
 
+Mount a channel on the feature's `APIRouter` and let `Composition` install it:
+
 ```python
 from fastapi import FastAPI
-from fastapi_canon.integrations.websockets import RpcChannel, CanonWebSocketRouter
+from fastapi_canon import APIRouter, Composition, Feature, RpcChannel
 
 greetings = RpcChannel("greetings")
 
@@ -97,15 +99,19 @@ async def hello() -> str:
     return "Hello"
 
 
-rpc = CanonWebSocketRouter()
-rpc.socket("/rpc", channels=(greetings,))
-app = FastAPI()
-app.include_router(rpc)
+router = APIRouter()
+router.include_channel(greetings, path="/rpc")
+app = Composition(
+    features=(Feature(name="greetings", routers=[router]),),
+).apply(FastAPI())
 ```
 
-Include the router directly in `Feature(routers=[rpc])`. For
-Canon/Dishka composition, see the [three-transport example](../../../examples/stack_service.py).
-Both reuse the same WebSocket runtime; no second RPC router model is introduced.
+`include_channel` mounts a snapshot of the channel's methods, events and message
+streams as one JSON-RPC endpoint on the same router as the feature's HTTP and SSE
+operations. `Inject[T]` parameters resolve from Composition's Dishka container.
+The [three-transport example](../../../examples/stack_service.py) shows a complete
+feature. Binary streams and raw sockets keep their own
+[socket endpoints](sockets.md).
 
 ## Quickstart
 
@@ -113,13 +119,8 @@ Channels group related operations and provide their namespace; a service mounts
 them on a socket. Their dispatch logic can also be called directly:
 
 ```python
-from fastapi_canon.integrations.websockets import (
-    Inject,
-    RpcChannel,
-    RpcModel,
-    CanonWebSocketRouter,
-    RpcSuccess,
-)
+from fastapi_canon import APIRouter, Inject, RpcChannel
+from fastapi_canon.integrations.websockets import RpcModel, RpcSuccess
 
 
 class CreateTask(RpcModel):
@@ -150,8 +151,8 @@ async def create(params: CreateTask, store: Inject[TaskStore]) -> Task:
     return await store.create(params.title)
 
 
-app = CanonWebSocketRouter(version=1)
-app.socket("/rpc", channels=(tasks,))
+router = APIRouter()
+router.include_channel(tasks, path="/rpc", version=1)
 
 
 async def test_create() -> None:
@@ -186,8 +187,8 @@ hooks, limits and custom transports.
 | --- | --- |
 | `RpcChannel` | Group operations under a namespace with `@channel.method()`, `.event()` and `.stream()`. |
 | `RpcModel` | Base class for parameter, result and event payloads. |
-| `CanonWebSocketRouter` | Mount channels on a socket path with `service.socket(...)`. |
-| `CanonWebSocketRouter` | Define endpoints and include their routes in FastAPI or a feature. |
+| `APIRouter.include_channel()` | Mount a channel as one JSON-RPC endpoint on the feature's router. |
+| `CanonWebSocketRouter` | Declare binary streams and raw sockets, which are not JSON-RPC channels. |
 | `Inject[T]` | Resolve a server-side dependency; it never appears in the contract. |
 | `RpcError` | Subclass for typed errors; declare them with `raises=` so generated clients raise matching exceptions. |
 

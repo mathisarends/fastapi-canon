@@ -3,10 +3,10 @@
 JSON-RPC methods accept parameters by name as a JSON object. Positional
 parameter arrays are not supported.
 
-A channel owns related operations and their wire namespace. A service mounts
-one or more channels on concrete socket paths. Keeping those concepts separate
-lets one application expose several independently addressable APIs while still
-producing one contract.
+A channel owns related operations and their wire namespace. The feature's
+`APIRouter` mounts channels on concrete socket paths with `include_channel`.
+Keeping those concepts separate lets one application expose several
+independently addressable APIs while still producing one contract.
 
 ## Define a method
 
@@ -16,12 +16,8 @@ Pydantic model, and their return annotation describes the result.
 ```python
 from fastapi import FastAPI
 
-from fastapi_canon import Composition, Feature
-from fastapi_canon.integrations.websockets import (
-    RpcChannel,
-    RpcModel,
-    CanonWebSocketRouter,
-)
+from fastapi_canon import APIRouter, Composition, Feature, RpcChannel, export_contracts
+from fastapi_canon.integrations.websockets import RpcModel
 
 
 class CreateTask(RpcModel):
@@ -46,10 +42,13 @@ async def health() -> None:
     return None
 
 
-rpc = CanonWebSocketRouter("/rpc", channels=[tasks])
-feature = Feature(name="tasks", routers=[rpc])
-app = Composition(features=(feature,)).apply(FastAPI())
-contract = rpc.contract(title="Tasks", base_url="wss://api.example.com", app=app)
+router = APIRouter()
+router.include_channel(tasks, path="/rpc")
+feature = Feature(name="tasks", routers=[router])
+app = Composition(features=(feature,)).apply(FastAPI(title="Tasks"))
+contract = export_contracts(
+    app, kinds=("openrpc",), base_url="wss://api.example.com"
+).openrpc
 ```
 
 The methods are exposed as `tasks.create` and `tasks.health`. Use an explicit
@@ -81,35 +80,38 @@ prefix of another operation when the protocol is materialized.
 
 ## Mount endpoints
 
-Use `CanonWebSocketRouter` for one JSON-RPC WebSocket path. Define the channel operations
-before constructing the router, which freezes them together for serving and
-OpenRPC export. The router contributes
-their error registries to `Feature`. Pass the composed app to `contract()` to
-export the same problem types served at runtime.
+Mount a channel with `router.include_channel(channel, path=...)` on the
+feature's `APIRouter`. Each call mounts a snapshot of the channel as one JSON-RPC
+WebSocket endpoint, so declare operations before mounting. The router contributes
+the channel's error registries to `Feature`, and `export_contracts(app)` exports
+the same problem types served at runtime.
 
 For a per-connection FastAPI dependency, pass its async function as `context=`.
 Its concrete return annotation supplies the type available to handlers through
-`Inject[T]`. Use `resolver=Dishka()` for Dishka dependencies. Construct `CanonWebSocketRouter()` without a path to register multiple paths with
-`socket()` and `stream()` and export them together.
+`Inject[T]`. Under `Composition`, `Inject[T]` also resolves application services
+from the shared Dishka container.
 
-Mount several channels on one JSON-RPC socket:
+To serve several channels on one socket, include them in a root channel and
+mount that:
 
 ```python
-from fastapi_canon.integrations.websockets import CanonWebSocketRouter
+project = RpcChannel("project", namespace="")
+project.include_channel(tasks, namespace="tasks")
+project.include_channel(admin, namespace="internal.admin")
 
-app = CanonWebSocketRouter(version=2)
-endpoint = app.socket(
-    "/projects/{project_id}/rpc",
-    channels=(tasks, admin),
+router.include_channel(
+    project,
+    path="/projects/{project_id}/rpc",
     name="project-rpc",
     subprotocol="rpc.v2",
     summary="Project control API.",
+    version=2,
 )
 ```
 
 Path variables are available from `RpcConnection.path_params`. Endpoint names
-identify servers in OpenRPC and generated clients; when omitted, the last
-static path segment is used. A channel can be mounted only once in a service.
+identify servers in OpenRPC and generated clients; when omitted, the name is
+derived from the full path, such as `rpc_ws` for `/ws`.
 
 Use child channels for nested wire namespaces. Mount only the root; its children
 inherit declared errors and the resolver scope:
@@ -123,7 +125,7 @@ turn = voice.child("turn")
 async def start() -> None: ...  # voice.turn.start
 
 
-app.socket("/rpc", channels=(voice,))
+router.include_channel(voice, path="/rpc")
 ```
 
 A single nested operation does not need a child channel. Names passed to the
@@ -143,29 +145,25 @@ configuration.
 For a standalone dotted namespace, the channel name can default to it:
 `RpcChannel(namespace="voice.turn")`.
 
-The service stays mutable until `freeze()`, `protocol`, `contract()`, or the router serves its first connection. Add all channels and endpoints before that
-point.
+`include_channel` mounts a snapshot. Later registrations on the source channel
+do not change an endpoint that is already mounted.
 
 ## Protocol version
 
-`CanonWebSocketRouter(version=...)` takes a positive integer. The version is emitted as
+`include_channel(..., version=...)` takes a positive integer. The version is emitted as
 `<version>.0.0` in OpenRPC, so changing a wire contract can be reflected in the
 service definition and generated artifacts together.
 
-Configure shared serving defaults once and override them only where an endpoint
-differs:
+Serving options configure the mounted connection:
 
 ```python
-app = CanonWebSocketRouter(error_mapper=map_error, limits=RpcLimits(max_concurrency=16))
-app.socket(
-    "/rpc",
-    channels=(tasks,),
-    limits=RpcLimits(max_concurrency=4),
+router.include_channel(
+    tasks,
+    path="/rpc",
+    error_mapper=map_error,
+    limits=RpcLimits(max_concurrency=16),
 )
 ```
-
-`serve()` and the mounted FastAPI routes use these defaults unless an explicit call-site
-override is supplied.
 
 Malformed JSON, including input nested beyond the JSON decoder's recursion
 limit, produces `parse_error` (`-32700`) and leaves an RPC connection usable.
@@ -196,8 +194,7 @@ async def long_running() -> None:
     await finish_long_running_work()
 
 
-app = CanonWebSocketRouter(limits=RpcLimits(request_timeout=30.0))
-app.socket("/rpc", channels=[tasks])
+router.include_channel(tasks, path="/rpc", limits=RpcLimits(request_timeout=30.0))
 ```
 
 An omitted method override inherits the serving limit; explicit `None` disables
@@ -315,18 +312,20 @@ class SharedCapacity(RpcMiddleware):
                 self.active_requests -= 1
 ```
 
-Register that same instance on the service and handshake hook:
+Register that same instance as middleware and handshake hook:
 
 ```python
 capacity = SharedCapacity(connections=200, requests=64)
-app = CanonWebSocketRouter(
-    middleware=[capacity], limits=RpcLimits(max_pending_requests=128)
+router.include_channel(
+    tasks,
+    path="/rpc",
+    middleware=[capacity],
+    limits=RpcLimits(max_pending_requests=128),
+    before_accept=capacity.before_accept,
 )
-app.socket("/rpc", channels=[tasks], before_accept=capacity.before_accept)
-web.include_router(app)
 ```
 
-Custom transports using `app.serve()` also run the registered handshake hook.
+Custom transports using `serve()` also run the registered handshake hook.
 Alternatively pass `before_accept=capacity.before_accept` to an endpoint's `serve()`.
 The shared request semaphore limits requests across sockets, while per-connection
 admission bounds requests waiting for that semaphore. Both scopes use `finally`,

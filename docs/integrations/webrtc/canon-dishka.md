@@ -1,22 +1,17 @@
 # Canon and Dishka
 
-Register `WebRtcRouter` directly in `Feature.routers`. Canon installs Dishka's
-middleware and manages the application container. WebRTC does not need a Canon
-adapter or a required dependency on Canon or Dishka.
-
-For declarative admission errors, the optional
-[`CanonWebRtcRouter`](../../webrtc.md) adds Canon's registry and
-router/session `raises` declarations. It exports HTTP denial metadata in the
-WebRTC contract while preserving the native session runtime and signaling protocol.
-Register a plain WebRTC feature's registry explicitly with `Feature(errors=...)`
-when using runtime exception mapping without that integration.
+Declare sessions with `@router.webrtc(...)` on the feature's `APIRouter`. Canon
+installs Dishka's middleware and manages the application container. The router's
+registry and `raises` declarations describe admission errors, which are exported
+as HTTP denial metadata in the WebRTC contract while the native session runtime
+and signaling protocol stay unchanged. See [WebRTC admission errors](../../webrtc.md).
 
 For typed browser denials, see the optional [HTTP ticket recipe](admission-tickets.md).
 For remote peers, the [send-only example](../../../examples/webrtc/remote_video/README.md)
 binds a separate engine and lease to each session, including refused sessions.
 
 The session factory is a FastAPI dependency. Decorate an **async factory** with
-`@inject` below `@rtc.session(...)`; Canon does not automatically inject this
+`@inject` below `@router.webrtc(...)`; Canon does not automatically inject this
 factory. Session services use `Scope.SESSION`, matching Dishka's
 [WebSocket scope model](https://dishka.readthedocs.io/en/stable/integrations/fastapi.html#websockets).
 
@@ -26,13 +21,8 @@ from collections.abc import AsyncIterator
 from dishka import AsyncContainer, FromDishka, Provider, Scope, provide
 from dishka.integrations.fastapi import inject
 from fastapi import FastAPI
-from fastapi_canon import Composition, Feature
-from fastapi_canon.integrations.webrtc import (
-    DataChannelSpec,
-    Peer,
-    Session,
-    WebRtcRouter,
-)
+from fastapi_canon import APIRouter, Composition, Feature
+from fastapi_canon.integrations.webrtc import DataChannelSpec, Peer, Session
 from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine
 
 
@@ -60,13 +50,11 @@ class Services(Provider):
         # Release this message's transaction or other short-lived resources.
 
 
-rtc = WebRtcRouter(engine=AiortcEngine())
-
-
+router = APIRouter()
 CHAT = DataChannelSpec("chat", receive_model=str, send_model=str)
 
 
-@rtc.session("/chat", data_channels=[CHAT])
+@router.webrtc("/chat", engine=AiortcEngine(), data_channels=[CHAT])
 @inject
 async def chat(
     transcript: FromDishka[Transcript], container: FromDishka[AsyncContainer]
@@ -80,7 +68,7 @@ async def chat(
 
 
 app = Composition(
-    features=(Feature(name="chat", routers=[rtc], providers=[Services]),)
+    features=(Feature(name="chat", routers=[router], providers=[Services]),)
 ).apply(FastAPI())
 ```
 

@@ -81,8 +81,8 @@ fastapi-canon websockets generate --config rpcgen.toml
 ```
 
 Paths are resolved relative to the config file. Client generation reads the
-rendered OpenRPC document; it does not receive the live `CanonWebSocketRouter` or
-`RpcProtocol` object.
+rendered OpenRPC document; it does not receive the live router or `RpcProtocol`
+object.
 
 Run the same command in CI with `--check`. It exits nonzero and lists stale
 files instead of writing them:

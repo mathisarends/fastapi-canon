@@ -5,7 +5,7 @@
 The library follows one path from a Python definition to a typed client:
 
 ```text
-Pydantic events + StreamRouter
+Pydantic events + APIRouter.sse()
               ↓
 Native FastAPI OpenAPI → validated OpenAPI 3.2
               ↓
@@ -18,7 +18,8 @@ Fetch / HTTPX transport → typed asynchronous iteration
 
 ## Server integration
 
-[`StreamRouter`](../../../fastapi_canon/integrations/sse/router.py) extends `APIRouter`. Registration
+`APIRouter.sse()` registers each stream through the internal
+[`StreamRouter`](../../../fastapi_canon/integrations/sse/router.py), a FastAPI `APIRouter`. Registration
 checks the generator and its event annotation, then registers the original
 function with `response_class=EventSourceResponse`. FastAPI handles dependency
 resolution, request validation, event serialization, heartbeats and ASGI

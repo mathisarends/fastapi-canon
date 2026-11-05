@@ -1,7 +1,7 @@
 # Optional error-contract checking
 
 Run the source checker to find application exceptions missing from a direct
-`CanonRouter` operation's `raises=` declaration:
+`APIRouter` operation's `raises=` declaration:
 
 ```console
 fastapi-canon check errors src
@@ -150,7 +150,7 @@ completeness, rather than asserting machine-dependent wall-clock thresholds.
 
 ## Supported source patterns
 
-The initial checker follows direct `CanonRouter` declarations with ordinary route
+The checker follows direct `APIRouter` declarations with ordinary route
 decorators, including `api_route`. It reads literal `ErrorRegistry(errors=[...])`
 and named `Error` definitions. A direct, statically resolved `RouterPolicy` supplies
 its registry, dependencies and shared errors. Policy, router and operation `raises`
