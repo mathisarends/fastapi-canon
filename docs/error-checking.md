@@ -279,6 +279,45 @@ partial scan), for dynamic builtins such as `getattr`, `super` and `next`, and
 when a method on an untyped library result has the name of an application
 method.
 
+## Comprehensions and deferred generators
+
+List, set and dict comprehensions follow supported explicit calls in their
+iterable expressions, filters and results (both keys and values for dicts).
+Multiple clauses and nested eager comprehensions are supported. The first
+iterable uses its enclosing environment; target names are local to the
+comprehension, including names introduced by later clauses. They do not replace
+outer bindings. As with ordinary loops/branches, analysis conservatively follows
+possible paths without proving cardinality or filter feasibility.
+
+Async eager comprehensions support awaited application helpers and directly
+resolved async-generator iterables. Recognized custom iteration protocols,
+unresolved async iterators, unresolved element-method dispatch, mutating
+attribute/subscript targets and assignment expressions retain CAN003. Container
+annotations do not establish the concrete implementation of each element;
+implicit Python iteration, hashing and operator behavior remain outside the
+explicit-call model.
+
+Creating a generator expression evaluates its outermost iterable expression but
+does not execute result/filter helpers. The checker records deferred CAN003 and
+does not invent executed-body gaps. Direct `for`/`async for` iteration or an eager
+comprehension consuming that expression follows its body. Stored generator
+aliases and arbitrary library consumers are not proven by this bounded model.
+An unawaited coroutine result also remains deferred/incomplete.
+
+For example, `[require_item(item_id) for item_id in item_ids]` now follows
+`require_item` with the same CAN001/CAN002 mapping/declaration distinction and
+call trace as an ordinary call. An enclosing `try/except Missing` catches its
+explicit Missing path. Declaring the corresponding Error in `raises` covers it.
+
+The reference service's `list_tasks` path includes comprehensions in the
+[repository](../examples/reference-service/src/app/features/tasks/infrastructure/repository.py)
+and [presentation mapper](../examples/reference-service/src/app/features/tasks/presentation/mapper.py).
+Its two `unsupported expression: ListComp` diagnostics disappear. The full scan
+still reports six operations, zero contract gaps and five incomplete operations:
+unresolved `super().__init__`, inherited dispatch and nested route factories
+remain explicit boundaries. Its strict/require-complete command still exits 1;
+this change does not claim a fully validated reference application.
+
 ## Analysis boundaries
 
 `complete` describes analysis of the supported explicit source paths, not proof
@@ -292,8 +331,9 @@ classes, custom decorators,
 recursive calls, dynamic contracts, nested route factories, deferred coroutine
 execution and unsupported control flow produce `CAN003`. `for`, `async for` and
 `while` loops are analyzed like branches that may run; iterating a call to a
-generator follows the generator's body. Context managers, comprehensions,
-`match` and `except*` are currently outside the supported flow analysis. Reassigned module declarations and detected contract mutations also
+generator follows the generator's body. Supported comprehensions and deferred
+generator expressions are described above. Context managers, `match` and
+`except*` are currently outside the supported flow analysis. Reassigned module declarations and detected contract mutations also
 prevent a complete result, including assignments with type annotations. Expanded
 `ErrorRegistry(**config)` arguments are unresolved contracts: the checker reports
 `CAN003` and suppresses guessed gaps for those operations. Dishka providers are

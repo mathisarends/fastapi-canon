@@ -142,14 +142,23 @@ class _Analyzer:
             )
         if isinstance(node, ast.Lambda):
             return flow
+        if isinstance(node, ast.GeneratorExp) and not iterated:
+            # Creation evaluates the outer iterable expression, but neither the
+            # filters nor the result until a consumer advances the generator.
+            flow.extend(self.expression(node.generators[0].iter, function, env, stack))
+            flow.unknowns.append(
+                _Unknown(
+                    "generator expression execution is deferred until iterated",
+                    function.name,
+                    node.lineno,
+                )
+            )
+            return flow
         if isinstance(
-            node,
-            ast.GeneratorExp
-            | ast.ListComp
-            | ast.SetComp
-            | ast.DictComp
-            | ast.NamedExpr,
+            node, ast.ListComp | ast.SetComp | ast.DictComp | ast.GeneratorExp
         ):
+            return self._comprehension(node, function, env, stack)
+        if isinstance(node, ast.NamedExpr):
             flow.unknowns.append(
                 _Unknown(
                     f"unsupported expression: {type(node).__name__}",
@@ -236,6 +245,98 @@ class _Analyzer:
                 )
             ):
                 flow.extend(self.function(member, stack))
+        return flow
+
+    def _comprehension(
+        self,
+        node: ast.ListComp | ast.SetComp | ast.DictComp | ast.GeneratorExp,
+        function: _Definition,
+        env: _Environment,
+        stack: tuple[str, ...],
+    ) -> _Flow:
+        flow = _Flow()
+        local = env.copy()
+        # All targets are lexical locals, even in filters before a later for.
+        # The first iterable alone is evaluated in the enclosing environment.
+        for generator in node.generators:
+            self._invalidate(generator.target, local)
+            if any(
+                isinstance(child, ast.Attribute | ast.Subscript)
+                for child in ast.walk(generator.target)
+            ):
+                flow.unknowns.append(
+                    _Unknown(
+                        "unsupported comprehension target",
+                        function.name,
+                        generator.target.lineno,
+                    )
+                )
+        for index, generator in enumerate(node.generators):
+            flow.extend(
+                self._comprehension_iterable(
+                    generator.iter,
+                    function,
+                    env if index == 0 else local,
+                    stack,
+                    asynchronous=bool(generator.is_async),
+                )
+            )
+            for condition in generator.ifs:
+                flow.extend(self.expression(condition, function, local, stack))
+        values = (
+            [node.key, node.value] if isinstance(node, ast.DictComp) else [node.elt]
+        )
+        for value in values:
+            flow.extend(self.expression(value, function, local, stack))
+        return flow
+
+    def _comprehension_iterable(
+        self,
+        node: ast.expr,
+        function: _Definition,
+        env: _Environment,
+        stack: tuple[str, ...],
+        *,
+        asynchronous: bool,
+    ) -> _Flow:
+        flow = self.expression(node, function, env, stack, iterated=True)
+        target = node.func if isinstance(node, ast.Call) else node
+        definition = self.source.definitions.get(
+            self.source.resolve(target, function.module, env) or ""
+        )
+        value_type = definition
+        if (
+            isinstance(node, ast.Call)
+            and definition
+            and isinstance(definition.node, ast.FunctionDef | ast.AsyncFunctionDef)
+            and definition.node.returns
+        ):
+            value_type = self.source.definitions.get(
+                self.source.annotation(definition.node.returns, definition.module) or ""
+            )
+        if value_type and isinstance(value_type.node, ast.ClassDef):
+            flow.unknowns.append(
+                _Unknown(
+                    "unsupported comprehension iteration protocol",
+                    function.name,
+                    node.lineno,
+                )
+            )
+        if asynchronous and not (
+            isinstance(node, ast.GeneratorExp)
+            or (
+                definition
+                and isinstance(definition.node, ast.AsyncFunctionDef)
+                and _generator(definition.node)
+            )
+        ):
+            flow.unknowns.append(
+                _Unknown(
+                    "unresolved async comprehension iterator",
+                    function.name,
+                    node.lineno,
+                )
+            )
         return flow
 
     def _construct(

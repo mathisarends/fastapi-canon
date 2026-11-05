@@ -22,6 +22,12 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- Source error checking follows explicit calls in eager list/set/dict
+  comprehensions, including iterable/filter/result paths, nested clauses and
+  supported async forms. Comprehension bindings stay local. Generator expression
+  creation no longer counts its deferred body/filter errors as executed; direct
+  iteration follows the body, while unproven consumers retain CAN003.
+
 - `fastapi-canon explain CODE` explains existing source, composition and common
   generation codes with a meaning, example, repair and guide. Text is the default;
   `--format json` returns a versioned object. Unknown/application-defined codes
@@ -185,6 +191,13 @@ The next release containing the breaking changes below must be 0.16.0.
   instead of 0.115.
 
 ### Breaking changes
+
+- Source checking can now report CAN001/CAN002 for newly followed comprehension
+  paths that previously retained incomplete analysis. Before adopting 0.16.0,
+  review new findings and declare their existing Error mappings in `raises`, or
+  add missing mappings, before enforcing strict CI. Unresolved protocols and
+  consumers still retain CAN003; do not treat those reports as full coverage.
+  See [comprehension coverage](docs/error-checking.md#comprehensions-and-deferred-generators).
 
 - Unexpected common-generation failures now omit raw exception contents in
   text/JSON diagnostics. Before adopting 0.16.0, update parsers that depended on
