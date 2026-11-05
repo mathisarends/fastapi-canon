@@ -18,6 +18,11 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- `McpOptions` accepts `stateless_http`, `mask_error_details` and root
+  `middleware`. Both boolean options default to `None`, preserving native
+  FastMCP settings. Middleware wraps mounted feature execution inside Canon's
+  dependency scope.
+
 - Root `Inject[T]` is shared by WebSocket and MCP integrations. WebSocket
   context functions support `Inject[T]` and reusable `hooks=(function, ...)`
   registrations keyed by return type. Hooks can combine injected services with
@@ -74,6 +79,11 @@ The next release containing the breaking changes below must be 0.16.0.
   Python APIs in text or versioned JSON, separately from import-free source checks.
 
 ### Breaking changes
+
+- The new MCP option fields extend the public `McpOptions` constructor for
+  0.16.0. Existing declarations retain their behavior. To preserve a previous
+  custom stateless endpoint when adopting Canon, set
+  `McpOptions(stateless_http=True)` explicitly.
 
 - MCP discovery and execution reject duplicate public component identities across
   mounted servers, including collisions produced by namespace concatenation.

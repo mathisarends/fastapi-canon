@@ -19,13 +19,20 @@ def install_mcp(
     options: McpOptions,
     container: AsyncContainer | None,
 ) -> Lifespan[FastAPI]:
-    server = FastMCP(options.name or app.title, on_duplicate="error", auth=options.auth)
+    server = FastMCP(
+        options.name or app.title,
+        on_duplicate="error",
+        auth=options.auth,
+        mask_error_details=options.mask_error_details,
+    )
     if container is not None:
         server.add_middleware(_DishkaScope(container))
     server.add_middleware(ComponentValidation(server))
+    for middleware in options.middleware:
+        server.add_middleware(middleware)
     for mount in mounts:
         server.mount(mount.server, namespace=mount.namespace)
-    mcp_app = server.http_app(path="/")
+    mcp_app = server.http_app(path="/", stateless_http=options.stateless_http)
     app.mount(options.path, mcp_app)
     return mcp_app.lifespan
 
