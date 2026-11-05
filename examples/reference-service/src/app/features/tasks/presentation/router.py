@@ -3,7 +3,7 @@ from uuid import UUID
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import Query, status
-from fastapi_canon import CanonRouter
+from fastapi_canon import APIRouter
 
 from app.authentication.presentation import AuthenticatedUserId
 from app.authentication.presentation.errors import authentication_required
@@ -16,7 +16,7 @@ from app.features.tasks.presentation.schemas import (
     TaskResponse,
 )
 
-router = CanonRouter(
+router = APIRouter(
     prefix="/tasks",
     tags=["tasks"],
     route_class=DishkaRoute,
