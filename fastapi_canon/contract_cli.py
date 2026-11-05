@@ -3,6 +3,7 @@
 import argparse
 import difflib
 import importlib
+import inspect
 import json
 import sys
 from collections.abc import Sequence
@@ -21,9 +22,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     export = commands.add_parser(
         "export", help="Export registered application contracts"
     )
-    export.add_argument("--app", required=True, help="module:attribute")
     export.add_argument(
-        "--factory", action="store_true", help="Call a zero-argument app factory"
+        "--app",
+        required=True,
+        help="module:attribute of an app or zero-argument app factory",
     )
     export.add_argument("--output-dir", required=True, type=Path)
     export.add_argument(
@@ -40,7 +42,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     try:
-        app = _load_application(args.app, factory=args.factory, root=Path.cwd())
+        app = _load_application(args.app, root=Path.cwd())
         kinds: tuple[ContractKind, ...] = tuple(
             args.kind or ("openapi", "openrpc", "webrtc")
         )
@@ -105,8 +107,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
 
-def _load_application(reference: str, *, factory: bool, root: Path) -> FastAPI:
-    """Import an app or explicitly invoke its factory, without entering lifespan."""
+def _load_application(reference: str, *, root: Path) -> FastAPI:
+    """Use an app instance directly or invoke its synchronous zero-argument factory."""
     module, separator, attribute = reference.partition(":")
     if not separator or not module or not attribute:
         raise ValueError("Application references must use module:attribute syntax")
@@ -115,11 +117,15 @@ def _load_application(reference: str, *, factory: bool, root: Path) -> FastAPI:
         value: Any = importlib.import_module(module)
         for part in attribute.split("."):
             value = getattr(value, part)
-        if factory:
+        if not isinstance(value, FastAPI) and callable(value):
+            if inspect.iscoroutinefunction(value) or inspect.iscoroutinefunction(
+                type(value).__call__
+            ):
+                raise TypeError(f"{reference} must use a synchronous app factory")
             value = value()
         if not isinstance(value, FastAPI):
             raise TypeError(
-                f"{reference} did not resolve to a FastAPI application; use --factory for factories"
+                f"{reference} must resolve to a FastAPI application or a zero-argument factory returning one"
             )
         return value
     finally:

@@ -4,6 +4,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 
 def test_cli_exports_without_runtime_secrets_and_checks_drift(tmp_path: Path) -> None:
     (tmp_path / "application.py").write_text(
@@ -32,7 +34,6 @@ def test_cli_exports_without_runtime_secrets_and_checks_drift(tmp_path: Path) ->
         "export",
         "--app",
         "application:create_app",
-        "--factory",
         "--output-dir",
         "contracts",
     ]
@@ -107,4 +108,77 @@ def test_cli_reports_import_time_configuration_errors_without_placeholder_secret
     )
     assert result.returncode == 2
     assert "JWT_SECRET required at import" in result.stderr
+    assert not (tmp_path / "contracts").exists()
+
+
+@pytest.mark.parametrize("app_source", ["Application()", "Application"])
+def test_cli_distinguishes_app_instances_from_constructor_factories(
+    tmp_path: Path, app_source: str
+) -> None:
+    (tmp_path / "application.py").write_text(
+        "from fastapi import FastAPI\n"
+        "class Application(FastAPI):\n"
+        "    def __init__(self):\n"
+        "        super().__init__(title='Existing instance')\n"
+        "    async def __call__(self, scope, receive, send):\n"
+        "        raise AssertionError('Do not invoke an app instance as a factory')\n"
+        f"app = {app_source}\n",
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "fastapi_canon",
+            "contracts",
+            "export",
+            "--app",
+            "application:app",
+            "--output-dir",
+            "contracts",
+        ],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        timeout=45,
+    )
+    assert result.returncode == 0, result.stderr
+    document = json.loads(
+        (tmp_path / "contracts/openapi.json").read_text(encoding="utf-8")
+    )
+    assert document["info"]["title"] == "Existing instance"
+
+
+@pytest.mark.parametrize(
+    ("source", "message"),
+    [
+        ("app = object()\n", "must resolve to a FastAPI application"),
+        ("def app(): return object()\n", "must resolve to a FastAPI application"),
+        ("async def app(): return object()\n", "must use a synchronous app factory"),
+    ],
+)
+def test_cli_rejects_invalid_app_references_without_writing(
+    tmp_path: Path, source: str, message: str
+) -> None:
+    (tmp_path / "invalid.py").write_text(source, encoding="utf-8")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "fastapi_canon",
+            "contracts",
+            "export",
+            "--app",
+            "invalid:app",
+            "--output-dir",
+            "contracts",
+        ],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        timeout=45,
+    )
+    assert result.returncode == 2
+    assert message in result.stderr
+    assert "RuntimeWarning" not in result.stderr
     assert not (tmp_path / "contracts").exists()

@@ -11,9 +11,11 @@ All notable changes to `fastapi-canon` are documented in this file.
   come from the registered routes, including nested router and mount prefixes;
   custom handlers keep their declarations. Unmounted operations are omitted and
   ambiguous endpoints, operation names and protocol versions fail explicitly.
-- `fastapi-canon contracts export --app module:create_app --factory --output-dir
-  contracts`, with format selection, public RPC origin, deterministic JSON and
-  read-only `--check`/`--diff`. It needs no SDK target configuration and never
+- `fastapi-canon contracts export --app module:create_app --output-dir
+  contracts`, automatically accepting an existing app or invoking a synchronous
+  zero-argument app factory, with format selection, public RPC origin,
+  deterministic JSON and read-only `--check`/`--diff`. It needs no SDK target
+  configuration and never
   enters application lifespan or resolves runtime dependencies. See
   [application contracts](docs/contracts.md) for factories without placeholder
   secrets and the distinction between runtime and contract-affecting settings.

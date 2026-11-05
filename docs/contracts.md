@@ -37,14 +37,16 @@ Request-specific ASGI `root_path` values cannot be discovered by an offline expo
 ## CLI
 
 ```console
-fastapi-canon contracts export --app backend.application:create_app --factory --output-dir contracts
-fastapi-canon contracts export --app backend.application:create_app --factory --output-dir contracts --check --diff
+fastapi-canon contracts export --app backend.application:create_app --output-dir contracts
+fastapi-canon contracts export --app backend.application:create_app --output-dir contracts --check --diff
 fastapi-canon contracts export --app backend.application:app --kind openapi --output-dir contracts
 ```
 
-`--factory` explicitly invokes a zero-argument app factory. Without it, the reference
-must resolve to a FastAPI instance. `--kind` is repeatable. All three formats are
-selected by default, and absent RPC/WebRTC transports produce no file. Explicitly
+`--app` accepts an existing FastAPI instance or a synchronous zero-argument factory
+returning one. Instances are used directly; factories are called automatically,
+without an additional flag. Async factories are rejected. `--kind` is repeatable.
+All three formats are selected by default, and absent RPC/WebRTC transports produce
+no file. Explicitly
 selecting a missing transport is an error. `--base-url` supplies the public RPC origin.
 
 The selected filenames `openapi.json`, `openrpc.json` and `webrtc.json` belong to
