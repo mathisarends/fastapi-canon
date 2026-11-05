@@ -36,3 +36,12 @@ def test_endpoint_path_is_normalized() -> None:
 def test_empty_server_name(name: str) -> None:
     with pytest.raises(FeatureConfigurationError, match="name"):
         McpOptions(name=name)
+
+
+@pytest.mark.parametrize("parameter", ["auth_factory", "middleware_factory"])
+def test_async_runtime_factories_are_rejected(parameter: str) -> None:
+    async def factory(container: object) -> None:
+        return None
+
+    with pytest.raises(FeatureConfigurationError, match="synchronous callable"):
+        McpOptions(**{parameter: factory})  # type: ignore[arg-type]  # Async factories are deliberately invalid.

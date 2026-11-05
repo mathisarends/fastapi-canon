@@ -6,10 +6,12 @@ from uuid import uuid4
 
 import httpx2
 import pytest
-from dishka import Provider, Scope, provide
+from dishka import AsyncContainer, Provider, Scope, provide
 from fastapi import FastAPI
 from fastmcp import Client, FastMCP
 from fastmcp.client.transports import StreamableHttpTransport
+from fastmcp.server.auth import AccessToken, TokenVerifier
+from fastmcp.server.middleware import Middleware, MiddlewareContext
 from fastmcp.utilities.asgi_transport import StreamingASGITransport
 from mcp import MCPError
 
@@ -44,7 +46,9 @@ class Services(Provider):
 
 
 @asynccontextmanager
-async def connected(app: FastAPI, path: str = "/mcp") -> AsyncIterator[Client[Any]]:
+async def connected(
+    app: FastAPI, path: str = "/mcp", *, auth: str | None = None
+) -> AsyncIterator[Client[Any]]:
     def factory(
         headers: dict[str, str] | None = None,
         timeout: httpx2.Timeout | None = None,
@@ -62,7 +66,10 @@ async def connected(app: FastAPI, path: str = "/mcp") -> AsyncIterator[Client[An
     transport = StreamableHttpTransport(
         "http://testserver" + path, httpx_client_factory=factory
     )
-    async with app.router.lifespan_context(app), Client(transport, timeout=5) as client:
+    async with (
+        app.router.lifespan_context(app),
+        Client(transport, timeout=5, auth=auth) as client,
+    ):
         yield client
 
 
@@ -349,3 +356,110 @@ async def test_root_http_auth_rejects_unauthenticated_requests() -> None:
             "/mcp/", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
         )
         assert response.status_code == 401
+
+
+async def test_runtime_factories_borrow_each_app_container_without_opening_resources() -> (
+    None
+):
+    events: list[str] = []
+
+    class Identity:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+    class Identities(Provider):
+        def __init__(self, name: str) -> None:
+            super().__init__()
+            self.name = name
+
+        @provide(scope=Scope.APP)
+        async def identity(self) -> AsyncIterator[Identity]:
+            events.append("open:" + self.name)
+            yield Identity(self.name)
+            events.append("close:" + self.name)
+
+    class Verifier(TokenVerifier):
+        def __init__(self, container: AsyncContainer) -> None:
+            super().__init__()
+            self.container = container
+
+        async def verify_token(self, token: str) -> AccessToken | None:
+            identity = await self.container.get(Identity)
+            if token != identity.name:
+                return None
+            return AccessToken(token=token, client_id=identity.name, scopes=[])
+
+    class Observe(Middleware):
+        def __init__(self, container: AsyncContainer) -> None:
+            self.container = container
+
+        async def on_call_tool(
+            self, context: MiddlewareContext[Any], call_next: Any
+        ) -> Any:
+            identity = await self.container.get(Identity)
+            events.append("call:" + identity.name)
+            return await call_next(context)
+
+    server = McpServer("Identity")
+
+    @server.tool
+    async def identify(identity: Inject[Identity]) -> str:
+        return identity.name
+
+    options = McpOptions(
+        auth_factory=Verifier, middleware_factory=lambda container: [Observe(container)]
+    )
+
+    def make_app(name: str) -> FastAPI:
+        feature = Feature(
+            name="identity",
+            providers=[lambda: Identities(name)],
+            mcp=[McpMount(server=server, namespace="identity")],
+        )
+        composition = Composition(features=[feature], mcp=options)
+        app = FastAPI()
+        assert not composition.check(app).has_errors
+        return composition.apply(app)
+
+    first, second = make_app("first"), make_app("second")
+    assert events == []
+
+    async with connected(first, auth="first") as client:
+        assert (await client.call_tool("identity_identify")).data == "first"
+    async with connected(second, auth="second") as client:
+        assert (await client.call_tool("identity_identify")).data == "second"
+    assert events == [
+        "open:first",
+        "call:first",
+        "close:first",
+        "open:second",
+        "call:second",
+        "close:second",
+    ]
+
+
+@pytest.mark.parametrize("parameter", ["auth_factory", "middleware_factory"])
+def test_invalid_runtime_factory_result_fails_before_app_mutation(
+    parameter: str,
+) -> None:
+    feature = Feature(name="services", providers=[lambda: Services([])])
+    options = McpOptions(**{parameter: lambda container: object()})  # type: ignore[arg-type]  # Exercise invalid factory output.
+    composition = Composition(features=[feature], mcp=options)
+    app = FastAPI()
+    routes = tuple(app.routes)
+
+    report = composition.check(app)
+
+    assert any(issue.code == "canon.mcp.E002" for issue in report.issues)
+    with pytest.raises(FeatureConfigurationError, match=parameter):
+        composition.apply(app)
+    assert tuple(app.routes) == routes
+
+
+def test_runtime_factory_requires_an_app_container() -> None:
+    composition = Composition(mcp=McpOptions(middleware_factory=lambda container: []))
+
+    with pytest.raises(
+        FeatureConfigurationError, match="requires features with Dishka providers"
+    ):
+        composition.apply(FastAPI())

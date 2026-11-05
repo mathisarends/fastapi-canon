@@ -8,6 +8,10 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- `McpOptions(auth_factory=..., middleware_factory=...)` builds app-specific
+  FastMCP adapters from the borrowed Dishka APP container. Synchronous factories
+  are validated during composition preflight before application mutation.
+
 - The bundled `build-canon-backend` skill explains Canon's components and
   Composition/Dishka wiring through focused references and small examples.
   `fastapi-canon skill install --force` refreshes complete skill trees from the
@@ -49,6 +53,12 @@ The next release containing the breaking changes below must be 0.16.0.
   Python APIs in text or versioned JSON, separately from import-free source checks.
 
 ### Breaking changes
+
+- The new MCP factory fields extend `McpOptions` for 0.16.0. Move auth and shared
+  middleware adapters that read `app.state.dishka_container` into synchronous
+  factories receiving the container directly. Supply either `auth` or
+  `auth_factory`; factories must not resolve resources or start tasks during
+  composition preflight.
 
 - `fastapi-canon skill install` now creates both
   `.agents/skills/build-canon-backend` and `.claude/skills/build-canon-backend`.
