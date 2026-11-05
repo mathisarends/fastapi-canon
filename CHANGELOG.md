@@ -8,6 +8,16 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- `fastapi_canon.Scoped[UseCase]` executes an async callable use case in a fresh
+  short service scope per invocation. Its call preserves argument and result
+  types and finishes provider cleanup before returning. Register wrappers at
+  APP scope; retain `ServiceScope` for multiple calls sharing one transaction.
+  This API is opt-in and introduces no additional breaking changes: existing
+  `ServiceScope` signatures, provider lifetimes, transport injection markers,
+  routing defaults and dependency requirements are unchanged. Existing
+  applications require no migration to continue using their current APIs.
+  See [short use-case calls](docs/database.md#short-use-case-calls).
+
 - The bundled `build-canon-backend` skill explains Canon's components and
   Composition/Dishka wiring through focused references and small examples.
   `fastapi-canon skill install --force` refreshes complete skill trees from the
@@ -99,6 +109,23 @@ The next release containing the breaking changes below must be 0.16.0.
   the dependency container alive through feature and router cleanup.
 
 ### Migration
+
+- Adopting `Scoped` is optional. For a single coroutine use-case call, replace
+  `async with service_scope() as use_case: result = await use_case(...)` with
+  `result = await scoped_use_case(...)`, after registering an APP-scoped
+  `Scoped(container, UseCase)` provider. The constructor requires the APP
+  container and a class with an asynchronous coroutine `__call__`; it rejects
+  request/socket child containers, synchronous callables and async generators.
+  Keep `ServiceScope` when several calls must share one scope/transaction, or
+  when the service exposes ordinary methods instead of `__call__`. Each
+  `Scoped` invocation has its own scope and, with Canon's Database providers,
+  commits independently; splitting a previously shared transaction changes
+  atomicity and is an application decision. Return materialized values rather
+  than scoped resources or lazy ORM graphs. Commit/cleanup errors propagate
+  before a result reaches the caller; no automatic retries, read-only mode or
+  consistent-snapshot guarantee is added. Continue using the existing transport
+  injection API (for example `FromDishka[Scoped[UseCase]]` for HTTP); the shared
+  `Inject` proposal is not part of this change.
 
 - Use `from fastapi_canon import APIRouter, RpcChannel` for a feature's shared
   HTTP, SSE, RPC and WebRTC declarations. Mount reusable channel groups with
