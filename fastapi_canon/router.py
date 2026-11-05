@@ -113,7 +113,33 @@ class CanonRouter(APIRouter):
             response=response,
             configured=configured_responses,
         )
-        return super().api_route(path, **kwargs)
+        dependency_origins = {str(id(dep)): "router" for dep in self.dependencies}
+        dependency_origins.update(
+            {str(id(dep)): "operation" for dep in (kwargs.get("dependencies") or ())}
+        )
+        error_origins = {str(id(error)): "operation" for error in local_raises}
+        error_origins.update({str(id(error)): "router" for error in self.raises})
+        if self.policy is not None:
+            dependency_origins.update(
+                {str(id(dep)): "router.policy" for dep in self.policy.dependencies}
+            )
+            error_origins.update(
+                {str(id(error)): "router.policy" for error in self.policy.raises}
+            )
+
+        def register(endpoint: CallableT) -> CallableT:
+            configured = {
+                **kwargs,
+                "openapi_extra": _RouteMetadata(
+                    kwargs.get("openapi_extra") or {},
+                    dependency_origins,
+                    error_origins,
+                    endpoint,
+                ),
+            }
+            return super(CanonRouter, self).api_route(path, **configured)(endpoint)
+
+        return register
 
     def get[CallableT: Callable[..., Any]](
         self,
@@ -287,6 +313,24 @@ def _normalize_raises(
                 msg = f"error {error.code!r} does not belong to this router's registry"
                 raise ErrorConfigurationError(msg)
     return normalized
+
+
+class _RouteMetadata(dict[str, Any]):
+    """Retain declaration provenance across FastAPI route copies without JSON keys."""
+
+    def __init__(
+        self,
+        values: Mapping[str, Any],
+        dependencies: dict[str, str],
+        errors: dict[str, str],
+        endpoint: Callable[..., object],
+    ) -> None:
+        super().__init__(values)
+        self._dependency_origins = tuple(
+            (int(key), value) for key, value in dependencies.items()
+        )
+        self._error_origins = tuple(errors.items())
+        self._endpoint = endpoint
 
 
 def _normalize_responses(value: object) -> OpenAPIResponses:

@@ -51,6 +51,9 @@ architecture:
     fastapi_canon.feature: composition
     fastapi_canon.api_router: composition
     fastapi_canon.public_exports: exports
+    fastapi_canon.diagnostics: values
+    fastapi_canon.introspection: composition
+    fastapi_canon.composition_cli: generation
     fastapi_canon.scopes: composition
     fastapi_canon.integrations.database: persistence
 

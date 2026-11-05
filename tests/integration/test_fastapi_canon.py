@@ -122,12 +122,12 @@ def test_invalid_http_contracts_fail_at_declaration(statuses: Any) -> None:
 def test_http_contracts_respect_normalization_options() -> None:
     router = CanonRouter(http_statuses=[401])
     router.get("/private")(lambda: None)
-    app = Composition(
+    composition = Composition(
         features=[Feature(name="private", routers=[router])],
         errors=ErrorOptions(include_http_exceptions=False),
-    ).apply(FastAPI())
+    )
     with pytest.raises(ConfigurationError, match="normalization is disabled"):
-        app.openapi()
+        composition.apply(FastAPI())
 
 
 @pytest.mark.parametrize("status", [422, 500])
@@ -251,7 +251,7 @@ def test_installation_after_startup_fails_explicitly() -> None:
             ErrorRegistry(errors=[], type_base="urn:test:problems").install(app)
 
 
-def test_startup_validates_before_opening_feature_resources() -> None:
+def test_composition_validates_before_opening_feature_resources() -> None:
     started = []
 
     @asynccontextmanager
@@ -262,17 +262,12 @@ def test_startup_validates_before_opening_feature_resources() -> None:
     router = CanonRouter()
     router.get("/one", operation_id="duplicate")(lambda: None)
     router.get("/two", operation_id="duplicate")(lambda: None)
-    app = Composition(
+    composition = Composition(
         features=[Feature(name="invalid", routers=[router], lifespan=lifespan)]
-    ).apply(FastAPI())
-    with (
-        pytest.warns(UserWarning, match="Duplicate Operation ID"),
-        pytest.raises(
-            ConfigurationError, match=r"duplicate operationId.*GET /one.*GET /two"
-        ),
-        TestClient(app),
-    ):
-        pytest.fail("invalid contracts must prevent startup")
+    )
+    app = FastAPI()
+    with pytest.raises(ConfigurationError, match="Duplicate operation ID 'duplicate'"):
+        composition.apply(app)
     assert not started
     assert app.openapi_schema is None
 

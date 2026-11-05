@@ -60,7 +60,8 @@ media runtimes.
 contract renderers with native HTTP/SSE OpenAPI. This adds an explicit composition
 dependency on WebRTC and its AnyIO lifecycle types; consumers of the root facade
 inherit that declared direction. No transport imports another transport.
-`contract_routes.py` is an adapter shared by RPC and WebRTC for effective paths.
+`contract_routes.py` is an adapter shared by RPC, WebRTC and HTTP introspection
+for effective paths.
 OpenAPI copying/promotion lives in the core adapter; optional JSON Schema validation
 stays in generation, keeping root imports free of generator dependencies.
 
@@ -90,6 +91,13 @@ exceptions and test-quality requirements, and [public namespaces](canon.md) for
 consumer imports.
 
 ## Tests and checks
+
+`diagnostics.py` contains framework-independent immutable descriptions and check
+results. `introspection.py` adapts effective HTTP route metadata; composition owns
+preflight orchestration, feature checks and the installed snapshot. CLI adapters
+consume those same APIs. Canon route declarations retain provenance as Python
+metadata that survives FastAPI route copies without entering exported OpenAPI.
+See [composition checks](system-checks.md) for scope and developer APIs.
 
 Unit, integration and contract roots mirror library paths independently. For
 example, `fastapi_canon/error/openapi.py` maps to
