@@ -37,6 +37,7 @@ The generated API follows your domain: `client.projects.get()`,
 | `export_contracts(app)` / `fastapi-canon contracts export` | Export registered HTTP/SSE, RPC and WebRTC contracts from one composed app. |
 | `fastapi-canon check errors` | Source analysis for missing error mappings/declarations, with explicit incomplete-analysis diagnostics. |
 | `Composition.check()` / `.inspect()` | Structured configuration diagnostics and immutable installed HTTP snapshots, also available through the CLI. |
+| `fastapi-canon explain CODE` | Offline meaning, example, repair and guide for built-in codes; see the [prepared source interface](docs/diagnostics.md). |
 | Optional WebRTC and telemetry | Typed media-session contracts and explicit OpenTelemetry instrumentation at the composition boundary. |
 
 The [public API guide](docs/canon.md) maps these responsibilities to imports.

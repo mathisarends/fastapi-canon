@@ -65,6 +65,10 @@ for effective paths.
 `application_loading.py` belongs to generation and shares reference/factory
 loading among composition inspection, contract export and common SDK generation.
 It imports FastAPI without generator/media engines and never enters lifespans.
+`diagnostic_explanations.py` is a generation-layer CLI adapter with static
+explanation data. Emitted codes remain owned by their existing checkers; the
+catalog imports neither static analysis nor composition runtimes and creates no
+reverse dependency from analysis to framework integration.
 OpenAPI copying/promotion lives in the core adapter; optional JSON Schema validation
 stays in generation, keeping root imports free of generator dependencies.
 

@@ -98,7 +98,9 @@ service.py:24: CAN001 [app.router.complete_task] app.service.TaskNotFound: app.e
 | `CAN003` | A declaration or execution path could not be fully analyzed. |
 
 Default mode prints findings and exits zero. Use `--strict` to exit one for
-contract gaps. Incomplete analysis remains visible and does not fail this mode.
+contract gaps. Use `fastapi-canon explain CAN003` for a code's meaning, example,
+repair and guide, including [JSON explanations](diagnostics.md#json-explanation-contract).
+Incomplete analysis remains visible and does not fail strict mode by itself.
 Add `--require-complete` to fail for incomplete operations or a scan containing no
 supported operations. Use both flags when both conditions should fail CI:
 
@@ -314,7 +316,8 @@ When the scanned source contains `Composition(router_policy=...)`, the checker
 marks operations incomplete and suppresses guessed contract gaps: determining
 which operations inherit that policy requires analyzing application mounting.
 
-Plain FastAPI routers are skipped. Canon's SSE and WebRTC declarations are outside
-this first version. Generator bodies are explicitly incomplete: failures after
-response start need transport-specific error events or protocol handling, rather
-than additional HTTP `raises` entries.
+Plain FastAPI routers are skipped. Supported Canon HTTP, SSE, RPC and WebRTC
+declarations are described above. Analysis follows supported explicit generator
+paths; failures after response start still use their transport's terminal
+problem/protocol handling. Source completeness does not validate that runtime
+error phase or guarantee that every possible exception is declared.

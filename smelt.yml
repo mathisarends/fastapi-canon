@@ -55,6 +55,7 @@ architecture:
     fastapi_canon.introspection: composition
     fastapi_canon.composition_cli: generation
     fastapi_canon.application_loading: generation
+    fastapi_canon.diagnostic_explanations: generation
     fastapi_canon.scopes: composition
     fastapi_canon.injection: values
     fastapi_canon.injected_route: composition
