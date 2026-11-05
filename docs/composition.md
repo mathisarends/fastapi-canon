@@ -156,7 +156,6 @@ Use an immutable `RouterPolicy` to reuse HTTP prerequisites and the errors they
 can raise while keeping each router's contract explicit:
 
 ```python
-from dishka.integrations.fastapi import DishkaRoute
 from fastapi import Depends
 from fastapi_canon import APIRouter, Composition, RouterPolicy
 
@@ -168,7 +167,6 @@ protected = RouterPolicy(
 projects = APIRouter(
     prefix="/projects",
     tags=["projects"],
-    route_class=DishkaRoute,
     policy=protected,
 )
 
@@ -217,9 +215,9 @@ policy declarations are not a runtime exception allowlist.
 `APIRouter(policy=...)` shares error contracts with operations declared directly
 on that router, like router-level `raises`. Use `Composition(router_policy=...)`
 for contracts across included child routers; the meaning of ordinary `raises=`
-and `include_router()` is unchanged. Keep `route_class=DishkaRoute` on the router
-where endpoints are declared. A composition policy does not replace route classes
-or retrofit injection. WebRTC sessions declare their admission contracts with
+and `include_router()` is unchanged. Endpoints resolve `Inject[T]` and
+`FromDishka[T]` through the route class of the router where they are declared;
+a composition policy does not replace route classes. WebRTC sessions declare their admission contracts with
 `raises=` and `dependencies=` on `@router.webrtc(...)`; composition HTTP contract
 compilation does not extend the separate WebRTC session descriptor.
 

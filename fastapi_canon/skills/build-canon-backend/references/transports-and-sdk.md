@@ -12,7 +12,6 @@ once through `Feature`:
 ```python
 from collections.abc import AsyncIterator
 
-from dishka.integrations.fastapi import FromDishka, inject
 from fastapi_canon import APIRouter, Inject, RpcChannel
 
 from backend.features.projects.application import ProjectService
@@ -25,9 +24,8 @@ channel = RpcChannel("projects")
 
 
 @router.sse("/events", operation_id="projects.events")
-@inject
 async def project_events(
-    projects: FromDishka[ProjectService],
+    projects: Inject[ProjectService],
 ) -> AsyncIterator[ProjectEvent]:
     async for event in projects.events():
         yield event
@@ -50,8 +48,8 @@ for full options; the protocols retain their own admission, scope and cleanup ru
 ## Typed SSE
 
 Install the `sse` extra. Declare streams with `@router.sse(...)`; a typed async
-iterator supplies the business event model. Place `@inject` below `@router.sse`
-when the generator uses `FromDishka`.
+iterator supplies the business event model. The generator requests services
+with `Inject[T]`; they are resolved on its first iteration, after response start.
 
 | Failure phase | Declaration and behavior |
 | --- | --- |
@@ -75,8 +73,8 @@ Install the `websockets` extra. Declare typed methods and events on an
 `RpcChannel` with `@channel.method(raises=[...])`, using the same public `Error`
 definitions as HTTP, and mount it with `router.include_channel(channel,
 path="/rpc")` after declaring operations. Methods request services with
-`Inject[T]`, resolved from Composition's Dishka container; HTTP's `DishkaRoute`
-is not the RPC injection mechanism. Handshake authentication uses `context=`/`hooks=` and
+`Inject[T]`, resolved from Composition's Dishka container, as in HTTP and SSE
+endpoints. Handshake authentication uses `context=`/`hooks=` and
 `rejects=` on the same call; see
 [integrations/websockets/dependencies.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/integrations/websockets/dependencies.md).
 

@@ -1,9 +1,8 @@
 from typing import Annotated
 from uuid import UUID
 
-from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import Query, status
-from fastapi_canon import APIRouter
+from fastapi_canon import APIRouter, Inject
 
 from app.authentication.presentation import AuthenticatedUserId
 from app.authentication.presentation.errors import authentication_required
@@ -19,7 +18,6 @@ from app.features.tasks.presentation.schemas import (
 router = APIRouter(
     prefix="/tasks",
     tags=["tasks"],
-    route_class=DishkaRoute,
     raises=[authentication_required],
 )
 
@@ -33,7 +31,7 @@ router = APIRouter(
 async def create_task(
     body: CreateTaskRequest,
     authenticated_user_id: AuthenticatedUserId,
-    task_service: FromDishka[TaskService],
+    task_service: Inject[TaskService],
 ) -> TaskResponse:
     task = await task_service.create(
         user_id=authenticated_user_id,
@@ -50,7 +48,7 @@ async def create_task(
 )
 async def list_tasks(
     authenticated_user_id: AuthenticatedUserId,
-    task_service: FromDishka[TaskService],
+    task_service: Inject[TaskService],
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> TaskListResponse:
     tasks = await task_service.list_recent(
@@ -70,7 +68,7 @@ async def list_tasks(
 async def complete_task(
     task_id: UUID,
     authenticated_user_id: AuthenticatedUserId,
-    task_service: FromDishka[TaskService],
+    task_service: Inject[TaskService],
 ) -> TaskResponse:
     task = await task_service.complete(
         user_id=authenticated_user_id,

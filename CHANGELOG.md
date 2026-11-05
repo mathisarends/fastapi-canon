@@ -31,6 +31,13 @@ The next release containing the breaking changes below must be 0.16.0.
   replace existing feature bindings, for example fakes in tests. Overrides that
   provide a type no feature provides fail with `canon.providers.E001`.
 
+- `fastapi_canon.APIRouter` resolves `Inject[T]` and Dishka's `FromDishka[T]`
+  parameters of HTTP and SSE endpoints without `route_class=DishkaRoute` or
+  `@inject`. Injected parameters stay out of the OpenAPI contract, synchronous
+  handlers are supported, and endpoints already decorated with `@inject` or
+  routers with an explicit `route_class` keep their behavior. FastAPI dependency
+  functions that use `FromDishka[T]` still need `@inject`.
+
 - `McpOptions(auth_factory=..., middleware_factory=...)` builds app-specific
   FastMCP adapters from the borrowed Dishka APP container. Synchronous factories
   are validated during composition preflight before application mutation.

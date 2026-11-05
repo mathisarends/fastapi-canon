@@ -179,8 +179,9 @@ sequences include named lists/tuples, unpacking and concatenation. Router contra
 do not propagate to separately included child routers.
 
 Analysis follows imports, aliases and explicit re-exports within the supplied
-roots; typed service methods, including `FromDishka[Service]`; direct helper
-calls; simple constructor-injected `self` attributes; and annotated return values.
+roots; typed service methods, including `Inject[Service]` and
+`FromDishka[Service]`; direct helper calls; simple constructor-injected `self`
+attributes; and annotated return values.
 It also follows function dependencies declared with `Depends` or `Security`,
 including `Annotated` aliases, nested dependencies and router/operation dependency
 lists. Dependencies supplied later while mounting an application are outside this
