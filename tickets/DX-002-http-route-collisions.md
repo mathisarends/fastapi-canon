@@ -1,6 +1,6 @@
 # DX-002: Reject ambiguous HTTP method and path contributions
 
-- Status: Open
+- Status: In progress
 - Priority: P1
 - Kind: Verified bug
 - Baseline: `a366702` (2026-11-05)

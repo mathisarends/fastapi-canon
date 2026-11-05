@@ -78,6 +78,7 @@ application behavior. Independent failures can appear together.
 | `canon.composition.E001` | Installation timing, conflicting installation or integration options. |
 | `canon.routing.E001` | Repeated router contributions or an invalid router factory. |
 | `canon.routing.E002` | Duplicate HTTP operation IDs, including collisions with existing app routes. |
+| `canon.routing.E003` | Ambiguous HTTP method/path contributions, including hidden and existing app routes. |
 | `canon.mcp.E001` | An application or feature HTTP route shadows the MCP endpoint. |
 | `canon.mcp.E002` | An MCP auth or middleware factory cannot be constructed. |
 | `canon.handlers.E001` | Exception-handler conflicts. |
@@ -93,6 +94,19 @@ authentication on every route, prove exception coverage, or validate the runtime
 behavior of RPC, SSE event bodies, WebRTC, MCP or application services. An SSE
 route's HTTP admission surface is included when represented by an HTTP route.
 Database/deployment probes remain explicit operations outside this profile.
+
+The `http.paths` check compares effective HTTP paths after nested and composition
+prefixes. Parameter names do not distinguish routes: `GET /items/{item_id}` and
+`GET /items/{other_id:str}` conflict. Converter equivalence means identical
+compiled regex structure after named capture labels are removed, including
+default versus explicit `str` converters. Different converter regexes remain
+distinct even when they overlap (such as `int` and `float`); the check does not
+attempt to prove arbitrary regex equivalence or overlap. Static and parameter
+routes can intentionally overlap, and distinct methods or prefixes are valid.
+WebSocket routes use another ASGI scope and do not collide with HTTP routes.
+Mounted subapplications retain their separate ownership boundary. Resolve an
+`E003` finding by changing a path/method or removing the duplicate registration;
+distinct operation IDs and schema visibility do not change request dispatch.
 
 ## Explain the installed HTTP composition
 

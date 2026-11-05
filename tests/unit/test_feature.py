@@ -88,7 +88,7 @@ def test_composition_includes_routers_in_declaration_order() -> None:
     async def first_route() -> dict[str, str]:
         return {"feature": "first"}
 
-    @second.get("/same")
+    @second.get("/{item_id}")
     async def second_route() -> dict[str, str]:
         return {"feature": "second"}
 
@@ -101,6 +101,7 @@ def test_composition_includes_routers_in_declaration_order() -> None:
 
     with TestClient(app) as client:
         assert client.get("/same").json() == {"feature": "first"}
+        assert client.get("/other").json() == {"feature": "second"}
 
 
 def test_composition_router_factory_applies_shared_router_configuration() -> None:
