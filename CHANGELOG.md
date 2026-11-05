@@ -6,6 +6,13 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Added
 
+- A shared root `APIRouter` with typed `sse(...)`, reusable
+  `include_channel(..., path=...)` and managed `webrtc(...)` declarations.
+  `RpcChannel()` supports anonymous groups and snapshot-based
+  `include_channel(..., namespace=...)` composition. Existing specialized routers,
+  wire controls and generated-client runtimes remain supported. See
+  [the shared router guide](docs/routers.md).
+
 - Public `fastapi_canon.export_contracts(app)` and `Contracts` snapshot API for
   HTTP/SSE OpenAPI, mounted RPC OpenRPC and WebRTC session contracts. RPC paths
   come from the registered routes, including nested router and mount prefixes;
@@ -23,6 +30,20 @@ All notable changes to `fastapi-canon` are documented in this file.
   and reuses one factory result across all source formats and targets. Bindings
   from these new app contracts inherit the SDK's public base URL. Offline
   generation continues to consume saved contracts without importing application code.
+
+### Breaking changes
+
+- Composed applications now install the configured validation, HTTP-exception
+  and unhandled-error normalizers even without a domain registry. The fallback
+  problem type base is `urn:fastapi-canon:problem`. To retain application-owned
+  framework handlers, disable the corresponding normalizers through `ErrorOptions`;
+  an already installed registry must use the same options as the composition.
+- Install compositions and error registries before application startup. OpenAPI
+  is validated before application resources open, and operation IDs must be unique.
+  Explicit feature registries supplement automatically collected router registries.
+- Normalized validation and internal failures participate in the documented
+  422/500 problem unions. Regenerate SDKs when adopting these response contracts.
+  These changes require the next minor release when this unreleased work ships.
 
 ### Migration
 

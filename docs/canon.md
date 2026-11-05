@@ -61,6 +61,7 @@ represent another PyPI distribution.
 
 | Responsibility | Public imports | Guide |
 | --- | --- | --- |
+| Shared application router and composable channels | `fastapi_canon.APIRouter`, `RpcChannel` | [One feature router](routers.md) |
 | Application composition and Dishka lifecycle | `fastapi_canon.Composition`, `Feature` | [Composition](composition.md#feature-composition) |
 | Database ownership, migrations, locks and short service scopes | `fastapi_canon.Database`, `AlembicMigrations`, `TransactionLocks`, `ServiceScope` | [Databases](database.md) |
 | HTTP routes and contracts | `fastapi_canon.CanonRouter`, `RouterPolicy`, `Error`, `ErrorRegistry`, `CanonResponse` | [HTTP contracts](composition.md#error-contracts) |
@@ -73,11 +74,9 @@ represent another PyPI distribution.
 Typical application imports are explicit:
 
 ```python
-from fastapi_canon import CanonRouter, Composition, Feature
+from fastapi_canon import APIRouter, Composition, Feature, RpcChannel
 from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
-from fastapi_canon.integrations.sse import CanonStreamRouter
-from fastapi_canon.integrations.websockets import RpcChannel, CanonWebSocketRouter
-from fastapi_canon.integrations.webrtc import CanonWebRtcRouter, Session
+from fastapi_canon.integrations.webrtc import Session
 ```
 
 The lower-level `fastapi_canon.integrations.sse.StreamRouter` and
@@ -85,6 +84,10 @@ The lower-level `fastapi_canon.integrations.sse.StreamRouter` and
 Their Canon counterparts add error-registry and composition contracts. Core
 imports do not eagerly load either transport. Import the aiortc adapter only
 when choosing that engine.
+
+For new feature code, use `APIRouter.sse()`, `APIRouter.include_channel()` and
+`APIRouter.webrtc()` on the same router. Existing specialized Canon routers remain
+available for applications which already configure those adapters directly.
 
 WebSocket class names retain `Rpc` when they describe RPC or its declared socket
 contracts. The namespace names the transport; it does not make every WebSocket

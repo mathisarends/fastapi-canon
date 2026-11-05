@@ -49,6 +49,8 @@ architecture:
     fastapi_canon.openapi: adapters
     fastapi_canon.router: routing
     fastapi_canon.feature: composition
+    fastapi_canon.api_router: composition
+    fastapi_canon.public_exports: exports
     fastapi_canon.scopes: composition
     fastapi_canon.integrations.database: persistence
 
@@ -76,16 +78,22 @@ architecture:
     fastapi_canon.integrations.webrtc.codegen: generation
     fastapi_canon.integrations.websockets.adapters.opentelemetry: telemetry
   layers:
+    exports:
+      path: public_exports
+      may_depend_on: [values, responses, adapters, routing, composition, transport, sse, rpc, rtc, telemetry, persistence, mcp]
+      third_party:
+        default: deny
+        allow: [dishka, fastapi, starlette, pydantic, typing_extensions, pydantic_core, opentelemetry, sqlalchemy, alembic, anyio, fastmcp]
     tooling:
       path: scripts
-      may_depend_on: [values, responses, adapters, routing, composition, transport, sse, rpc, rtc, telemetry, generation, analysis, persistence, mcp]
+      may_depend_on: [values, responses, adapters, routing, composition, transport, sse, rpc, rtc, telemetry, generation, analysis, persistence, mcp, exports]
       third_party:
         default: deny
         # Installed-wheel resource smoke checks also exercise SQLAlchemy.
         allow: [packaging, fastapi, pydantic, pydantic_core, typing_extensions, starlette, dishka, httpx, httpx2, jsonschema, jinja2, pytest, uvicorn, anyio, aiortc, av, opentelemetry, sqlalchemy, sqlmodel, alembic, fastmcp]
     showcase:
       path: examples
-      may_depend_on: [values, responses, adapters, routing, composition, transport, sse, rpc, rtc, telemetry, generation, analysis, application, persistence, mcp]
+      may_depend_on: [values, responses, adapters, routing, composition, transport, sse, rpc, rtc, telemetry, generation, analysis, application, persistence, mcp, exports]
       third_party:
         default: deny
         allow: [fastapi, pydantic, pydantic_core, typing_extensions, starlette, dishka, opentelemetry, httpx, httpx2, sqlmodel, sqlalchemy, pydantic_settings, uvicorn, anyio, alembic, fastmcp]
@@ -114,7 +122,7 @@ architecture:
         allow: [fastapi, starlette, pydantic]
     composition:
       path: feature
-      may_depend_on: [values, responses, adapters, routing, telemetry, rpc, rtc, mcp]
+      may_depend_on: [values, responses, adapters, routing, telemetry, sse, rpc, rtc, mcp]
       third_party:
         default: deny
         allow: [dishka, fastapi, starlette, pydantic, opentelemetry, typing_extensions, pydantic_core, fastmcp, anyio]
@@ -194,6 +202,7 @@ architecture:
       - analysis
       - persistence
       - mcp
+      - exports
       third_party:
         default: deny
         allow:
@@ -214,7 +223,7 @@ architecture:
         - fastmcp
     application:
       path: application
-      may_depend_on: [values, responses, adapters, routing, composition, telemetry, rpc, rtc, persistence, mcp]
+      may_depend_on: [values, responses, adapters, routing, composition, telemetry, sse, rpc, rtc, persistence, mcp, exports]
       third_party:
         default: deny
         allow:

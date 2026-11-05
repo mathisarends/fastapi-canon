@@ -66,6 +66,10 @@ class CanonRouter(APIRouter):
         super().include_router(router, **kwargs)
         if isinstance(router, CanonRouter):
             self._included_error_registries.extend(router.error_registries)
+        else:
+            self._included_error_registries.extend(
+                getattr(router, "_canon_error_registries", ())
+            )
 
     def api_route[CallableT: Callable[..., Any]](
         self,

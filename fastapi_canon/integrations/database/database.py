@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from fastapi_canon import Feature
+from fastapi_canon.feature import Feature
 from fastapi_canon.integrations.database.locks import TransactionLocks
 from fastapi_canon.integrations.database.migrations import AlembicMigrations
 
