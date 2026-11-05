@@ -38,7 +38,7 @@ def validate_app(app: FastAPI) -> None:
     installed = tuple(int(part) for part in version("fastapi").split(".")[:2])
     if installed < (0, 143) or not isinstance(getattr(app, "_telemetry", None), dict):
         raise FeatureConfigurationError(
-            "Canon telemetry requires FastAPI >=0.143; core still supports FastAPI >=0.115"
+            "Canon telemetry requires FastAPI >=0.143; core still supports FastAPI >=0.121"
         )
     if not _CONFIGURATION_FIELDS.issubset(app._telemetry):
         raise FeatureConfigurationError(

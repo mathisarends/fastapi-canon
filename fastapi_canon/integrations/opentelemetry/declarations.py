@@ -156,7 +156,7 @@ class Telemetry:
             getattr(app, "_telemetry", None), dict
         ):
             raise FeatureConfigurationError(
-                "Canon telemetry requires FastAPI >=0.143; core still supports FastAPI >=0.115"
+                "Canon telemetry requires FastAPI >=0.143; core still supports FastAPI >=0.121"
             )
         try:
             # lazy telemetry adapter factory

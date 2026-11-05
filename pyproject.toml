@@ -16,7 +16,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "dishka>=1.10,<2",
+    "dishka>=1.10,<1.11",
     "fastapi>=0.121,<1",
     "pydantic>=2.9,<3",
 ]
@@ -44,7 +44,7 @@ websockets = [
     "typing-extensions>=4.12.2",
 ]
 webrtc = ["anyio>=4", "starlette>=0.41", "typing-extensions>=4.12"]
-aiortc = ["aiortc>=1.14,<2"]
+aiortc = ["aiortc>=1.14,<1.16"]
 codegen = [
     "jsonschema>=4.23,<5", "jinja2>=3.1,<4",
     "pydantic>=2.11.2,<3", "typing-extensions>=4.12.2",

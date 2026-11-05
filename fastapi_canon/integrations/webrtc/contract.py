@@ -30,8 +30,8 @@ from fastapi_canon.integrations.webrtc.protocol import PROTOCOL_VERSION, SUBPROT
 from fastapi_canon.integrations.webrtc.router import DECLARATION_ATTRIBUTE
 
 if TYPE_CHECKING:
-    # Only the documented attributes path_params, query_params and dependencies
-    # of a route's dependant are read; no private FastAPI module is imported.
+    # FastAPI does not document Dependant. Only path_params, query_params and
+    # dependencies are read; the upstream canary checks them on new releases.
     from fastapi.dependencies.models import Dependant
 
 # Builds Annotated types from runtime values, which type checkers cannot follow.
