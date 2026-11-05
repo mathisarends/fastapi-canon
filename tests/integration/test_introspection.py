@@ -3,6 +3,8 @@ from dataclasses import FrozenInstanceError, asdict
 from functools import wraps
 
 import pytest
+from dishka import FromDishka, Provider, Scope
+from dishka.integrations.fastapi import DishkaRoute
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.testclient import TestClient
 
@@ -24,6 +26,10 @@ class NotAuthenticated(Exception):
 
 class ProjectMissing(Exception):
     pass
+
+
+class ProjectService:
+    name = "project"
 
 
 def require_authenticated_user() -> None:
@@ -269,3 +275,23 @@ def test_endpoint_lookup_reports_every_ambiguous_registration() -> None:
     with pytest.raises(LookupError, match="found 2: GET /projects, GET /archive"):
         description.operation(get_project)
     assert description.operation_by_id("archive.get").path == "/archive"
+
+
+def test_endpoint_lookup_keeps_the_declared_symbol_with_dishka_routes() -> None:
+    router = CanonRouter(route_class=DishkaRoute)
+    provider = Provider()
+    provider.provide(ProjectService, scope=Scope.REQUEST)
+
+    @router.get("/projects", operation_id="projects.get")
+    async def get_project(service: FromDishka[ProjectService]) -> str:
+        return service.name
+
+    composition = Composition(
+        features=(Feature(name="projects", routers=[router], providers=[provider]),)
+    )
+    app = composition.apply(FastAPI())
+    operation = composition.inspect(app).operation(get_project)
+    assert operation.operation_id == "projects.get"
+    assert operation.path == "/projects"
+    with TestClient(app) as client:
+        assert client.get(operation.path).json() == "project"

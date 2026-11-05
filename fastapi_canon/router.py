@@ -107,12 +107,20 @@ class CanonRouter(APIRouter):
             error_origins.update(
                 {str(id(error)): "router.policy" for error in self.policy.raises}
             )
-        kwargs["openapi_extra"] = _RouteMetadata(
-            kwargs.get("openapi_extra") or {},
-            dependency_origins,
-            error_origins,
-        )
-        return super().api_route(path, **kwargs)
+
+        def register(endpoint: CallableT) -> CallableT:
+            configured = {
+                **kwargs,
+                "openapi_extra": _RouteMetadata(
+                    kwargs.get("openapi_extra") or {},
+                    dependency_origins,
+                    error_origins,
+                    endpoint,
+                ),
+            }
+            return super(CanonRouter, self).api_route(path, **configured)(endpoint)
+
+        return register
 
     def get[CallableT: Callable[..., Any]](
         self,
@@ -252,12 +260,14 @@ class _RouteMetadata(dict[str, Any]):
         values: Mapping[str, Any],
         dependencies: dict[str, str],
         errors: dict[str, str],
+        endpoint: Callable[..., object],
     ) -> None:
         super().__init__(values)
         self._dependency_origins = tuple(
             (int(key), value) for key, value in dependencies.items()
         )
         self._error_origins = tuple(errors.items())
+        self._endpoint = endpoint
 
 
 def _normalize_responses(value: object) -> OpenAPIResponses:

@@ -114,7 +114,10 @@ def _describe(
             for name, _, providers in features
         ),
         operations=tuple(operations),
-        endpoints=tuple(route.original_route.endpoint for route in effective),
+        endpoints=tuple(
+            getattr(route.openapi_extra, "_endpoint", route.original_route.endpoint)
+            for route in effective
+        ),
     )
 
 

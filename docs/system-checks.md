@@ -118,6 +118,8 @@ and `operation_by_id("projects.get")` for external IDs. Both reject missing or
 ambiguous matches. Callable lookup uses identity and never invokes the endpoint;
 decorated routes use the callable registered with the router. Runtime lookup
 references are excluded from dataclass/JSON exports.
+Canon routers retain the declared symbol across framework wrappers such as
+`DishkaRoute`, so automatic injection does not change the lookup reference.
 
 Origins distinguish `application`, `composition.router_policy`,
 `composition.router_factory`, `router.include_router`, `router.policy`, `router`,
