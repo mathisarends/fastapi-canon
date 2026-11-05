@@ -15,7 +15,53 @@
         "title": "CancelProject",
         "type": "object"
       },
-      "CancelRequest": {
+      "ProjectMissingProblem": {
+        "additionalProperties": true,
+        "description": "RFC 9457 Problem Details with a stable application code.",
+        "properties": {
+          "code": {
+            "const": "project_missing",
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "format": "uri-reference",
+            "type": "string"
+          },
+          "replacement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Replacement"
+          },
+          "title": {
+            "const": "Project not found",
+            "type": "string"
+          },
+          "type": {
+            "const": "https://api.example.com/problems/project_missing",
+            "format": "uri-reference",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "code"
+        ],
+        "title": "ProjectMissingProblem",
+        "type": "object",
+        "x-canon-problem": true
+      },
+      "ProjectsCancelRequest": {
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -65,59 +111,13 @@
           "method",
           "params"
         ],
-        "title": "CancelRequest",
+        "title": "ProjectsCancelRequest",
         "type": "object"
-      },
-      "ProjectMissingProblem": {
-        "additionalProperties": true,
-        "description": "RFC 9457 Problem Details with a stable application code.",
-        "properties": {
-          "code": {
-            "const": "project_missing",
-            "type": "string"
-          },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "format": "uri-reference",
-            "type": "string"
-          },
-          "replacement": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Replacement"
-          },
-          "title": {
-            "const": "Project not found",
-            "type": "string"
-          },
-          "type": {
-            "const": "https://api.example.com/problems/project_missing",
-            "format": "uri-reference",
-            "type": "string"
-          }
-        },
-        "required": [
-          "type",
-          "title",
-          "code"
-        ],
-        "title": "ProjectMissingProblem",
-        "type": "object",
-        "x-canon-problem": true
       }
     }
   },
   "info": {
-    "description": "Typed JSON-RPC API.",
+    "description": "",
     "title": "Projects",
     "version": "1.0.0"
   },
@@ -154,8 +154,13 @@
       },
       "servers": [
         {
-          "name": "ws",
-          "url": "wss://api.example.com/ws",
+          "name": "rpc_ws",
+          "url": "{baseUrl}/ws",
+          "variables": {
+            "baseUrl": {
+              "default": "{baseUrl}"
+            }
+          },
           "x-rpckit-transport": {
             "frameType": "text",
             "messageEncoding": "json",
@@ -167,15 +172,20 @@
         "$ref": "#/components/schemas/CancelProject"
       },
       "x-rpc-request-schema": {
-        "$ref": "#/components/schemas/CancelRequest"
+        "$ref": "#/components/schemas/ProjectsCancelRequest"
       }
     }
   ],
   "openrpc": "1.4.1",
   "servers": [
     {
-      "name": "ws",
-      "url": "wss://api.example.com/ws",
+      "name": "rpc_ws",
+      "url": "{baseUrl}/ws",
+      "variables": {
+        "baseUrl": {
+          "default": "{baseUrl}"
+        }
+      },
       "x-rpckit-transport": {
         "frameType": "text",
         "messageEncoding": "json",
@@ -183,6 +193,7 @@
       }
     }
   ],
+  "x-canon-application": true,
   "x-rpc-heartbeat": {
     "method": "$/ping",
     "params": {},

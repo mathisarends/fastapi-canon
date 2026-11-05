@@ -8,7 +8,7 @@ output = "contracts/openapi.json"
 
 [codegen.sources.control]
 kind = "openrpc"
-source = "app:contract"
+source = "app:app"
 output = "contracts/openrpc.json"
 
 [codegen.targets.browser]
