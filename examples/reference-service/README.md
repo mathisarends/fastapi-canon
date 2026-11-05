@@ -2,7 +2,7 @@
 
 A small task API demonstrating feature slices, repositories, mapping, transactions,
 and authentication with the real `fastapi-canon` library. Features contribute
-providers, `CanonRouter` declarations, and typed error registries. `Composition`
+providers, `APIRouter` declarations, and typed error registries. `Composition`
 owns the Dishka container and its shutdown; the application has no local Feature
 implementation or second container/lifespan manager.
 

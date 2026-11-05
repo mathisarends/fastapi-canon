@@ -8,7 +8,8 @@ from typing import Any, Literal
 
 import pytest
 
-from examples.canonical_errors.app import contract
+from examples.canonical_errors.app import create_app
+from fastapi_canon import export_contracts
 from fastapi_canon.codegen.config import (
     Configuration,
     SourceConfig,
@@ -98,7 +99,7 @@ def test_selection_applies_to_binding_emitters(
     tmp_path: Path, kind: Literal["openrpc", "webrtc"]
 ) -> None:
     if kind == "openrpc":
-        document = contract.to_openrpc()
+        document = _example_openrpc()
         document["x-rpc-notifications"] = [
             {
                 "name": "records.updates",
@@ -235,3 +236,9 @@ def test_selection_records_original_provenance_and_is_drift_checked(
         source, include_operations=("records.list",), exclude_operations=()
     )
     assert generate(replace(config, sources=(changed,)), offline=True, check=True)[0]
+
+
+def _example_openrpc() -> dict[str, Any]:
+    document = export_contracts(create_app(), kinds=("openrpc",)).openrpc
+    assert document is not None
+    return document

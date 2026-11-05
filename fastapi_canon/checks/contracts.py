@@ -9,6 +9,14 @@ from fastapi_canon.checks.analysis import _ROUTE_METHODS, _Analyzer, _Flow, _Unk
 from fastapi_canon.checks.source import _Definition, _Source
 
 _CANON_ROUTER = "fastapi_canon.CanonRouter"
+_CANON_ROUTERS = frozenset(
+    {
+        _CANON_ROUTER,
+        "fastapi_canon.router.CanonRouter",
+        "fastapi_canon.APIRouter",
+        "fastapi_canon.api_router.APIRouter",
+    }
+)
 _ERROR = "fastapi_canon.Error"
 _REGISTRY = "fastapi_canon.ErrorRegistry"
 _DEPENDENCIES = {
@@ -110,10 +118,7 @@ class _Checker:
                     if isinstance(router, ast.Call)
                     else None
                 )
-                if constructor not in {
-                    _CANON_ROUTER,
-                    "fastapi_canon.router.CanonRouter",
-                }:
+                if constructor not in _CANON_ROUTERS:
                     if constructor in {
                         "fastapi.APIRouter",
                         "fastapi.routing.APIRouter",

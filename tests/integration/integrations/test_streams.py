@@ -33,6 +33,7 @@ from examples.streams.app import (
     run_not_found,
 )
 from fastapi_canon import (
+    APIRouter,
     CanonRouter,
     Composition,
     Error,
@@ -53,8 +54,9 @@ def stream_app() -> FastAPI:
 
 
 def test_router_combines_native_bases_and_feature_discovers_registry() -> None:
-    assert isinstance(router, CanonRouter)
-    assert isinstance(router, StreamRouter)
+    assert isinstance(CanonStreamRouter(), CanonRouter)
+    assert isinstance(CanonStreamRouter(), StreamRouter)
+    assert isinstance(router, APIRouter)
     assert feature.errors is not None
     assert feature.errors.errors == run_errors.errors
 

@@ -58,8 +58,8 @@ uv run fastapi-canon check errors src --strict --require-complete
 ```
 
 Use the actual consumer source root (for example `backend/src`). The checker
-covers supported direct `CanonRouter` HTTP operations, not every transport or
-dynamic call graph. Abstract Dishka ports can leave analysis incomplete. Inspect
+covers direct `APIRouter` HTTP operations; it does not analyze SSE, RPC
+channels or dynamic call graphs. Abstract Dishka ports can leave analysis incomplete. Inspect
 `CAN001` (missing declaration), `CAN002` (missing mapping) and `CAN003` (unresolved
 analysis) using [error-checking.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/error-checking.md); do not claim complete coverage by
 dropping the completeness flag or adding broad suppressions.

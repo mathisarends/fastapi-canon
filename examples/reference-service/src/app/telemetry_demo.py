@@ -10,7 +10,7 @@ import httpx2
 from dishka import FromDishka, Provider, Scope, provide
 from dishka.integrations.fastapi import inject
 from fastapi import FastAPI
-from fastapi_canon import CanonRouter, Composition, ErrorOptions, Feature
+from fastapi_canon import APIRouter, Composition, ErrorOptions, Feature
 from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
 from fastapi_canon.integrations.opentelemetry.httpx import instrument_httpx
 from fastapi_canon.integrations.opentelemetry.sqlalchemy import instrument_sqlalchemy
@@ -129,7 +129,7 @@ def create_tasks_app() -> FastAPI:  # smelt: ignore[SMT429] -- external API
         telemetry=options,
         request_logging=True,
         errors=ErrorOptions(type_base="https://api.example.test/problems"),
-        router_factory=lambda: CanonRouter(prefix="/api/v1"),
+        router_factory=lambda: APIRouter(prefix="/api/v1"),
     ).apply(app)
     return app
 
@@ -137,7 +137,7 @@ def create_tasks_app() -> FastAPI:  # smelt: ignore[SMT429] -- external API
 # Public demo application factory for standalone telemetry services.
 def create_notifier_app() -> FastAPI:  # smelt: ignore[SMT429] -- external API
     options, lifecycle = _telemetry("notifier")
-    router = CanonRouter()
+    router = APIRouter()
 
     @router.post("/notifications")
     async def notify() -> dict[str, str]:
@@ -165,7 +165,7 @@ def _notification_feature() -> Feature:
             HttpNotificationGateway, provides=NotificationGateway, scope=Scope.REQUEST
         )
 
-    router = CanonRouter()
+    router = APIRouter()
 
     @router.post("/demo/notify")
     @inject

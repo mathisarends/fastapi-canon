@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
-from fastapi_canon import CanonRouter, Composition, ErrorOptions, Feature
+from fastapi_canon import APIRouter, Composition, ErrorOptions, Feature
 
 from app.authentication.feature import feature as authentication_feature
 from app.features.tasks.feature import feature as tasks_feature
@@ -28,7 +28,7 @@ def create_app(  # smelt: ignore[SMT429] -- external API
     app.include_router(health_router)
     composition = Composition(
         features=FEATURES,
-        router_factory=lambda: CanonRouter(prefix="/api/v1"),
+        router_factory=lambda: APIRouter(prefix="/api/v1"),
         errors=ErrorOptions(type_base="https://api.example.test/problems"),
         telemetry=telemetry,
     )

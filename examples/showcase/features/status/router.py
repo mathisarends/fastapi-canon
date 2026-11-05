@@ -1,6 +1,6 @@
-from fastapi_canon import CanonRouter
+from fastapi_canon import APIRouter
 
-router = CanonRouter(tags=["status"])
+router = APIRouter(tags=["status"])
 
 
 @router.get("/health", operation_id="get_health")

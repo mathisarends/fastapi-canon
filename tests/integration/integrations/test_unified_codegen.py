@@ -14,7 +14,8 @@ from typing import Any
 import httpx
 import pytest
 
-from examples.canonical_errors.app import app, contract, projects
+from examples.canonical_errors.app import app, create_app, projects
+from fastapi_canon import export_contracts
 from fastapi_canon.cli import main
 from fastapi_canon.codegen.config import (
     Configuration,
@@ -312,7 +313,7 @@ def test_model_and_operation_conflicts_require_explicit_resolution() -> None:
         operation.name == ("projects", "read")
         for operation in build_plan(((config, api),)).operations
     )
-    rpc = contract.to_openrpc()
+    rpc = _example_openrpc()
     rpc["components"]["schemas"]["ProjectMissingProblem"]["properties"][
         "replacement"
     ] = {"type": "integer"}
@@ -738,7 +739,7 @@ def test_terminal_only_nested_problem_definitions_share_identity(
 
 
 def _inputs() -> tuple[tuple[SourceConfig, dict[str, Any]], ...]:
-    api, rpc = copy.deepcopy(export_schema(app)), contract.to_openrpc()
+    api, rpc = copy.deepcopy(export_schema(app)), _example_openrpc()
     color = {
         "title": "Color",
         "type": "string",
@@ -768,3 +769,9 @@ def _inputs() -> tuple[tuple[SourceConfig, dict[str, Any]], ...]:
 
 async def _collect(stream: Any) -> list[Any]:
     return [item async for item in stream]
+
+
+def _example_openrpc() -> dict[str, Any]:
+    document = export_contracts(create_app(), kinds=("openrpc",)).openrpc
+    assert document is not None
+    return document

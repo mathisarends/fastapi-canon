@@ -1,7 +1,7 @@
 # Components and composition
 
 Use this to identify the pieces of an existing Canon application or wire a new
-feature. Inspect installed signatures when a project pins an older version:
+feature. Inspect the installed signatures before relying on an option:
 
 ```console
 uv run fastapi-canon --version
@@ -12,8 +12,8 @@ uv run python -c "import inspect; from fastapi_canon import Composition, Feature
 
 | Component | Responsibility | Connect it through |
 | --- | --- | --- |
-| `APIRouter` | HTTP contracts, typed SSE, RPC channel mounts, WebRTC declarations | `Feature(routers=[router])` |
-| `CanonRouter` | HTTP-only route and error contracts; existing specialized transport routers remain supported | `Feature(routers=[router])` |
+| `APIRouter` | One feature router: HTTP contracts, typed SSE, JSON-RPC channel mounts, WebRTC sessions | `Feature(routers=[router])` |
+| `RpcChannel`, `Inject` | Typed JSON-RPC methods/events and their injected dependencies | `router.include_channel(channel, path=...)` |
 | `Error`, `ErrorRegistry` | Public problem identity and exception mapping | Router `error_registry=`, operation `raises=` |
 | `RouterPolicy` | Reusable HTTP prerequisites and documented failures | Router `policy=` or composition `router_policy=` |
 | Dishka `Provider` | Bind application services and ports to their implementations | `Feature(providers=[ProviderClass])` |
@@ -27,8 +27,7 @@ uv run python -c "import inspect; from fastapi_canon import Composition, Feature
 
 Import core values from `fastapi_canon` or `fastapi_canon.error`. MCP and telemetry
 use their `fastapi_canon.integrations.*` facades. Extras install dependencies;
-enable only those the application needs. Older releases may require specialized
-routers in place of the shared `APIRouter`; verify availability before migrating.
+enable only those the application needs.
 
 ## Wiring in one place
 
@@ -39,7 +38,7 @@ constructors and remain independent of Canon and Dishka.
 
 ```python
 from fastapi import FastAPI
-from fastapi_canon import CanonRouter, Composition, ErrorOptions, Feature
+from fastapi_canon import APIRouter, Composition, ErrorOptions, Feature
 
 from backend.features.projects.infrastructure.di import ProjectsProvider
 from backend.features.projects.presentation.router import router
@@ -51,7 +50,7 @@ def create_app() -> FastAPI:
     composition = Composition(
         features=(projects,),
         errors=ErrorOptions(type_base="https://api.example.com/problems"),
-        router_factory=lambda: CanonRouter(prefix="/api/v1"),
+        router_factory=lambda: APIRouter(prefix="/api/v1"),
     )
     return composition.apply(FastAPI(title="Projects API"))
 ```
@@ -63,12 +62,14 @@ connections and I/O out of imports, declarations and app construction; open owne
 resources in yielding providers or lifespans. Do not add a second `setup_dishka`
 or manually install the same error registry.
 
-HTTP handlers use `DishkaRoute` and `FromDishka[T]`. APP resources own pools and
+HTTP handlers use `DishkaRoute` and `FromDishka[T]`; SSE endpoints use `@inject`.
+JSON-RPC methods use `Inject[T]`; Composition's container resolves them.
+APP resources own pools and
 factories; REQUEST resources own a single operation. See the
 [HTTP walkthrough](http-feature.md) for the complete router/service/provider and
 [resources](resources.md) before adding persistence or long-lived work.
 
-For installed versions providing composition diagnostics and contract export:
+Inspect the composed app and export its contracts:
 
 ```console
 uv run fastapi-canon inspect backend.app:create_app --factory

@@ -3,9 +3,14 @@ from collections.abc import AsyncIterator
 from fastapi import Depends, FastAPI
 from pydantic import BaseModel
 
-from fastapi_canon import CanonRouter, Composition, Error, ErrorRegistry, Feature
-from fastapi_canon.integrations.sse import CanonStreamRouter
-from fastapi_canon.integrations.websockets import CanonWebSocketRouter, RpcChannel
+from fastapi_canon import (
+    APIRouter,
+    Composition,
+    Error,
+    ErrorRegistry,
+    Feature,
+    RpcChannel,
+)
 
 
 class ProjectMissing(Exception):
@@ -36,8 +41,7 @@ project_missing = Error(
 errors = ErrorRegistry(
     errors=[project_missing], type_base="https://api.example.com/problems"
 )
-http = CanonRouter(error_registry=errors)
-streams = CanonStreamRouter(error_registry=errors)
+router = APIRouter(error_registry=errors)
 projects = RpcChannel("projects", error_registry=errors)
 
 
@@ -46,7 +50,7 @@ def require_project(project_id: int) -> None:
         raise ProjectMissing("private database information")
 
 
-@http.get(
+@router.get(
     "/projects/{project_id}",
     operation_id="get",
     tags=["projects"],
@@ -57,7 +61,7 @@ async def get_project(project_id: int) -> Project:
     return Project(id=project_id)
 
 
-@streams.stream(
+@router.sse(
     "/projects/{project_id}/events",
     operation_id="events",
     tags=["projects"],
@@ -80,15 +84,12 @@ async def cancel(params: CancelProject) -> None:
     require_project(params.project_id)
 
 
-websockets = CanonWebSocketRouter("/ws", channels=[projects])
-feature = Feature(name="projects", routers=[http, streams, websockets])
+router.include_channel(projects, path="/ws")
+feature = Feature(name="projects", routers=[router])
 
 
 def create_app() -> FastAPI:
-    return Composition(features=(feature,)).apply(FastAPI())
+    return Composition(features=(feature,)).apply(FastAPI(title="Projects"))
 
 
 app = create_app()
-contract = websockets.contract(
-    title="Projects", base_url="wss://api.example.com", app=app
-)

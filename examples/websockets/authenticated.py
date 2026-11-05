@@ -4,13 +4,11 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
 
-from dishka import Provider, Scope, from_context, make_async_container, provide
-from dishka.integrations.fastapi import FromDishka, setup_dishka
+from dishka import Provider, Scope, from_context, provide
+from dishka.integrations.fastapi import FromDishka
 from fastapi import FastAPI, WebSocket
+from fastapi_canon import APIRouter, Composition, Feature, Inject, RpcChannel
 from fastapi_canon.integrations.websockets import (
-    CanonWebSocketRouter,
-    Inject,
-    RpcChannel,
     RpcConnection,
     RpcErrorBinding,
     RpcRejection,
@@ -80,23 +78,16 @@ async def open_session(websocket: WebSocket, sessions: FromDishka[Sessions]) -> 
 
 
 def create_app() -> FastAPI:
-    container = make_async_container(Dependencies())
-
-    @asynccontextmanager
-    async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-        yield
-        await container.close()
-
-    app = FastAPI(lifespan=lifespan)
+    router = APIRouter()
     channel = RpcChannel("account")
 
     @channel.method()
     async def whoami(identity: Inject[RequestIdentity]) -> str:
         return identity.login.user
 
-    router = CanonWebSocketRouter(
-        "/rpc",
-        channels=[channel],
+    router.include_channel(
+        channel,
+        path="/rpc",
         context=open_session,
         resolver=AuthenticatedDishka(),
         rejects=(
@@ -108,9 +99,8 @@ def create_app() -> FastAPI:
             ),
         ),
     )
-    app.include_router(router)
-    setup_dishka(container, app)
-    return app
+    feature = Feature(name="account", routers=[router], providers=[Dependencies])
+    return Composition(features=(feature,)).apply(FastAPI())
 
 
 app = create_app()

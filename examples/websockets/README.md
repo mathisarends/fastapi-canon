@@ -1,8 +1,20 @@
 # Examples
 
-These examples show the fastapi_canon.integrations.websockets API directly, without a web framework, generated
-client, or application structure. Each file is standalone and executable.
+Applications mount JSON-RPC channels on their feature router with
+`APIRouter.include_channel`, as [`authenticated.py`](authenticated.py) does:
 
+```python
+router = APIRouter()
+router.include_channel(channel, path="/rpc", context=open_session, resolver=...)
+```
+
+The other examples work one level lower, on the `fastapi_canon.integrations.websockets`
+protocol model: channels, frozen protocols, schemas, binary streams and raw sockets.
+Each file is standalone and executable.
+
+- [`authenticated.py`](authenticated.py) authenticates the WebSocket handshake,
+  binds the login to the Dishka connection scope and closes the connection when
+  the credentials expire.
 - [`basic.py`](basic.py) declares a typed method, serves one raw JSON-RPC request,
   and prints the response.
 - [`features.py`](features.py) mounts multiple channels on one versioned

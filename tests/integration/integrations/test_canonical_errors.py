@@ -13,8 +13,14 @@ from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError as SchemaValidationError
 
-from examples.canonical_errors.app import contract, create_app, project_missing
-from fastapi_canon import Composition, ErrorOptions, ErrorRegistry, Feature
+from examples.canonical_errors.app import create_app, project_missing
+from fastapi_canon import (
+    Composition,
+    ErrorOptions,
+    ErrorRegistry,
+    Feature,
+    export_contracts,
+)
 from fastapi_canon.integrations.sse.codegen.ir import build_ir as stream_ir
 from fastapi_canon.integrations.sse.codegen.openapi import export_schema
 from fastapi_canon.integrations.sse.codegen.python import generate_python
@@ -83,7 +89,7 @@ def test_same_domain_error_across_http_stream_and_rpc() -> None:
     assert "private" not in terminal.text
     assert "canon.complete" not in terminal.text
     assert stream_problem["replacement"] is None
-    schema = contract.to_openrpc()["components"]["schemas"]["ProjectMissingProblem"]
+    schema = _example_openrpc()["components"]["schemas"]["ProjectMissingProblem"]
     Draft202012Validator(schema).validate(rpc_problem)
     operation = app.openapi()["paths"]["/projects/{project_id}/events"]["get"]
     assert operation["x-canon-stream"]["version"] == 1
@@ -434,7 +440,7 @@ def test_generated_python_rpc_error_uses_type_uri_and_preserves_extensions(
 ) -> None:
     files = dict(
         render_python_client(
-            contract.to_openrpc(),
+            _example_openrpc(),
             PythonClientOptions(
                 package="canonical_rpc_sdk", with_transport="websocket"
             ),
@@ -525,7 +531,7 @@ def test_generated_typescript_clients_execute_problem_and_stream_lifecycle(
         ),
         "rpc": dict(
             render_typescript_client(
-                contract.to_openrpc(),
+                _example_openrpc(),
                 TypeScriptClientOptions(
                     client_name="ProjectsClient", with_transport="websocket"
                 ),
@@ -623,3 +629,9 @@ def _sdk(root: Path, name: str, files: dict[str, str]) -> Iterator[Any]:
         for module in tuple(sys.modules):
             if module == name or module.startswith(name + "."):
                 del sys.modules[module]
+
+
+def _example_openrpc() -> dict[str, Any]:
+    document = export_contracts(create_app(), kinds=("openrpc",)).openrpc
+    assert document is not None
+    return document
