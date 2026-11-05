@@ -4,6 +4,7 @@ from http import HTTPMethod
 from typing import TYPE_CHECKING
 
 from ._version import __version__
+from .contracts import Contracts, export_contracts
 from .error import Error, ErrorConfigurationError, ErrorRegistry, Problem
 from .feature import (
     Composition,
@@ -35,6 +36,7 @@ __all__ = [
     "CanonResponse",
     "CanonRouter",
     "Composition",
+    "Contracts",
     "Database",
     "Error",
     "ErrorConfigurationError",
@@ -54,6 +56,7 @@ __all__ = [
     "ServiceScope",
     "TransactionLocks",
     "__version__",
+    "export_contracts",
     "install_openapi_contracts",
     "run_alembic_environment",
     "validate_openapi_contracts",

@@ -9,7 +9,7 @@ from fastapi_canon.cli import main
 
 
 @pytest.mark.parametrize(
-    "transport", ["sse", "websockets", "webrtc", "generate", "skill"]
+    "transport", ["sse", "websockets", "webrtc", "contracts", "generate", "skill"]
 )
 def test_subcommand_help_uses_the_fastapi_canon_command(
     transport: str, capsys: pytest.CaptureFixture[str]

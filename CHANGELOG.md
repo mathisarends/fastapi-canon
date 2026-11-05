@@ -2,6 +2,33 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
+## Unreleased
+
+### Added
+
+- Public `fastapi_canon.export_contracts(app)` and `Contracts` snapshot API for
+  HTTP/SSE OpenAPI, mounted RPC OpenRPC and WebRTC session contracts. RPC paths
+  come from the registered routes, including nested router and mount prefixes;
+  custom handlers keep their declarations. Unmounted operations are omitted and
+  ambiguous endpoints, operation names and protocol versions fail explicitly.
+- `fastapi-canon contracts export --app module:create_app --factory --output-dir
+  contracts`, with format selection, public RPC origin, deterministic JSON and
+  read-only `--check`/`--diff`. It needs no SDK target configuration and never
+  enters application lifespan or resolves runtime dependencies. See
+  [application contracts](docs/contracts.md) for factories without placeholder
+  secrets and the distinction between runtime and contract-affecting settings.
+- Common SDK generation accepts the same FastAPI app/factory as an OpenRPC source
+  and reuses one factory result across all source formats and targets. Bindings
+  from these new app contracts inherit the SDK's public base URL. Offline
+  generation continues to consume saved contracts without importing application code.
+
+### Migration
+
+- Replace application-specific OpenAPI scripts and handwritten mounted RPC URL
+  maps with the application export command or root Python API. Existing transport
+  commands and standalone `RpcContract` sources remain supported; this addition
+  does not require a breaking API or wire-format change.
+
 ## 0.15.0 - 2026-11-04
 
 ### Added

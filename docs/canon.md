@@ -123,6 +123,7 @@ There is one installed command, `fastapi-canon`, also available as
 
 | Command | Responsibility |
 | --- | --- |
+| `fastapi-canon contracts export` | Export the composed app's HTTP/SSE, RPC and WebRTC contracts without starting runtime resources |
 | `fastapi-canon generate` | Plan contracts together and generate one domain SDK with shared models/errors |
 | `fastapi-canon sse` | Export OpenAPI/SSE contracts and generate Python/TypeScript clients |
 | `fastapi-canon websockets` | Export OpenRPC/socket contracts and generate Python/TypeScript clients |
