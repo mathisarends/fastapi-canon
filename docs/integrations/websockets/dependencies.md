@@ -214,7 +214,8 @@ from the authenticated login, closing an expired connection with
 to the RPC SESSION and request identities belong to each call's REQUEST scope.
 The example owns and closes its APP container in the FastAPI lifespan.
 
-Run from this package directory with `uv run uvicorn examples.websockets.authenticated:app`.
+Run from the repository root with
+`uv run --frozen uvicorn examples.websockets.authenticated:app`.
 The in-memory demo session is for illustrating integration; use the application's
 session service and explicit production Origin allowlist. The tests cover denied
 handshakes, an authenticated call, and expiry of an established connection.

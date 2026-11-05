@@ -17,7 +17,7 @@ guides cover the individual parts of the API in more detail:
 - [Observability](observability.md) â€” instrument calls and streams with middleware and OpenTelemetry
 - [Contract and clients](clients.md) â€” export OpenRPC and generate typed clients
 - [Transports](transports.md) â€” serve with FastAPI, a custom adapter, or in-memory tests
-- [Releasing](releasing.md) â€” version, validate, and tag a release
+- [Releasing](releasing.md) â€” prepare and verify the unified Canon release
 
 Start with services and channels if you are building a server. Start with the
 contract and client guide if the server definition already exists.

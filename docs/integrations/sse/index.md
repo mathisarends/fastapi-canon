@@ -10,7 +10,7 @@ TypeScript Fetch and Python HTTPX clients from the same definitions.
 | [Native transports](native-transports.md) | Existing SSE proxies, contract-first generation and private REST codegen views. |
 | [Client usage](clients.md) | Named event values, typed iteration, authentication, cancellation, and errors. |
 | [Development](development.md) | Local checks, test coverage, supported features, and roadmap. |
-| [Releasing](releasing.md) | Workspace release preparation, PyPI publishing, and recovery. |
+| [Releasing](releasing.md) | Unified Canon release preparation, PyPI publishing, and recovery. |
 | [Architecture](architecture.md) | Server integration, shared IR, generation, and transport boundaries. |
 
 Start with the [quickstart](quickstart.md), then use the

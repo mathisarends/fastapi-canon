@@ -3,8 +3,9 @@
 [Documentation](index.md) · [Project](README.md)
 
 Use the [repository contributor commands](../../contributing.md) from the
-repository root. They use shared Python and pnpm lockfiles and run each package
-in its own process.
+repository root. They use one root Python environment and shared Python/pnpm
+lockfiles. All library Python tests run in one root pytest invocation; the
+reference service additionally has its own installed-application test run.
 Only the root CI and pre-commit configurations are active.
 
 For focused Streams work:
@@ -44,7 +45,7 @@ Package checks install the freshly built wheel in three new environments: core
 only, codegen with HTTPX only, and codegen with HTTPX2 only. They bypass cached local
 wheels so repeated builds of the same release version test the current artifact.
 In a directory
-outside the checkout they invoke the installed `fastapi-streams` command, exercise
+outside the checkout they invoke the installed `fastapi-canon sse` command, exercise
 `schema`, `generate`, `check` and drift exit codes, compile the generated TypeScript
 and consume an event through the generated Python SDK. Metadata and `__version__`
 must match the release version in `pyproject.toml`.
@@ -74,8 +75,8 @@ startup measurements, real-network results or Hermes deployment evidence.
 
 Use `--runtime python` or `--runtime typescript` for focused runs. Adjust
 `--events`, `--iterations` and `--rounds` for longer samples. For a comparison,
-run the same harness with `--source-dir` pointing to the other revision's Streams
-package directory, keeping the interpreter, dependencies and arguments fixed.
+run the same harness with `--source-dir` pointing to the other revision's
+repository root, keeping the interpreter, dependencies and arguments fixed.
 Repeat runs to assess noise; ordinary CI does not enforce timing thresholds.
 
 ## Supported scope
