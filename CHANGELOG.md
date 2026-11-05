@@ -18,6 +18,20 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- `McpOptions(auth_factory=..., middleware_factory=...)` builds app-specific
+  FastMCP adapters from the borrowed Dishka APP container. Synchronous factories
+  are validated during composition preflight before application mutation.
+
+- Public `fastapi_canon.integrations.mcp.McpScope` opens an independent Dishka
+  REQUEST scope for native MCP injection and returns its container. Applications
+  can retain operation-owned resources through shielded execution without
+  importing Canon's implementation helpers.
+
+- `McpOptions` accepts `stateless_http`, `mask_error_details` and root
+  `middleware`. Both boolean options default to `None`, preserving native
+  FastMCP settings. Middleware wraps mounted feature execution inside Canon's
+  dependency scope.
+
 - Root `Inject[T]` is shared by WebSocket and MCP integrations. WebSocket
   context functions support `Inject[T]` and reusable `hooks=(function, ...)`
   registrations keyed by return type. Hooks can combine injected services with
@@ -74,6 +88,28 @@ The next release containing the breaking changes below must be 0.16.0.
   Python APIs in text or versioned JSON, separately from import-free source checks.
 
 ### Breaking changes
+
+- The new MCP factory fields extend `McpOptions` for 0.16.0. Move auth and shared
+  middleware adapters that read `app.state.dishka_container` into synchronous
+  factories receiving the container directly. Supply either `auth` or
+  `auth_factory`; factories must not resolve resources or start tasks during
+  composition preflight.
+
+- The MCP facade adds the public `McpScope` API for 0.16.0. Replace custom imports
+  of `integrations.mcp.dependencies.request_scope` and `inject_handler` used to
+  obtain a scoped container with `async with McpScope(app_container)() as scoped`.
+  Normal composed MCP calls retain their existing scope behavior.
+
+- The new MCP option fields extend the public `McpOptions` constructor for
+  0.16.0. Existing declarations retain their behavior. To preserve a previous
+  custom stateless endpoint when adopting Canon, set
+  `McpOptions(stateless_http=True)` explicitly.
+
+- MCP discovery and execution reject duplicate public component identities across
+  mounted servers, including collisions produced by namespace concatenation.
+  Rename local tools/prompts or their mount namespaces before upgrading to
+  0.16.0. Distinct FastMCP versions remain supported. Validation uses the live,
+  caller-visible catalog and does not query authenticated providers at startup.
 
 - MCP installation rejects existing application and feature HTTP routes or mounts
   that shadow its endpoint, including router prefixes and catch-all paths. Move

@@ -4,12 +4,12 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 from .declarations import McpMount, McpOptions
-from .dependencies import Inject
+from .dependencies import Inject, McpScope
 
 if TYPE_CHECKING:
     from .server import McpServer
 
-__all__ = ["Inject", "McpMount", "McpOptions", "McpServer"]
+__all__ = ["Inject", "McpMount", "McpOptions", "McpScope", "McpServer"]
 
 
 def __getattr__(name: str) -> Any:
