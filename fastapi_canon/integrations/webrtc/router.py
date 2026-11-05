@@ -10,12 +10,16 @@ import logging
 import uuid
 from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import asynccontextmanager
-from typing import Annotated, Any, TypeVar, cast
+from functools import update_wrapper
+from typing import Annotated, Any, TypeVar, cast, get_type_hints
 
+from dishka import AsyncContainer, DependencyKey
+from dishka.integrations.base import default_parse_dependency, is_dishka_injected
 from fastapi import APIRouter, Depends, HTTPException, WebSocket
 from fastapi.params import Depends as DependsParam
 from starlette.requests import HTTPConnection
 
+from fastapi_canon.injection import injected_dependency
 from fastapi_canon.integrations.webrtc.declarations import (
     AdmissionErrors,
     DataChannelSpec,
@@ -82,6 +86,8 @@ class WebRtcRouter(APIRouter):
     dependencies resolve before the WebSocket is accepted, so a rejected
     request allocates no peer. Dependencies, including ``yield`` dependencies,
     stay open until the session's cleanup finished.
+    ``Inject[T]`` and ``FromDishka[T]`` resolve from the WebSocket's Dishka
+    SESSION container automatically, without an HTTP request parameter.
 
     Including the router in an application registers its lifespan, which closes
     every active session with ``shutdown`` when the application stops.
@@ -151,6 +157,7 @@ class WebRtcRouter(APIRouter):
         """
 
         def decorator(factory: Factory) -> Factory:
+            dependency, roots = _inject_factory(factory)
             declaration = SessionDeclaration(
                 name=name or factory.__name__,
                 path=self.prefix + path,
@@ -169,7 +176,7 @@ class WebRtcRouter(APIRouter):
 
             async def endpoint(
                 websocket: WebSocket,
-                session: Annotated[Session, Depends(factory)],
+                session: Annotated[Session, Depends(dependency)],
             ) -> None:
                 if not isinstance(cast(object, session), Session):
                     logger.error(
@@ -184,6 +191,7 @@ class WebRtcRouter(APIRouter):
             endpoint.__doc__ = factory.__doc__
             endpoint.__name__ = f"webrtc_session_{declaration.name}"
             setattr(endpoint, DECLARATION_ATTRIBUTE, declaration)
+            endpoint.__dict__["__canon_webrtc_dependency_roots__"] = roots
             self.add_api_websocket_route(
                 path,
                 endpoint,
@@ -318,6 +326,85 @@ class WebRtcRouter(APIRouter):
             yield
         finally:
             await self.aclose()
+
+
+def _inject_factory(
+    factory: Callable[..., Any],
+) -> tuple[Callable[..., Any], tuple[DependencyKey, ...] | None]:
+    source = getattr(factory, "__dishka_orig_func__", factory)
+    signature = inspect.signature(source)
+    hints = get_type_hints(source, include_extras=True)
+    roots: list[DependencyKey] = []
+    parameters: list[inspect.Parameter] = []
+    for name, parameter in signature.parameters.items():
+        hint = hints.get(name, parameter.annotation)
+        service = injected_dependency(hint)
+        key = (
+            DependencyKey(service, "")
+            if service is not None
+            else default_parse_dependency(parameter, hint)
+        )
+        if key is not None:
+            roots.append(key)
+            hint = Annotated[key.type_hint, Depends(_factory_resolver(key))]
+        parameters.append(parameter.replace(annotation=hint))
+    if is_dishka_injected(factory):
+        # Dishka's synchronous decorator replaces markers in place; its Depends
+        # closures belong to Dishka and cannot be statically recovered here.
+        return factory, tuple(dict.fromkeys(roots)) if roots else None
+    if not roots:
+        return factory, ()
+    if inspect.isasyncgenfunction(factory):
+        manager = asynccontextmanager(factory)
+
+        async def async_generator(*args: Any, **kwargs: Any) -> Any:
+            async with manager(*args, **kwargs) as session:
+                yield session
+
+        wrapped: Callable[..., Any] = async_generator
+    elif inspect.iscoroutinefunction(factory):
+
+        async def coroutine(*args: Any, **kwargs: Any) -> Any:
+            return await factory(*args, **kwargs)
+
+        wrapped = coroutine
+    elif inspect.isgeneratorfunction(factory):
+
+        def generator(*args: Any, **kwargs: Any) -> Any:
+            yield from factory(*args, **kwargs)
+
+        wrapped = generator
+    else:
+
+        def function(*args: Any, **kwargs: Any) -> Any:
+            return factory(*args, **kwargs)
+
+        wrapped = function
+    update_wrapper(wrapped, factory)
+    wrapped.__dict__["__signature__"] = signature.replace(
+        parameters=parameters,
+        return_annotation=hints.get("return", signature.return_annotation),
+    )
+    wrapped.__annotations__ = {
+        **hints,
+        **{parameter.name: parameter.annotation for parameter in parameters},
+    }
+    return wrapped, tuple(dict.fromkeys(roots))
+
+
+def _factory_resolver(key: DependencyKey) -> Callable[..., Any]:
+    async def resolve(websocket: WebSocket) -> Any:
+        container: AsyncContainer | None = getattr(
+            websocket.state, "dishka_container", None
+        )
+        if container is None:
+            raise RuntimeError(
+                "WebRTC Inject/FromDishka factories need a Dishka WebSocket "
+                "SESSION container; install with Composition or setup_dishka."
+            )
+        return await container.get(key.type_hint, component=key.component)
+
+    return resolve
 
 
 def _origins(origins: Sequence[str] | None) -> frozenset[str] | None:

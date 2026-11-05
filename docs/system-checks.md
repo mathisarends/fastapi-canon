@@ -87,12 +87,13 @@ application behavior. Independent failures can appear together.
 | `canon.providers.E001` | Provider sources, instrumentation declarations or the Dishka graph are invalid. |
 | `canon.providers.E002` | A mounted JSON-RPC method has a missing service root or unreadable dependency declarations. |
 | `canon.providers.E003` | An HTTP/SSE endpoint root is unavailable at its execution scope, or its declarations are unreadable. |
+| `canon.providers.E004` | A WebRTC factory injects a service unavailable through APP/SESSION scope. |
 | `canon.description.E001` | HTTP metadata cannot be described against the composed catalog. |
 | `canon.contracts.E001` | HTTP/OpenAPI response contracts cannot be compiled. |
 | `canon.checks.E001` | A feature check failed to return valid findings. |
 
 Built-in checks validate composition configuration, the provider graph, selected
-HTTP/SSE and RPC endpoint roots, HTTP contracts and registered WebSocket path
+HTTP/SSE, RPC and WebRTC factory roots, HTTP contracts and registered WebSocket path
 uniqueness during preflight. They do not
 infer whether a dependency enforces authentication, require
 authentication on every route, prove exception coverage, or validate the runtime
@@ -158,6 +159,19 @@ checks do not prove runtime context availability or activation conditions.
 Ordinary request parameters and schemas are unchanged; injected roots stay out
 of OpenAPI. This is preflight coverage; installed snapshots keep their existing
 HTTP contract/path checks.
+
+## WebRTC factory dependency preflight
+
+Automatically injected WebRTC factory roots are checked through APP/SESSION
+scope. `canon.providers.E004` reports the feature, effective WebSocket path,
+service and component. REQUEST resources belong in explicit short child scopes
+for message work; a factory cannot resolve them from its SESSION container.
+The check records `webrtc.factory_dependencies:<feature>:<path>` and never runs
+providers or the factory. External containers and uninspectable explicit Dishka
+wrappers are skipped. Arbitrary nested FastAPI `Depends`/`Security` dependencies,
+including markers already replaced by a synchronous `@inject` decorator, are
+outside this root check. Runtime admission, callback behavior and media engines
+remain outside composition preflight. See the [WebRTC scope guide](integrations/webrtc/canon-dishka.md).
 
 ## RPC method dependency preflight
 

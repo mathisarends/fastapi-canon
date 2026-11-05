@@ -601,8 +601,12 @@ def _prepare_composition(app: FastAPI, composition: Composition) -> _Preparation
         _check_rpc_dependencies(
             app, composition.features, routers, container, issues, checks
         )
+        _check_webrtc_dependencies(
+            app, composition.features, routers, container, issues, checks
+        )
     else:
         checks.append(CheckResult("rpc.method_dependencies", "skipped"))
+        checks.append(CheckResult("webrtc.factory_dependencies", "skipped"))
     mcp_runtime = None
     if composition.mcp is not None and not missing_dependencies:
         from fastapi_canon.integrations.mcp.configuration import prepare_runtime
@@ -938,6 +942,67 @@ def _check_rpc_dependencies(
                     )
                 )
             checks.append(CheckResult(name, "failed" if missing else "passed"))
+
+
+def _check_webrtc_dependencies(
+    app: FastAPI,
+    features: tuple[Feature, ...],
+    routers: tuple[APIRouter, ...],
+    container: AsyncContainer | None,
+    issues: list[CheckIssue],
+    checks: list[CheckResult],
+) -> None:
+    attribute = "__canon_webrtc_dependency_roots__"
+    entries = [
+        ("<application>", path, route.endpoint)
+        for path, route in iter_contract_routes(app.router.routes, include_mounts=False)
+        if hasattr(getattr(route, "endpoint", None), attribute)
+    ]
+    wrapper = APIRouter(prefix=app.router.prefix)
+    for router in routers:
+        wrapper.include_router(router)
+    owners = [
+        feature.name
+        for feature in features
+        for router in feature.routers
+        for _, route in iter_contract_routes(router.routes, include_mounts=False)
+        if hasattr(getattr(route, "endpoint", None), attribute)
+    ]
+    effective = [
+        (path, route.endpoint)
+        for path, route in iter_contract_routes(wrapper.routes, include_mounts=False)
+        if hasattr(getattr(route, "endpoint", None), attribute)
+    ]
+    entries.extend(
+        (owner, path, endpoint)
+        for owner, (path, endpoint) in zip(owners, effective, strict=True)
+    )
+    external = (
+        container is None and getattr(app.state, "dishka_container", None) is not None
+    )
+    for owner, path, endpoint in entries:
+        roots = getattr(endpoint, attribute)
+        name = f"webrtc.factory_dependencies:{owner}:{path}"
+        if roots is None or (roots and external):
+            checks.append(CheckResult(name, "skipped"))
+            continue
+        missing = [
+            key
+            for key in roots
+            if not _dependency_available(container, key, Scope.SESSION)
+        ]
+        for key in missing:
+            qualified = _qualified_name(key.type_hint)
+            issues.append(
+                CheckIssue(
+                    "canon.providers.E004",
+                    f"WebRTC factory {path!r} injects {qualified} without an APP/SESSION binding (component {key.component!r})",
+                    "Register the factory service at APP or SESSION scope; use a child REQUEST scope for per-message work.",
+                    feature_names=(owner,),
+                    locations=(f"WEBSOCKET {path}", qualified),
+                )
+            )
+        checks.append(CheckResult(name, "failed" if missing else "passed"))
 
 
 def _dependency_available(

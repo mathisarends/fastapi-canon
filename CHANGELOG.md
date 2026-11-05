@@ -22,6 +22,12 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- WebRTC session factories resolve `Inject[T]` and `FromDishka[T]` automatically
+  from the WebSocket SESSION container, including sync/coroutine functions and
+  sync/async generator dependencies. FastAPI path/header inputs and pre-accept
+  HTTP denials are preserved. Generator teardown runs after session cleanup and
+  before SESSION provider cleanup; no HTTP Request is inserted into signaling.
+
 - The default `APIRouter` injection supports typed async/sync callable instances,
   bound methods and `functools.partial`, including module/class future
   annotations and inherited call methods. `Inject`/`FromDishka` parameters stay
@@ -152,6 +158,13 @@ The next release containing the breaking changes below must be 0.16.0.
   declared path instead of failing with an AttributeError.
 
 ### Breaking changes
+
+- Composition rejects WebRTC factory marker roots unavailable through APP/SESSION
+  scope with `canon.providers.E004`. Before adopting 0.16.0, register missing
+  services/components at APP or SESSION scope and move per-message REQUEST work
+  into explicit child scopes. External containers and unsupported explicit
+  wrappers keep ownership with skipped coverage; nested FastAPI dependencies
+  remain outside this check. See [factory preflight](docs/system-checks.md#webrtc-factory-dependency-preflight).
 
 - Non-function endpoint callables now need inspectable, named parameter
   signatures. Opaque, variadic and remaining positional-only forms fail during
