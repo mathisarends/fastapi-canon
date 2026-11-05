@@ -92,6 +92,13 @@ def _generate(
             error.source = error.source or source.name
             raise
         except Exception as error:
+            if isinstance(error, ImportError) or isinstance(
+                error.__cause__, ImportError
+            ):
+                raise GenerationError(
+                    "Generation dependencies are unavailable; install fastapi-canon[codegen]",
+                    source=source.name,
+                ) from None
             raise GenerationError(
                 f"Cannot export source {source.name!r} ({type(error).__name__}); check its application reference, factory selection and contract schema",
                 source=source.name,
