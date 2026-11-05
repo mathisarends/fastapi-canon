@@ -75,6 +75,11 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Breaking changes
 
+- MCP installation rejects existing application and feature HTTP routes or mounts
+  that shadow its endpoint, including router prefixes and catch-all paths. Move
+  those routes or select a distinct `McpOptions(path=...)` before upgrading to
+  0.16.0. Preflight reports `canon.mcp.E001` before application mutation.
+
 - WebSocket context preparation with `resolver=Dishka()` now owns a short
   REQUEST scope and closes it before acceptance. Return independently usable
   context data; put connection-lifetime resources in SESSION-scoped providers.

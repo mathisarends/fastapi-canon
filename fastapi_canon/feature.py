@@ -9,7 +9,9 @@ from typing import TYPE_CHECKING, Any
 from dishka import AsyncContainer, Provider, make_async_container
 from dishka.exceptions import DishkaError  # type: ignore[attr-defined]  # not exported
 from fastapi import APIRouter, FastAPI
+from starlette.routing import Match
 from starlette.types import ExceptionHandler, Lifespan
+from starlette.types import Scope as ASGIScope
 
 from fastapi_canon.diagnostics import (
     CheckContext,
@@ -519,6 +521,14 @@ def _prepare_composition(app: FastAPI, composition: Composition) -> _Preparation
         "Contribute each router once and return a fresh empty application router.",
         lambda: _prepare_feature_routers(composition),
     )
+    if routers_ok and routers is not None and composition.mcp is not None:
+        mcp_path = composition.mcp.path
+        attempt(
+            "mcp.routes",
+            "canon.mcp.E001",
+            "Move the conflicting HTTP route or choose a different MCP path.",
+            lambda: _validate_mcp_routes(app, routers, mcp_path),
+        )
     _, handlers_ok = attempt(
         "handlers",
         "canon.handlers.E001",
@@ -626,10 +636,6 @@ def _validate_runtime_options(app: FastAPI, composition: Composition) -> None:
         validate_mounts(mounts, composition.mcp)
         if app.middleware_stack is not None:
             raise FeatureConfigurationError("install MCP before the app starts")
-        if composition.mcp is not None and any(
-            getattr(route, "path", None) == composition.mcp.path for route in app.routes
-        ):
-            raise FeatureConfigurationError("MCP path conflicts with an existing route")
     if composition.request_logging and app.middleware_stack is not None:
         raise FeatureConfigurationError("install request logging before the app starts")
     if composition.telemetry is not None:
@@ -643,6 +649,29 @@ def _prepare_feature_routers(composition: Composition) -> tuple[APIRouter, ...]:
         composition.router_factory,
         composition.router_policy,
     )
+
+
+def _validate_mcp_routes(
+    app: FastAPI, routers: tuple[APIRouter, ...], path: str
+) -> None:
+    for router in (app.router, *routers):
+        for route in router.routes:
+            for endpoint in (path, path + "/"):
+                for method in ("GET", "POST", "DELETE"):
+                    scope: ASGIScope = {
+                        "type": "http",
+                        "path": endpoint,
+                        "root_path": "",
+                        "method": method,
+                    }
+                    match, _ = route.matches(scope)
+                    if match is Match.FULL or (
+                        endpoint == path and match is Match.PARTIAL
+                    ):
+                        raise FeatureConfigurationError(
+                            f"MCP path {path!r} conflicts with an existing route "
+                            f"matching {method} {endpoint}"
+                        )
 
 
 def _prepare_registry(app: FastAPI, composition: Composition) -> ErrorRegistry:
