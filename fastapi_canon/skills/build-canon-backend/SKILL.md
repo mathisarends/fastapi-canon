@@ -35,9 +35,13 @@ them. Supporting references are installed beside this file for both agent tools.
 - Domain owns rules and plain exceptions. Application owns workflows and ports.
   Infrastructure implements I/O. Presentation maps wire models and public errors.
   Both outer layers depend inward; `feature.py` and the app root assemble them.
-- Use Dishka for application dependencies. Put `DishkaRoute` on the router that
-  declares HTTP handlers using `FromDishka`. Let `Composition` own the container
-  and HTTP scope lifecycle.
+- Give each feature one `fastapi_canon.APIRouter` for HTTP, typed SSE
+  (`@router.sse`), JSON-RPC channels (`router.include_channel`) and WebRTC
+  (`@router.webrtc`). Contribute it once through `Feature(routers=[router])`.
+- Use Dishka for application dependencies. Put `DishkaRoute` on the router for
+  HTTP handlers using `FromDishka`; decorate SSE endpoints with `@inject`; mount
+  channels using `Inject[T]` with `resolver=Dishka()`. Let `Composition` own the
+  container and scope lifecycle.
 - Import Canon through `fastapi_canon`, `fastapi_canon.error` or documented
   `fastapi_canon.integrations.*` facades. Define each public problem once, bind
   its registry to the router, and declare operation failures with `raises=`.

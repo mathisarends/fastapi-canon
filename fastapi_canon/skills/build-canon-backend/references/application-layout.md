@@ -39,7 +39,7 @@ backend/
           orm.py                  Persistence schema
         presentation/
           __init__.py
-          router.py               CanonRouter and thin HTTP handlers
+          router.py               APIRouter and thin handlers
           schemas.py              Request/response models
           mapper.py               Wire mapping when it warrants a module
           errors.py               Error values and ErrorRegistry

@@ -6,42 +6,53 @@ dependencies. Keep core imports usable without optional runtimes.
 
 ## Shared feature router
 
-For installed versions exposing `fastapi_canon.APIRouter`, add declarations to
-the feature's existing router, then contribute it once through `Feature`:
+Add every transport to the feature's existing `APIRouter`, then contribute it
+once through `Feature`:
 
 ```python
 from collections.abc import AsyncIterator
 
-from fastapi_canon import APIRouter, RpcChannel
+from dishka.integrations.fastapi import FromDishka, inject
+from fastapi_canon import APIRouter, Inject, RpcChannel
+from fastapi_canon.integrations.websockets.adapters.dishka import Dishka
 
-router = APIRouter(prefix="/projects")
-channel = RpcChannel("projects")
+from backend.features.projects.application import ProjectService
+
+from .errors import PROJECT_MISSING, project_errors
+from .schemas import Project, ProjectEvent, RenameProject
+
+router = APIRouter(prefix="/projects", error_registry=project_errors)
+channel = RpcChannel("projects", error_registry=project_errors)
 
 
 @router.sse("/events", operation_id="projects.events")
-async def project_events() -> AsyncIterator[str]:
-    yield "ready"
+@inject
+async def project_events(
+    projects: FromDishka[ProjectService],
+) -> AsyncIterator[ProjectEvent]:
+    async for event in projects.events():
+        yield event
 
 
-@channel.method("ping")
-async def ping() -> str:
-    return "pong"
+@channel.method("rename", raises=[PROJECT_MISSING])
+async def rename(params: RenameProject, projects: Inject[ProjectService]) -> Project:
+    return await projects.rename(params.project_id, params.title)
 
 
-router.include_channel(channel, path="/rpc")
+router.include_channel(channel, path="/rpc", resolver=Dishka())
 ```
 
 Declare channel operations before inclusion: each mount captures a snapshot.
 Use `@router.webrtc(...)` for managed media sessions after selecting the required
-engine and session options. Existing specialized routers remain valid. See
+engine and session options. See
 [routers](https://github.com/mathisarends/fastapi_canon/blob/main/docs/routers.md)
 for full options; the protocols retain their own admission, scope and cleanup rules.
 
 ## Typed SSE
 
-Install the `sse` extra. A typed async iterator supplies the business event model.
-Use `@router.sse(...)` above, or `CanonStreamRouter` from
-`fastapi_canon.integrations.sse` for an existing dedicated stream router.
+Install the `sse` extra. Declare streams with `@router.sse(...)`; a typed async
+iterator supplies the business event model. Place `@inject` below `@router.sse`
+when the generator uses `FromDishka`.
 
 | Failure phase | Declaration and behavior |
 | --- | --- |
@@ -55,31 +66,35 @@ for admission checks. For data access during iteration, inject an APP-owned shor
 scope factory as described in [resources](resources.md).
 
 Generated iterators yield business events, consume completion and raise shared
-`ProblemError` for terminal problems; unexpected EOF is a transport failure.
-`CanonResponse.sse()` documents a manual streaming response but does not provide
-the typed Canon stream protocol. See [streams.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/streams.md) and
+`ProblemError` for terminal problems; unexpected EOF is a transport failure. See [streams.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/streams.md) and
 [integrations/sse/clients.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/integrations/sse/clients.md) for complete declarations and client behavior.
 
 ## WebSocket RPC
 
-Install the `websockets` extra. Declare typed
-methods on the channel with `@channel.method(raises=[...])`, using the same public
-`Error` definitions as HTTP. On a dedicated `CanonWebSocketRouter` from
-`fastapi_canon.integrations.websockets`, mount with
-`rpc.socket("/rpc", channels=[channel])` after declaring operations, then
-contribute the router to a `Feature`. For Dishka, follow [integrations/websockets/dependencies.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/integrations/websockets/dependencies.md);
-HTTP's `DishkaRoute` is not the RPC injection mechanism.
+Install the `websockets` extra. Declare typed methods and events on an
+`RpcChannel` with `@channel.method(raises=[...])`, using the same public `Error`
+definitions as HTTP, and mount it with `router.include_channel(channel,
+path="/rpc")` after declaring operations. With Dishka, pass `resolver=Dishka()`
+and request services with `Inject[T]`; HTTP's `DishkaRoute` is not the RPC
+injection mechanism. Handshake authentication uses `context=`/`hooks=` and
+`rejects=` on the same call; see
+[integrations/websockets/dependencies.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/integrations/websockets/dependencies.md).
 
 Export the composed app with `fastapi-canon contracts export --app
 backend.app:create_app --output-dir contracts` so effective paths and problem
-types match runtime. Do not copy older `RpcService` wiring. JSON-RPC problem
-data lives inside its protocol envelope. Raw/binary socket sessions retain their
-own framing and close rules. See [integrations/websockets/services.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/integrations/websockets/services.md) and
+types match runtime. JSON-RPC problem data lives inside its protocol envelope.
+Binary streams and raw sockets are not JSON-RPC channels; they keep their own
+endpoints, framing and close rules. See
+[integrations/websockets/services.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/integrations/websockets/services.md) and
 [problems.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/problems.md).
 
-For WebRTC, read [webrtc.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/webrtc.md) before choosing `CanonWebRtcRouter` and an engine.
-Media/session lifetimes need explicit ownership; an SSE convention is not a
-WebRTC or binary-socket protocol.
+## WebRTC
+
+Install the `webrtc` extra and read
+[webrtc.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/webrtc.md)
+before choosing an engine for `@router.webrtc(...)`. Media and session lifetimes
+need explicit ownership; an SSE convention is not a WebRTC or binary-socket
+protocol.
 
 ## One generated domain SDK
 
@@ -120,9 +135,8 @@ uv run fastapi-canon generate --check --diff
 ```
 
 Consumers call `client.projects.get(...)`. HTTP and typed SSE use the OpenAPI
-source. Add an `openrpc` source that references an exported contract for RPC and
-include it in the same target's `sources`. Where supported, an `openrpc` source
-can also reference the app/factory directly. Use saved contracts and `--offline`
+source. Add an `openrpc` source with the same `source = "backend.main:app"` for
+RPC channels and include it in the same target's `sources`. Use saved contracts and `--offline`
 when generation must avoid importing the app.
 
 Change declarations/templates, regenerate, and inspect drift. The generator owns

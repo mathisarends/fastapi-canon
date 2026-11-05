@@ -128,14 +128,14 @@ class ProjectResponse(BaseModel):
 
 ```python
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
-from fastapi_canon import CanonRouter
+from fastapi_canon import APIRouter
 
 from backend.features.projects.application import ProjectService
 
 from .errors import PROJECT_MISSING, project_errors
 from .schemas import ProjectResponse
 
-router = CanonRouter(
+router = APIRouter(
     prefix="/projects",
     tags=["projects"],
     route_class=DishkaRoute,
@@ -191,7 +191,7 @@ FEATURES: tuple[Feature, ...] = (projects_feature,)
 
 ```python
 from fastapi import FastAPI
-from fastapi_canon import CanonRouter, Composition, ErrorOptions
+from fastapi_canon import APIRouter, Composition, ErrorOptions
 
 from backend.composition import FEATURES
 
@@ -200,7 +200,7 @@ def create_app() -> FastAPI:
     composition = Composition(
         features=FEATURES,
         errors=ErrorOptions(type_base="https://api.example.com/problems"),
-        router_factory=lambda: CanonRouter(prefix="/api/v1"),
+        router_factory=lambda: APIRouter(prefix="/api/v1"),
     )
     app = composition.apply(FastAPI(title="Projects API"))
     composition.validate(app)
