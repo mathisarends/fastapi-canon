@@ -22,8 +22,8 @@ then generates Python and TypeScript consumers from them.
 
 | Server declaration | Contract source | Generated domain API | Boilerplate handled by the binding |
 | --- | --- | --- | --- |
-| `CanonRouter.get(..., operation_id="projects.get")` | OpenAPI | `client.projects.get(...)` | HTTP request encoding, response decoding and problem handling. |
-| `CanonStreamRouter.stream(..., operation_id="projects.events")` | The same OpenAPI source | Async iteration over `client.projects.events(...)` | SSE framing, event decoding, completion and terminal problem handling. |
+| `@router.get(..., operation_id="projects.get")` | OpenAPI | `client.projects.get(...)` | HTTP request encoding, response decoding and problem handling. |
+| `@router.sse(..., operation_id="projects.events")` | The same OpenAPI source | Async iteration over `client.projects.events(...)` | SSE framing, event decoding, completion and terminal problem handling. |
 | `RpcChannel("projects").method()` decorating `cancel` | OpenRPC | `client.projects.cancel(...)` | WebSocket connection, request IDs, response correlation and declared errors. |
 
 An SSE endpoint's return annotation supplies the event schema; it does not need
