@@ -222,3 +222,138 @@ class AppProvider(Provider):
     [finding] = diagnostics(report)
     assert finding["code"] == "CAN001"
     assert finding["trace"][-2:] == ["api.Template.get", "api.Concrete.load"]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "impl = SafeRepository()\nimpl = SqlRepository()\nreturn impl",
+        "impl: Repository = SafeRepository()\nimpl = SqlRepository()\nreturn impl",
+        "impl = SafeRepository()\nimpl: Repository = SqlRepository()\nreturn impl",
+        "impl = SqlRepository()\nalias = impl\nimpl = SafeRepository()\nreturn alias",
+        "impl = SafeRepository()\nif self.flag:\n    impl = SqlRepository()\nreturn impl",
+        "if self.flag:\n    return SqlRepository()\nreturn SafeRepository()",
+        "impl = SqlRepository()\nreturn impl\nimpl = SafeRepository()",
+        "impl = SqlRepository()\nyield impl\nimpl = SafeRepository()",
+        "impl = SafeRepository()\nimpl = SqlRepository()\nyield impl",
+        "impl = SafeRepository()\nif self.flag:\n    impl = SqlRepository()\nyield impl",
+    ],
+    ids=[
+        "reassignment",
+        "annotated-initial",
+        "annotated-reassignment",
+        "local-alias",
+        "conditional-assignment",
+        "conditional-return",
+        "unreachable-assignment",
+        "yield-position",
+        "reassigned-yield",
+        "conditional-yield",
+    ],
+)
+def test_factory_values_follow_assignment_and_exit_order(
+    analyze: Callable[..., dict[str, Any]], body: str
+) -> None:
+    provider = (
+        """
+class SafeRepository(Repository):
+    async def get(self) -> None:
+        return None
+
+class AppProvider(Provider):
+    @provide(scope=Scope.REQUEST, provides=Repository)
+    def repository(self):
+"""
+        + "\n".join("        " + line for line in body.splitlines())
+        + "\n"
+    )
+
+    report = analyze(SQL_REPOSITORY + provider)
+
+    assert any(
+        item["code"] == "CAN001" and item["trace"][-1] == "api.SqlRepository.get"
+        for item in diagnostics(report)
+    )
+
+
+def test_factory_nested_definitions_do_not_supply_results(
+    analyze: Callable[..., dict[str, Any]],
+) -> None:
+    provider = """
+class AppProvider(Provider):
+    @provide(scope=Scope.REQUEST)
+    def repository(self) -> Repository:
+        def unrelated():
+            return SqlRepository()
+        class Unrelated:
+            def create(self):
+                yield SqlRepository()
+        return unknown()
+"""
+
+    report = analyze(SQL_REPOSITORY + provider)
+
+    [finding] = diagnostics(report)
+    assert finding["code"] == "CAN003"
+    assert not report["operations"][0]["complete"]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "return SafeRepository()\nreturn SqlRepository()",
+        "impl = SafeRepository()\nif self.flag:\n    impl = SqlRepository()\n    return SafeRepository()\nreturn impl",
+        "def unrelated():\n    yield SqlRepository()\nreturn SafeRepository()",
+    ],
+    ids=["unreachable-return", "terminated-branch", "nested-yield"],
+)
+def test_factory_does_not_collect_unreturned_implementations(
+    analyze: Callable[..., dict[str, Any]], body: str
+) -> None:
+    provider = (
+        """
+class SafeRepository(Repository):
+    async def get(self) -> None:
+        return None
+
+class AppProvider(Provider):
+    @provide(scope=Scope.REQUEST, provides=Repository)
+    def repository(self):
+"""
+        + "\n".join("        " + line for line in body.splitlines())
+        + "\n"
+    )
+
+    report = analyze(SQL_REPOSITORY + provider)
+
+    assert diagnostics(report) == []
+    assert report["operations"][0]["complete"]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "if self.flag:\n    return SqlRepository()",
+        "impl = SqlRepository()\nif self.flag:\n    impl = unknown()\nreturn impl",
+        "impl = SqlRepository()\nwhile self.flag:\n    impl = unknown()\nreturn impl",
+        "impl = SqlRepository()\nif (impl := unknown()):\n    pass\nreturn impl",
+    ],
+    ids=["fallthrough", "unknown-branch", "unmodeled-loop", "named-expression"],
+)
+def test_uncertain_factory_paths_prevent_complete_success(
+    analyze: Callable[..., dict[str, Any]], body: str
+) -> None:
+    provider = (
+        """
+class AppProvider(Provider):
+    @provide(scope=Scope.REQUEST, provides=Repository)
+    def repository(self):
+"""
+        + "\n".join("        " + line for line in body.splitlines())
+        + "\n"
+    )
+
+    report = analyze(SQL_REPOSITORY + provider, declaration="raises=[missing]")
+
+    assert any(item["code"] == "CAN003" for item in diagnostics(report))
+    assert not report["operations"][0]["complete"]
