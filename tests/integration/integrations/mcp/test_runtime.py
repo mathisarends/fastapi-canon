@@ -10,6 +10,7 @@ from dishka import Provider, Scope, provide
 from fastapi import FastAPI
 from fastmcp import Client, FastMCP
 from fastmcp.client.transports import StreamableHttpTransport
+from fastmcp.server.middleware import Middleware, MiddlewareContext
 from fastmcp.utilities.asgi_transport import StreamingASGITransport
 from mcp import MCPError
 
@@ -349,3 +350,106 @@ async def test_root_http_auth_rejects_unauthenticated_requests() -> None:
             "/mcp/", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
         )
         assert response.status_code == 401
+
+
+@pytest.mark.parametrize("stateless", [False, True])
+async def test_http_session_mode_is_explicitly_configurable(stateless: bool) -> None:
+    app = Composition(mcp=McpOptions(stateless_http=stateless)).apply(FastAPI())
+    async with (
+        app.router.lifespan_context(app),
+        httpx2.AsyncClient(
+            transport=StreamingASGITransport(app), base_url="http://testserver"
+        ) as client,
+    ):
+        response = await client.post(
+            "/mcp/",
+            headers={"Accept": "application/json, text/event-stream"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-03-26",
+                    "capabilities": {},
+                    "clientInfo": {"name": "test", "version": "1"},
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    assert bool(response.headers.get("mcp-session-id")) is not stateless
+
+
+async def test_root_middleware_wraps_children_before_dependency_cleanup() -> None:
+    events: list[str] = []
+
+    class Recording(Middleware):
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        async def on_call_tool(
+            self, context: MiddlewareContext[Any], call_next: Any
+        ) -> Any:
+            events.append(self.name + ".before")
+            result = await call_next(context)
+            events.append(self.name + ".after")
+            return result
+
+    server = McpServer("Portfolio", middleware=[Recording("child")])
+
+    @server.tool
+    async def identify(service: Inject[Service]) -> str:
+        events.append("handler")
+        return service.identifier
+
+    feature = Feature(
+        name="portfolio",
+        providers=[lambda: Services(events)],
+        mcp=[McpMount(server=server, namespace="portfolio")],
+    )
+    app = Composition(
+        features=[feature],
+        mcp=McpOptions(middleware=(Recording("root"),)),
+    ).apply(FastAPI())
+
+    async with connected(app) as client:
+        assert (await client.call_tool("portfolio_identify")).data
+    assert events == [
+        "root.before",
+        "child.before",
+        "open",
+        "handler",
+        "child.after",
+        "root.after",
+        "commit",
+        "close",
+    ]
+
+
+@pytest.mark.parametrize("masked", [False, True])
+async def test_root_masks_forwarded_execution_failures_when_requested(
+    masked: bool,
+) -> None:
+    class Failure(Middleware):
+        async def on_call_tool(
+            self, context: MiddlewareContext[Any], call_next: Any
+        ) -> Any:
+            raise RuntimeError("private-operation-detail")
+
+    server = FastMCP("Native", middleware=[Failure()])
+
+    @server.tool
+    async def greet() -> str:
+        return "hello"
+
+    app = Composition(
+        features=[
+            Feature(name="native", mcp=[McpMount(server=server, namespace="native")])
+        ],
+        mcp=McpOptions(mask_error_details=masked),
+    ).apply(FastAPI())
+
+    async with connected(app) as client:
+        result = await client.call_tool("native_greet", raise_on_error=False)
+    assert result.is_error
+    assert ("private-operation-detail" in str(result.content)) is not masked

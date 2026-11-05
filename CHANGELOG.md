@@ -8,6 +8,11 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- `McpOptions` accepts `stateless_http`, `mask_error_details` and root
+  `middleware`. Both boolean options default to `None`, preserving native
+  FastMCP settings. Middleware wraps mounted feature execution inside Canon's
+  dependency scope.
+
 - The bundled `build-canon-backend` skill explains Canon's components and
   Composition/Dishka wiring through focused references and small examples.
   `fastapi-canon skill install --force` refreshes complete skill trees from the
@@ -49,6 +54,11 @@ The next release containing the breaking changes below must be 0.16.0.
   Python APIs in text or versioned JSON, separately from import-free source checks.
 
 ### Breaking changes
+
+- The new MCP option fields extend the public `McpOptions` constructor for
+  0.16.0. Existing declarations retain their behavior. To preserve a previous
+  custom stateless endpoint when adopting Canon, set
+  `McpOptions(stateless_http=True)` explicitly.
 
 - `fastapi-canon skill install` now creates both
   `.agents/skills/build-canon-backend` and `.claude/skills/build-canon-backend`.
