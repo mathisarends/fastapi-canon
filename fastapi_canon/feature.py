@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field, replace
@@ -10,7 +11,7 @@ from dishka import AsyncContainer, Provider, make_async_container
 from dishka.entities.key import DependencyKey
 from dishka.exceptions import DishkaError  # type: ignore[attr-defined]  # not exported
 from fastapi import APIRouter, FastAPI
-from starlette.routing import Match
+from starlette.routing import Match, Route
 from starlette.types import ExceptionHandler, Lifespan
 from starlette.types import Scope as ASGIScope
 
@@ -618,7 +619,13 @@ def _prepare_composition(app: FastAPI, composition: Composition) -> _Preparation
                 issues,
                 checks,
             )
-        if not any(issue.code == "canon.routing.E002" for issue in issues):
+            _check_http_paths(
+                app.router, routers, composition.features, (), issues, checks
+            )
+        if not any(
+            issue.code in {"canon.routing.E002", "canon.routing.E003"}
+            for issue in issues
+        ):
             operations, _ = attempt(
                 "http.contracts",
                 "canon.contracts.E001",
@@ -822,6 +829,75 @@ def _check_operations(
     checks.append(CheckResult("http.operation_ids", "failed" if failed else "passed"))
 
 
+def _check_http_paths(
+    application: APIRouter,
+    routers: tuple[APIRouter, ...],
+    features: tuple[Feature, ...],
+    known: tuple[OperationInfo, ...],
+    issues: list[CheckIssue],
+    checks: list[CheckResult],
+) -> None:
+    entries = [
+        ("<application>", path, route)
+        for path, route in iter_contract_routes(
+            application.routes, include_mounts=False
+        )
+        if isinstance(getattr(route, "original_route", route), Route)
+    ]
+    if routers:
+        wrapper = APIRouter(prefix=application.prefix)
+        for router in routers:
+            wrapper.include_router(router)
+        owners = [
+            feature.name
+            for feature in features
+            for router in feature.routers
+            for _, route in iter_contract_routes(router.routes, include_mounts=False)
+            if isinstance(getattr(route, "original_route", route), Route)
+        ]
+        effective = [
+            (path, route)
+            for path, route in iter_contract_routes(
+                wrapper.routes, include_mounts=False
+            )
+            if isinstance(getattr(route, "original_route", route), Route)
+        ]
+        entries.extend(
+            (owner, path, route)
+            for owner, (path, route) in zip(owners, effective, strict=True)
+        )
+    installed = {
+        (op.operation_id, op.path, op.methods): op.feature_name for op in known
+    }
+    seen: dict[tuple[str, str], tuple[str, str]] = {}
+    failed = False
+    for owner, path, route in entries:
+        methods = tuple(sorted(route.methods or ()))
+        identity = getattr(route, "operation_id", None) or getattr(
+            route, "unique_id", None
+        )
+        owner = installed.get((identity, path, methods), owner)
+        # Erase parameter names, retaining the exact converter regex and literals.
+        pattern = re.sub(r"\(\?P<[^>]+>", "(?:", route.path_regex.pattern)
+        for method in methods:
+            key = (method, pattern)
+            previous = seen.get(key)
+            if previous is not None:
+                failed = True
+                issues.append(
+                    CheckIssue(
+                        "canon.routing.E003",
+                        f"Ambiguous HTTP route {method} {path}",
+                        "Use distinct effective paths or HTTP methods; operation IDs do not change dispatch.",
+                        feature_names=tuple(dict.fromkeys((previous[0], owner))),
+                        locations=(f"{method} {previous[1]}", f"{method} {path}"),
+                    )
+                )
+            else:
+                seen[key] = (owner, path)
+    checks.append(CheckResult("http.paths", "failed" if failed else "passed"))
+
+
 def _run_feature_checks(
     features: tuple[Feature, ...],
     description: CompositionInfo,
@@ -876,7 +952,10 @@ def _check_installed(
     _check_operations(
         _operation_headers(app.router, description.operations), issues, checks
     )
-    if any(issue.code == "canon.routing.E002" for issue in issues):
+    _check_http_paths(app.router, (), (), description.operations, issues, checks)
+    if any(
+        issue.code in {"canon.routing.E002", "canon.routing.E003"} for issue in issues
+    ):
         checks.append(CheckResult("http.contracts", "skipped"))
     else:
         cached = app.openapi_schema

@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 import pytest
 from dishka import Provider, Scope, provide
 from fastapi import APIRouter, FastAPI
+from httpx import ASGITransport, AsyncClient
 
 from fastapi_canon import (
     CheckContext,
@@ -227,4 +228,122 @@ def test_check_detects_operation_ids_added_after_installation() -> None:
     assert report.issues[0].locations == ("GET /projects", "GET /later")
     assert app.openapi_schema is schema
     with pytest.raises(FeatureConfigurationError, match="Duplicate operation ID"):
+        composition.build(app)
+
+
+@pytest.mark.parametrize(
+    ("first_path", "second_path"),
+    [
+        ("/same", "/same"),
+        ("/items/{item_id}", "/items/{other_id}"),
+        ("/items/{item_id:str}", "/items/{other_id}"),
+        ("/items/{item_id:int}", "/items/{other_id:int}"),
+    ],
+    ids=["literal", "parameters", "default-converter", "typed-converter"],
+)
+@pytest.mark.parametrize("existing", [False, True], ids=["features", "application"])
+def test_http_path_collisions_reject_before_installation(
+    first_path: str, second_path: str, existing: bool
+) -> None:
+    first = APIRouter(prefix="/v1")
+    second = APIRouter()
+    # Schema visibility and operation IDs do not change HTTP dispatch.
+    first.get(first_path, operation_id="first", include_in_schema=False)(lambda: "one")
+    second.get(second_path, operation_id="second")(lambda: "two")
+    nested = APIRouter(prefix="/v1")
+    nested.include_router(second)
+    app = FastAPI()
+    features = [Feature(name="two", routers=[nested])]
+    if existing:
+        app.include_router(first)
+    else:
+        features.insert(0, Feature(name="one", routers=[first]))
+    composition = Composition(features=features)
+    routes = tuple(app.routes)
+    handlers = dict(app.exception_handlers)
+    lifespan = app.router.lifespan_context
+
+    report = composition.check(app)
+
+    [issue] = report.issues
+    assert issue.code == "canon.routing.E003"
+    assert issue.feature_names == ("<application>" if existing else "one", "two")
+    assert issue.locations == (
+        "GET /v1" + first_path.replace(":str", "").replace(":int", ""),
+        "GET /v1" + second_path.replace(":int", ""),
+    )
+    assert report.has_errors
+    assert ("http.paths", "failed") in {
+        (check.name, check.status) for check in report.checks
+    }
+    with pytest.raises(FeatureConfigurationError, match="Ambiguous HTTP route"):
+        composition.build(app)
+    assert tuple(app.routes) == routes
+    assert app.exception_handlers == handlers
+    assert app.router.lifespan_context is lifespan
+    assert app.openapi_schema is None
+    assert not hasattr(app.state, "dishka_container")
+
+
+def test_distinct_http_routes_remain_reachable() -> None:
+    router = APIRouter(prefix="/items")
+    router.get("/fixed", operation_id="fixed")(lambda: "fixed")
+    router.get("/{item_id:int}", operation_id="integer")(lambda: "integer")
+    router.get("/{other_id}", operation_id="string")(lambda: "string")
+    router.post("/fixed", operation_id="create")(lambda: "created")
+    other = APIRouter(prefix="/other")
+    other.get("/fixed", operation_id="other")(lambda: "other")
+    composition = Composition(
+        features=[Feature(name="items", routers=[router, other])],
+        router_factory=lambda: APIRouter(prefix="/api"),
+    )
+    app = composition.build(FastAPI())
+
+    async def exercise() -> None:
+        async with (
+            asyncio.timeout(5),
+            AsyncClient(
+                transport=ASGITransport(app), base_url="http://test", timeout=5
+            ) as client,
+        ):
+            assert (await client.get("/api/items/fixed")).json() == "fixed"
+            assert (await client.get("/api/items/42")).json() == "integer"
+            assert (await client.get("/api/items/name")).json() == "string"
+            assert (await client.post("/api/items/fixed")).json() == "created"
+            assert (await client.get("/api/other/fixed")).json() == "other"
+
+    asyncio.run(exercise())
+    assert not composition.check(app).has_errors
+
+
+def test_http_path_check_includes_composition_router_prefix() -> None:
+    router = APIRouter()
+    router.get("/same", operation_id="feature")(lambda: "feature")
+    composition = Composition(
+        features=[Feature(name="feature", routers=[router])],
+        router_factory=lambda: APIRouter(prefix="/api"),
+    )
+    app = FastAPI()
+    app.get("/api/same", operation_id="existing")(lambda: "existing")
+
+    [issue] = composition.check(app).issues
+
+    assert issue.code == "canon.routing.E003"
+    assert issue.locations == ("GET /api/same", "GET /api/same")
+
+
+def test_http_path_check_runs_after_installation() -> None:
+    router = APIRouter()
+    router.get("/same", operation_id="first")(lambda: "first")
+    composition = Composition(features=[Feature(name="first", routers=[router])])
+    app = composition.build(FastAPI())
+    schema = app.openapi_schema
+    app.get("/same", operation_id="later", include_in_schema=False)(lambda: "later")
+
+    [issue] = composition.check(app).issues
+
+    assert issue.code == "canon.routing.E003"
+    assert issue.feature_names == ("first", "<application>")
+    assert app.openapi_schema is schema
+    with pytest.raises(FeatureConfigurationError, match="Ambiguous HTTP route"):
         composition.build(app)

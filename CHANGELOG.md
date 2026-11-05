@@ -134,6 +134,14 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Breaking changes
 
+- Composition now rejects ambiguous HTTP method/path contributions with
+  `canon.routing.E003`, including hidden routes, existing application routes and
+  paths differing only in parameter names with equivalent converter regexes.
+  Before adopting 0.16.0, remove duplicate registrations or give them distinct
+  effective paths or HTTP methods. Different operation IDs do not prevent route
+  shadowing. Intentional static/parameter overlap remains supported; see
+  [HTTP path checks](docs/system-checks.md#findings-and-coverage).
+
 - Provider-factory analysis in `fastapi-canon check errors` now follows local
   reassignments, aliases and conditional return/yield paths in execution order.
   Strict checks can fail for previously missed implementation errors; unmodeled
