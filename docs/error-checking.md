@@ -47,7 +47,10 @@ flowchart TD
     MATCH -->|No| UNMAPPED["CAN002: missing Error mapping"]
     INDEX -.->|Unresolved declaration| UNKNOWN["CAN003: incomplete analysis"]
     CONTRACT -.->|Dynamic contract| UNKNOWN
-    CALLS -.->|Abstract port or unresolved call| UNKNOWN
+    CALLS -->|Abstract port| BINDING["Dishka provider bindings in the source"]
+    BINDING -->|Bound implementations| CALLS
+    BINDING -.->|No binding| UNKNOWN
+    CALLS -.->|Unresolved call| UNKNOWN
     COVERED --> REPORT["Text or JSON report + optional CI exit status"]
     MISSING --> REPORT
     UNMAPPED --> REPORT
@@ -58,8 +61,9 @@ For example, `complete_task` calls `TaskService.complete`, which can explicitly
 raise `TaskNotFound`. A `raises=[task_not_found]` declaration supplies both its
 mapping and its operation contract. Removing that declaration produces `CAN002`
 with the call path; an explicit registry mapping without the declaration produces
-`CAN001`. If the same service calls an
-abstract repository method, that call also produces `CAN003`: a known gap and an
+`CAN001`. If the same service calls an abstract repository method, the checker
+follows the implementation that a Dishka provider in the scanned roots binds to
+that port. Without such a binding the call produces `CAN003`: a known gap and an
 incomplete analysis can appear together.
 
 The command is the supported entry point. The `checks` implementation modules,
@@ -189,6 +193,32 @@ including `Annotated` aliases, nested dependencies and router/operation dependen
 lists. Dependencies supplied later while mounting an application are outside this
 source-declaration check.
 
+### Dishka ports
+
+Calls to an abstract method or a `Protocol` member follow the implementations
+that `Provider` classes in the scanned roots bind to that port. The checker reads
+these bindings without constructing a container:
+
+```python
+class TaskProvider(Provider):
+    # The return annotation names the port; the returned constructor names
+    # the implementation. Iterator[T] and AsyncIterator[T] factories provide T.
+    @provide(scope=Scope.REQUEST)
+    def task_repository(self, session: AsyncSession) -> TaskRepository:
+        return SqlTaskRepository(session)
+
+    # provides= names the port; the first argument or source= names the class.
+    verifier = provide(LocalTokenVerifier, provides=TokenVerifier, scope=Scope.APP)
+```
+
+`@provide(provides=Port)` and `alias(source=Impl, provides=Port)` are read the
+same way. When several providers bind the same port, including `override=True`
+providers and test providers within the roots, the call contributes the union
+of their errors. A port without a binding, or a factory whose returned class is
+not statically known, keeps the operation incomplete (`CAN003`). Abstract calls
+on `self` without a binding follow the concrete subclasses in the roots, such as
+`to_domain` hooks of a generic repository base class.
+
 Explicit `raise` statements propagate through supported function calls and simple
 branches. `try`/`except` removes caught exceptions, preserves bare re-raises and
 includes translated exceptions from handlers. Exception matching and registry
@@ -248,7 +278,8 @@ interpreter errors, every Python protocol or implicit descriptor invocation,
 framework internals, application startup, transactions or background tasks.
 Explicit built-in exceptions are outside the application-error comparison.
 
-Unresolved calls, abstract ports, decorated hooks of library-based classes, custom decorators,
+Unresolved calls, unbound abstract ports, decorated hooks of library-based
+classes, custom decorators,
 recursive calls, dynamic contracts, nested route factories, deferred coroutine
 execution and unsupported control flow produce `CAN003`. `for`, `async for` and
 `while` loops are analyzed like branches that may run; iterating a call to a
@@ -256,10 +287,11 @@ generator follows the generator's body. Context managers, comprehensions,
 `match` and `except*` are currently outside the supported flow analysis. Reassigned module declarations and detected contract mutations also
 prevent a complete result, including assignments with type annotations. Expanded
 `ErrorRegistry(**config)` arguments are unresolved contracts: the checker reports
-`CAN003` and suppresses guessed gaps for those operations. Dishka provider bindings
-are not executed or inferred:
-an abstract port remains incomplete even if the application always binds one
-implementation.
+`CAN003` and suppresses guessed gaps for those operations. Dishka providers are
+read, not executed: bindings added to `Provider()` instances at runtime, or
+declared in providers outside the scanned roots, are not
+inferred, and an abstract port without a statically visible binding remains
+incomplete.
 
 Library calls are assumed not to raise application exceptions except through
 the application callables and construction hooks they receive. Methods that a

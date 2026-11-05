@@ -347,7 +347,9 @@ for incomplete analysis or no supported operations. `--format json` produces a
 machine-readable report for tooling and agents.
 
 This checks supported explicit source paths, not every possible runtime failure.
-Abstract Dishka ports and dynamic code can leave analysis incomplete. The checker
+Calls on abstract Dishka ports follow the implementations bound by the
+`Provider` classes in the scanned roots; unbound ports and dynamic code leave
+analysis incomplete. The checker
 covers `APIRouter` HTTP operations, `.sse()` streams and `.webrtc()` sessions,
 and `RpcChannel` methods.
 Calls into installed libraries such as Pydantic or SQLAlchemy contribute no

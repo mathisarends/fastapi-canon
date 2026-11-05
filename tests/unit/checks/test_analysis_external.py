@@ -118,6 +118,35 @@ def test_typed_library_receivers_and_fields_are_external(
     assert operation["complete"]
 
 
+def test_attributes_assigned_by_base_constructors_keep_their_type(
+    analyze: Callable[..., dict[str, dict[str, Any]]],
+) -> None:
+    source = """
+    from abc import ABC
+    from pydantic import SecretStr
+
+    class Base(ABC):
+        def __init__(self, token: SecretStr) -> None:
+            self._token = token
+
+    class Verifier(Base):
+        def __init__(self, token: SecretStr) -> None:
+            super().__init__(token)
+
+        def verify(self) -> str:
+            return self._token.get_secret_value()
+
+    def check(verifier: Verifier) -> str:
+        return verifier.verify()
+    """
+
+    operation = analyze("check(Verifier(SecretStr('x')))", source)["api.endpoint"]
+
+    assert ("CAN003", "unresolved call: self._token.get_secret_value") not in (
+        _messages(operation)
+    )
+
+
 @pytest.mark.parametrize(
     "body",
     [

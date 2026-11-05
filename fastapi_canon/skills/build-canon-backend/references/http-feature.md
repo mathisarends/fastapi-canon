@@ -94,6 +94,11 @@ class ProjectsProvider(Provider):
     project_service = provide(ProjectService)
 ```
 
+Keep port bindings in this static form (`provide(Impl, provides=Port)` or a
+`@provide` factory annotated with the port that returns the implementation's
+constructor). `fastapi-canon check errors` reads these bindings to follow calls
+on `ProjectRepository` into `DemoProjectRepository` without importing the app.
+
 ## Presentation contracts
 
 ### `backend/features/projects/presentation/errors.py`

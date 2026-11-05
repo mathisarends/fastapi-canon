@@ -166,6 +166,17 @@ class _Analyzer:
                 return flow
             if definition and isinstance(definition.node, ast.ClassDef):
                 flow.extend(self._construct(definition, function, stack, node.lineno))
+            elif definition and definition.owner and self.source.abstract(definition):
+                flow.extend(
+                    self._dispatch(
+                        node,
+                        definition,
+                        function,
+                        stack,
+                        awaited=awaited,
+                        iterated=iterated,
+                    )
+                )
             elif definition:
                 if definition.owner and isinstance(node.func, ast.Attribute):
                     receiver = self.source.resolve(
@@ -179,26 +190,16 @@ class _Analyzer:
                                 node.lineno,
                             )
                         )
-                iterated_generator = iterated and _generator(definition.node)
-                if (
-                    isinstance(definition.node, ast.AsyncFunctionDef)
-                    and not awaited
-                    and not iterated_generator
-                ):
-                    flow.unknowns.append(
-                        _Unknown(
-                            "coroutine execution is deferred until awaited",
-                            function.name,
-                            node.lineno,
-                        )
+                flow.extend(
+                    self._call(
+                        node,
+                        definition,
+                        function,
+                        stack,
+                        awaited=awaited,
+                        iterated=iterated,
                     )
-                    return flow
-                called = self.function(definition, stack, iterated=iterated_generator)
-                flow.escapes.extend(
-                    _Escape(item.exception, (function.name, *item.trace), item.line)
-                    for item in called.escapes
                 )
-                flow.unknowns.extend(called.unknowns)
             elif self.source.origin(node.func, function.module, env) is not None:
                 # Library code raises no application exceptions of its own; it
                 # reaches them only through receivers and callables it is given.
@@ -374,6 +375,105 @@ class _Analyzer:
             ],
             list(called.unknowns),
         )
+
+    def _call(
+        self,
+        node: ast.Call,
+        definition: _Definition,
+        function: _Definition,
+        stack: tuple[str, ...],
+        *,
+        awaited: bool,
+        iterated: bool,
+    ) -> _Flow:
+        flow = _Flow()
+        iterated_generator = iterated and _generator(definition.node)
+        if (
+            isinstance(definition.node, ast.AsyncFunctionDef)
+            and not awaited
+            and not iterated_generator
+        ):
+            flow.unknowns.append(
+                _Unknown(
+                    "coroutine execution is deferred until awaited",
+                    function.name,
+                    node.lineno,
+                )
+            )
+            return flow
+        called = self.function(definition, stack, iterated=iterated_generator)
+        flow.escapes.extend(
+            _Escape(item.exception, (function.name, *item.trace), item.line)
+            for item in called.escapes
+        )
+        flow.unknowns.extend(called.unknowns)
+        return flow
+
+    def _dispatch(
+        self,
+        node: ast.Call,
+        port: _Definition,
+        function: _Definition,
+        stack: tuple[str, ...],
+        *,
+        awaited: bool,
+        iterated: bool,
+    ) -> _Flow:
+        """Follow an abstract call to the implementations that can receive it.
+
+        Dishka providers in the source bind ports to implementations. Abstract
+        calls on ``self`` without a binding dispatch to concrete subclasses.
+        Multiple candidates contribute the union of their escapes.
+        """
+        assert port.owner is not None
+        assert isinstance(port.node, ast.FunctionDef | ast.AsyncFunctionDef)
+        flow = _Flow()
+        bound = self.source.implementations(port.owner)
+        receiver = node.func.value if isinstance(node.func, ast.Attribute) else None
+        candidates: list[_Definition] = []
+        if bound:
+            for implementation in bound:
+                method = (
+                    self.source.method(implementation, port.node.name)
+                    if implementation
+                    else None
+                )
+                if method is None or self.source.abstract(method):
+                    flow.unknowns.append(
+                        _Unknown(
+                            f"unresolved Dishka implementation of {port.name}",
+                            function.name,
+                            node.lineno,
+                        )
+                    )
+                else:
+                    candidates.append(method)
+        elif isinstance(receiver, ast.Name) and receiver.id == "self":
+            for subclass in self.source.subclasses(port.owner):
+                method = self.source.method(subclass, port.node.name)
+                if method is not None and not self.source.abstract(method):
+                    candidates.append(method)
+        if not bound and not candidates:
+            flow.unknowns.append(
+                _Unknown(
+                    f"abstract implementation without Dishka binding: {port.name}",
+                    function.name,
+                    node.lineno,
+                )
+            )
+        unique = {candidate.name: candidate for candidate in candidates}
+        for candidate in unique.values():
+            flow.extend(
+                self._call(
+                    node,
+                    candidate,
+                    function,
+                    stack,
+                    awaited=awaited,
+                    iterated=iterated,
+                )
+            )
+        return flow
 
     def block(
         self,
