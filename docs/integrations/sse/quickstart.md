@@ -90,7 +90,8 @@ rejected. Yield application data; FastAPI owns framing, heartbeats and ASGI.
 
 Put authentication and other HTTP preconditions in dependencies. A generator
 body executes after the response starts, so exceptions inside it cannot change
-the HTTP status. Declare registered errors raised while streaming with
-`stream_raises=`; they end the stream with a terminal `canon.problem` event.
+the HTTP status. Declare admission and streaming errors with `raises=`, which
+automatically registers them. During streaming they end the stream with a
+terminal `canon.problem` event.
 Represent recoverable application outcomes in your own event union, as the
 example's `RunFailed` does.

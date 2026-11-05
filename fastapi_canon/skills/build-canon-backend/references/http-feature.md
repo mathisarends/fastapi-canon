@@ -99,7 +99,7 @@ class ProjectsProvider(Provider):
 ### `backend/features/projects/presentation/errors.py`
 
 ```python
-from fastapi_canon import Error, ErrorRegistry
+from fastapi_canon import Error
 
 from backend.features.projects.domain import ProjectMissing
 
@@ -110,7 +110,6 @@ PROJECT_MISSING = Error(
     title="Project not found",
     detail="Choose another project.",
 )
-project_errors = ErrorRegistry(errors=[PROJECT_MISSING])
 ```
 
 ### `backend/features/projects/presentation/schemas.py`
@@ -132,14 +131,13 @@ from fastapi_canon import APIRouter
 
 from backend.features.projects.application import ProjectService
 
-from .errors import PROJECT_MISSING, project_errors
+from .errors import PROJECT_MISSING
 from .schemas import ProjectResponse
 
 router = APIRouter(
     prefix="/projects",
     tags=["projects"],
     route_class=DishkaRoute,
-    error_registry=project_errors,
 )
 
 
@@ -157,7 +155,7 @@ async def get_project(
     return ProjectResponse(id=project.id, title=project.title)
 ```
 
-Registry membership maps runtime exceptions; `raises=` declares the operation's
+`raises=` registers runtime exception mappings and declares the operation's
 public failures. Keep arbitrary exception text out of public details. For shared
 auth use `RouterPolicy` with real dependencies; declarations do not authorize
 requests. For empty/binary success use `CanonResponse.empty()` /

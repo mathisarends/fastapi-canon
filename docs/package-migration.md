@@ -11,6 +11,31 @@ The [repository migration](repository-migration.md) records the
 source history and publishing setup. The repository move does not rename the
 PyPI project or add further Python import changes.
 
+## Upcoming 0.16.0: error declarations
+
+This source change is unreleased. Replace SSE `stream_raises=` with `raises=`.
+When both arguments were present, combine their definitions in one sequence:
+
+```python
+@router.sse(
+    "/events",
+    raises=[authentication_required, task_not_found],
+)
+async def events(...) -> AsyncIterator[TaskEvent]: ...
+```
+
+`raises` now registers canonical errors automatically on HTTP routers, policies,
+SSE routes, WebRTC admission and RPC channels/operations. Remove explicit registry
+entries that only repeat these declarations. Keep `Feature(errors=ErrorRegistry(
+...))` or `error_registry=` for additional errors that are not declared anywhere.
+Set the common URI prefix with `Composition(errors=ErrorOptions(type_base=...))`.
+
+For SSE, the combined effective declaration describes both HTTP admission
+responses and terminal `canon.problem` frames. Dependencies run admission checks
+before response start; generator code, even before its first `yield`, runs after
+the response begins. Regenerate SDKs to include both representations of the
+combined error contract. Existing explicit `Error.type` URIs remain authoritative.
+
 ## Upgrade to 0.15.0
 
 The new MCP integration is opt-in: install `fastapi-canon[mcp]`, contribute

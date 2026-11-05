@@ -13,6 +13,7 @@ from starlette.routing import Match
 from starlette.types import ExceptionHandler, Lifespan
 from starlette.types import Scope as ASGIScope
 
+from fastapi_canon.contract_routes import iter_contract_routes
 from fastapi_canon.diagnostics import (
     CheckContext,
     CheckIssue,
@@ -940,6 +941,12 @@ def _collect_router_errors(
         contributions = list(getattr(router, "_canon_error_registries", ()))
         if isinstance(router, CanonRouter):
             contributions.extend(router.error_registries)
+        for _, route in iter_contract_routes(router.routes, include_mounts=False):
+            metadata = getattr(route, "openapi_extra", None)
+            registry = getattr(metadata, "_error_registry", None)
+            if registry is not None:
+                contributions.append(registry)
+            contributions.extend(getattr(route.endpoint, "_canon_error_registries", ()))
         for registry in contributions:
             if id(registry) in seen:
                 continue
