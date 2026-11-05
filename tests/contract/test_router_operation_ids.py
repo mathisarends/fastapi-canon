@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
 
 import pytest
+from dishka import Provider, Scope, provide
 from fastapi import APIRouter as FastAPIRouter
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
@@ -12,6 +13,41 @@ from fastapi_canon import (
     FeatureConfigurationError,
 )
 from fastapi_canon.integrations.sse import CanonStreamRouter
+from tests.fixtures.injected_endpoints import EndpointStore, reader
+
+
+@pytest.mark.parametrize(
+    ("kind", "expected"),
+    [
+        ("async-object", "AsyncReader"),
+        ("sync-object", "SyncReader"),
+        ("bound-async", "read"),
+        ("bound-sync", "sync_read"),
+        ("inherited", "InheritedReader"),
+        ("partial-async", "partial"),
+        ("keyword-sync", "partial"),
+        ("bound-positional", "partial"),
+    ],
+)
+def test_callable_endpoint_names_retain_the_existing_namespace_policy(
+    kind: str, expected: str
+) -> None:
+    class Services(Provider):
+        @provide(scope=Scope.REQUEST)
+        def store(self) -> EndpointStore:
+            return EndpointStore(1)
+
+    endpoint = reader(kind)
+    router = APIRouter(namespace="api")
+    router.get("/read")(endpoint)
+    composition = Composition(
+        features=[Feature(name="readers", routers=[router], providers=[Services()])]
+    )
+    app = composition.build(FastAPI())
+
+    operation = composition.inspect(app).operation(endpoint)
+    assert operation.operation_id == f"api.{expected}"
+    assert app.openapi()["paths"]["/read"]["get"]["operationId"] == f"api.{expected}"
 
 
 @pytest.mark.parametrize("namespace", [None, "projects", "organization.projects"])

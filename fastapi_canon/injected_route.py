@@ -5,6 +5,7 @@ from __future__ import annotations
 import functools
 import inspect
 from collections.abc import Callable
+from contextlib import aclosing
 from inspect import Parameter
 from typing import Annotated, Any, cast, get_type_hints
 
@@ -13,6 +14,7 @@ from dishka.entities.component import DEFAULT_COMPONENT
 from dishka.integrations.base import default_parse_dependency, wrap_injection
 from fastapi import Depends, Request
 from fastapi.routing import APIRoute
+from starlette.routing import get_name
 
 from fastapi_canon.injection import injected_dependency
 
@@ -22,8 +24,9 @@ class InjectedRoute(APIRoute):
 
     Behaves like Dishka's ``DishkaRoute`` and additionally accepts Canon's
     transport-independent ``Inject[T]`` marker. Endpoints without injected
-    parameters, including those already decorated with ``@inject``, are
-    registered unchanged.
+    parameters, including ordinary functions already decorated with ``@inject``,
+    keep their behavior. Typed callable objects, bound methods and partials use
+    independent function adapters without changing the declared lookup identity.
     """
 
     def __init__(self, path: str, endpoint: Callable[..., Any], **kwargs: Any) -> None:
@@ -32,13 +35,21 @@ class InjectedRoute(APIRoute):
 
 def inject_endpoint[EndpointT: Callable[..., Any]](endpoint: EndpointT) -> EndpointT:
     """Return *endpoint* with injected parameters resolved from Dishka."""
-    hints = get_type_hints(endpoint, include_extras=True)
-    parameters = inspect.signature(endpoint).parameters
+    signature, hints, source = _endpoint_signature(endpoint)
+    parameters = signature.parameters
+    if not inspect.isfunction(endpoint) and not inspect.isclass(endpoint):
+        endpoint = cast(
+            "EndpointT", _adapt_endpoint(endpoint, signature, hints, source)
+        )
     if not any(
-        _parse_dependency(parameter, hints.get(name, Any)) is not None
+        _parse_dependency(parameter, hints.get(name, parameter.annotation)) is not None
         for name, parameter in parameters.items()
     ):
         return endpoint
+    if inspect.isclass(endpoint):
+        raise TypeError(
+            "Endpoint constructors with injection need a typed function or callable instance"
+        )
     if inspect.iscoroutinefunction(endpoint) or inspect.isasyncgenfunction(endpoint):
         wrapped = _inject_async(endpoint, hints, parameters)
     else:
@@ -54,11 +65,11 @@ def _endpoint_dependencies(endpoint: Callable[..., Any]) -> tuple[DependencyKey,
     if retained is not None:
         return cast("tuple[DependencyKey, ...]", retained)
     source = getattr(endpoint, "__dishka_orig_func__", endpoint)
-    hints = get_type_hints(source, include_extras=True)
+    signature, hints, _ = _endpoint_signature(source)
     return tuple(
         dict.fromkeys(
             dependency
-            for name, parameter in inspect.signature(source).parameters.items()
+            for name, parameter in signature.parameters.items()
             if (
                 dependency := _parse_dependency(
                     parameter, hints.get(name, parameter.annotation)
@@ -67,6 +78,102 @@ def _endpoint_dependencies(endpoint: Callable[..., Any]) -> tuple[DependencyKey,
             is not None
         )
     )
+
+
+def _endpoint_signature(
+    endpoint: Callable[..., Any],
+) -> tuple[inspect.Signature, dict[str, Any], Callable[..., Any]]:
+    try:
+        signature = inspect.signature(endpoint)
+        source = endpoint
+        while isinstance(source, functools.partial):
+            source = source.func
+        owner: object | None = None
+        if inspect.ismethod(source):
+            owner = source.__self__
+        elif not (
+            inspect.isfunction(source)
+            or inspect.isclass(source)
+            or inspect.isbuiltin(source)
+        ):
+            owner = source
+            method = inspect.getattr_static(type(source), "__call__")
+            source = cast("Callable[..., Any]", method.__get__(source, type(source)))
+        namespace: dict[str, Any] = {}
+        if owner is not None:
+            cls = owner if inspect.isclass(owner) else type(owner)
+            for base in reversed(inspect.getmro(cls)):
+                namespace.update(vars(base))
+        hints = get_type_hints(source, localns=namespace or None, include_extras=True)
+    except (TypeError, ValueError, NameError, AttributeError):
+        raise TypeError(
+            f"Cannot inspect endpoint {get_name(endpoint)!r}; use a typed function, bound method, callable instance or functools.partial"
+        ) from None
+    return signature, hints, source
+
+
+def _adapt_endpoint(
+    endpoint: Callable[..., Any],
+    signature: inspect.Signature,
+    hints: dict[str, Any],
+    source: Callable[..., Any],
+) -> Callable[..., Any]:
+    if any(
+        parameter.kind
+        in (Parameter.POSITIONAL_ONLY, Parameter.VAR_POSITIONAL, Parameter.VAR_KEYWORD)
+        for parameter in signature.parameters.values()
+    ):
+        raise TypeError(
+            f"Endpoint {get_name(endpoint)!r} needs named parameters; bind positional-only arguments before registration"
+        )
+    if inspect.isasyncgenfunction(source):
+
+        async def generator(*args: Any, **kwargs: Any) -> Any:
+            async with aclosing(endpoint(*args, **kwargs)) as iterator:
+                async for item in iterator:
+                    yield item
+
+        adapted: Callable[..., Any] = generator
+    elif inspect.iscoroutinefunction(source):
+
+        async def coroutine(*args: Any, **kwargs: Any) -> Any:
+            return await endpoint(*args, **kwargs)
+
+        adapted = coroutine
+    elif inspect.isgeneratorfunction(source):
+
+        def sync_generator(*args: Any, **kwargs: Any) -> Any:
+            yield from endpoint(*args, **kwargs)
+
+        adapted = sync_generator
+    else:
+
+        def function(*args: Any, **kwargs: Any) -> Any:
+            return endpoint(*args, **kwargs)
+
+        adapted = function
+    functools.update_wrapper(adapted, endpoint)
+    adapted.__name__ = get_name(endpoint)
+    adapted.__qualname__ = getattr(endpoint, "__qualname__", adapted.__name__)
+    parameters = [
+        parameter.replace(annotation=hints.get(name, parameter.annotation))
+        for name, parameter in signature.parameters.items()
+    ]
+    result = hints.get("return", signature.return_annotation)
+    adapted.__annotations__ = {
+        parameter.name: parameter.annotation
+        for parameter in parameters
+        if parameter.annotation is not Parameter.empty
+    }
+    if result is not Parameter.empty:
+        adapted.__annotations__["return"] = result
+    adapted.__dict__["__signature__"] = signature.replace(
+        parameters=parameters, return_annotation=result
+    )
+    adapted.__dict__["__canon_declared_endpoint__"] = getattr(
+        endpoint, "__canon_declared_endpoint__", endpoint
+    )
+    return adapted
 
 
 def _parse_dependency(parameter: Parameter, hint: Any) -> DependencyKey | None:
