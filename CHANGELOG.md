@@ -8,6 +8,12 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- `fastapi_canon.Scoped[UseCase]` executes an async callable use case in a fresh
+  short service scope per invocation. Its call preserves argument and result
+  types and finishes provider cleanup before returning. Register wrappers at
+  APP scope; retain `ServiceScope` for multiple calls sharing one transaction.
+  See [short use-case calls](docs/database.md#short-use-case-calls).
+
 - A shared root `APIRouter` with typed `sse(...)`, reusable
   `include_channel(..., path=...)` and managed `webrtc(...)` declarations.
   `RpcChannel()` supports anonymous groups and snapshot-based
