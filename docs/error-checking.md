@@ -355,6 +355,39 @@ zero gaps and five incomplete operations, with strict/require-complete exit 1.
 Its remaining findings concern `super`, inherited dispatch and nested route
 factories rather than supported context managers.
 
+## Direct local route factories
+
+A synchronous, undecorated factory without parameters can declare local
+APIRouter/CanonRouter instances (or RpcChannels), nested operations and local
+helpers, then return the router/channel or a literal tuple/list of them. The
+checker indexes these declarations without calling the factory. Static Error,
+ErrorRegistry and RouterPolicy declarations, literal values/collections and
+aliases are resolved in that factory's own scope. Straightforward module-level
+helpers and imported declarations remain available. Factory-local class
+construction, imports, arbitrary setup calls and dynamic captures remain outside
+this bounded subset.
+
+Supported nested functions have stable names such as
+`app.create_router.<locals>.endpoint`; path and decorator line remain separate
+report fields. Two factories with a local `endpoint` keep independent symbols,
+registries and helper call paths. Calling a factory twice does not duplicate its
+source declaration. Distinct local routers keep separate contracts, including
+when a factory returns several routers.
+
+Parameters, conditional setup, reassigned local declarations, computed/unresolved
+captures, dynamic router selection and factory decorators retain CAN003. Repeated
+local function names also remain incomplete with source-line-qualified fallback
+names. Arbitrary endpoint decorators retain their ordinary incomplete-flow
+finding. Async/generator factories and general closure execution are not inferred.
+
+This still reports source-owned declarations, including uncalled factories. It
+does not establish mounting, URL prefixes, runtime reachability or successful
+factory execution. Use composition inspection and runtime tests for those claims.
+The reference-service report remains six operations, zero gaps and five incomplete
+operations (strict/require-complete exit 1). Its two telemetry factories return an
+application/Feature and include dynamic setup, so they remain explicitly outside
+this slice; their diagnostic messages do not change.
+
 ## Analysis boundaries
 
 `complete` describes analysis of the supported explicit source paths, not proof
@@ -365,7 +398,7 @@ Explicit built-in exceptions are outside the application-error comparison.
 
 Unresolved calls, unbound abstract ports, decorated hooks of library-based
 classes, custom decorators,
-recursive calls, dynamic contracts, nested route factories, deferred coroutine
+recursive calls, dynamic contracts, unsupported route factories, deferred coroutine
 execution and unsupported control flow produce `CAN003`. `for`, `async for` and
 `while` loops are analyzed like branches that may run; iterating a call to a
 generator follows the generator's body. Supported comprehensions and deferred
