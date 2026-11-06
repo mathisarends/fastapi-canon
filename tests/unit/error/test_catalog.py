@@ -48,7 +48,7 @@ def test_http_and_embedded_problems_share_identity_and_public_data() -> None:
     registry = ErrorRegistry(
         errors=[missing], type_base="https://api.example.test/problems"
     )
-    router = CanonRouter(error_registry=registry)
+    router = CanonRouter()
 
     @router.get("/item", raises=[missing])
     async def item() -> None:
@@ -92,13 +92,12 @@ def test_embedded_rendering_does_not_evaluate_http_headers() -> None:
 
 def test_application_catalog_reuses_composition_resolution() -> None:
     missing = Error(Missing, status=404, code="item_missing", title="Item missing")
-    local = ErrorRegistry(errors=[missing])
     app = Composition(
-        features=(Feature(name="items", errors=local),),
+        features=(Feature(name="items", errors=[missing]),),
         errors=ErrorOptions(type_base="https://api.example.test/problems"),
     ).build(FastAPI())
     registry = app_registry(app)
-    assert registry.errors == local.errors
+    assert registry.errors == (missing,)
     problem = problem_for(registry, Missing())
     assert problem is not None
     assert problem.type == "https://api.example.test/problems/item_missing"
@@ -193,7 +192,7 @@ def test_same_status_problem_union_uses_resolved_type_uris() -> None:
     missing = Error(Missing, status=404, code="item_missing", title="Item missing")
     expired = Error(Expired, status=404, code="item_expired", title="Item expired")
     local = ErrorRegistry(errors=[missing, expired])
-    router = CanonRouter(error_registry=local)
+    router = CanonRouter()
     router.get("/item", raises=[missing, expired])(lambda: None)
     registry = ErrorRegistry.merge(local, type_base="urn:example:problems")
     app = FastAPI()
