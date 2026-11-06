@@ -15,7 +15,7 @@ stream starts.
 
 ## What the example shows
 
-- `APIRouter(prefix="/runs", error_registry=..., raises=[...])` shares
+- `APIRouter(prefix="/runs", raises=[...])` shares
   authentication and error contracts between both stream operations.
 - `@router.sse(..., methods=[HTTPMethod.POST])` accepts a typed JSON body.
 - Resource checks run in dependencies, so they fail as HTTP problems before

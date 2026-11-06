@@ -7,7 +7,6 @@ from fastapi import FastAPI
 from opentelemetry.trace import SpanKind
 
 from fastapi_canon import Composition, Feature
-from fastapi_canon.error import ErrorRegistry
 from fastapi_canon.integrations.opentelemetry import Telemetry
 from tests.fixtures.telemetry import SpanCapture
 
@@ -33,14 +32,7 @@ async def test_overlapping_requests_correlate_with_exported_server_spans(
 
     with SpanCapture() as capture:
         Composition(
-            features=(
-                Feature(
-                    name="tasks",
-                    errors=ErrorRegistry(
-                        errors=[], type_base="https://example.test/problems"
-                    ),
-                ),
-            ),
+            features=(Feature(name="tasks"),),
             request_logging=True,
             telemetry=Telemetry(
                 tracer_provider=capture.provider,

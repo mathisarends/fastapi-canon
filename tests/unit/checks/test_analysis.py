@@ -28,16 +28,15 @@ from fastapi_canon.checks.source import (
 )
 
 PRELUDE = """
-from fastapi_canon import Error
-from fastapi_canon.error import ErrorRegistry
+from fastapi_canon import Error, Feature
 from fastapi_canon.router import CanonRouter
 
 class Missing(Exception):
     pass
 
 missing = Error(Missing, status=404, code="missing", title="Missing")
-registry = ErrorRegistry(errors=[missing])
-router = CanonRouter(error_registry=registry)
+router = CanonRouter()
+feature = Feature(name="api", routers=[router], errors=[missing])
 """
 
 
@@ -80,13 +79,9 @@ async def complete(service: Service) -> None:
 
 
 @pytest.mark.parametrize("shared", [False, True])
-@pytest.mark.parametrize("explicit_registry", [False, True])
-def test_shared_and_local_contracts(
-    tmp_path: Path, shared: bool, explicit_registry: bool
-) -> None:
-    base = (
-        PRELUDE if explicit_registry else PRELUDE.replace("error_registry=registry", "")
-    )
+@pytest.mark.parametrize("listed", [False, True])
+def test_shared_and_local_contracts(tmp_path: Path, shared: bool, listed: bool) -> None:
+    base = PRELUDE if listed else PRELUDE.replace(", errors=[missing]", "")
     prelude = (
         base.replace(
             "router = CanonRouter(",
@@ -147,16 +142,16 @@ def test_import_aliases_reexports_and_dishka_services(tmp_path: Path) -> None:
         """
 from fastapi_canon.router import CanonRouter as Router
 from dishka.integrations.fastapi import FromDishka
-from app import Service, missing, registry
+from app import Service, missing
 
-router = Router(error_registry=registry, raises=[missing])
+router = Router(raises=[missing])
 
 @router.get('/')
 async def endpoint(service: FromDishka[Service]) -> None:
     await service.run()
 """,
         **{
-            "app/__init__.py": "from .services import Service\nfrom .errors import missing, registry",
+            "app/__init__.py": "from .services import Service\nfrom .errors import missing",
             "app/errors.py": PRELUDE,
             "app/services.py": """
 from .errors import Missing
@@ -267,14 +262,14 @@ def again() -> None:
 def test_mro_uses_most_specific_registered_mapping(tmp_path: Path) -> None:
     report = analyze(
         tmp_path,
-        PRELUDE.replace("registry = ErrorRegistry(errors=[missing])", "").replace(
-            "router = CanonRouter(error_registry=registry)", ""
-        )
+        PRELUDE.replace(
+            'feature = Feature(name="api", routers=[router], errors=[missing])', ""
+        ).replace("router = CanonRouter()", "")
         + """
 class Specific(Missing): pass
 specific = Error(Specific, status=409, code='specific', title='Specific')
-registry = ErrorRegistry(errors=[missing, specific])
-router = CanonRouter(error_registry=registry, raises=[missing])
+router = CanonRouter(raises=[missing])
+feature = Feature(name="api", routers=[router], errors=[specific])
 
 @router.get('/')
 def endpoint() -> None:
@@ -328,7 +323,7 @@ def endpoint(identity: Identity) -> str:
 @pytest.mark.parametrize("location", ["router", "operation"])
 def test_router_and_operation_dependencies(tmp_path: Path, location: str) -> None:
     declarations = (
-        "router = CanonRouter(error_registry=registry, dependencies=[Depends(authentication)])"
+        "router = CanonRouter(dependencies=[Depends(authentication)])"
         if location == "router"
         else ""
     )
@@ -338,7 +333,7 @@ def test_router_and_operation_dependencies(tmp_path: Path, location: str) -> Non
     report = analyze(
         tmp_path,
         (
-            PRELUDE.replace("router = CanonRouter(error_registry=registry)", "")
+            PRELUDE.replace("router = CanonRouter()", "")
             if location == "router"
             else PRELUDE
         )
@@ -518,8 +513,8 @@ def endpoint(value: str):
     "statement",
     [
         "router = build_router()",
-        "registry = build_registry(); router = CanonRouter(error_registry=registry)",
-        "registry.errors.append(missing)",
+        "router = CanonRouter(raises=build_errors())",
+        "errors = [missing]; errors.append(build_error()); router = CanonRouter(raises=errors)",
     ],
 )
 def test_dynamic_and_mutated_declarations_are_incomplete(
@@ -700,7 +695,7 @@ def test_mutated_contract_does_not_guess_missing_errors(tmp_path: Path) -> None:
         + """
 shared = []
 shared.append(missing)
-another_router = CanonRouter(error_registry=registry, raises=shared)
+another_router = CanonRouter(raises=shared)
 @another_router.get('/')
 def endpoint(): raise Missing()
 """,
@@ -732,35 +727,6 @@ shared: list = {"[]" if initially_declared else "[missing]"}
     assert _main([str(tmp_path), "--strict", "--require-complete"]) == 1
 
 
-@pytest.mark.parametrize("explicit_errors", [False, True])
-def test_expanded_registry_is_incomplete_without_guessed_gaps(
-    tmp_path: Path, explicit_errors: bool
-) -> None:
-    configuration = (
-        'config = {"type_base": "https://example.test/problems"}\n'
-        "registry = ErrorRegistry(errors=[missing], **config)"
-        if explicit_errors
-        else 'config = {"errors": [missing]}\nregistry = ErrorRegistry(**config)'
-    )
-    report = analyze(
-        tmp_path,
-        PRELUDE.replace("registry = ErrorRegistry(errors=[missing])", configuration)
-        + """
-@router.get('/', raises=[missing])
-def endpoint(): raise Missing()
-""",
-    )
-    assert report.gaps == 0
-    assert report.incomplete == 1
-    assert codes(report) == ["CAN003"]
-    assert (
-        "expanded ErrorRegistry keyword arguments"
-        in report.operations[0].diagnostics[0].message
-    )
-    assert _main([str(tmp_path), "--strict"]) == 0
-    assert _main([str(tmp_path), "--strict", "--require-complete"]) == 1
-
-
 def test_cli_help_names_the_error_contract_check(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -779,7 +745,7 @@ def test_direct_router_policy_contracts(tmp_path: Path, declared: bool) -> None:
         PRELUDE
         + f"""
 from fastapi_canon import RouterPolicy
-policy = RouterPolicy(error_registry=registry, raises={"[missing]" if declared else "[]"})
+policy = RouterPolicy(raises={"[missing]" if declared else "[]"})
 secured = CanonRouter(policy=policy)
 @secured.get('/')
 def endpoint(): raise Missing()
@@ -788,7 +754,7 @@ def endpoint(): raise Missing()
     assert codes(report) == ([] if declared else ["CAN001"])
 
 
-def test_policy_dependencies_and_local_registry_combine(tmp_path: Path) -> None:
+def test_policy_dependencies_and_local_raises_combine(tmp_path: Path) -> None:
     report = analyze(
         tmp_path,
         PRELUDE
@@ -797,10 +763,9 @@ from fastapi import Depends
 from fastapi_canon import RouterPolicy
 class Conflict(Exception): pass
 conflict = Error(Conflict, status=409, code='conflict', title='Conflict')
-local_registry = ErrorRegistry(errors=[conflict])
 def authentication(): raise Missing()
-policy = RouterPolicy(error_registry=registry, dependencies=[Depends(authentication)])
-secured = CanonRouter(policy=policy, error_registry=local_registry, raises=[conflict])
+policy = RouterPolicy(dependencies=[Depends(authentication)])
+secured = CanonRouter(policy=policy, raises=[conflict])
 @secured.get('/')
 def endpoint(): raise Conflict()
 """,
@@ -944,8 +909,8 @@ def test_cached_inheritance_preserves_uncertain_modules(tmp_path: Path) -> None:
         tmp_path,
         """
 from fastapi_canon.router import CanonRouter
-from errors import registry
-router = CanonRouter(error_registry=registry)
+from errors import missing
+router = CanonRouter(raises=[missing])
 @router.get('/first')
 def first(): pass
 @router.get('/second')
@@ -955,11 +920,9 @@ def second(): pass
             "base.py": "state = 1\nstate = 2\nclass Base(Exception): pass\n",
             "errors.py": """
 from fastapi_canon import Error
-from fastapi_canon.error import ErrorRegistry
 from base import Base
 class Missing(Base): pass
 missing = Error(Missing, status=404, code='missing', title='Missing')
-registry = ErrorRegistry(errors=[missing])
 """,
         },
     )

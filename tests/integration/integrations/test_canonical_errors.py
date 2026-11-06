@@ -33,7 +33,6 @@ from fastapi_canon.integrations.websockets.codegen import (
     PythonClientOptions,
     render_python_client,
 )
-from fastapi_canon.integrations.websockets.definition import RpcDefinition
 
 
 def test_empty_catalog_keeps_its_configured_internal_problem_identity() -> None:
@@ -42,9 +41,7 @@ def test_empty_catalog_keeps_its_configured_internal_problem_identity() -> None:
     from examples.canonical_errors.app import ProjectEvent
     from fastapi_canon.integrations.sse import CanonStreamRouter
 
-    router = CanonStreamRouter(
-        error_registry=ErrorRegistry(errors=[], type_base="urn:empty:problems")
-    )
+    router = CanonStreamRouter()
 
     @router.stream("/events")
     async def events() -> AsyncIterator[ProjectEvent]:
@@ -53,6 +50,7 @@ def test_empty_catalog_keeps_its_configured_internal_problem_identity() -> None:
 
     app = FastAPI()
     app.include_router(router)
+    ErrorRegistry(errors=[], type_base="urn:empty:problems").install(app)
     response = TestClient(app).get("/events")
     assert "urn:empty:problems/internal_server_error" in response.text
     assert "private" not in response.text
@@ -167,8 +165,7 @@ def test_nested_plain_router_keeps_declarations_isolated_between_applications() 
         assert client.get("/nested/projects/0").json()["type"] == (
             "urn:second:problem/project_missing"
         )
-    assert feature.errors is not None
-    assert feature.errors.errors == (project_missing,)
+    assert feature.errors == (project_missing,)
     contracts = export_contracts(first)
     assert contracts.openrpc is not None
     assert contracts.openrpc["methods"][0]["errors"][0]["x-canon-problem-type"] == (
@@ -290,9 +287,10 @@ async def test_rpc_router_serves_all_endpoint_kinds_with_one_contract() -> None:
 
 
 def test_nested_public_extensions_keep_aliases_and_valid_contract_references() -> None:
+    from fastapi import FastAPI
     from pydantic import BaseModel, Field
 
-    from fastapi_canon import Error
+    from fastapi_canon import APIRouter, Error
 
     class Retry(BaseModel):
         retry_after: int = Field(alias="retryAfter")
@@ -314,26 +312,24 @@ def test_nested_public_extensions_keep_aliases_and_valid_contract_references() -
         extensions_model=PublicFields,
         extensions=public_fields,
     )
-    registry = ErrorRegistry(errors=[error], type_base="urn:test:problems")
-    channel = RpcChannel("items", error_registry=registry)
+    channel = RpcChannel("items")
 
     @channel.method(raises=[error])
     async def missing() -> None:
         raise Missing("private")
 
-    service = RpcDefinition()
-    service.socket("/ws", channels=[channel])
-    document = service.contract(title="Nested", base_url="wss://test").to_openrpc()
-    server = channel.create_server()
-
-    async def render() -> Any:
-        response = await server.handle(
-            {"jsonrpc": "2.0", "id": 1, "method": "items.missing"}
-        )
-        assert response is not None and not isinstance(response, list)
-        return response.model_dump(mode="json")["error"]["data"]["problem"]
-
-    payload = asyncio.run(render())
+    router = APIRouter()
+    router.include_channel(channel, path="/ws")
+    app = Composition(
+        features=[Feature(name="items", routers=[router])],
+        errors=ErrorOptions(type_base="urn:test:problems"),
+    ).build(FastAPI())
+    contracts = export_contracts(app)
+    assert contracts.openrpc is not None
+    document = contracts.openrpc
+    with TestClient(app) as client, client.websocket_connect("/ws") as socket:
+        socket.send_json({"jsonrpc": "2.0", "id": 1, "method": "items.missing"})
+        payload = socket.receive_json()["error"]["data"]["problem"]
     assert payload["recovery"] == {"retryAfter": 5}
     assert "private" not in json.dumps(payload)
     schema = {
@@ -426,8 +422,7 @@ def test_stream_shared_declarations_and_safe_renderer_failures() -> None:
         title="Missing",
         detail=bad_detail,
     )
-    registry = ErrorRegistry(errors=[error], type_base="urn:test:problems")
-    router = CanonStreamRouter(error_registry=registry, raises=[error])
+    router = CanonStreamRouter(raises=[error])
     closed = []
 
     @router.stream("/events", raises=[error])

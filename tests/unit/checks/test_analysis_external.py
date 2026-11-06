@@ -9,14 +9,14 @@ import pytest
 from fastapi_canon.cli import main
 
 PRELUDE = """
-from fastapi_canon import APIRouter, Error
-from fastapi_canon.error import ErrorRegistry
+from fastapi_canon import APIRouter, Error, Feature
 
 class Missing(Exception):
     pass
 
 missing = Error(Missing, status=404, code="missing", title="Missing")
-router = APIRouter(error_registry=ErrorRegistry(errors=[missing]))
+router = APIRouter()
+feature = Feature(name='api', routers=[router], errors=[missing])
 
 def fail() -> None:
     raise Missing()

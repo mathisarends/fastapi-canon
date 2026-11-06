@@ -75,10 +75,9 @@ def test_composition_normalizes_without_domain_registries() -> None:
             _validate_payload(document, operation_path, status, response.json())
 
 
-def test_nested_routers_and_explicit_registries_contribute_together() -> None:
+def test_nested_routers_and_listed_errors_contribute_together() -> None:
     missing = Error(Missing, status=404, code="item_missing", title="Item missing")
-    registry = ErrorRegistry(errors=[missing])
-    child = CanonRouter(error_registry=registry)
+    child = CanonRouter()
 
     @child.get("/items/{item_id}", raises=[missing])
     async def item(item_id: str) -> None:
@@ -88,7 +87,7 @@ def test_nested_routers_and_explicit_registries_contribute_together() -> None:
     parent.include_router(child)
     root = CanonRouter()
     root.include_router(parent)
-    feature = Feature(name="items", routers=[root], errors=ErrorRegistry(errors=[]))
+    feature = Feature(name="items", routers=[root], errors=[missing])
     app = Composition(features=[feature]).build(FastAPI())
 
     with TestClient(app) as client:
@@ -134,7 +133,7 @@ def test_http_contracts_respect_normalization_options() -> None:
 @pytest.mark.parametrize("status", [422, 500])
 def test_framework_and_domain_errors_share_discriminated_contracts(status: int) -> None:
     missing = Error(Missing, status=status, code="item_missing", title="Item missing")
-    router = CanonRouter(error_registry=ErrorRegistry(errors=[missing]))
+    router = CanonRouter()
 
     @router.get("/items/{item_id}", raises=[missing])
     async def item(item_id: int) -> None:
@@ -280,7 +279,7 @@ def test_domain_errors_respect_websocket_transport(
     accepted: bool, denial: bool
 ) -> None:
     missing = Error(Missing, status=404, code="item_missing", title="Item missing")
-    router = CanonRouter(error_registry=ErrorRegistry(errors=[missing]))
+    router = CanonRouter()
 
     @router.websocket("/ws")
     async def socket(websocket: WebSocket) -> None:
@@ -288,9 +287,9 @@ def test_domain_errors_respect_websocket_transport(
             await websocket.accept()
         raise Missing
 
-    app = Composition(features=[Feature(name="socket", routers=[router])]).build(
-        FastAPI()
-    )
+    app = Composition(
+        features=[Feature(name="socket", routers=[router], errors=[missing])]
+    ).build(FastAPI())
     messages: list[Message] = []
 
     async def receive() -> Message:
@@ -349,7 +348,7 @@ def test_stream_authentication_uses_the_same_http_problem_contract() -> None:
 
 def test_failure_after_stream_start_does_not_send_a_second_response() -> None:
     missing = Error(Missing, status=404, code="item_missing", title="Item missing")
-    router = CanonRouter(error_registry=ErrorRegistry(errors=[missing]))
+    router = CanonRouter()
 
     async def chunks() -> AsyncIterator[str]:
         yield "data: ready\n\n"

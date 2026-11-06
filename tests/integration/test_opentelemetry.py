@@ -20,7 +20,7 @@ from starlette.types import Scope as ASGIScope
 
 import fastapi_canon.integrations.opentelemetry as telemetry_api
 from fastapi_canon import Composition, ErrorOptions, Feature
-from fastapi_canon.error import Error, ErrorRegistry
+from fastapi_canon.error import Error
 from fastapi_canon.exceptions import FeatureConfigurationError
 from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
 from fastapi_canon.integrations.websockets import CanonWebSocketRouter
@@ -79,12 +79,7 @@ def callable_application(options: Telemetry) -> FastAPI:
         repository = provide(MemoryRepository, provides=Repository, scope=Scope.REQUEST)
         service = provide(CallableService, scope=Scope.REQUEST)
 
-    router = CanonRouter(
-        error_registry=ErrorRegistry(
-            type_base="https://example.test/problems",
-            errors=[Error(Missing, status=404, code="missing", title="Missing")],
-        )
-    )
+    router = CanonRouter()
 
     @router.get("/callable/{key}")
     @inject
@@ -99,12 +94,14 @@ def callable_application(options: Telemetry) -> FastAPI:
                 name="items",
                 providers=[Dependencies],
                 routers=[router],
+                errors=[Error(Missing, status=404, code="missing", title="Missing")],
                 instrumentation=instrument(
                     Repository, CallableService, expected=(Missing,)
                 ),
             ),
         ),
         telemetry=options,
+        errors=ErrorOptions(type_base="https://example.test/problems"),
     ).build(FastAPI())
 
 
@@ -119,13 +116,10 @@ def application(options: Telemetry | None, *, expected: bool = True) -> FastAPI:
         service = provide(Service, scope=Scope.REQUEST)
 
     closed: list[Repository] = []
-    errors = ErrorRegistry(
-        type_base="https://example.test/problems",
-        errors=[Error(Missing, status=404, code="missing", title="Missing")],
-    )
-    router = CanonRouter(error_registry=errors)
+    missing = Error(Missing, status=404, code="missing", title="Missing")
+    router = CanonRouter()
 
-    @router.get("/items/{key}", raises=[errors.errors[0]])
+    @router.get("/items/{key}", raises=[missing])
     @inject
     async def get_item(key: UUID, service: FromDishka[Service], fail: str = "") -> str:
         return await service.run(key, fail)

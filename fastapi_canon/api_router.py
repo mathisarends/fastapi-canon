@@ -221,7 +221,6 @@ class APIRouter(CanonRouter):
         adapter = CanonStreamRouter(
             namespace=self.namespace,
             generate_unique_id_function=self.generate_unique_id_function,
-            error_registry=self.error_registry,
             raises=self.raises,
             http_statuses=self.http_statuses,
         )
@@ -256,7 +255,6 @@ class APIRouter(CanonRouter):
         from fastapi_canon.integrations.webrtc import CanonWebRtcRouter
 
         adapter = CanonWebRtcRouter(
-            error_registry=self.error_registry,
             raises=self.raises,
             engine=engine,
             ice_servers=ice_servers,

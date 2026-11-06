@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from fastapi.params import Depends
 
 from fastapi_canon.error import Error, ErrorConfigurationError
-from fastapi_canon.error.registry import AnyError, ErrorRegistry
+from fastapi_canon.error.registry import AnyError
 from fastapi_canon.error.validation import unique_instances
 
 
@@ -16,18 +16,15 @@ class RouterPolicy:
     Route classes remain a declaration-time choice on each router.
     """
 
-    error_registry: ErrorRegistry | None
     dependencies: tuple[Depends, ...]
     raises: tuple[AnyError, ...]
 
     def __init__(
         self,
         *,
-        error_registry: ErrorRegistry | None = None,
         dependencies: Sequence[Depends] = (),
         raises: Sequence[AnyError] = (),
     ) -> None:
-        registry = validate_registry(error_registry)
         raw_dependencies: object = dependencies
         if isinstance(raw_dependencies, str) or not isinstance(
             raw_dependencies, Sequence
@@ -38,23 +35,8 @@ class RouterPolicy:
             unique_instances(dependencies, Depends, parameter="dependencies")
         )
         normalized_raises = normalize_raises(raises, parameter="raises")
-        if normalized_raises:
-            registry = ErrorRegistry.merge(
-                *((registry,) if registry is not None else ()),
-                ErrorRegistry(errors=normalized_raises),
-                type_base=registry.type_base if registry is not None else None,
-            )
-        object.__setattr__(self, "error_registry", registry)
         object.__setattr__(self, "dependencies", normalized_dependencies)
         object.__setattr__(self, "raises", normalized_raises)
-
-
-def validate_registry(value: ErrorRegistry | None) -> ErrorRegistry | None:
-    raw: object = value
-    if raw is not None and not isinstance(raw, ErrorRegistry):
-        msg = "error_registry must be an ErrorRegistry instance or None"
-        raise ErrorConfigurationError(msg)
-    return value
 
 
 def validate_policy(value: RouterPolicy | None) -> None:
@@ -62,20 +44,6 @@ def validate_policy(value: RouterPolicy | None) -> None:
     if raw is not None and not isinstance(raw, RouterPolicy):
         msg = "policy must be a RouterPolicy instance or None"
         raise ErrorConfigurationError(msg)
-
-
-def merge_policy_registry(
-    registry: ErrorRegistry | None, policy: RouterPolicy | None
-) -> ErrorRegistry | None:
-    shared = policy.error_registry if policy is not None else None
-    if shared is None or shared is registry:
-        return registry
-    if registry is None:
-        return shared
-    bases = {value.type_base for value in (shared, registry) if value.type_base}
-    return ErrorRegistry.merge(
-        shared, registry, type_base=next(iter(bases)) if len(bases) == 1 else None
-    )
 
 
 def normalize_raises(

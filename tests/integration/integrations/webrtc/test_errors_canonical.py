@@ -12,7 +12,7 @@ from fastapi_canon import (
     Feature,
     RouterPolicy,
 )
-from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
+from fastapi_canon.error import ErrorConfigurationError
 from fastapi_canon.integrations.webrtc import CanonWebRtcRouter, Session
 from fastapi_canon.integrations.webrtc.codegen.typescript import generate_typescript
 from fastapi_canon.integrations.webrtc.contract import build_contract
@@ -32,7 +32,7 @@ class Forbidden(Exception):
 
 MISSING = Error(Missing, status=404, code="browser_missing", title="Browser missing")
 FORBIDDEN = Error(Forbidden, status=403, code="browser_forbidden", title="Forbidden")
-ERRORS = ErrorRegistry(errors=[MISSING, FORBIDDEN])
+ERRORS = (MISSING, FORBIDDEN)
 
 
 class NoPeerEngine(AiortcEngine):
@@ -41,7 +41,7 @@ class NoPeerEngine(AiortcEngine):
 
 
 def application(*, dependency: bool, declared: bool = True) -> FastAPI:
-    router = CanonWebRtcRouter(engine=NoPeerEngine(), error_registry=ERRORS)
+    router = CanonWebRtcRouter(engine=NoPeerEngine())
 
     def authorize() -> None:
         if dependency:
@@ -53,8 +53,9 @@ def application(*, dependency: bool, declared: bool = True) -> FastAPI:
     ) -> Session:
         raise Missing()
 
+    # Undeclared sessions still map MISSING through the feature's listed errors.
     return Composition(
-        features=(Feature(name="browser", routers=[router]),),
+        features=(Feature(name="browser", routers=[router], errors=ERRORS),),
         errors=ErrorOptions(type_base="https://example.test/problems"),
     ).build(FastAPI())
 
@@ -91,8 +92,7 @@ def test_shared_local_contracts_use_composed_registry_and_effective_path() -> No
         return Session()
 
     feature = Feature(name="browser", routers=[router])
-    assert feature.errors is not None
-    assert feature.errors.errors == ERRORS.errors
+    assert feature.errors == ERRORS
     parent = APIRouter(prefix="/api")
     parent.include_router(router, prefix="/browser")
     nested = FastAPI()
@@ -129,7 +129,6 @@ def test_router_policy_applies_to_webrtc_admission_and_contract() -> None:
     router = CanonWebRtcRouter(
         engine=NoPeerEngine(),
         policy=policy,
-        error_registry=ErrorRegistry(errors=[MISSING]),
     )
 
     @router.session("/policy-video", raises=[MISSING])
@@ -167,9 +166,7 @@ def test_error_after_accept_uses_protocol_close() -> None:
     async def ice(context: Any) -> Any:
         raise Missing()
 
-    router = CanonWebRtcRouter(
-        engine=NoPeerEngine(), error_registry=ERRORS, ice_servers=ice
-    )
+    router = CanonWebRtcRouter(engine=NoPeerEngine(), ice_servers=ice)
 
     @router.session("/s", raises=[MISSING])
     async def video() -> Session:
@@ -203,16 +200,16 @@ def test_embedded_problem_schema_preserves_nested_extension_references() -> None
         extensions_model=Details,
         extensions=lambda exc: Details(items=[Item(reason="gone")]),
     )
-    registry = ErrorRegistry(errors=[error], type_base="https://example.test/problems")
-    router = CanonWebRtcRouter(engine=NoPeerEngine(), error_registry=registry)
+    router = CanonWebRtcRouter(engine=NoPeerEngine())
 
     @router.session("/s", raises=[error])
     async def video() -> Session:
         return Session()
 
-    app = Composition(features=(Feature(name="browser", routers=[router]),)).build(
-        FastAPI()
-    )
+    app = Composition(
+        features=(Feature(name="browser", routers=[router]),),
+        errors=ErrorOptions(type_base="https://example.test/problems"),
+    ).build(FastAPI())
     contract = build_contract(app)
     schema = contract["sessions"][0]["admission_errors"][0]["schema"]
     assert schema["$defs"]

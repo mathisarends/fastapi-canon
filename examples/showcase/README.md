@@ -14,7 +14,7 @@ showcase/
       router.py                  # APIRouter HTTP layer
       models.py                  # request and response models
       exceptions.py              # domain exceptions, without HTTP concerns
-      errors.py                  # Error / ErrorRegistry contracts
+      errors.py                  # Error contracts
       service.py                 # framework-independent use cases
       providers.py               # Dishka bindings contributed by the feature
     status/
@@ -48,18 +48,16 @@ engine:
 | Insufficient stock | Feature-defined `409 product_unavailable` problem, including typed extension members |
 | Invalid request body | Built-in normalized `422 request_validation_error` problem |
 
-`catalog/errors.py` deliberately has no application-wide problem-type URL. Its
-`ErrorRegistry` is local to the feature. `Composition` merges that registry
-and `ErrorOptions(type_base=...)` resolves every feature error type to the
-same public namespace. The catalog's `APIRouter` declares contracts
-with `raises=[...]`, so `/openapi.json` documents the `404` and `409` responses
-without duplicating schemas. The lower-level
-`ErrorRegistry.responses()` API remains supported for ordinary FastAPI routers
-and incremental migrations.
+`catalog/errors.py` only defines `Error` contracts and deliberately has no
+application-wide problem-type URL. The catalog's `APIRouter` declares them with
+`raises=[...]`, so `/openapi.json` documents the `404` and `409` responses
+without duplicating schemas. `Composition` collects every declared error into
+the application catalog, and `ErrorOptions(type_base=...)` resolves every
+feature error type to the same public namespace.
 
 The router only validates HTTP input and calls `CatalogService`; it receives
-that service through Dishka. `catalog/__init__.py` contributes the provider,
-router, and error registry as one `Feature`, so removing the feature removes
+that service through Dishka. `catalog/__init__.py` contributes the provider
+and router, with its declared errors, as one `Feature`, so removing the feature removes
 all of those pieces together.
 
 To turn a feature off, remove `catalog_feature` from `Composition` in `app.py`.

@@ -14,7 +14,6 @@ from fastapi_canon import (
     Feature,
     export_contracts,
 )
-from fastapi_canon.error import ErrorRegistry
 from fastapi_canon.integrations.webrtc import Session
 from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine
 
@@ -26,8 +25,7 @@ class BrowserMissing(Exception):
 BROWSER_MISSING = Error(
     BrowserMissing, status=404, code="browser_missing", title="Browser missing"
 )
-errors = ErrorRegistry(errors=[BROWSER_MISSING])
-router = APIRouter(error_registry=errors)
+router = APIRouter()
 
 
 @router.webrtc(

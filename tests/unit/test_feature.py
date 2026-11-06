@@ -42,6 +42,19 @@ def test_feature_requires_a_diagnostic_name(name: str) -> None:
         Feature(name=name)
 
 
+@pytest.mark.parametrize(
+    ("errors", "message"),
+    [
+        ("missing", "errors must be a sequence"),
+        ([object()], "Error instance"),
+        (ErrorRegistry(errors=[]), "errors must be a sequence"),
+    ],
+)
+def test_feature_errors_accept_only_error_lists(errors: object, message: str) -> None:
+    with pytest.raises(FeatureConfigurationError, match=message):
+        Feature(name="items", errors=errors)  # type: ignore[arg-type]  # Verify invalid runtime declarations.
+
+
 def test_composition_rejects_duplicate_feature_names() -> None:
     with pytest.raises(FeatureConfigurationError, match=r"catalog.*duplicated"):
         Composition(
@@ -498,7 +511,7 @@ def test_error_registries_are_merged_for_runtime_and_openapi() -> None:
         raise NotFoundError
 
     app = Composition(
-        features=(Feature(name="items", routers=[router], errors=errors),),
+        features=(Feature(name="items", routers=[router], errors=[error]),),
         errors=ErrorOptions(type_base="https://example.test/problems"),
     ).build(FastAPI())
 
@@ -513,15 +526,14 @@ def test_error_registries_are_merged_for_runtime_and_openapi() -> None:
     )
 
 
-def test_feature_collects_error_registry_from_canon_router() -> None:
+def test_feature_collects_declared_errors_from_canon_router() -> None:
     error = Error(
         NotFoundError,
         status=404,
         code="item_not_found",
         title="Item not found",
     )
-    errors = ErrorRegistry(name="items", errors=[error])
-    router = CanonRouter(error_registry=errors)
+    router = CanonRouter()
 
     @router.get("/items/{item_id}", raises=[error])
     async def get_item(item_id: str) -> None:
@@ -534,7 +546,7 @@ def test_feature_collects_error_registry_from_canon_router() -> None:
         errors=ErrorOptions(type_base="https://example.test/problems"),
     ).build(FastAPI())
 
-    assert feature.errors is not None
+    assert feature.errors == (error,)
     with TestClient(app, raise_server_exceptions=False) as client:
         response = client.get("/items/missing")
     assert response.status_code == 404
@@ -610,11 +622,11 @@ def test_error_collision_does_not_install_routers() -> None:
                 Feature(
                     name="first",
                     routers=[router],
-                    errors=ErrorRegistry(name="first", errors=[first]),
+                    errors=[first],
                 ),
                 Feature(
                     name="second",
-                    errors=ErrorRegistry(name="second", errors=[second]),
+                    errors=[second],
                 ),
             ),
             errors=ErrorOptions(type_base="https://example.test/problems"),

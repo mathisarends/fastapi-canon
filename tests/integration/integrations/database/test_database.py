@@ -24,7 +24,6 @@ from fastapi_canon import (
     Scoped,
     ServiceScope,
 )
-from fastapi_canon.error import ErrorRegistry
 from fastapi_canon.integrations.database import Database
 
 
@@ -74,18 +73,15 @@ async def test_http_scope_finishes_before_response_start(
             Feature(
                 name="items",
                 routers=[router],
-                errors=ErrorRegistry(
-                    type_base="urn:test:problem",
-                    errors=[
-                        Error(
-                            Rejected,
-                            type="urn:test:rejected",
-                            code="rejected",
-                            title="Rejected",
-                            status=409,
-                        )
-                    ],
-                ),
+                errors=[
+                    Error(
+                        Rejected,
+                        type="urn:test:rejected",
+                        code="rejected",
+                        title="Rejected",
+                        status=409,
+                    )
+                ],
             ),
         ],
     ).build(FastAPI())

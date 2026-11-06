@@ -100,7 +100,7 @@ feature = Feature(
     routers=[router],
     providers=[provider],
     instrumentation=instrument(ProjectRepository),
-    errors=feature_errors,
+    errors=[rate_limited],
     exception_handlers=[handler_spec],
     lifespan=feature_lifespan,
 )
@@ -112,9 +112,12 @@ is enabled; the original providers remain usable directly. See the
 [telemetry guide](telemetry.md) for configuration and migration from `observe()`.
 
 Features automatically collect `Error` definitions from `raises=` declarations
-and explicit registries on their routers, including nested routers and channels.
-Use `errors=ErrorRegistry(...)` for additional errors that are not declared
-anywhere. Repeated references to the same definitions are merged by identity at
+on their routers, policies and channels, including nested routers and channels.
+`raises=` is the only declaration: list additional errors that no operation
+declares, such as dependency failures handled globally, with
+`Feature(errors=[...])`. `Feature.errors` is the resulting tuple. Set the common
+problem-type URI prefix once with `Composition(errors=ErrorOptions(type_base=...))`.
+Repeated references to the same definitions are merged by identity at
 the application boundary; collisions between different definitions still fail.
 
 Mutable sequences passed to `Feature` are copied to tuples. Installing features
@@ -229,6 +232,23 @@ mounted outside that router do not acquire its prerequisites or declared
 errors. Hidden routes execute the dependencies but have no OpenAPI operation to
 extend. The application error registry still handles registered exceptions
 globally; declarations are not a runtime exception allowlist.
+
+An included router cannot opt out of its parent's policy, just as it cannot
+drop the parent's `dependencies`. When an application mixes public and
+protected routes, keep the application router free of the policy and attach it
+where it applies: to individual routers, or to a parent router that includes
+only the protected ones.
+
+```python
+composition = Composition(
+    features=(projects_feature, users_feature),
+    router_factory=lambda: APIRouter(prefix="/api/v1"),
+)
+
+projects = APIRouter(prefix="/projects", policy=protected)  # requires a user
+health = APIRouter(prefix="/health")  # public
+projects_feature = Feature(name="projects", routers=[projects, health])
+```
 
 Endpoints resolve `Inject[T]` and `FromDishka[T]` through the route class of
 the router where they are declared; an including router does not replace route
@@ -630,10 +650,7 @@ from fastapi.responses import StreamingResponse
 from fastapi_canon import APIRouter, CanonResponse
 
 
-router = APIRouter(
-    error_registry=document_errors,
-    raises=[AUTHENTICATION_REQUIRED_ERROR, ACCESS_DENIED_ERROR],
-)
+router = APIRouter(raises=[AUTHENTICATION_REQUIRED_ERROR, ACCESS_DENIED_ERROR])
 
 
 def pdf_chunks(path: Path) -> Iterator[bytes]:

@@ -154,7 +154,7 @@ for Dishka's own markers and dependency injection details.
 
 | API | Behavior |
 | --- | --- |
-| `APIRouter(raises=[...], http_statuses=[...], **options)` | Router-level `raises` automatically registers shared errors and applies to every HTTP and SSE operation declared on this router. `error_registry=` optionally adds undeclared mappings. Standard FastAPI router options pass through. |
+| `APIRouter(raises=[...], http_statuses=[...], **options)` | Router-level `raises` automatically registers shared errors and applies to every HTTP and SSE operation declared on this router. Standard FastAPI router options pass through. |
 | `router.sse(path, raises=[...], methods=None, **options)` | Local errors extend shared errors for both admission and terminal stream failures. Defaults to GET; use `methods=[HTTPMethod.POST]` for a body-driven stream. FastAPI dependencies, tags and operation IDs pass through. |
 | `router.get(...)`, `router.post(...)`, `router.api_route(...)` | Ordinary HTTP declarations on the same router. |
 

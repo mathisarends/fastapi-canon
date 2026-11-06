@@ -1,7 +1,6 @@
 from pydantic import BaseModel
 
 from fastapi_canon import Error
-from fastapi_canon.error import ErrorRegistry
 
 from .exceptions import ProductNotFound, ProductUnavailable
 
@@ -31,9 +30,4 @@ product_unavailable = Error(
         "available": error.available,
     },
     description="The product exists, but not enough units are in stock.",
-)
-
-registry = ErrorRegistry(
-    name="catalog",
-    errors=[product_not_found, product_unavailable],
 )

@@ -64,8 +64,6 @@ _FACTORY_DECLARATIONS = _ROUTER_DECLARATIONS | {
     "fastapi_canon.Error",
     "fastapi_canon.error.Error",
     "fastapi_canon.error.error.Error",
-    "fastapi_canon.error.ErrorRegistry",
-    "fastapi_canon.error.registry.ErrorRegistry",
     "fastapi_canon.RouterPolicy",
     "fastapi_canon.policy.RouterPolicy",
 }
@@ -92,6 +90,8 @@ class _Source:
     nested: list[_Definition] = field(default_factory=list)
     touched: set[str] = field(default_factory=set)
     inherited_contracts: list[tuple[str, int]] = field(default_factory=list)
+    # raises= and errors= arguments; Composition maps the errors they name.
+    error_declarations: list[tuple[str, ast.expr]] = field(default_factory=list)
     roots: list[Path] = field(default_factory=list)
     _externals: dict[str, bool] = field(default_factory=dict)
     _methods: frozenset[str] | None = None
@@ -135,6 +135,12 @@ class _Source:
                     source._index(module, tree.body, package=package, names=names)
                     indexed = {id(source.definitions[name].node) for name in names}
                     for node in ast.walk(tree):
+                        if isinstance(node, ast.Call):
+                            source.error_declarations.extend(
+                                (module, item.value)
+                                for item in node.keywords
+                                if item.arg in {"raises", "errors"}
+                            )
                         if isinstance(node, ast.Call) and (
                             (
                                 isinstance(node.func, ast.Attribute)

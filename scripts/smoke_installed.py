@@ -459,12 +459,11 @@ def _canon_check() -> None:
         root = Path(temporary)
         source = root / "api.py"
         source.write_text(
-            "from fastapi_canon import APIRouter, Error\n"
-            "from fastapi_canon.error import ErrorRegistry\n"
+            "from fastapi_canon import APIRouter, Error, Feature\n"
             "class Missing(Exception): pass\n"
             "missing = Error(Missing, status=404, code='missing', title='Missing')\n"
-            "registry = ErrorRegistry(errors=[missing])\n"
-            "router = APIRouter(error_registry=registry)\n"
+            "router = APIRouter()\n"
+            "feature = Feature(name='api', routers=[router], errors=[missing])\n"
             "@router.get('/')\n"
             "def endpoint(): raise Missing()\n",
             encoding="utf-8",
@@ -722,7 +721,6 @@ def _webrtc_router(engine, *, canon=False):
     declarations = {}
     if canon:
         from fastapi_canon import Error
-        from fastapi_canon.error import ErrorRegistry
         from fastapi_canon.integrations.webrtc import CanonWebRtcRouter
 
         denied = Error(
@@ -732,9 +730,7 @@ def _webrtc_router(engine, *, canon=False):
             title="Denied",
             type="https://example.test/problems/admission_denied",
         )
-        rtc = CanonWebRtcRouter(
-            engine=engine, prefix="/rtc", error_registry=ErrorRegistry(errors=[denied])
-        )
+        rtc = CanonWebRtcRouter(engine=engine, prefix="/rtc")
         declarations["raises"] = [denied]
     else:
         rtc = WebRtcRouter(engine=engine, prefix="/rtc")
@@ -891,10 +887,10 @@ def _router_policies() -> None:
         APIRouter,
         Composition,
         Error,
+        ErrorOptions,
         Feature,
         RouterPolicy,
     )
-    from fastapi_canon.error import ErrorRegistry
 
     class AuthenticationRequired(Exception):
         pass
@@ -909,30 +905,23 @@ def _router_policies() -> None:
         title="Authentication required",
     )
     item_denied = Error(ItemDenied, status=401, code="item_denied", title="Item denied")
-    auth_errors = ErrorRegistry(
-        errors=[authentication_required], type_base="https://example.test/problems"
-    )
-    item_errors = ErrorRegistry(
-        errors=[item_denied], type_base="https://example.test/problems"
-    )
+    problems = ErrorOptions(type_base="https://example.test/problems")
 
     async def require_user(authorization: str | None = Header(default=None)) -> None:
         if authorization != "Bearer test":
             raise AuthenticationRequired
 
     policy = RouterPolicy(
-        error_registry=auth_errors,
         dependencies=[Depends(require_user)],
         raises=[authentication_required],
     )
     for direct in (False, True):
-        router = APIRouter(
-            policy=policy if direct else None, error_registry=item_errors
-        )
+        router = APIRouter(policy=policy if direct else None)
         router.get("/policy", raises=[item_denied])(lambda: "ok")
         feature = Feature(name="policy", routers=[router])
         composition = Composition(
             features=(feature,),
+            errors=problems,
             router_factory=None if direct else lambda: APIRouter(policy=policy),
         )
         app = composition.build(FastAPI())
@@ -947,7 +936,7 @@ def _router_policies() -> None:
             len(response["content"]["application/problem+json"]["schema"]["oneOf"]) == 2
         )
         if not direct:
-            public = Composition(features=(feature,)).build(FastAPI())
+            public = Composition(features=(feature,), errors=problems).build(FastAPI())
             assert TestClient(public).get("/policy").status_code == 200
 
 

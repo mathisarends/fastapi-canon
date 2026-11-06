@@ -84,7 +84,6 @@ class RpcChannel:
         /,
         *,
         namespace: str | None = None,
-        error_registry: ErrorRegistry | None = None,
         raises: Iterable[RpcErrorDeclaration] = (),
         resolver_scope: RpcResolverScope = call_scope,
     ) -> None:
@@ -101,7 +100,8 @@ class RpcChannel:
         if not self._name:
             raise ProtocolDefinitionError("RPC channel name cannot be empty")
         self._namespace = resolved_namespace
-        self.error_registry = error_registry
+        # Collected from raises; Composition merges it into the application catalog.
+        self.error_registry: ErrorRegistry | None = None
         self._raises: tuple[type[RpcError], ...] = ()
         self._raises = self._merge_raises(raises, owner=f"RPC channel {self.name}")
         if not callable(resolver_scope):
@@ -498,10 +498,10 @@ class RpcChannel:
         child = RpcChannel(
             join_rpc_name(self.name, local),
             namespace=join_rpc_name(self.namespace, local),
-            error_registry=self.error_registry,
-            raises=self.raises,
             resolver_scope=resolver_scope or self.resolver_scope,
         )
+        child.error_registry = self.error_registry
+        child._raises = self.raises
         child._raises = child._merge_raises(raises, owner=f"RPC channel {child.name}")
         self._children.append(child)
         return child
@@ -648,12 +648,10 @@ class RpcChannel:
 
     def _snapshot(self, namespace: str) -> "RpcChannel":
         snapshot = RpcChannel(
-            self.name,
-            namespace=namespace,
-            error_registry=self.error_registry,
-            raises=self.raises,
-            resolver_scope=self.resolver_scope,
+            self.name, namespace=namespace, resolver_scope=self.resolver_scope
         )
+        snapshot.error_registry = self.error_registry
+        snapshot._raises = self.raises
 
         def rename(name: str) -> str:
             local = name[len(self.namespace) + 1 :] if self.namespace else name

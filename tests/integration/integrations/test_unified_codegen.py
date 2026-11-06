@@ -714,8 +714,7 @@ def test_terminal_only_nested_problem_definitions_share_identity(
     from fastapi import FastAPI
     from pydantic import BaseModel
 
-    from fastapi_canon import Composition, Error, Feature
-    from fastapi_canon.error import ErrorRegistry
+    from fastapi_canon import Composition, Error, ErrorOptions, Feature
     from fastapi_canon.integrations.sse import CanonStreamRouter
 
     class Leaf(BaseModel):
@@ -743,8 +742,7 @@ def test_terminal_only_nested_problem_definitions_share_identity(
         extensions_model=Fields,
         extensions={"metadata": {"leaf": {"count": 1}}},
     )
-    errors = ErrorRegistry(errors=[missing], type_base="https://test/problems")
-    streams = CanonStreamRouter(error_registry=errors)
+    streams = CanonStreamRouter()
 
     async def nested() -> AsyncIterator[int]:
         yield 1
@@ -756,7 +754,8 @@ def test_terminal_only_nested_problem_definitions_share_identity(
         "/nested", operation_id="nested", tags=["projects"], raises=[missing]
     )(nested)
     application = Composition(
-        features=(Feature(name="nested", routers=[streams]),)
+        features=(Feature(name="nested", routers=[streams]),),
+        errors=ErrorOptions(type_base="https://test/problems"),
     ).build(FastAPI())
     plan = build_plan(((SourceConfig("api", "openapi"), export_schema(application)),))
     assert (

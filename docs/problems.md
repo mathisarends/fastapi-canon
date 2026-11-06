@@ -119,8 +119,8 @@ The router contributes the errors declared by its HTTP, SSE and RPC operations.
 Composition merges definitions by identity, checks conflicts and installs the
 resolved application catalog. Configure the common URI prefix through
 `ErrorOptions(type_base=...)`; an explicit `Error.type` keeps its own URI.
-Use `Feature(errors=ErrorRegistry(...))` or `error_registry=` only for additional
-errors that are not declared anywhere, such as dependency failures. Registration
+Use `Feature(errors=[...])` only for additional errors that are not declared
+anywhere, such as dependency failures. Registration
 alone does not add those errors to an operation's documented contract.
 `export_contracts` reads the composed app, so `contracts.openapi` and
 `contracts.openrpc` use the same resolved type URIs as the runtime responses.

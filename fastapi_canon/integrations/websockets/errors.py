@@ -217,7 +217,7 @@ def declared_error(error: Any, registry: ErrorRegistry | None = None) -> type[Rp
     if isinstance(error, Error):
         if registry is None or not registry.contains(error):
             raise ProtocolDefinitionError(
-                "Canonical raises must belong to the channel's error_registry"
+                "Canonical raises must belong to the channel's declared errors"
             )
         return _canon_binding(error, registry).error_type
     if isinstance(error, RpcErrorBinding):

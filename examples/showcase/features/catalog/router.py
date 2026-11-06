@@ -1,13 +1,12 @@
 from fastapi_canon import APIRouter, Inject
 
-from .errors import product_not_found, product_unavailable, registry
+from .errors import product_not_found, product_unavailable
 from .models import Product, Reservation
 from .service import CatalogService
 
 router = APIRouter(
     prefix="/products",
     tags=["catalog"],
-    error_registry=registry,
 )
 
 
