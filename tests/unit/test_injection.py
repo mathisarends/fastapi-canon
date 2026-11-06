@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, ForwardRef, get_args
 
 from fastapi_canon import Inject
 from fastapi_canon.injection import injected_dependency
@@ -19,3 +19,20 @@ def test_aliases_keep_the_dependency_type() -> None:
 
 def test_unmarked_annotations_are_not_injected() -> None:
     assert injected_dependency(Annotated[str, "other metadata"]) is None
+
+
+def test_injection_annotations_are_stable_per_dependency() -> None:
+    assert Inject[int] == Inject[int]
+    assert injected_dependency(Inject[int]) is int
+
+
+def test_forward_references_keep_only_the_marker() -> None:
+    dependency, *metadata = get_args(Inject["Later"])
+
+    assert isinstance(dependency, ForwardRef)
+    assert dependency.__forward_arg__ == "Later"
+    assert len(metadata) == 1
+
+
+class Later:
+    pass

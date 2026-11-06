@@ -22,6 +22,7 @@ from fastapi_canon.error.contracts import (
     contracts_from_responses,
 )
 from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.injection import injected_resolver_dependency
 from fastapi_canon.policy import RouterPolicy
 from fastapi_canon.router import CanonRouter
 
@@ -199,6 +200,9 @@ def _dependencies(
     pending = list(route.dependant.dependencies) if route.dependant is not None else []
     while pending:
         parameter_dependency = pending.pop(0)
+        if injected_resolver_dependency(parameter_dependency.call) is not None:
+            # Inject[T] resolves a service; it is not a request prerequisite.
+            continue
         name = _qualified_name(parameter_dependency.call)
         if not any(item.name == name for item in result):
             result.append(DependencyInfo(name, "dependency"))

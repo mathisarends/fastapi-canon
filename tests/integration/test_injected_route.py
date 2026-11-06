@@ -507,3 +507,114 @@ def test_external_containers_are_not_replaced_or_resolved_by_preflight() -> None
 
     asyncio.run(scenario())
     assert lifecycle.closed == [1]
+
+
+class Verifier:
+    def verify(self, token: str) -> str:
+        return token.upper()
+
+
+class VerifierProvider(Provider):
+    @provide(scope=Scope.APP)
+    def verifier(self) -> Verifier:
+        return Verifier()
+
+
+async def authenticated_user(token: str, verifier: Inject[Verifier]) -> str:
+    return verifier.verify(token)
+
+
+def sync_authenticated_user(token: str, verifier: Inject[Verifier]) -> str:
+    return verifier.verify(token)
+
+
+@pytest.mark.parametrize("dependency", [authenticated_user, sync_authenticated_user])
+def test_fastapi_dependencies_resolve_injected_parameters(
+    dependency: object,
+) -> None:
+    router = APIRouter()
+    user = Annotated[str, Depends(dependency)]
+
+    @router.get("/me")
+    async def me(name: user) -> str:
+        return name
+
+    @router.get("/sync")
+    def sync_me(name: user) -> str:
+        return name
+
+    app = Composition(
+        features=[
+            Feature(name="users", routers=[router], providers=[VerifierProvider()])
+        ]
+    ).build(FastAPI())
+
+    async def scenario() -> None:
+        async with (
+            asyncio.timeout(5),
+            AsyncClient(
+                transport=ASGITransport(app), base_url="http://test", timeout=5
+            ) as client,
+        ):
+            assert (await client.get("/me", params={"token": "ada"})).json() == "ADA"
+            assert (await client.get("/sync", params={"token": "bo"})).json() == "BO"
+
+    asyncio.run(scenario())
+    parameters = app.openapi()["paths"]["/me"]["get"]["parameters"]
+    assert [parameter["name"] for parameter in parameters] == ["token"]
+
+
+def test_injected_fastapi_dependencies_keep_their_override_identity() -> None:
+    router = APIRouter()
+
+    @router.get("/me")
+    async def me(name: Annotated[str, Depends(authenticated_user)]) -> str:
+        return name
+
+    app = Composition(
+        features=[
+            Feature(name="users", routers=[router], providers=[VerifierProvider()])
+        ]
+    ).build(FastAPI())
+    app.dependency_overrides[authenticated_user] = lambda: "override"
+
+    with TestClient(app) as client:
+        assert client.get("/me").json() == "override"
+
+
+def test_missing_bindings_in_fastapi_dependencies_reject_before_installation() -> None:
+    router = APIRouter()
+
+    @router.get("/me")
+    async def me(name: Annotated[str, Depends(authenticated_user)]) -> str:
+        return name
+
+    composition = Composition(features=[Feature(name="users", routers=[router])])
+
+    [issue] = composition.check(FastAPI()).issues
+
+    assert issue.code == "canon.providers.E003"
+    assert issue.locations == (
+        "GET /me",
+        f"{Verifier.__module__}.{Verifier.__qualname__}",
+    )
+
+
+def test_injected_services_are_not_reported_as_prerequisites() -> None:
+    router = APIRouter()
+
+    @router.get("/me")
+    async def me(name: Annotated[str, Depends(authenticated_user)]) -> str:
+        return name
+
+    composition = Composition(
+        features=[
+            Feature(name="users", routers=[router], providers=[VerifierProvider()])
+        ]
+    )
+    app = composition.build(FastAPI())
+
+    [operation] = composition.inspect(app).operations
+    assert [dependency.name for dependency in operation.dependencies] == [
+        f"{authenticated_user.__module__}.{authenticated_user.__qualname__}"
+    ]

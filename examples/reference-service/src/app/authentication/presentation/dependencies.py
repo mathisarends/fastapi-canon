@@ -1,9 +1,9 @@
 from typing import Annotated
 from uuid import UUID
 
-from dishka.integrations.fastapi import FromDishka, inject
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi_canon import Inject
 
 from app.authentication.application import AuthenticationFailed, TokenVerifier
 
@@ -14,13 +14,12 @@ bearer = HTTPBearer(
 )
 
 
-@inject
 async def authenticated_user_id(
     credentials: Annotated[
         HTTPAuthorizationCredentials | None,
         Depends(bearer),
     ],
-    verifier: FromDishka[TokenVerifier],
+    verifier: Inject[TokenVerifier],
 ) -> UUID:
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise AuthenticationFailed
