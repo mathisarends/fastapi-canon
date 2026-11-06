@@ -12,11 +12,11 @@ from fastapi_canon import (
     APIRouter,
     Composition,
     Error,
+    ErrorOptions,
     Feature,
     Inject,
     ServiceScope,
 )
-from fastapi_canon.error import ErrorRegistry
 
 
 class AuthenticationRequired(Exception):
@@ -77,11 +77,6 @@ run_not_found = Error(
     code="run_not_found",
     title="Run not found",
 )
-run_errors = ErrorRegistry(
-    name="runs",
-    errors=[authentication_required, run_not_found],
-    type_base="https://example.test/problems",
-)
 
 
 async def require_authentication(
@@ -100,7 +95,6 @@ async def require_existing_run(run_id: int, runs: Inject[RunService]) -> None:
 router = APIRouter(
     prefix="/runs",
     tags=["runs"],
-    error_registry=run_errors,
     raises=[authentication_required],
     dependencies=[Depends(require_authentication)],
     http_statuses=[403],
@@ -139,7 +133,10 @@ async def create_events(
 
 
 feature = Feature(name="runs", routers=[router], providers=[RunProvider])
-composition = Composition(features=(feature,))
+composition = Composition(
+    features=(feature,),
+    errors=ErrorOptions(type_base="https://example.test/problems"),
+)
 
 
 def create_app() -> FastAPI:

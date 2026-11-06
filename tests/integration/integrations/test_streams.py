@@ -28,20 +28,21 @@ from examples.streams.app import (
     RunProvider,
     RunService,
     app,
+    authentication_required,
     create_app,
     feature,
     router,
-    run_errors,
     run_not_found,
 )
 from fastapi_canon import (
     APIRouter,
     Composition,
     Error,
+    ErrorOptions,
     Feature,
     RouterPolicy,
 )
-from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
+from fastapi_canon.error import ErrorConfigurationError
 from fastapi_canon.integrations.sse import CanonStreamRouter, StreamRouter
 from fastapi_canon.router import CanonRouter
 
@@ -57,25 +58,20 @@ def test_router_combines_native_bases_and_feature_discovers_registry() -> None:
     assert isinstance(CanonStreamRouter(), CanonRouter)
     assert isinstance(CanonStreamRouter(), StreamRouter)
     assert isinstance(router, APIRouter)
-    assert feature.errors is not None
-    assert feature.errors.errors == run_errors.errors
+    assert feature.errors == (authentication_required, run_not_found)
 
 
 def test_shared_and_local_raises_are_deduplicated_with_shared_status() -> None:
     other = Error(KeyError, status=404, code="other_missing", title="Other missing")
-    errors = ErrorRegistry(
-        errors=[run_not_found, other], type_base="https://example.test/problems"
-    )
-    combined = CanonStreamRouter(
-        error_registry=errors, raises=[run_not_found, run_not_found]
-    )
+    combined = CanonStreamRouter(raises=[run_not_found, run_not_found])
 
     @combined.stream("/events", raises=[run_not_found, other, other])
     async def events() -> AsyncIterator[RunEvent]:
         yield RunCompleted(run_id=1)
 
     application = Composition(
-        features=(Feature(name="events", routers=[combined]),)
+        features=(Feature(name="events", routers=[combined]),),
+        errors=ErrorOptions(type_base="https://example.test/problems"),
     ).build(FastAPI())
     schema = application.openapi()
     response = schema["paths"]["/events"]["get"]["responses"]["404"]
@@ -91,9 +87,8 @@ def test_shared_and_local_raises_are_deduplicated_with_shared_status() -> None:
 @pytest.mark.parametrize(
     ("options", "message"),
     [
-        ({"error_registry": object()}, "error_registry must be"),
-        ({"error_registry": run_errors, "raises": "invalid"}, "must be a sequence"),
-        ({"error_registry": run_errors, "raises": [object()]}, "Error instance"),
+        ({"raises": "invalid"}, "must be a sequence"),
+        ({"raises": [object()]}, "Error instance"),
     ],
 )
 def test_invalid_canon_declarations(
@@ -103,7 +98,7 @@ def test_invalid_canon_declarations(
         if scope == "router":
             CanonStreamRouter(**options)
         else:
-            selected = CanonStreamRouter(error_registry=options.get("error_registry"))
+            selected = CanonStreamRouter()
 
             @selected.stream("/events", raises=options.get("raises", ()))
             async def events() -> AsyncIterator[RunEvent]:
@@ -175,7 +170,6 @@ def test_successful_typed_streams(method: HTTPMethod, stream_app: FastAPI) -> No
 @pytest.mark.parametrize("with_errors", [False, True])
 def test_sync_generators_and_composition_router_factory(with_errors: bool) -> None:
     sync = CanonStreamRouter(
-        error_registry=run_errors if with_errors else None,
         raises=[run_not_found] if with_errors else (),
     )
 
@@ -200,18 +194,14 @@ def test_feature_discovers_stream_and_rest_registries_together() -> None:
     other_missing = Error(
         OtherMissing, status=404, code="other_missing", title="Other missing"
     )
-    rest_errors = ErrorRegistry(
-        errors=[other_missing], type_base="https://example.test/problems"
-    )
-    rest = CanonRouter(error_registry=rest_errors)
+    rest = CanonRouter()
 
     @rest.get("/rest", raises=[other_missing])
     async def missing() -> None:
         raise OtherMissing
 
     mixed = Feature(name="mixed", routers=[router, rest], providers=[RunProvider])
-    assert mixed.errors is not None
-    assert mixed.errors.errors == (*run_errors.errors, other_missing)
+    assert mixed.errors == (authentication_required, run_not_found, other_missing)
     application = Composition(features=(mixed,)).build(FastAPI())
     with TestClient(application) as client:
         assert client.get("/rest").json()["code"] == "other_missing"
@@ -376,7 +366,7 @@ def test_compilation_preserves_entire_native_sse_contract() -> None:
 
 
 def test_composition_policy_preserves_typed_sse_and_runs_before_streaming() -> None:
-    selected = CanonStreamRouter(error_registry=run_errors)
+    selected = CanonStreamRouter()
 
     @selected.stream("/policy-events", raises=[run_not_found])
     async def events() -> AsyncIterator[RunEvent]:
@@ -391,7 +381,6 @@ def test_composition_policy_preserves_typed_sse_and_runs_before_streaming() -> N
         raise RunNotFound(1)
 
     policy = RouterPolicy(
-        error_registry=run_errors,
         dependencies=[Depends(require_run)],
         raises=[run_not_found],
     )
@@ -410,7 +399,7 @@ def test_composition_policy_preserves_typed_sse_and_runs_before_streaming() -> N
 
 
 def test_generator_body_errors_happen_after_response_start() -> None:
-    selected = CanonStreamRouter(error_registry=run_errors)
+    selected = CanonStreamRouter()
     calls: list[str] = []
 
     async def before_start() -> None:
