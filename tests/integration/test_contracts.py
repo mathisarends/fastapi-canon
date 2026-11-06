@@ -13,7 +13,6 @@ from fastapi_canon import (
     Feature,
     export_contracts,
 )
-from fastapi_canon.error import ErrorRegistry
 from fastapi_canon.integrations.sse import CanonStreamRouter
 from fastapi_canon.integrations.webrtc import Session, WebRtcRouter
 from fastapi_canon.integrations.websockets import (
@@ -202,8 +201,7 @@ def test_export_preserves_raw_sockets_and_composed_error_catalog() -> None:
         pass
 
     missing = Error(Missing, status=404, code="missing", title="Missing")
-    errors = ErrorRegistry(errors=[missing])
-    channel = RpcChannel("browser", error_registry=errors)
+    channel = RpcChannel("browser")
 
     @channel.method(raises=[missing])
     async def open() -> None:

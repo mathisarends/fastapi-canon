@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from fastapi import FastAPI
 from fastapi_canon import Error
 from fastapi_canon.error import ErrorRegistry
 from fastapi_canon.integrations.websockets import (
@@ -695,10 +696,10 @@ def _error_document(*, with_errors: bool) -> dict[str, Any]:
         missing = Error(
             LookupError, status=404, code="project_missing", title="Missing project"
         )
-        registry = ErrorRegistry(errors=[missing], type_base="urn:example:problems")
-        channel = RpcChannel(
-            "demo", error_registry=registry, raises=(UnavailableError, missing)
-        )
+        channel = RpcChannel("demo", raises=(UnavailableError, missing))
+        # Manual assembly: an installed catalog resolves problem type URIs.
+        app = FastAPI()
+        ErrorRegistry(errors=[missing], type_base="urn:example:problems").install(app)
 
         @channel.method
         async def echo(params: _Params) -> _Result:
@@ -706,9 +707,12 @@ def _error_document(*, with_errors: bool) -> dict[str, Any]:
 
     else:
         channel = _methods_only()
+        app = None
     service = RpcDefinition()
     service.socket("/rpc", channels=[channel])
-    return service.contract(title="Example", base_url="ws://localhost").to_openrpc()
+    return service.contract(
+        title="Example", base_url="ws://localhost", app=app
+    ).to_openrpc()
 
 
 def _events_only() -> RpcChannel:

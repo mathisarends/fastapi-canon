@@ -20,7 +20,6 @@ from fastapi_canon import (
     Feature,
     export_contracts,
 )
-from fastapi_canon.error import ErrorRegistry
 from fastapi_canon.exceptions import ConfigurationError
 from fastapi_canon.integrations.webrtc import SUBPROTOCOL, Session
 from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine
@@ -292,7 +291,7 @@ def test_nested_channel_errors_are_collected_and_do_not_close_the_connection() -
     missing = Error(
         MissingProject, status=404, code="project_missing", title="Project missing"
     )
-    projects = RpcChannel(error_registry=ErrorRegistry(errors=[missing]))
+    projects = RpcChannel()
 
     @projects.method("read", raises=[missing])
     async def read() -> None:
