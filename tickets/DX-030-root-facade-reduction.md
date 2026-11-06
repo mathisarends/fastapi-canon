@@ -71,6 +71,6 @@ Out of scope: WebSocket, SSE and WebRTC facades (DX-031, DX-032).
 
 ## Completion
 
-- Implementation or decision PR:
-- Final commit and verification:
-- Remaining follow-ups:
+- Implementation or decision PR: [#105](https://github.com/mathisarends/fastapi-canon/pull/105)
+- Final commit and verification: `db192b7`; ruff, format, mypy, Smelt (`--fail-on warning`), pre-commit and pytest (2742 passed, 26 skipped) pass. Consumer imports from the root use only kept names.
+- Remaining follow-ups: [DX-031](DX-031-websocket-facade-reduction.md), [DX-032](DX-032-transport-router-adapters.md).
