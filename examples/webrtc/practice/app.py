@@ -24,6 +24,7 @@ from aiortc import VideoStreamTrack
 from aiortc.contrib.media import MediaRelay
 from aiortc.mediastreams import MediaStreamError
 from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi_canon import APIRouter
 from fastapi_canon.integrations.webrtc import (
     DataChannelSpec,
     Direction,
@@ -32,10 +33,10 @@ from fastapi_canon.integrations.webrtc import (
     Peer,
     Role,
     Session,
+    SessionCapacity,
     SessionLimits,
 )
 from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine
-from fastapi_canon.integrations.webrtc.router import WebRtcRouter
 from pydantic import BaseModel, Field
 
 DEMO_TOKEN = "demo"
@@ -95,19 +96,21 @@ def lesson_access(
     return lesson
 
 
-rtc = WebRtcRouter(
-    prefix="/rtc",
-    engine=AiortcEngine(),
-    limits=SessionLimits(negotiation_timeout_seconds=20),
-    max_sessions=50,
-)
+rtc = APIRouter(prefix="/rtc")
+ENGINE = AiortcEngine()
+LIMITS = SessionLimits(negotiation_timeout_seconds=20)
+# Both sessions draw from one pool of 50 slots.
+CAPACITY = SessionCapacity(max_sessions=50)
 
 
-@rtc.session(
+@rtc.webrtc(
     "/lessons/{lesson_id}",
+    engine=ENGINE,
     name="practice",
     media=MediaPolicy(audio=Direction.SEND_RECEIVE),
     data_channels=(MESSAGES,),
+    limits=LIMITS,
+    capacity=CAPACITY,
 )
 def practice(lesson: Annotated[Lesson, Depends(lesson_access)]) -> Session:
     """Speak with the tutor: audio is echoed back and prompts receive feedback."""
@@ -140,12 +143,15 @@ def practice(lesson: Annotated[Lesson, Depends(lesson_access)]) -> Session:
     return Session(on_track=on_track, on_message={MESSAGES: on_prompt})
 
 
-@rtc.session(
+@rtc.webrtc(
     "/clock",
+    engine=ENGINE,
     name="clock",
     role=Role.OFFERER,
     media=MediaPolicy(video=Direction.SEND),
     data_channels=(TICKS,),
+    limits=LIMITS,
+    capacity=CAPACITY,
 )
 def clock(interval_ms: Annotated[int, Query(ge=50, le=5000)] = 250) -> Session:
     """Watch a synthetic video track and receive a tick on every interval."""

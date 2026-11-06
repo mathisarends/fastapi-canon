@@ -8,7 +8,7 @@
   "generation": {
     "client_name": "PracticeRtcClient",
     "contract_hash_encoding": "canonical-json-v1",
-    "contract_sha256": "55e7a716659218d0d7e6c14071cf7d99936a04db3a35ad9a3ddc76ba564e6203",
+    "contract_sha256": "9a50e450faf23fe7aba94930e2068af9e8036f94b8baef1265086681920f1b5a",
     "generator": "fastapi-canon",
     "generator_version": "0.15.0",
     "target": "typescript"
