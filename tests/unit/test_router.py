@@ -66,7 +66,6 @@ def test_router_rejects_invalid_namespaces(namespace: object) -> None:
 def test_router_composes_shared_and_operation_contracts() -> None:
     router = CanonRouter(
         prefix="/sessions",
-        error_registry=SESSION_ERRORS,
         raises=[AUTHENTICATION_REQUIRED, SESSION_NOT_FOUND],
     )
 
@@ -98,18 +97,8 @@ def test_router_composes_shared_and_operation_contracts() -> None:
     }
 
 
-@pytest.mark.parametrize("explicit_registry", [False, True])
-def test_auto_registration_preserves_inheritance_and_operation_local_errors(
-    explicit_registry: bool,
-) -> None:
-    router = CanonRouter(
-        raises=[AUTHENTICATION_REQUIRED],
-        error_registry=(
-            ErrorRegistry(errors=[AUTHENTICATION_REQUIRED])
-            if explicit_registry
-            else None
-        ),
-    )
+def test_auto_registration_preserves_inheritance_and_operation_local_errors() -> None:
+    router = CanonRouter(raises=[AUTHENTICATION_REQUIRED])
     router.get("/tasks", operation_id="tasks.list")(lambda: [])
     router.post(
         "/tasks/completion", operation_id="tasks.complete", raises=[SESSION_NOT_FOUND]
@@ -194,10 +183,7 @@ def test_all_http_decorators_accept_canon_contracts(method: str, verb: str) -> N
 
 
 def test_api_route_accepts_canon_contracts_for_custom_method_sets() -> None:
-    router = CanonRouter(
-        error_registry=SESSION_ERRORS,
-        raises=[SESSION_NOT_FOUND],
-    )
+    router = CanonRouter(raises=[SESSION_NOT_FOUND])
     router.api_route(
         "/resource",
         methods=["GET", "POST"],
@@ -234,14 +220,9 @@ def test_raises_registers_errors_without_an_explicit_registry() -> None:
     assert router.error_registry.errors == (SESSION_NOT_FOUND,)
 
 
-def test_error_registry_rejects_invalid_value() -> None:
-    with pytest.raises(ErrorConfigurationError, match="error_registry must be"):
-        CanonRouter(error_registry=object())  # type: ignore[arg-type]
-
-
 def test_raises_rejects_conflicting_errors_at_declaration_time() -> None:
     foreign = error(SessionNotFound, 404, "foreign_session")
-    router = CanonRouter(error_registry=SESSION_ERRORS)
+    router = CanonRouter(raises=[SESSION_NOT_FOUND])
 
     with pytest.raises(ErrorConfigurationError, match="conflicting exception class"):
         router.get("/session", raises=[foreign])
@@ -283,7 +264,6 @@ def test_canon_contract_rejects_conflicting_fastapi_response() -> None:
 def test_nested_reused_router_preserves_contracts_and_streaming_runtime() -> None:
     router = CanonRouter(
         generate_unique_id_function=generate_unique_id,
-        error_registry=SESSION_ERRORS,
         raises=[SESSION_NOT_FOUND],
     )
 
