@@ -1,6 +1,6 @@
 # DX-014: Analyze exception paths through comprehensions
 
-- Status: In progress
+- Status: Done
 - Priority: P2
 - Kind: Checker coverage
 - Baseline: `a366702` (2026-11-05)
@@ -43,7 +43,7 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
 
 ## Completion
 
-- Implementation or decision PR: Pending publication after verification.
+- Implementation or decision PR: [#96](https://github.com/mathisarends/fastapi-canon/pull/96).
 - Final commit and verification: Implementation `8d923e4`; 2,651 root tests
   passed (26 skipped); all 149 checker tests also passed on Python 3.12.
   Ruff, formatting, mypy, changed/full Smelt and all pre-commit hooks passed.

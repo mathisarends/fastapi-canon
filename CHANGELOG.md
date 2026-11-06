@@ -22,6 +22,11 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- Source checking follows supported local sync/async context-manager enter,
+  body and exit calls. Literal exit suppression and multiple-manager order are
+  modeled; unknown suppression, external/decorated/inherited protocols and
+  unsupported bindings retain CAN003 without importing application code.
+
 - Source error checking follows explicit calls in eager list/set/dict
   comprehensions, including iterable/filter/result paths, nested clauses and
   supported async forms. Comprehension bindings stay local. Generator expression
@@ -191,6 +196,12 @@ The next release containing the breaking changes below must be 0.16.0.
   instead of 0.115.
 
 ### Breaking changes
+
+- Supported context-manager paths can now expose CAN001/CAN002 gaps previously
+  hidden behind unsupported `with`/`async with` statements. Before enabling strict
+  checking on 0.16.0, map these escaping errors and declare them in `raises`.
+  Keep CAN003 for managers whose suppression/protocol remains unknown; see
+  [context-manager coverage](docs/error-checking.md#local-context-managers).
 
 - Source checking can now report CAN001/CAN002 for newly followed comprehension
   paths that previously retained incomplete analysis. Before adopting 0.16.0,

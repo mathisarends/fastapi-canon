@@ -1,6 +1,6 @@
 # DX-013: Provide one explain command for documented diagnostic codes
 
-- Status: In progress
+- Status: Done
 - Priority: P3
 - Kind: Feature
 - Baseline: `a366702` (2026-11-05)
@@ -51,8 +51,7 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
   runtimes. Mypy, Ruff, changed/full Smelt and all-files pre-commit passed.
   All 175 changed local Markdown links/anchors resolve, including the new guide.
   Client/browser/dependency matrices were not repeated for static explanation
-  lookup. DX-011's follow-up and DX-012 are now confirmed merged. Status remains
-  In progress until merge.
+  lookup. DX-011's follow-up and DX-012 are now confirmed merged. Merged as `f1070fb`.
 - Remaining follow-ups: application-defined codes use their own finding hint;
   lookup does not execute application checks or prove their runtime coverage.
   Decision tickets remain intentionally Open and untouched by implementation.
