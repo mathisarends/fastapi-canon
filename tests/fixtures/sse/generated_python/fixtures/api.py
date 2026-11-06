@@ -14,7 +14,7 @@ class FixturesApi:
     _nested_events_x_trace_adapter = TypeAdapter(Models.NestedEventsXTrace)
     _nested_events_item_id_adapter = TypeAdapter(int)
     _nested_events_labels_adapter = TypeAdapter(Models.NestedEventsLabels)
-    _nested_events_event_adapter = TypeAdapter(Models.FixtureEvent)
+    _nested_events_event_adapter: TypeAdapter[Models.FixtureEvent] = TypeAdapter(Models.FixtureEvent)
     _nested_events_problem_adapters: dict[str, TypeAdapter[Any]] = {
     }
 

@@ -21,7 +21,7 @@ code moves to a documented API.
 FastAPI releases minor versions too often to cap the core range per minor.
 Instead, the weekly `Upstream canary` workflow upgrades `uv.lock` in CI only and
 runs `scripts/check.py all`, the telemetry bridge check and the distribution
-smoke against the newest versions the declared ranges allow. On 2026-11-05 the
+smoke against the newest versions the declared ranges allow on Python 3.12–3.14. On 2026-11-05 the
 full suite passed with FastAPI 0.162.0, Starlette 1.10.0 and aioice 0.13.0.
 Dishka and aiortc ranges are capped at the verified minor and widened in a
 release after the canary passes. Run the canary manually with
@@ -246,7 +246,18 @@ bridging, instrumentation ownership, and operation-span limits.
 CI runs package-specific lint/type checks, separate Python suites and generated
 client drift/TypeScript tests on Linux with Python 3.12–3.14 and Windows with
 Python 3.14. Linux/Python 3.14 also runs Chromium/aiortc browser tests and installed
-artifact checks. See the [active CI workflow](../.github/workflows/ci.yml).
+artifact checks. A separate job resolves the lowest direct dependencies the
+declared ranges allow (`uv lock --resolution lowest-direct`) and runs the full
+Python suite on Python 3.12. Because the development environment installs every
+extra together, it exercises their jointly lowest versions, for example FastAPI
+0.143.3 rather than the core minimum 0.121; the installed-wheel minimum matrix
+covers each combination at its own bounds.
+
+Pushes to `main`, manual runs and pull requests labeled `full-ci` run all of these
+checks. Other pull requests run the static gates once and the suite on Python 3.12
+and 3.14; documentation-only changes skip the suite, and dependency, browser and
+artifact checks run when their inputs change. See the
+[active CI workflow](../.github/workflows/ci.yml).
 
 The installed-wheel matrix covers:
 

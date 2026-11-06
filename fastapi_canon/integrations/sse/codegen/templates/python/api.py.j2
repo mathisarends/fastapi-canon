@@ -18,7 +18,7 @@ class {{ class_name }}:
 {% if operation.body %}
     _{{ operation.operation_id | snake }}_body_adapter = TypeAdapter({{ operation.body.type | py_type }})
 {% endif %}
-    _{{ operation.operation_id | snake }}_event_adapter = TypeAdapter({{ operation.event | py_type }})
+    _{{ operation.operation_id | snake }}_event_adapter: TypeAdapter[{{ operation.event | py_type }}] = TypeAdapter({{ operation.event | py_type }})
     _{{ operation.operation_id | snake }}_problem_adapters: dict[str, TypeAdapter[Any]] = {
 {% for type_uri, payload in operation.problems %}        {{ type_uri | repr }}: TypeAdapter({{ payload | py_type }}),
 {% endfor %}    }

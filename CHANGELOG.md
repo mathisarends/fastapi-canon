@@ -211,6 +211,22 @@ The next release containing the breaking changes below must be 0.16.0.
 - Telemetry configuration errors name the current core minimum, FastAPI 0.121,
   instead of 0.115.
 
+- Generated Python SSE clients annotate their event adapters explicitly. With
+  Pydantic 2.11 through 2.13, strict Pyright inferred `TypeAdapter[Unknown]` for
+  annotated event unions; generated runtime behavior is unchanged.
+
+### Development
+
+- CI runs the full Python suite against the lowest direct dependencies the
+  declared ranges allow, on Python 3.12, alongside the installed-wheel minimum
+  matrix. Development tool floors are raised to versions that pass the suite:
+  pytest 9.1, pytest-asyncio 1.4, Ruff 0.15 and Uvicorn 0.53.
+- Pull requests run the static gates once and the suite on Python 3.12 and 3.14.
+  Documentation-only changes skip the suite; dependency, browser and artifact
+  checks run when their inputs change. Pushes to `main`, manual runs and the
+  `full-ci` label run the complete matrix. The weekly upstream canary adds
+  Python 3.13.
+
 ### Breaking changes
 
 - Supported nested route factories now report contract gaps instead of blanket

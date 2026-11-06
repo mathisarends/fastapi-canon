@@ -13,12 +13,12 @@ from ..runtime import RequestOptions, Transport, append_query, encode_path, vali
 class AgentRunsApi:
     _stream_prompt_run_id_adapter = TypeAdapter(str)
     _stream_prompt_body_adapter = TypeAdapter(Models.RunRequest)
-    _stream_prompt_event_adapter = TypeAdapter(Models.RunEvent)
+    _stream_prompt_event_adapter: TypeAdapter[Models.RunEvent] = TypeAdapter(Models.RunEvent)
     _stream_prompt_problem_adapters: dict[str, TypeAdapter[Any]] = {
     }
     _stream_run_events_run_id_adapter = TypeAdapter(str)
     _stream_run_events_delay_adapter = TypeAdapter(Models.StreamRunEventsDelay)
-    _stream_run_events_event_adapter = TypeAdapter(Models.RunEvent)
+    _stream_run_events_event_adapter: TypeAdapter[Models.RunEvent] = TypeAdapter(Models.RunEvent)
     _stream_run_events_problem_adapters: dict[str, TypeAdapter[Any]] = {
     }
 
