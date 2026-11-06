@@ -49,6 +49,9 @@ fix and required verification have landed.
   determines whether follow-up implementations are justified.
 - DX-028 is a small independent documentation task. Do not raise dependency
   minimums merely to simplify a table.
+- DX-030 through DX-032 implement the DX-023 facade decision. Ship all three in
+  one minor release with one breaking-changes import table; DX-032 adds
+  `SessionCapacity` before it removes `WebRtcRouter`.
 
 ## Ticket index
 
@@ -76,13 +79,16 @@ fix and required verification have landed.
 | [DX-020](DX-020-mcp-activation-policy.md)           | P3       | Decision                    | Decide whether MCP mounts imply activation                               | None                                                                                        | Done ([#99](https://github.com/mathisarends/fastapi-canon/pull/99)) |
 | [DX-021](DX-021-composition-prefix-policy.md)       | P3       | Decision                    | Decide whether Composition needs a prefix convenience API                | None                                                                                        | Done ([#99](https://github.com/mathisarends/fastapi-canon/pull/99)) |
 | [DX-022](DX-022-feature-metadata-defaults.md)       | P3       | Decision                    | Decide ownership of feature names, tags and transport namespaces         | None                                                                                        | Done ([#99](https://github.com/mathisarends/fastapi-canon/pull/99)) |
-| [DX-023](DX-023-public-export-organization.md)      | P3       | Decision                    | Evaluate public facade organization without arbitrary export cuts        | None                                                                                        | Open   |
+| [DX-023](DX-023-public-export-organization.md)      | P3       | Decision                    | Evaluate public facade organization without arbitrary export cuts        | None                                                                                        | Done   |
 | [DX-024](DX-024-generation-command-policy.md)       | P3       | Decision and documentation  | Clarify preferred and specialized generation workflows                   | None                                                                                        | Done ([#99](https://github.com/mathisarends/fastapi-canon/pull/99)) |
 | [DX-025](DX-025-single-app-codegen-config.md)       | P3       | Decision                    | Decide a single-app shorthand for common codegen sources                 | None                                                                                        | Open   |
 | [DX-026](DX-026-mcp-problem-contracts.md)           | P3       | Decision                    | Decide MCP binding of shared application problems                        | None                                                                                        | Done ([#99](https://github.com/mathisarends/fastapi-canon/pull/99)) |
 | [DX-027](DX-027-context-terminology.md)             | P3       | Decision                    | Evaluate context terminology across connection and server APIs           | None                                                                                        | Done ([#99](https://github.com/mathisarends/fastapi-canon/pull/99)) |
 | [DX-028](DX-028-dependency-version-overview.md)     | P3       | Documentation               | Document minimum dependencies in one current overview                    | None                                                                                        | Open   |
 | [DX-029](DX-029-transport-diagnostic-profile.md)    | P3       | Decision                    | Define a transport-aware composition inspection profile                  | [DX-004](DX-004-rpc-injection-preflight.md), [DX-006](DX-006-sse-endpoint-introspection.md) | Open   |
+| [DX-030](DX-030-root-facade-reduction.md)           | P2       | Feature (breaking)          | Reduce the root facade to application-building names                     | [DX-023](DX-023-public-export-organization.md)                                              | Open   |
+| [DX-031](DX-031-websocket-facade-reduction.md)      | P2       | Feature (breaking)          | Split the WebSocket facade by user task                                  | [DX-023](DX-023-public-export-organization.md)                                              | Open   |
+| [DX-032](DX-032-transport-router-adapters.md)       | P2       | Feature (breaking)          | Make SSE and WebRTC routers internal adapters of APIRouter               | [DX-023](DX-023-public-export-organization.md)                                              | Open   |
 
 ## Shared acceptance and verification rules
 
@@ -134,7 +140,7 @@ shared fixtures in tests/fixtures/, and development scripts in scripts/.
 | G1-G7         | DX-024, DX-010, DX-025, DX-012, DX-018, DX-011 and DX-017 respectively. App-based OpenRPC already exists; generated SDKs are already committed.                |
 | X1-X4, X7     | Substantially fixed in central docs/examples; keep regression checks focused on remaining concrete claims.                                                     |
 | X5, X6        | Active-doc corrections DX-009 and the short entry path DX-019.                                                                                                 |
-| S1-S3         | Export evaluation DX-023 and current dependency overview DX-028.                                                                                               |
+| S1-S3         | Export decision DX-023 (implemented by DX-030 through DX-032) and current dependency overview DX-028.                                                          |
 | S4            | Direct instrumentation=instrument(A, B) works. Explicit unpacking of differently configured groups is not itself a bug.                                        |
 
 Deliberately deferred without an implementation ticket: inferred Error titles
