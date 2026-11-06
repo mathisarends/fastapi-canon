@@ -22,6 +22,11 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- Source checking resolves bounded direct local router/channel factories without
+  executing them. HTTP/SSE/RPC endpoints, static error contracts and helper calls
+  use independent lexical scopes and stable factory-qualified names. Dynamic
+  captures/setup and unsupported factories remain incomplete.
+
 - Source checking follows supported local sync/async context-manager enter,
   body and exit calls. Literal exit suppression and multiple-manager order are
   modeled; unknown suppression, external/decorated/inherited protocols and
@@ -196,6 +201,12 @@ The next release containing the breaking changes below must be 0.16.0.
   instead of 0.115.
 
 ### Breaking changes
+
+- Supported nested route factories now report contract gaps instead of blanket
+  CAN003, and their operation names become `module.factory.<locals>.endpoint`.
+  Before adopting 0.16.0, update report-name filters and map/declare newly exposed
+  escaping errors. Path and decorator line remain separate report fields; see
+  [factory coverage](docs/error-checking.md#direct-local-route-factories).
 
 - Supported context-manager paths can now expose CAN001/CAN002 gaps previously
   hidden behind unsupported `with`/`async with` statements. Before enabling strict

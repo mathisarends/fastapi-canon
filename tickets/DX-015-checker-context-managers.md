@@ -38,7 +38,7 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
 
 ## Completion
 
-- Implementation or decision PR: Pending PR creation after completed verification.
+- Implementation or decision PR: [#97](https://github.com/mathisarends/fastapi-canon/pull/97).
 - Final commit and verification: Source `4815439`; all 203 checker tests pass
   on Python 3.14 and Python 3.12, including 54 new public-CLI cases. Ruff,
   formatting, mypy, changed/full Smelt, all-files pre-commit and 77 local
