@@ -213,7 +213,7 @@ The next release containing the breaking changes below must be 0.16.0.
 - CI runs the full Python suite against the lowest direct dependencies the
   declared ranges allow, on Python 3.12, alongside the installed-wheel minimum
   matrix. Development tool floors are raised to versions that pass the suite:
-  pytest 9, pytest-asyncio 1.4, Ruff 0.15 and Uvicorn 0.53.
+  pytest 9.1, pytest-asyncio 1.4, Ruff 0.15 and Uvicorn 0.53.
 - Pull requests run the static gates once and the suite on Python 3.12 and 3.14.
   Documentation-only changes skip the suite; dependency, browser and artifact
   checks run when their inputs change. Pushes to `main`, manual runs and the
