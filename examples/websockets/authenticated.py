@@ -7,8 +7,9 @@ from typing import Any
 from dishka import Provider, Scope, from_context, provide
 from dishka.integrations.fastapi import FromDishka
 from fastapi import FastAPI, WebSocket
-from fastapi_canon import APIRouter, Composition, Feature, Inject, RpcChannel
+from fastapi_canon import APIRouter, Composition, Feature, Inject
 from fastapi_canon.integrations.websockets import (
+    RpcChannel,
     RpcConnection,
     RpcErrorBinding,
     RpcRejection,

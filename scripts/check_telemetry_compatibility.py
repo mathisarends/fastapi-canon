@@ -52,7 +52,7 @@ def _verify() -> None:
     from dishka.integrations.fastapi import inject
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
-    from fastapi_canon import CanonRouter, Composition, Feature
+    from fastapi_canon import APIRouter, Composition, Feature
     from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
     from opentelemetry import trace
     from opentelemetry.sdk.metrics import MeterProvider
@@ -77,7 +77,7 @@ def _verify() -> None:
     try:
         provider = Provider()
         provider.provide(Port, scope=Scope.REQUEST)
-        router = CanonRouter()
+        router = APIRouter()
 
         @router.get("/{name}")
         @inject

@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from fastapi_canon import Error, ErrorRegistry
+from fastapi_canon import Error
+from fastapi_canon.error import ErrorRegistry
 from fastapi_canon.integrations.websockets import (
     Inject,
     RpcBinaryInput,

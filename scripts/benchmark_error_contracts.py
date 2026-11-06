@@ -24,7 +24,8 @@ _ROOT = Path(__file__).resolve().parents[1]
 
 def _project(root: Path, features: int, routes: int, depth: int) -> None:
     (root / "errors.py").write_text(
-        "from fastapi_canon import Error, ErrorRegistry\n"
+        "from fastapi_canon import Error\n"
+        "from fastapi_canon.error import ErrorRegistry\n"
         "class Failure(Exception): pass\n"
         "class Missing(Failure): pass\n"
         "class Unauthorized(Exception): pass\n"
@@ -57,10 +58,10 @@ def _project(root: Path, features: int, routes: int, depth: int) -> None:
     for feature in range(features):
         lines = [
             "from dishka import FromDishka",
-            "from fastapi_canon import CanonRouter",
+            "from fastapi_canon import APIRouter",
             "from errors import registry, missing, unauthorized",
             "from shared import Service, Identity",
-            "router = CanonRouter(error_registry=registry, raises=[unauthorized])",
+            "router = APIRouter(error_registry=registry, raises=[unauthorized])",
         ]
         for route in range(routes):
             declared = "[]" if route % 5 == 0 else "[missing]"

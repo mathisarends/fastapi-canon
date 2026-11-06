@@ -16,17 +16,16 @@ from starlette.types import Message
 from fastapi_canon import (
     APIRouter,
     Composition,
-    ConfigurationError,
     Error,
-    ErrorRegistry,
     Feature,
-    RpcChannel,
     export_contracts,
 )
+from fastapi_canon.error import ErrorRegistry
+from fastapi_canon.exceptions import ConfigurationError
 from fastapi_canon.integrations.webrtc import SUBPROTOCOL, Session
 from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine
 from fastapi_canon.integrations.webrtc.events import SessionEvent, SessionEventKind
-from fastapi_canon.integrations.websockets import Inject, RpcConnection
+from fastapi_canon.integrations.websockets import Inject, RpcChannel, RpcConnection
 
 
 class Rename(BaseModel):

@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import URL, Column, MetaData, String, Table, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from fastapi_canon import Database
+from fastapi_canon.integrations.database import Database
 
 
 @pytest.fixture(params=["sqlite", "postgres"])

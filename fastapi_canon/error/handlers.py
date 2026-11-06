@@ -23,11 +23,8 @@ from fastapi_canon.error.contracts import (
 )
 from fastapi_canon.error.openapi import install_openapi
 from fastapi_canon.error.rendering import render_problem
-from fastapi_canon.error.types import (
-    ErrorConfigurationError,
-    JsonValue,
-    http_problem_title,
-)
+from fastapi_canon.error.types import JsonValue, http_problem_title
+from fastapi_canon.exceptions import ErrorConfigurationError
 
 logger = logging.getLogger(__name__)
 

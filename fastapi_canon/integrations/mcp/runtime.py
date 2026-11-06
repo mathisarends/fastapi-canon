@@ -7,7 +7,7 @@ from fastmcp import FastMCP
 from fastmcp.server.middleware import Middleware, MiddlewareContext
 from starlette.types import Lifespan
 
-from fastapi_canon.error.types import FeatureConfigurationError
+from fastapi_canon.exceptions import FeatureConfigurationError
 from fastapi_canon.integrations.mcp import McpMount, McpOptions, McpScope
 from fastapi_canon.integrations.mcp.component_validation import ComponentValidation
 from fastapi_canon.integrations.mcp.configuration import McpRuntime

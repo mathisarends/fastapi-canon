@@ -9,15 +9,14 @@ from jsonschema import Draft202012Validator
 from pydantic import BaseModel, ValidationError
 
 from fastapi_canon import (
-    CanonRouter,
     Composition,
     Error,
-    ErrorConfigurationError,
     ErrorOptions,
-    ErrorRegistry,
     Feature,
 )
+from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
 from fastapi_canon.error.catalog import app_registry, problem_for, problem_schema
+from fastapi_canon.router import CanonRouter
 
 
 class Missing(Exception):
@@ -231,7 +230,7 @@ def test_ambiguous_about_blank_union_fails_without_caching() -> None:
 
 @pytest.mark.parametrize("status", [True, False, "404", 404.0])
 def test_problem_status_is_an_actual_json_integer(status: Any) -> None:
-    from fastapi_canon import Problem
+    from fastapi_canon.error import Problem
 
     with pytest.raises(ValidationError):
         Problem(

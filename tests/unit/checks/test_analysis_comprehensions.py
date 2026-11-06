@@ -10,7 +10,8 @@ from fastapi_canon.cli import main
 
 PRELUDE = """
 from collections.abc import AsyncIterator
-from fastapi_canon import APIRouter, Error, ErrorRegistry
+from fastapi_canon import APIRouter, Error
+from fastapi_canon.error import ErrorRegistry
 raise RuntimeError('The source module must never be imported')
 
 class Missing(Exception): pass

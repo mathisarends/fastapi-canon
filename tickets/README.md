@@ -18,7 +18,7 @@ documented in their merged PRs.
 | [DX-027](DX-027-context-terminology.md) | Decision | Done ([#99](https://github.com/mathisarends/fastapi-canon/pull/99)) |
 | [DX-028](DX-028-dependency-version-overview.md) | Documentation | Open |
 | [DX-029](DX-029-transport-diagnostic-profile.md) | Decision | Open |
-| [DX-030](DX-030-root-facade-reduction.md) | Feature (breaking) | Open |
+| [DX-030](DX-030-root-facade-reduction.md) | Feature (breaking) | In progress ([#105](https://github.com/mathisarends/fastapi-canon/pull/105)) |
 | [DX-031](DX-031-websocket-facade-reduction.md) | Feature (breaking) | Open |
 | [DX-032](DX-032-transport-router-adapters.md) | Feature (breaking) | Open |
 

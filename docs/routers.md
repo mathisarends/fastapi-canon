@@ -97,7 +97,7 @@ async def events(project_id: int) -> AsyncIterator[int]:
 
 These operations export as `projects.get` and `projects.events`, producing
 `client.projects.get(...)` and `client.projects.events(...)` in the common SDK.
-The same rule applies to `CanonRouter` and `CanonStreamRouter`.
+The same rule applies to the standalone `CanonStreamRouter`.
 
 - An explicit `operation_id=` always wins and is never prefixed.
 - Otherwise the ID is `<namespace>.<function_name>`, or just `<function_name>`
@@ -157,7 +157,8 @@ from collections.abc import AsyncIterator
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from fastapi_canon import APIRouter, Composition, Feature, RpcChannel
+from fastapi_canon import APIRouter, Composition, Feature
+from fastapi_canon.integrations.websockets import RpcChannel
 from fastapi_canon.integrations.websockets import Inject, RpcConnection
 
 

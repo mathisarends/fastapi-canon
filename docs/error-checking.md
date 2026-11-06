@@ -358,7 +358,7 @@ factories rather than supported context managers.
 ## Direct local route factories
 
 A synchronous, undecorated factory without parameters can declare local
-APIRouter/CanonRouter instances (or RpcChannels), nested operations and local
+APIRouter instances (or RpcChannels), nested operations and local
 helpers, then return the router/channel or a literal tuple/list of them. The
 checker indexes these declarations without calling the factory. Static Error,
 ErrorRegistry and RouterPolicy declarations, literal values/collections and

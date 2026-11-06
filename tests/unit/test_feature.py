@@ -14,14 +14,14 @@ from starlette.responses import Response
 
 from fastapi_canon import (
     CanonResponse,
-    CanonRouter,
     Composition,
     ErrorOptions,
     ExceptionHandlerSpec,
     Feature,
-    FeatureConfigurationError,
 )
 from fastapi_canon.error import Error, ErrorRegistry
+from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.router import CanonRouter
 
 
 def test_feature_copies_inputs_and_is_frozen() -> None:

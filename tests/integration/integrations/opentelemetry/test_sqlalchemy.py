@@ -17,7 +17,9 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import QueuePool
 
-from fastapi_canon import Composition, Database, Feature, FeatureConfigurationError
+from fastapi_canon import Composition, Feature
+from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.integrations.database import Database
 from fastapi_canon.integrations.opentelemetry import Telemetry
 from fastapi_canon.integrations.opentelemetry.sqlalchemy import (
     SqlAlchemyInstrumentation,

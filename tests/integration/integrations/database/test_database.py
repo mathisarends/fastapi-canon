@@ -19,13 +19,13 @@ from starlette.types import Scope as ASGIScope
 
 from fastapi_canon import (
     Composition,
-    Database,
     Error,
-    ErrorRegistry,
     Feature,
     Scoped,
     ServiceScope,
 )
+from fastapi_canon.error import ErrorRegistry
+from fastapi_canon.integrations.database import Database
 
 
 @pytest.mark.parametrize(

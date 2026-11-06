@@ -3,7 +3,7 @@ from typing import Literal
 
 import pytest
 
-from fastapi_canon import (
+from fastapi_canon.diagnostics import (
     CheckIssue,
     CheckReport,
     CheckResult,

@@ -28,7 +28,9 @@ from fastapi_canon.checks.source import (
 )
 
 PRELUDE = """
-from fastapi_canon import CanonRouter, Error, ErrorRegistry
+from fastapi_canon import Error
+from fastapi_canon.error import ErrorRegistry
+from fastapi_canon.router import CanonRouter
 
 class Missing(Exception):
     pass
@@ -110,7 +112,10 @@ def endpoint() -> None:
 def test_api_router_operations_are_checked(tmp_path: Path) -> None:
     report = analyze(
         tmp_path,
-        PRELUDE.replace("CanonRouter", "APIRouter")
+        PRELUDE.replace(
+            "from fastapi_canon.router import CanonRouter",
+            "from fastapi_canon import APIRouter",
+        ).replace("CanonRouter(", "APIRouter(")
         + """
 @router.get('/')
 def endpoint() -> None:
@@ -140,7 +145,7 @@ def test_import_aliases_reexports_and_dishka_services(tmp_path: Path) -> None:
     report = analyze(
         tmp_path,
         """
-from fastapi_canon import CanonRouter as Router
+from fastapi_canon.router import CanonRouter as Router
 from dishka.integrations.fastapi import FromDishka
 from app import Service, missing, registry
 
@@ -536,7 +541,7 @@ def test_direct_nested_route_factory_is_complete(tmp_path: Path) -> None:
     report = analyze(
         tmp_path,
         """
-from fastapi_canon import CanonRouter
+from fastapi_canon.router import CanonRouter
 def create_router():
     router = CanonRouter()
     @router.get('/')
@@ -911,7 +916,7 @@ def test_cached_inheritance_preserves_uncertain_modules(tmp_path: Path) -> None:
     report = analyze(
         tmp_path,
         """
-from fastapi_canon import CanonRouter
+from fastapi_canon.router import CanonRouter
 from errors import registry
 router = CanonRouter(error_registry=registry)
 @router.get('/first')
@@ -922,7 +927,8 @@ def second(): pass
         **{
             "base.py": "state = 1\nstate = 2\nclass Base(Exception): pass\n",
             "errors.py": """
-from fastapi_canon import Error, ErrorRegistry
+from fastapi_canon import Error
+from fastapi_canon.error import ErrorRegistry
 from base import Base
 class Missing(Base): pass
 missing = Error(Missing, status=404, code='missing', title='Missing')

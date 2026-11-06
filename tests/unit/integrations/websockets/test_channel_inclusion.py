@@ -1,8 +1,7 @@
 from collections.abc import AsyncIterator
 
 import pytest
-from fastapi_canon import RpcChannel
-from fastapi_canon.integrations.websockets import ProtocolDefinitionError
+from fastapi_canon.integrations.websockets import ProtocolDefinitionError, RpcChannel
 
 
 def test_anonymous_channels_have_unprefixed_operations() -> None:

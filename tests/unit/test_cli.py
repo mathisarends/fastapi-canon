@@ -62,9 +62,9 @@ def test_module_entry_point_checks_errors_without_importing_application(
     tmp_path: Path,
 ) -> None:
     (tmp_path / "api.py").write_text(
-        "from fastapi_canon import CanonRouter\n"
+        "from fastapi_canon import APIRouter\n"
         "raise RuntimeError('must not import')\n"
-        "router = CanonRouter()\n"
+        "router = APIRouter()\n"
         "@router.get('/')\n"
         "def endpoint() -> str: return 'ok'\n",
         encoding="utf-8",

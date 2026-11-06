@@ -61,24 +61,37 @@ represent another PyPI distribution.
 
 | Responsibility | Public imports | Guide |
 | --- | --- | --- |
-| Shared application router and composable channels | `fastapi_canon.APIRouter`, `RpcChannel` | [One feature router](routers.md) |
+| Shared application router and composable channels | `fastapi_canon.APIRouter`, `fastapi_canon.integrations.websockets.RpcChannel` | [One feature router](routers.md) |
 | Application composition and Dishka lifecycle | `fastapi_canon.Composition`, `Feature` | [Composition](composition.md#feature-composition) |
 | Typed transport dependencies and context hooks | `fastapi_canon.Inject` | [Dependency injection](integrations/websockets/dependencies.md) |
-| Composition checks and installed HTTP descriptions | `fastapi_canon.CheckReport`, `CheckIssue`, `CheckContext`, `CompositionInfo`, `FeatureInfo`, `OperationInfo` | [System checks](system-checks.md) |
-| Database ownership, migrations, locks and short service scopes | `fastapi_canon.Database`, `AlembicMigrations`, `TransactionLocks`, `Scoped`, `ServiceScope` | [Databases](database.md) |
-| HTTP routes and contracts | `fastapi_canon.APIRouter`, `RouterPolicy`, `Error`, `ErrorRegistry`, `CanonResponse` | [HTTP contracts](composition.md#error-contracts) |
+| Composition checks and installed HTTP descriptions | `fastapi_canon.diagnostics.CheckReport`, `CheckIssue`, `CheckContext`, `CompositionInfo`, `FeatureInfo`, `OperationInfo` | [System checks](system-checks.md) |
+| Database ownership, migrations and locks | `fastapi_canon.integrations.database.Database`, `AlembicMigrations`, `TransactionLocks` | [Databases](database.md) |
+| Short service scopes | `fastapi_canon.Scoped`, `ServiceScope` | [Databases](database.md) |
+| HTTP routes and contracts | `fastapi_canon.APIRouter`, `RouterPolicy`, `Error`, `ErrorOptions`, `CanonResponse`; `fastapi_canon.error.ErrorRegistry`, `Problem` | [HTTP contracts](composition.md#error-contracts) |
 | Typed SSE | `APIRouter.sse()` | [SSE contracts](streams.md) |
-| WebSocket JSON-RPC | `APIRouter.include_channel()` with `fastapi_canon.RpcChannel` | [WebSockets](integrations/websockets/index.md) |
+| WebSocket JSON-RPC | `APIRouter.include_channel()` with `fastapi_canon.integrations.websockets.RpcChannel` | [WebSockets](integrations/websockets/index.md) |
 | Raw WebSocket messages and binary streams | `fastapi_canon.integrations.websockets.CanonWebSocketRouter`, `RpcSocket` | [Sockets](integrations/websockets/sockets.md) |
 | WebRTC with Canon admission errors | `APIRouter.webrtc()`, `fastapi_canon.integrations.webrtc.Session` | [WebRTC admission](webrtc.md) |
-| Contract export | `fastapi_canon.export_contracts`, `fastapi-canon contracts export` | [Application export](contracts.md) |
+| Contract export | `fastapi_canon.export_contracts`, `fastapi_canon.contracts.Contracts`, `fastapi-canon contracts export` | [Application export](contracts.md) |
+| OpenAPI contracts without `Composition` | `fastapi_canon.openapi.install_openapi_contracts`, `validate_openapi_contracts` | [Composition](composition.md) |
+| Startup configuration errors | `fastapi_canon.exceptions.ConfigurationError` and its subclasses | [Problems](problems.md) |
 | Telemetry declarations | `fastapi_canon.integrations.opentelemetry.Telemetry`, `instrument` | [Telemetry](telemetry.md) |
 | SQLAlchemy engine instrumentation declaration | `fastapi_canon.integrations.opentelemetry.sqlalchemy.SqlAlchemyInstrumentation` | [Engine lifetime](database.md#engine-instrumentation-lifetime) |
+
+Only the modules in this table are public: the `fastapi_canon` root,
+`fastapi_canon.error`, `fastapi_canon.diagnostics`, `fastapi_canon.exceptions`,
+`fastapi_canon.openapi`, `fastapi_canon.contracts` and the
+`fastapi_canon.integrations.*` facades with their documented submodules. Other
+modules are internal even without a leading underscore and may change in any
+release. The root exports only names needed to build an application; a type
+used by a transport method, such as `RpcChannel` or `Session`, is imported from
+that transport's namespace.
 
 Typical application imports are explicit:
 
 ```python
-from fastapi_canon import APIRouter, Composition, Feature, RpcChannel
+from fastapi_canon import APIRouter, Composition, Feature
+from fastapi_canon.integrations.websockets import RpcChannel
 from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
 from fastapi_canon.integrations.webrtc import Session
 ```

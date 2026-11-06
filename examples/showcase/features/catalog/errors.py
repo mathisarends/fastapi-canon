@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 
-from fastapi_canon import Error, ErrorRegistry
+from fastapi_canon import Error
+from fastapi_canon.error import ErrorRegistry
 
 from .exceptions import ProductNotFound, ProductUnavailable
 

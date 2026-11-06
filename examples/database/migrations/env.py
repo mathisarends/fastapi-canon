@@ -1,3 +1,3 @@
-from fastapi_canon import run_alembic_environment
+from fastapi_canon.integrations.database import run_alembic_environment
 
 run_alembic_environment()

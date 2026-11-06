@@ -17,7 +17,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from fastapi_canon import FeatureConfigurationError
+from fastapi_canon.exceptions import FeatureConfigurationError
 from fastapi_canon.integrations.opentelemetry import Telemetry
 from fastapi_canon.integrations.opentelemetry.httpx import instrument_httpx
 from tests.fixtures.telemetry import SpanCapture

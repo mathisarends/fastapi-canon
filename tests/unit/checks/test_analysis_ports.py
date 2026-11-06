@@ -12,7 +12,8 @@ PRELUDE = """
 from abc import ABC, abstractmethod
 from typing import Protocol
 from dishka import Provider, Scope, provide
-from fastapi_canon import APIRouter, Error, ErrorRegistry, Inject
+from fastapi_canon import APIRouter, Error, Inject
+from fastapi_canon.error import ErrorRegistry
 
 class Missing(Exception):
     pass

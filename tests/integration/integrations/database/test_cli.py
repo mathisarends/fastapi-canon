@@ -13,7 +13,7 @@ def test_installed_command_creates_and_applies_real_revisions(tmp_path: Path) ->
         "from contextlib import contextmanager\n"
         "from pathlib import Path\n"
         "from sqlalchemy import MetaData, Table, Column, String, event\n"
-        "from fastapi_canon import Database, AlembicMigrations\n"
+        "from fastapi_canon.integrations.database import Database, AlembicMigrations\n"
         "def record(message):\n"
         "    with Path('engine-lifecycle.txt').open('a') as output:\n"
         "        output.write(message + '\\n')\n"

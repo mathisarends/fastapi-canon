@@ -7,7 +7,8 @@ from dishka import Scope
 from fastapi import FastAPI
 from sqlalchemy import text
 
-from fastapi_canon import Composition, Database, TransactionLocks
+from fastapi_canon import Composition
+from fastapi_canon.integrations.database import Database, TransactionLocks
 
 
 @pytest.mark.parametrize("outcome", ["commit", "rollback", "cancel"])
