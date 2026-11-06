@@ -318,6 +318,43 @@ unresolved `super().__init__`, inherited dispatch and nested route factories
 remain explicit boundaries. Its strict/require-complete command still exits 1;
 this change does not claim a fully validated reference application.
 
+## Local context managers
+
+Source checking follows explicit calls in local sync `__enter__`/`__exit__`
+methods and async `__aenter__`/`__aexit__` methods, as well as the `with` body.
+Methods must be ordinary, undecorated, nongenerator definitions on the resolved
+class itself. Direct construction, typed local/parameter instances and local
+factories with a class return annotation are supported; coroutine factories must
+be awaited. A simple `as name` binding uses the enter return annotation, including
+`Self`. Destructured or mutating bindings remain incomplete.
+
+Exit methods with implicit None, bare `return`, `return None` or `return False`
+do not suppress body exceptions. A single top-level literal `return True`
+suppresses body exceptions, while errors in that exit method still escape.
+Multiple managers enter left to right and exit in reverse order; outer
+suppression also applies to errors entering an inner manager. A straight-line
+unconditional enter raise skips that manager's body and exit; a straight-line
+unconditional exit raise replaces inner errors. Other branching/call paths use
+the existing conservative union of possible explicit escapes.
+
+Unknown, computed or conditional suppression retains CAN003 and possible body
+gaps. Exception argument values are not simulated. Inherited/decorated methods,
+generator-based protocols, protocol kind mismatches and unresolved/external
+managers retain CAN003; body helpers are still inspected. In particular,
+SQLAlchemy and arbitrary library managers are not assumed harmless. This is
+explicit exception analysis, not a model of every implicit Python protocol error.
+
+For example, `with Manager(): require_item(item_id)` now follows
+`require_item` when Manager has local nonsuppressing methods, preserving its
+mapping/declaration diagnostics. Enter/exit helper traces include the protocol
+method. An enclosing supported `try/except` can catch these errors normally.
+The source module is never imported.
+
+The reference-service comparison is unchanged by this slice: six operations,
+zero gaps and five incomplete operations, with strict/require-complete exit 1.
+Its remaining findings concern `super`, inherited dispatch and nested route
+factories rather than supported context managers.
+
 ## Analysis boundaries
 
 `complete` describes analysis of the supported explicit source paths, not proof
@@ -332,8 +369,8 @@ recursive calls, dynamic contracts, nested route factories, deferred coroutine
 execution and unsupported control flow produce `CAN003`. `for`, `async for` and
 `while` loops are analyzed like branches that may run; iterating a call to a
 generator follows the generator's body. Supported comprehensions and deferred
-generator expressions are described above. Context managers, `match` and
-`except*` are currently outside the supported flow analysis. Reassigned module declarations and detected contract mutations also
+generator expressions and local context managers are described above. `match`
+and `except*` are currently outside the supported flow analysis. Reassigned module declarations and detected contract mutations also
 prevent a complete result, including assignments with type annotations. Expanded
 `ErrorRegistry(**config)` arguments are unresolved contracts: the checker reports
 `CAN003` and suppresses guessed gaps for those operations. Dishka providers are

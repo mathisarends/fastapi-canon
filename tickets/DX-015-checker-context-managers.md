@@ -1,6 +1,6 @@
 # DX-015: Analyze explicit exception paths in supported context managers
 
-- Status: Open
+- Status: In progress
 - Priority: P2
 - Kind: Checker coverage
 - Baseline: `a366702` (2026-11-05)
@@ -11,8 +11,10 @@
 
 Create a local context manager with **enter**/**exit** (and an async counterpart),
 then call an explicit-error helper inside with/async with from an HTTP endpoint.
-Run check errors with --strict --require-complete. Context managers are outside
-the baseline's supported flow analysis; record current CAN003 output first.
+Run check errors with --strict --require-complete. On the DX-014 parent both
+sync and async public-CLI probes exit 1 with only
+`CAN003 unsupported statement: With/AsyncWith`; the body helper gap is missed.
+After implementation they report CAN002 with a complete operation.
 
 ## Scope
 
@@ -22,11 +24,11 @@ context managers by assuming they cannot throw.
 
 ## Acceptance criteria
 
-- [ ] Follow body errors and supported enter/exit methods for local sync/async managers with meaningful traces.
-- [ ] Correctly handle a known nonsuppressing exit; unknown or conditional suppression remains incomplete.
-- [ ] Unknown external managers and unsupported protocol behavior retain CAN003 instead of becoming silently complete.
-- [ ] Cover normal completion and errors during enter, body and exit without importing application code.
-- [ ] Document the subset and demonstrate whether actual reference-service diagnostics improve.
+- [x] Follow body errors and supported enter/exit methods for local sync/async managers with meaningful traces.
+- [x] Correctly handle a known nonsuppressing exit; unknown or conditional suppression remains incomplete.
+- [x] Unknown external managers and unsupported protocol behavior retain CAN003 instead of becoming silently complete.
+- [x] Cover normal completion and errors during enter, body and exit without importing application code.
+- [x] Document the subset and demonstrate whether actual reference-service diagnostics improve.
 
 ## Verification
 
@@ -36,6 +38,14 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
 
 ## Completion
 
-- Implementation or decision PR:
-- Final commit and verification:
-- Remaining follow-ups:
+- Implementation or decision PR: Pending final current-main verification.
+- Final commit and verification: Source `4815439`; all 203 checker tests pass
+  on Python 3.14 and Python 3.12, including 54 new public-CLI cases. Ruff,
+  formatting, mypy, changed/full Smelt, all-files pre-commit and 77 local
+  Markdown links passed. Full root pytest is being repeated after the
+  environment restart and current-main dependency update.
+  The reference-service scan remains exit 1: six operations, zero gaps,
+  five incomplete operations; its diagnostic messages are unchanged.
+- Remaining follow-ups: Inherited/decorated/generator-based protocols and
+  unknown or conditional suppression remain explicitly incomplete. DX-016
+  addresses the separate bounded nested route-factory slice.
