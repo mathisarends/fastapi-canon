@@ -111,6 +111,14 @@ The same rule applies to `CanonRouter` and `CanonStreamRouter`.
 - A custom FastAPI `generate_unique_id_function=` replaces Canon's default rule.
   `APIRouter.sse()` uses the same generator as the owning router.
 
+`Feature.name` identifies a feature in diagnostics and lifecycle only; it is not a
+public API name. Public names come from the declaration that owns them: the
+router `namespace`, an explicit `operation_id` and `tags`, and an `RpcChannel`
+namespace. To group a feature's operations, set the namespace or tags where the
+router is declared (`APIRouter(namespace="projects", tags=["projects"])`) rather
+than expecting them from the feature. This keeps a reusable router's public names
+independent of where it is installed.
+
 Renaming an endpoint function changes its automatic ID and generated SDK member.
 Pin `operation_id="projects.events"` when that public name must survive a Python
 refactor. Use explicit IDs for anonymous or wrapped callables without a stable

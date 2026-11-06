@@ -150,6 +150,22 @@ composition = Composition(
 The factory is called during `build()` and must return a fresh, empty router.
 Omitting it installs feature routers directly on the app.
 
+For only a shared URL prefix, the factory is a single line and is the supported
+way to set it; Canon has no separate `prefix=` option:
+
+```python
+composition = Composition(
+    features=(project_feature,),
+    router_factory=lambda: APIRouter(prefix="/api/v1"),
+)
+```
+
+The prefix applies to every installed feature router, including nested routers.
+It appears in `Composition.inspect(app)` and in the exported OpenAPI paths
+(`/projects/{project_id}` becomes `/api/v1/projects/{project_id}`) but does not
+change automatic operation IDs such as `projects.get_project`, which derive from
+router namespaces. Routes added directly to the app are not prefixed.
+
 ### Router policies
 
 Use an immutable `RouterPolicy` to reuse HTTP prerequisites and the errors they

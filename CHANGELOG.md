@@ -28,6 +28,11 @@ The next release containing the breaking changes below must be 0.16.0.
   resource cleanup. Live/offline exact drift is enforced by integration tests
   and the root clients gate.
 
+- Documentation records the DX decisions on MCP activation, the shared router
+  prefix, feature metadata ownership, WebSocket `context=` terminology and the
+  preferred generation command, and explains MCP error masking with `ToolError`.
+  No runtime behavior or public API changed.
+
 - Source checking resolves bounded direct local router/channel factories without
   executing them. HTTP/SSE/RPC endpoints, static error contracts and helper calls
   use independent lexical scopes and stable factory-qualified names. Dynamic
