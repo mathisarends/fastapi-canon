@@ -38,12 +38,16 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
 
 ## Completion
 
-- Implementation or decision PR: Pending final current-main verification.
+- Implementation or decision PR: Pending PR creation after completed verification.
 - Final commit and verification: Source `4815439`; all 203 checker tests pass
   on Python 3.14 and Python 3.12, including 54 new public-CLI cases. Ruff,
   formatting, mypy, changed/full Smelt, all-files pre-commit and 77 local
-  Markdown links passed. Full root pytest is being repeated after the
-  environment restart and current-main dependency update.
+  Markdown links passed. Full root pytest passed with 2,705 tests before the
+  main update (26 skipped), then 2,706 tests after merging current main and
+  syncing its refreshed dependencies (26 skipped, 153 warnings). The isolated
+  Python 3.12 checker suite was repeated against that lockfile. Main merge
+  `424346d` includes the upstream dependency stabilization; all lint, formatting,
+  typing and pre-commit checks passed again.
   The reference-service scan remains exit 1: six operations, zero gaps,
   five incomplete operations; its diagnostic messages are unchanged.
 - Remaining follow-ups: Inherited/decorated/generator-based protocols and
