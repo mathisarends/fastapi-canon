@@ -20,6 +20,7 @@ from fastapi.params import Depends as DependsParam
 from starlette.requests import HTTPConnection
 
 from fastapi_canon.injection import injected_dependency
+from fastapi_canon.integrations.webrtc.capacity import SessionCapacity, SlotReservation
 from fastapi_canon.integrations.webrtc.declarations import (
     AdmissionErrors,
     DataChannelSpec,
@@ -50,32 +51,6 @@ logger = logging.getLogger("fastapi_canon.integrations.webrtc")
 Factory = TypeVar("Factory", bound=Callable[..., Any])
 
 DECLARATION_ATTRIBUTE = "__canon_webrtc__"
-
-
-class _Counter:
-    def __init__(self, limit: int | None) -> None:
-        self.limit = limit
-        self.active = 0
-
-    @property
-    def full(self) -> bool:
-        return self.limit is not None and self.active >= self.limit
-
-
-class _Slots:
-    """Reserved capacity of one session in its router and endpoint counters."""
-
-    def __init__(self, *counters: _Counter) -> None:
-        self._counters = counters
-        self._held = True
-        for counter in counters:
-            counter.active += 1
-
-    def release(self) -> None:
-        if self._held:
-            self._held = False
-            for counter in self._counters:
-                counter.active -= 1
 
 
 class WebRtcRouter(APIRouter):
@@ -120,15 +95,13 @@ class WebRtcRouter(APIRouter):
             dependencies=list(dependencies or []),
             lifespan=self._lifespan,
         )
-        if max_sessions is not None and max_sessions <= 0:
-            raise ValueError("max_sessions must be positive")
         self.engine = engine
         self.ice_servers = ice_servers
         self.limits = limits or SessionLimits()
         self.event_hook = on_event
         self.allowed_origins = _origins(allowed_origins)
         self.declarations: list[SessionDeclaration] = []
-        self._counter = _Counter(max_sessions)
+        self._capacity = _capacity(max_sessions)
         self._runtimes: set[SessionRuntime] = set()
         self._closing = False
 
@@ -146,6 +119,7 @@ class WebRtcRouter(APIRouter):
         data_channels: Sequence[DataChannelSpec] = (),
         limits: SessionLimits | None = None,
         max_sessions: int | None = None,
+        capacity: SessionCapacity | None = None,
         dependencies: Sequence[DependsParam] | None = None,
         admission_errors: AdmissionErrors | None = None,
     ) -> Callable[[Factory], Factory]:
@@ -153,8 +127,16 @@ class WebRtcRouter(APIRouter):
 
         The factory may be a function, coroutine function or generator
         dependency. ``name`` defaults to the factory name and becomes the
-        generated client's method name.
+        generated client's method name. ``max_sessions`` limits this endpoint;
+        ``capacity`` is a :class:`SessionCapacity` shared with other declarations.
         """
+        raw_capacity: object = capacity
+        if raw_capacity is not None and not isinstance(raw_capacity, SessionCapacity):
+            raise TypeError("capacity must be a SessionCapacity instance or None")
+        local = _capacity(max_sessions)
+        capacities = tuple(
+            value for value in (self._capacity, local, capacity) if value is not None
+        )
 
         def decorator(factory: Factory) -> Factory:
             dependency, roots = _inject_factory(factory)
@@ -172,7 +154,6 @@ class WebRtcRouter(APIRouter):
             if any(d.name == declaration.name for d in self.declarations):
                 raise ValueError(f"Session {declaration.name!r} is already declared")
             self.declarations.append(declaration)
-            counter = _Counter(max_sessions)
 
             async def endpoint(
                 websocket: WebSocket,
@@ -186,7 +167,7 @@ class WebRtcRouter(APIRouter):
                     )
                     await _refuse(websocket, ErrorCode.HANDLER_FAILURE)
                     return
-                await self._serve(declaration, counter, websocket, session)
+                await self._serve(declaration, capacities, websocket, session)
 
             endpoint.__doc__ = factory.__doc__
             endpoint.__name__ = f"webrtc_session_{declaration.name}"
@@ -230,7 +211,7 @@ class WebRtcRouter(APIRouter):
     async def _serve(
         self,
         declaration: SessionDeclaration,
-        counter: _Counter,
+        capacities: tuple[SessionCapacity, ...],
         websocket: WebSocket,
         session: Session,
     ) -> None:
@@ -249,7 +230,7 @@ class WebRtcRouter(APIRouter):
                 )
                 await _refuse(websocket, ErrorCode.HANDLER_FAILURE)
                 return
-            runtime = self._admit(declaration, counter, websocket, session)
+            runtime = self._admit(declaration, capacities, websocket, session)
             if runtime is None:
                 code = ErrorCode.SHUTDOWN if self._closing else ErrorCode.SESSION_LIMIT
                 await _refuse(websocket, code)
@@ -277,14 +258,14 @@ class WebRtcRouter(APIRouter):
     def _admit(
         self,
         declaration: SessionDeclaration,
-        counter: _Counter,
+        capacities: tuple[SessionCapacity, ...],
         websocket: WebSocket,
         session: Session,
     ) -> SessionRuntime | None:
         session_id = uuid.uuid4().hex
         if self._closing:
             return None
-        if self._counter.full or counter.full:
+        if any(capacity.full for capacity in capacities):
             self._emit(
                 SessionEvent(
                     kind=SessionEventKind.REJECTED,
@@ -308,7 +289,7 @@ class WebRtcRouter(APIRouter):
             websocket=websocket,
             session=session,
             session_id=session_id,
-            slots=_Slots(self._counter, counter),
+            slots=SlotReservation(*capacities),
         )
 
     def _emit(self, event: SessionEvent) -> None:
@@ -405,6 +386,10 @@ def _factory_resolver(key: DependencyKey) -> Callable[..., Any]:
         return await container.get(key.type_hint, component=key.component)
 
     return resolve
+
+
+def _capacity(max_sessions: int | None) -> SessionCapacity | None:
+    return None if max_sessions is None else SessionCapacity(max_sessions=max_sessions)
 
 
 def _origins(origins: Sequence[str] | None) -> frozenset[str] | None:

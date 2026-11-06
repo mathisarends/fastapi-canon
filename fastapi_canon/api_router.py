@@ -27,6 +27,7 @@ if TYPE_CHECKING:
         IceServerSource,
         MediaPolicy,
         Role,
+        SessionCapacity,
         SessionLimits,
     )
     from fastapi_canon.integrations.websockets import (
@@ -96,6 +97,7 @@ class SessionOptions(TypedDict, total=False):
     data_channels: Sequence[DataChannelSpec]
     limits: SessionLimits | None
     max_sessions: int | None
+    capacity: SessionCapacity | None
     dependencies: Sequence[Depends] | None
     raises: Sequence[AnyError]
 

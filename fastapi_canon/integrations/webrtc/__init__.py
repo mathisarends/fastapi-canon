@@ -8,6 +8,7 @@ peer connection.
 
 from fastapi_canon._version import __version__
 from fastapi_canon.integrations.webrtc.canon import CanonWebRtcRouter
+from fastapi_canon.integrations.webrtc.capacity import SessionCapacity
 from fastapi_canon.integrations.webrtc.declarations import (
     AdmissionErrors,
     DataChannelSpec,
@@ -87,6 +88,7 @@ __all__ = [
     "Peer",
     "Role",
     "Session",
+    "SessionCapacity",
     "SessionClosedError",
     "SessionContext",
     "SessionDeclaration",

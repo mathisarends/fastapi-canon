@@ -63,7 +63,7 @@ from fastapi_canon.integrations.webrtc.peer import IncomingTrack, OutgoingTrack,
 from fastapi_canon.integrations.webrtc.sdp import DescriptionSummary, summarize
 
 if TYPE_CHECKING:
-    from fastapi_canon.integrations.webrtc.router import _Slots
+    from fastapi_canon.integrations.webrtc.capacity import SlotReservation
 
 logger = logging.getLogger("fastapi_canon.integrations.webrtc")
 
@@ -109,7 +109,7 @@ class SessionRuntime:
         websocket: WebSocket,
         session: Session,
         session_id: str,
-        slots: _Slots,
+        slots: SlotReservation,
     ) -> None:
         self.declaration = declaration
         self.session_id = session_id
