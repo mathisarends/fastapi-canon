@@ -40,6 +40,12 @@ uv sync --locked --all-groups
 
 ## Release evidence
 
+Predecessor changelogs are available in the
+[historical source snapshot](https://github.com/mathisarends/fastapi_canon/tree/21c74910ea7304cb136af7bfb3953dcafcc2325d/docs/history).
+Current documentation links to that fixed snapshot instead of keeping duplicate
+changelogs in the active documentation tree. The imported license notices are
+identical to the root MIT `LICENSE`, which remains in this repository.
+
 | Releases | Evidence location |
 | --- | --- |
 | Original standalone Canon through 0.4.0 | Existing [`fastapi_canon` releases](https://github.com/mathisarends/fastapi_canon/releases), including the original `v0.4.0` tag |

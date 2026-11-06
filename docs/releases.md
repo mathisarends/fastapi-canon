@@ -170,9 +170,9 @@ assets are verified.
 | Package | Version | Migration |
 | --- | --- | --- |
 | Canon | 0.15.0 | Regenerate Python and TypeScript SDKs with the server; replace `subscription()` with `stream()`, `.subscribe`/`.unsubscribe` with `.open`/`.cancel`, and `max_subscriptions` with `max_streams`. Follow the [0.15.0 upgrade guide](package-migration.md#upgrade-to-0150); MCP remains opt-in. Older upgrades also require the [0.14.0 database controls](package-migration.md#upgrade-to-0140), [0.13.0 composition/scope migration](package-migration.md#upgrade-to-0130), [0.12.0](../CHANGELOG.md#0120---2026-11-02), [0.11.0](../CHANGELOG.md#0110---2026-11-01), [0.10.0](../CHANGELOG.md#0100---2026-11-01) and included [0.9.0 migrations](../CHANGELOG.md#090---unreleased). |
-| WebRTC | 0.3.0 | Use public enum members, keyword-only engine/channel options and `DescriptionType`; handle lazy type aliases in introspection tools. See the [migration notes](history/fastapi-webrtc.md#030---2026-10-24). |
-| Streams | 0.5.0 | Regenerate clients. SDK-owned generated Python clients bound the connect time to 10 seconds; pass `RequestOptions(timeout=None)` or inject `httpx.AsyncClient(timeout=None)` to keep it unbounded. See the [Streams 0.5.0 notes](history/fastapi-streams.md#050---2026-10-25). |
-| RPCKit | 0.4.1 | None; wire output and generated clients are unchanged apart from the manifest generator version. See the [RPCKit 0.4.1 notes](history/fastapi-rpckit.md#041---2026-10-25). |
+| WebRTC | 0.3.0 | Use public enum members, keyword-only engine/channel options and `DescriptionType`; handle lazy type aliases in introspection tools. See the [migration notes](https://github.com/mathisarends/fastapi_canon/blob/21c74910ea7304cb136af7bfb3953dcafcc2325d/docs/history/fastapi-webrtc.md#030---2026-10-24). |
+| Streams | 0.5.0 | Regenerate clients. SDK-owned generated Python clients bound the connect time to 10 seconds; pass `RequestOptions(timeout=None)` or inject `httpx.AsyncClient(timeout=None)` to keep it unbounded. See the [Streams 0.5.0 notes](https://github.com/mathisarends/fastapi_canon/blob/21c74910ea7304cb136af7bfb3953dcafcc2325d/docs/history/fastapi-streams.md#050---2026-10-25). |
+| RPCKit | 0.4.1 | None; wire output and generated clients are unchanged apart from the manifest generator version. See the [RPCKit 0.4.1 notes](https://github.com/mathisarends/fastapi_canon/blob/21c74910ea7304cb136af7bfb3953dcafcc2325d/docs/history/fastapi-rpckit.md#041---2026-10-25). |
 
 The earlier Canon 0.8.1 and transport publications used separate distributions.
 Their consolidation ships in Canon 0.10.0 without internal distribution pins.
@@ -194,7 +194,7 @@ WebRTC 0.1.0 and RPCKit 0.3.0:
   Applications retain control of playback and fallback. The optional
   [HTTP ticket recipe](integrations/webrtc/admission-tickets.md) provides
   readable admission errors before signaling.
-- [RPCKit factory typing](history/fastapi-rpckit.md#040---2026-10-20)
+- [RPCKit factory typing](https://github.com/mathisarends/fastapi_canon/blob/21c74910ea7304cb136af7bfb3953dcafcc2325d/docs/history/fastapi-rpckit.md#040---2026-10-20)
   removes the URL-parameter and backend subprotocol mismatches. Regenerate clients
   before removing consumer generator overrides.
 
@@ -208,7 +208,7 @@ native OpenTelemetry integration, plus canonical error bindings and common SDK
 generation. See the [migration guide](package-migration.md).
 Only Canon is an active release target. Integrations now live under
 `fastapi_canon/integrations/`, tests under `tests/`, examples under `examples/`
-and historical changelogs under `docs/history/`. Source metadata alone does not establish
+and historical changelogs in Git history. Source metadata alone does not establish
 a publication; the verified 0.10.0 publication is recorded above.
 
 ## Publisher setup

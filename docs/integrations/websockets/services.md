@@ -345,7 +345,7 @@ accounting when the required bound spans workers or hosts.
 `BaseModel` classes are supported too, so domain models do not need to inherit
 from `RpcModel` merely to appear in an RPC signature.
 
-[Back to documentation](index.md)
+[Back to documentation](README.md)
 ## Idempotent methods
 
 Declare `@channel.method(idempotent=True)` only when concurrent or repeated

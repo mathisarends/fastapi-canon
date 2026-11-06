@@ -134,11 +134,15 @@ def test_release_notes_resolve_links_against_the_release_commit(
     package = release.packages(release_repo)["fastapi-canon"]
     commit = "a" * 40
     path = release_repo / package.directory / "CHANGELOG.md"
+    path.write_text(
+        "## 0.5.4 - 2026-10-25\n\n[Migration guide](docs/package-migration.md)\n",
+        encoding="utf-8",
+    )
     original = path.read_bytes()
     notes = release._release_notes(release_repo, package, "0.5.4", commit)
     assert (
         f"https://github.com/mathisarends/fastapi_canon/blob/{commit}/"
-        "docs/history/fastapi-streams.md"
+        "docs/package-migration.md"
     ) in notes
     assert "../fastapi-streams" not in notes
     assert path.read_bytes() == original

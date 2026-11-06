@@ -1,6 +1,6 @@
 # TypeScript and Python clients
 
-[Documentation](index.md) · [Project](README.md)
+[Documentation](README.md) · [Project](README.md)
 
 ## Named values and typed iteration
 

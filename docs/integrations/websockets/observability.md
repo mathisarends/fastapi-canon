@@ -208,7 +208,7 @@ instance with both signals disabled still enters middleware scopes.
 Generated-client instrumentation and OTEL log exporting are configured by the
 application. Per-request trace propagation is described below.
 
-[Back to documentation](index.md)
+[Back to documentation](README.md)
 ## Observe generated-client calls
 
 Generated clients use `middleware` for instrumentation. Wrap

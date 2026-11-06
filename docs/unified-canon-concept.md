@@ -17,7 +17,7 @@ The generated public API follows domain names; protocol clients live under
 
 ## From server declarations to domain methods
 
-The [README walkthrough](../README.md#core-api-routes-errors-and-composition)
+The [quickstart](quickstart.md#core-api-routes-errors-and-composition)
 builds an HTTP operation, an SSE stream and a WebSocket RPC method in one app,
 then generates Python and TypeScript consumers from them.
 

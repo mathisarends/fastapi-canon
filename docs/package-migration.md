@@ -186,6 +186,28 @@ Remove the old `fastapi-streams`, `fastapi-rpckit` and `fastapi-webrtc` direct
 dependencies from your application. Replace Canon's former `streams` extra with
 `sse`. There are no imports forwarded to the earlier distributions.
 
+## Agent skill
+
+From your application project, install the bundled backend-building skill:
+
+```console
+uv run fastapi-canon skill install
+```
+
+This copies the skill and its references to `.agents/skills/build-canon-backend`
+and `.claude/skills/build-canon-backend`. To update both from your installed Canon
+version:
+
+```console
+uv sync --upgrade-package fastapi-canon
+uv run fastapi-canon skill install --force
+```
+
+`--force` replaces the complete destination directories, including local edits.
+Keep custom guidance elsewhere. Use `--destination <skill-directory>` for a
+single custom destination. Installation uses the installed Canon bundle and
+does not download another skill version.
+
 ## Python imports
 
 | Earlier import | Canon import |

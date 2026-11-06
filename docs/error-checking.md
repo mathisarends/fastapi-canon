@@ -72,7 +72,7 @@ the documented JSON fields are the machine-readable interface.
 
 ## Findings and CI
 
-The [README walkthrough](../README.md#check-that-errors-are-mapped-and-declared)
+The [quickstart](quickstart.md#check-the-contract-in-ci)
 provides a minimal example: `get_project` calls `require_project`, which raises
 `ProjectMissing`. Remove the operation's `raises=[project_missing]` and run
 `fastapi-canon check errors src --strict --require-complete`: it reports `CAN002`
