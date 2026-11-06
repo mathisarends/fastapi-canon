@@ -64,8 +64,6 @@ _FACTORY_DECLARATIONS = _ROUTER_DECLARATIONS | {
     "fastapi_canon.Error",
     "fastapi_canon.error.Error",
     "fastapi_canon.error.error.Error",
-    "fastapi_canon.error.ErrorRegistry",
-    "fastapi_canon.error.registry.ErrorRegistry",
     "fastapi_canon.RouterPolicy",
     "fastapi_canon.policy.RouterPolicy",
 }

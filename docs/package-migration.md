@@ -42,8 +42,8 @@ async def events(...) -> AsyncIterator[TaskEvent]: ...
 
 `raises` now registers canonical errors automatically on HTTP routers, policies,
 SSE routes, WebRTC admission and RPC channels/operations. Remove explicit registry
-entries that only repeat these declarations. Keep `Feature(errors=ErrorRegistry(
-...))` or `error_registry=` for additional errors that are not declared anywhere.
+entries that only repeat these declarations. List additional errors that are
+not declared anywhere with `Feature(errors=[...])`.
 Set the common URI prefix with `Composition(errors=ErrorOptions(type_base=...))`.
 
 For SSE, the combined effective declaration describes both HTTP admission

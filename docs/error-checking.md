@@ -34,7 +34,7 @@ It reads both from source; it does not execute the application.
 flowchart TD
     CLI["check_error_contracts src"] --> AST["Parse Python files into an AST"]
     AST --> INDEX["Resolve imports, aliases, types and definitions"]
-    INDEX --> CONTRACT["Combine policy + router + operation raises and optional ErrorRegistry mappings"]
+    INDEX --> CONTRACT["Combine policy + router + operation raises; catalog from raises= and errors="]
     INDEX --> CALLS["Follow endpoint, service, helper and dependency calls"]
     CALLS --> HANDLING["Remove caught exceptions and include translated exceptions"]
     CALLS -->|Library call| CALLBACKS["Follow application callables and construction hooks it receives"]
@@ -60,7 +60,7 @@ flowchart TD
 For example, `complete_task` calls `TaskService.complete`, which can explicitly
 raise `TaskNotFound`. A `raises=[task_not_found]` declaration supplies both its
 mapping and its operation contract. Removing that declaration produces `CAN002`
-with the call path; an explicit registry mapping without the declaration produces
+with the call path; listing the error only in `Feature(errors=[...])` produces
 `CAN001`. If the same service calls an abstract repository method, the checker
 follows the implementation that a Dishka provider in the scanned roots binds to
 that port. Without such a binding the call produces `CAN003`: a known gap and an
@@ -77,7 +77,7 @@ provides a minimal example: `get_project` calls `require_project`, which raises
 `ProjectMissing`. Remove the operation's `raises=[project_missing]` and run
 `fastapi-canon check errors src --strict --require-complete`: it reports `CAN002`
 and exits one. Restore the declaration to obtain zero gaps for that supported
-HTTP path. An explicit registry mapping without `raises` produces `CAN001`.
+HTTP path. Listing the error only in `Feature(errors=[...])` produces `CAN001`.
 
 A successful check covers the supported source paths of the transports listed
 under [Transports](#transports), not arbitrary runtime exceptions.
@@ -93,8 +93,8 @@ service.py:24: CAN001 [app.router.complete_task] app.service.TaskNotFound: app.e
 
 | Code | Meaning |
 | --- | --- |
-| `CAN001` | An explicit application exception has a registry mapping that is missing from the operation's combined `raises`. |
-| `CAN002` | An explicit application exception has no mapping in `raises` or the router's registry. |
+| `CAN001` | An explicit application exception is mapped in the application catalog but missing from the operation's combined `raises`. |
+| `CAN002` | An explicit application exception has no mapping in `raises` or the application catalog. |
 | `CAN003` | A declaration or execution path could not be fully analyzed. |
 
 Default mode prints findings and exits zero. Use `--strict` to exit one for
@@ -177,8 +177,8 @@ completeness, rather than asserting machine-dependent wall-clock thresholds.
 One SSE `raises=` declaration covers both phases: dependency failures become
 HTTP problem responses, stream body failures terminal `canon.problem` events.
 
-For RPC, the checker reads `RpcChannel(raises=[...])`, an optional
-`error_registry=` and `Error` declarations. `RpcError` subclasses and `RpcErrorBinding` declarations are
+For RPC, the checker reads `RpcChannel(raises=[...])` and `Error`
+declarations. `RpcError` subclasses and `RpcErrorBinding` declarations are
 reported as unresolved contracts (`CAN003`). Contracts of channels included into
 other channels do not propagate, like router contracts.
 `.method` decorators on other objects are ignored.
@@ -186,9 +186,12 @@ other channels do not propagate, like router contracts.
 ## Supported source patterns
 
 The checker follows direct `APIRouter` declarations with ordinary route
-decorators, including `api_route`. It reads literal `ErrorRegistry(errors=[...])`
-and named `Error` definitions. A direct, statically resolved `RouterPolicy` supplies
-its registry, dependencies and shared errors. Policy, router and operation `raises`
+decorators, including `api_route`. It reads named `Error` definitions. The
+application catalog is every `Error` referenced in a `raises=` or `errors=`
+keyword in the scanned source, such as `Feature(errors=[...])`: a mapped
+exception that an operation does not declare is a contract gap (`CAN001`), an
+exception outside that catalog is unmapped (`CAN002`). A direct, statically
+resolved `RouterPolicy` supplies its dependencies and shared errors. Policy, router and operation `raises`
 combine; supported
 sequences include named lists/tuples, unpacking and concatenation. Router contracts
 do not propagate to separately included child routers.
@@ -230,7 +233,7 @@ on `self` without a binding follow the concrete subclasses in the roots, such as
 
 Explicit `raise` statements propagate through supported function calls and simple
 branches. `try`/`except` removes caught exceptions, preserves bare re-raises and
-includes translated exceptions from handlers. Exception matching and registry
+includes translated exceptions from handlers. Exception matching and catalog
 selection follow statically resolvable Python inheritance order, so a more
 specific registered error takes precedence over a base mapping. Conditions are
 not proved feasible: a finding describes a possible source path, not a guarantee
@@ -361,7 +364,7 @@ A synchronous, undecorated factory without parameters can declare local
 APIRouter instances (or RpcChannels), nested operations and local
 helpers, then return the router/channel or a literal tuple/list of them. The
 checker indexes these declarations without calling the factory. Static Error,
-ErrorRegistry and RouterPolicy declarations, literal values/collections and
+RouterPolicy declarations, literal values/collections and
 aliases are resolved in that factory's own scope. Straightforward module-level
 helpers and imported declarations remain available. Factory-local class
 construction, imports, arbitrary setup calls and dynamic captures remain outside
@@ -404,9 +407,7 @@ execution and unsupported control flow produce `CAN003`. `for`, `async for` and
 generator follows the generator's body. Supported comprehensions and deferred
 generator expressions and local context managers are described above. `match`
 and `except*` are currently outside the supported flow analysis. Reassigned module declarations and detected contract mutations also
-prevent a complete result, including assignments with type annotations. Expanded
-`ErrorRegistry(**config)` arguments are unresolved contracts: the checker reports
-`CAN003` and suppresses guessed gaps for those operations. Dishka providers are
+prevent a complete result, including assignments with type annotations. Dishka providers are
 read, not executed: bindings added to `Provider()` instances at runtime, or
 declared in providers outside the scanned roots, are not
 inferred, and an abstract port without a statically visible binding remains

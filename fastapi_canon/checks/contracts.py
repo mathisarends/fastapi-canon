@@ -491,7 +491,7 @@ class _Checker:
             message = (
                 f"{escape.exception}: {mapped} is missing from raises"
                 if mapped
-                else f"{escape.exception}: no Error mapping in raises or the router registry"
+                else f"{escape.exception}: no Error mapping in raises or the application catalog"
             )
             origin = self.source.definitions[escape.trace[-1]]
             operation.diagnostics.append(
