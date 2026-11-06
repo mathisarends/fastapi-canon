@@ -287,7 +287,7 @@ def test_parent_raises_extend_operations_included_without_composition() -> None:
     app = FastAPI()
     app.include_router(parent)
     # Manual assembly without Composition installs a registry directly.
-    ErrorRegistry(errors=[FORBIDDEN]).install(app)
+    ErrorRegistry(errors=[FORBIDDEN], type_base=PROBLEMS.type_base).install(app)
     responses = app.openapi()["paths"]["/child"]["get"]["responses"]
     assert responses["403"]["content"]["application/problem+json"]["schema"] == {
         "$ref": "#/components/schemas/ForbiddenProblem"
