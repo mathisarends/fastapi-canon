@@ -4,7 +4,7 @@
 - Priority: P3
 - Kind: Decision
 - Baseline: `a366702` (2026-11-05)
-- Depends on: [DX-004](DX-004-rpc-injection-preflight.md), [DX-006](DX-006-sse-endpoint-introspection.md)
+- Depends on: [DX-004](https://github.com/mathisarends/fastapi-canon/pull/84), [DX-006](https://github.com/mathisarends/fastapi-canon/pull/86)
 - Earlier review: Remaining C3 beyond the concrete bug tickets.
 
 ## Problem and reproduction
