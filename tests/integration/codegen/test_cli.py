@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from fastapi_canon.codegen.config import load_config
+
 
 @pytest.fixture
 def project(tmp_path: Path) -> Path:
@@ -56,7 +58,9 @@ def test_json_generation_and_clean_check_report_source_warnings(project: Path) -
 @pytest.mark.parametrize("option", ["--check", "--diff"])
 def test_json_drift_is_read_only_and_separates_diff(project: Path, option: str) -> None:
     assert _run(project).returncode == 0
-    changed = project / "dist/generated/typescript/client.ts"
+    config = load_config(project / "fastapi-canon.toml")
+    browser = next(target for target in config.targets if target.name == "browser")
+    changed = browser.output / "client.ts"
     changed.write_text(
         changed.read_text(encoding="utf-8") + "// local edit\n", encoding="utf-8"
     )
@@ -221,7 +225,7 @@ def _run(project: Path, *options: str) -> subprocess.CompletedProcess[str]:
 def _artifacts(project: Path) -> dict[str, bytes]:
     return {
         str(path.relative_to(project)): path.read_bytes()
-        for directory in ("contracts", "dist", "sdk", "bad-sdk")
+        for directory in ("contracts", "dist", "generated", "sdk", "bad-sdk")
         for path in (project / directory).rglob("*")
         if path.is_file()
     }
