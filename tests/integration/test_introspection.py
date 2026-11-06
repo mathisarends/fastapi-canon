@@ -22,7 +22,6 @@ from fastapi_canon import (
     Inject,
     RouterPolicy,
 )
-from fastapi_canon.error import ErrorRegistry
 from fastapi_canon.exceptions import FeatureConfigurationError
 from fastapi_canon.integrations.sse import CanonStreamRouter
 from fastapi_canon.router import CanonRouter
@@ -58,9 +57,7 @@ def test_snapshot_records_effective_paths_dependencies_and_error_origins() -> No
     project_error = Error(
         ProjectMissing, code="project_missing", status=404, title="Project missing"
     )
-    auth = ErrorRegistry(errors=[auth_error])
-    projects = ErrorRegistry(errors=[project_error])
-    router = CanonRouter(prefix="/projects", error_registry=projects)
+    router = CanonRouter(prefix="/projects")
     router.get(
         "/{project_id}",
         operation_id="projects.get",
@@ -73,7 +70,6 @@ def test_snapshot_records_effective_paths_dependencies_and_error_origins() -> No
         router_factory=lambda: CanonRouter(
             prefix="/api/v1",
             policy=RouterPolicy(
-                error_registry=auth,
                 raises=[auth_error],
                 dependencies=[Depends(require_authenticated_user)],
             ),
@@ -208,14 +204,12 @@ def test_path_converters_share_openapi_paths_and_inherited_contracts() -> None:
         status=401,
         title="Authentication required",
     )
-    registry = ErrorRegistry(
-        errors=[failure], type_base="https://example.test/problems"
-    )
     router = CanonRouter()
     router.get("/files/{path:path}", operation_id="files.get")(lambda path: path)
     composition = Composition(
         features=(Feature(name="files", routers=[router]),),
-        router_factory=lambda: CanonRouter(error_registry=registry, raises=[failure]),
+        errors=ErrorOptions(type_base="https://example.test/problems"),
+        router_factory=lambda: CanonRouter(raises=[failure]),
     )
     app = composition.build(FastAPI())
     operation = composition.inspect(app).operation_by_id("files.get")
