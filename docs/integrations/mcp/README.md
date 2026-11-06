@@ -52,6 +52,13 @@ Clients see `portfolio_get_portfolio` with only `portfolio_id` in its input sche
 endpoint. Namespaces are explicit public API identifiers, independent of feature
 names. Duplicate namespaces or server instances fail during composition.
 Contributing mounts requires explicit `Composition(mcp=McpOptions())` activation.
+Mounts alone never open an endpoint. The activation is deliberate: authentication
+is configured only on `McpOptions(auth=...)` (a mounted server's own `auth` is
+rejected), so an endpoint created implicitly from a mount would be
+unauthenticated, and its path and ownership would be implicit. A feature
+that declares mounts without `McpOptions` fails composition with `Features with MCP
+mounts require Composition(mcp=McpOptions())`; add `mcp=McpOptions()` (or
+`McpOptions(auth=...)`) to the `Composition`.
 
 When auth or root middleware depends on application services, use
 `McpOptions(auth_factory=..., middleware_factory=...)`. Each synchronous factory
