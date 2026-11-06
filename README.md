@@ -1,18 +1,130 @@
 # fastapi-canon
 
-**Typed APIs, streams, and clients for FastAPI.**
+Canon adds shared error handling, typed streams, WebSocket APIs and client
+generation to FastAPI. Public error definitions are shared across HTTP, SSE and
+WebSocket RPC, exported contracts, and generated Python and TypeScript clients.
 
-Define operations and public errors in Python. Generate Python and TypeScript
-clients for HTTP, SSE, and WebSockets.
+## Contents
 
-Built from the recurring problems my coding agents and I ran into while building
-FastAPI applications: streaming responses, inconsistent errors, duplicated client
-code, and application wiring.
+- [What Canon handles](#what-canon-handles)
+- [Install](#install)
+- [Shared error handling](#shared-error-handling)
+- [HTTP, SSE and WebSocket clients](#http-sse-and-websocket-clients)
+- [Instrument application boundaries](#instrument-application-boundaries)
+- [Check contracts in CI](#check-contracts-in-ci)
+- [Learn more](#learn-more)
 
-Streaming tokens is straightforward—until you need typed events, predictable
-failures, and a client that knows when the stream actually finished.
+## What Canon handles
 
-## Define it in Python. Use it from your client.
+- **HTTP, SSE and WebSockets:** typed operations, event streams and RPC methods,
+  with generated Python and TypeScript clients.
+- **Public errors:** map domain exceptions once, declare them with `raises=`,
+  and carry the contract into HTTP RFC 9457 Problem Details, streams and SDKs.
+- **Static checks and code generation:** find missing error mappings and
+  declarations, report incomplete analysis, and catch generated-client drift in CI.
+- **Application composition:** features contribute routers, Dishka providers and
+  lifespans; composition owns installation and cleanup.
+- **Instrumentation:** declare observed services and ports at the feature boundary
+  without adding telemetry annotations to business logic.
+
+Generated SDKs do not depend on Canon. Python clients use Pydantic, an HTTP client
+and, for RPC, `websockets`; TypeScript clients use fetch/DOM APIs.
+See [client generation](docs/unified-canon-concept.md) for supported operations
+and target requirements.
+
+## Install
+
+```console
+uv add "fastapi-canon[sse,websockets]"
+uv add --dev "fastapi-canon[codegen]"
+```
+
+For HTTP-only applications, use `uv add fastapi-canon`. The base includes
+FastAPI, Pydantic and Dishka. Python 3.12–3.14 is supported.
+
+The current published release is **0.15.0**. See the
+[upgrade guide](docs/package-migration.md#upgrade-to-0150) and
+[tested compatibility](docs/compatibility.md). Upgrade servers and regenerated
+clients together.
+
+## Shared error handling
+
+Keep domain exceptions in ordinary Python. Define their public representation
+once with `Error`, then declare it on operations with `raises=`:
+
+```python
+from fastapi import FastAPI
+
+from fastapi_canon import APIRouter, Composition, Error, ErrorOptions, Feature
+
+
+class ProjectMissing(Exception):
+    pass
+
+
+project_missing = Error(
+    ProjectMissing,
+    status=404,
+    code="project_missing",
+    title="Project not found",
+    detail="Choose another project.",
+)
+router = APIRouter()
+
+
+@router.get(
+    "/projects/{project_id}",
+    operation_id="projects.get",
+    raises=[project_missing],
+)
+async def get_project(project_id: int) -> dict[str, int]:
+    if project_id == 0:
+        raise ProjectMissing()
+    return {"id": project_id}
+
+
+app = Composition(
+    features=(Feature(name="projects", routers=[router]),),
+    errors=ErrorOptions(type_base="https://api.example.com/problems"),
+).build(FastAPI())
+```
+
+`GET /projects/0` returns a 404 `application/problem+json` response following
+RFC 9457, with type `https://api.example.com/problems/project_missing` and code
+`project_missing`. OpenAPI documents the same problem. Exception messages stay
+private by default; the declared detail is public.
+
+Reuse the same `project_missing` object in `@router.sse(..., raises=[...])` and
+`@channel.method(raises=[...])`. There is one domain-to-public-error mapping:
+
+| Where the failure occurs | How it reaches the client |
+| --- | --- |
+| HTTP request or SSE admission | HTTP Problem Details response |
+| During an SSE stream | Terminal `canon.problem` event |
+| WebSocket RPC method | Problem data in the JSON-RPC error envelope |
+
+These bindings preserve the problem's `type`, `code` and declared public fields.
+HTTP status is included in HTTP problems and omitted from SSE terminal and RPC
+problems. RFC 9457 defines HTTP Problem Details; the stream and RPC bindings are
+Canon conventions.
+
+Generated SDKs expose these failures through a shared `ProblemError`:
+
+```python
+from api_client import ProblemError
+
+try:
+    project = await client.projects.get(project_id=0)
+except ProblemError as error:
+    print(error.problem.type)
+```
+
+This client excerpt runs inside an async function with a generated client.
+The [quickstart](docs/quickstart.md) shows the complete server and SDK setup;
+[shared problems](docs/problems.md) covers typed extensions, validation failures
+and safe internal errors.
+
+## HTTP, SSE and WebSocket clients
 
 Declare a typed stream on Canon's `APIRouter`:
 
@@ -83,39 +195,6 @@ an unexpected EOF raises `TransportError`.
 The same SDK can expose HTTP lookups and WebSocket RPC calls such as
 `client.projects.get(...)` and `client.projects.cancel(...)`, with shared models
 and public problem errors. See the [complete walkthrough](docs/quickstart.md).
-
-## What Canon handles
-
-- **HTTP, SSE and WebSockets:** typed operations, event streams and RPC methods,
-  with generated Python and TypeScript clients.
-- **Public errors:** map domain exceptions once, declare them with `raises=`,
-  and carry the contract into HTTP RFC 9457 Problem Details, streams and SDKs.
-- **Static checks and code generation:** find missing error mappings and
-  declarations, report incomplete analysis, and catch generated-client drift in CI.
-- **Application composition:** features contribute routers, Dishka providers and
-  lifespans; composition owns installation and cleanup.
-- **Instrumentation:** declare observed services and ports at the feature boundary
-  without adding telemetry annotations to business logic.
-
-Generated SDKs do not depend on Canon. Python clients use Pydantic, an HTTP client
-and, for RPC, `websockets`; TypeScript clients use fetch/DOM APIs.
-See [client generation](docs/unified-canon-concept.md) for supported operations
-and target requirements.
-
-## Install
-
-```console
-uv add "fastapi-canon[sse,websockets]"
-uv add --dev "fastapi-canon[codegen]"
-```
-
-For HTTP-only applications, use `uv add fastapi-canon`. The base includes
-FastAPI, Pydantic and Dishka. Python 3.12–3.14 is supported.
-
-The current published release is **0.15.0**. See the
-[upgrade guide](docs/package-migration.md#upgrade-to-0150) and
-[tested compatibility](docs/compatibility.md). Upgrade servers and regenerated
-clients together.
 
 ## Instrument application boundaries
 
