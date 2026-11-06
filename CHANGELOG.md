@@ -185,6 +185,10 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Fixed
 
+- Concurrent Python SDK calls preserve the RPC connection error when shared
+  binding initialization fails, and subsequent calls can retry. Regenerate
+  Python SDKs to receive the runtime fix.
+
 - HTTP injection and Canon SSE reuse `Annotated[Request, ...]` parameters instead
   of adding a second request parameter that causes missing-argument failures.
 

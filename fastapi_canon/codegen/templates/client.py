@@ -125,10 +125,11 @@ class Runtime:
                 return value
 
             self.pending[name] = asyncio.create_task(open_binding())
+        pending = self.pending[name]
         try:
-            client = await asyncio.shield(self.pending[name])
+            client = await asyncio.shield(pending)
         except BaseException:
-            if self.pending[name].done():
+            if pending.done() and self.pending.get(name) is pending:
                 self.pending.pop(name, None)
             raise
         self.ensure_open()
