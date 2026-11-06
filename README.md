@@ -10,8 +10,12 @@ the server into OpenAPI/OpenRPC and generated Python and TypeScript clients.
 The generated API follows your domain: `client.projects.get()`,
 `client.projects.events()` and `client.projects.cancel()`.
 
+Start with the [feature-to-client guide](docs/getting-started.md): one runnable
+feature with `APIRouter`, `Inject`, public errors, checks and a generated SDK.
+
 ## Contents
 
+- [Getting started](docs/getting-started.md)
 - [Core features](#core-features)
 - [Install](#install)
 - [Core API: routes, errors and composition](#core-api-routes-errors-and-composition)

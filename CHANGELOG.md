@@ -22,6 +22,11 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- A feature-to-client getting-started guide follows the runnable showcase through
+  APIRouter/Inject/raises, composition, scoped source checks, SDK generation and
+  real HTTP success/problem calls. The showcase includes generator configuration,
+  a saved contract and a bounded consumer, with runtime/drift checks.
+
 - The canonical-errors example includes committed, generator-owned combined
   Python/TypeScript SDKs and runnable real HTTP/SSE/RPC consumers. Its walkthrough
   links declarations, contracts, shared models/problems, unary RPC calls and

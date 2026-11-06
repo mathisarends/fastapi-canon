@@ -7,9 +7,10 @@ This backlog records the remaining DX work reviewed against `origin/main`
 It contains work specifications, not claims that the described fixes exist.
 The prepared source API is not necessarily the currently published release.
 
-Decision tickets are intentionally deferred and remain Open. This implementation
-batch covers the other ticket kinds. Completed specifications will be removed
-in a dedicated cleanup PR; their implementation PRs retain the documentation.
+Decision tickets are outside this implementation batch. Their statuses and
+records from origin/main are preserved, including the separate decision PR #99.
+Completed implementation specifications will be removed in a dedicated cleanup
+PR; Decision specifications remain and implementation PRs retain the evidence.
 
 ## Pick up one ticket
 
@@ -70,9 +71,9 @@ fix and required verification have landed.
 | [DX-014](DX-014-checker-comprehensions.md)          | P2       | Checker coverage            | Analyze exception paths through comprehensions                           | [DX-001](DX-001-provider-factory-reassignments.md)                                          | Done ([#96](https://github.com/mathisarends/fastapi-canon/pull/96)) |
 | [DX-015](DX-015-checker-context-managers.md)        | P2       | Checker coverage            | Analyze explicit exception paths in supported context managers           | [DX-001](DX-001-provider-factory-reassignments.md)                                          | Done ([#97](https://github.com/mathisarends/fastapi-canon/pull/97)) |
 | [DX-016](DX-016-checker-nested-route-factories.md)  | P2       | Checker coverage            | Recognize bounded nested route factories in source checking              | [DX-001](DX-001-provider-factory-reassignments.md)                                          | Done ([#98](https://github.com/mathisarends/fastapi-canon/pull/98)) |
-| [DX-017](DX-017-combined-sdk-example.md)            | P2       | Documentation and fixture   | Publish one inspectable combined SDK example                             | None                                                                                        | In progress |
+| [DX-017](DX-017-combined-sdk-example.md)            | P2       | Documentation and fixture   | Publish one inspectable combined SDK example                             | None                                                                                        | In progress ([#100](https://github.com/mathisarends/fastapi-canon/pull/100)) |
 | [DX-018](DX-018-multipart-support-boundary.md)      | P3       | Decision                    | Decide and slice common SDK multipart support                            | None                                                                                        | Open   |
-| [DX-019](DX-019-getting-started-path.md)            | P2       | Documentation               | Create a short end-to-end getting-started path                           | [DX-009](DX-009-documentation-release-and-links.md)                                         | Open   |
+| [DX-019](DX-019-getting-started-path.md)            | P2       | Documentation               | Create a short end-to-end getting-started path                           | [DX-009](DX-009-documentation-release-and-links.md)                                         | In progress |
 | [DX-020](DX-020-mcp-activation-policy.md)           | P3       | Decision                    | Decide whether MCP mounts imply activation                               | None                                                                                        | Done ([#99](https://github.com/mathisarends/fastapi-canon/pull/99)) |
 | [DX-021](DX-021-composition-prefix-policy.md)       | P3       | Decision                    | Decide whether Composition needs a prefix convenience API                | None                                                                                        | Done ([#99](https://github.com/mathisarends/fastapi-canon/pull/99)) |
 | [DX-022](DX-022-feature-metadata-defaults.md)       | P3       | Decision                    | Decide ownership of feature names, tags and transport namespaces         | None                                                                                        | Done ([#99](https://github.com/mathisarends/fastapi-canon/pull/99)) |

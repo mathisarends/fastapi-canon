@@ -42,7 +42,7 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
 
 ## Completion
 
-- Implementation or decision PR: Pending PR publication after completed verification.
+- Implementation or decision PR: [#100](https://github.com/mathisarends/fastapi-canon/pull/100).
 - Final commit and verification: SDK/consumers `bddda14`; CLI path regression
   adjustment `0767b85`. All 14 unified codegen/consumer tests pass on Python
   3.14 and Python 3.12, including exact live/offline drift and both consumers

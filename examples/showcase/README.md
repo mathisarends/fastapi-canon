@@ -1,5 +1,9 @@
 # fastapi-canon showcase
 
+Follow the [feature-to-client guide](../../docs/getting-started.md) for a short,
+tested path through `APIRouter`, `Inject`, composition, checks and the generated
+SDK. This directory is its runnable source.
+
 This small application demonstrates the recommended application boundary:
 each feature owns its router and its domain-error contracts, while `app.py`
 is the only composition root. Its layout is deliberately suitable as a starting
@@ -25,7 +29,7 @@ showcase/
 Run it from the repository root:
 
 ```console
-uv run --with uvicorn uvicorn examples.showcase.app:app --reload
+uv run --frozen uvicorn examples.showcase.app:app --reload
 ```
 
 Then open [the API documentation](http://127.0.0.1:8000/docs), or try the
@@ -65,14 +69,25 @@ all of those pieces together.
 To turn a feature off, remove `catalog_feature` from `Composition` in `app.py`.
 Its routes and error definitions disappear together.
 
-The routes declare stable `operation_id` values for client generation. Export the
-compiled HTTP contract from the repository root:
+The routes declare stable `operation_id` values. The
+[generator configuration](fastapi-canon.toml) maps those IDs to `catalog.get`,
+`catalog.reserve` and `status.health` in the generated client. From the root:
 
 ```console
-uv run python -c "import json; from pathlib import Path; from examples.showcase.app import app; Path('openapi.json').write_text(json.dumps(app.openapi(), indent=2), encoding='utf-8')"
+uv run --frozen fastapi-canon generate --config examples/showcase/fastapi-canon.toml
+uv run --frozen fastapi-canon generate --config examples/showcase/fastapi-canon.toml --check --diff
+uv run --frozen python examples/showcase/consume.py --base-url http://127.0.0.1:8000
 ```
 
-Use that document as input to your OpenAPI client generator. It includes domain
-problems, normalized request validation, and internal failures. Application
-startup validates the same document automatically. See the
-[concept guide](../../CONCEPTS.md) for the ownership and transport contracts.
+The saved [contract](contracts/openapi.json) is committed. The SDK and its
+ownership manifest live in ignored `dist/generated/python/catalog_client`.
+The [consumer](consume.py) exposes that package on its import path and closes its
+HTTP resources with `async with`. Rebuild `dist/` after declaration changes;
+generated files are disposable and should not be edited manually. Source/API
+checks and the full command sequence are in the getting-started guide.
+
+The documented source-check command covers the catalog slice's two operations.
+Scanning the entire showcase root currently retains CAN003 for facade re-exports;
+composition inspection covers the mounted application's three operations.
+The integration suite checks source/preflight commands, exact saved/live/offline
+contract drift and the real generated-client HTTP success/problem path.

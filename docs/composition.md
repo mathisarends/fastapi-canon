@@ -17,9 +17,11 @@ contracts, and declares typed SSE (`@router.sse`), JSON-RPC channels
 (`router.include_channel`) and WebRTC sessions (`@router.webrtc`) on the same
 router. See [routers](routers.md) for every transport option.
 
-Use the [root README walkthrough](../README.md#core-api-routes-errors-and-composition)
-for the server-to-SDK path: HTTP, typed SSE and WebSocket RPC declarations become
-one Python/TypeScript domain API. This guide covers the core composition and HTTP
+Use [getting started](getting-started.md) for one feature, injected service,
+checks and a generated client. The
+[root README walkthrough](../README.md#core-api-routes-errors-and-composition)
+extends the server-to-SDK path across HTTP, typed SSE and WebSocket RPC.
+This guide covers the core composition and HTTP
 options in detail; the [codegen guide](unified-canon-concept.md)
 explains shared models, errors and generated bindings.
 
