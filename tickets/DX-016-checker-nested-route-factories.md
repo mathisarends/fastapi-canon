@@ -1,6 +1,6 @@
 # DX-016: Recognize bounded nested route factories in source checking
 
-- Status: In progress
+- Status: Done
 - Priority: P2
 - Kind: Checker coverage
 - Baseline: `a366702` (2026-11-05)
@@ -43,7 +43,7 @@ Apply the [shared completion and release rules](README.md#shared-acceptance-and-
 
 ## Completion
 
-- Implementation or decision PR: Pending final verification and publication.
+- Implementation or decision PR: [#98](https://github.com/mathisarends/fastapi-canon/pull/98); merged as `1f8bf0b`.
 - Final commit and verification: Source `0347678`; all 232 checker tests pass
   on Python 3.14 and Python 3.12, including 29 new CLI cases and an updated
   formerly-unsupported factory regression. A 100-factory scenario verifies

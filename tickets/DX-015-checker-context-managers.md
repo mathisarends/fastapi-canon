@@ -1,6 +1,6 @@
 # DX-015: Analyze explicit exception paths in supported context managers
 
-- Status: In progress
+- Status: Done
 - Priority: P2
 - Kind: Checker coverage
 - Baseline: `a366702` (2026-11-05)

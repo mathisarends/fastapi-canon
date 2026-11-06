@@ -19,7 +19,10 @@ The generated public API follows domain names; protocol clients live under
 
 The [README walkthrough](../README.md#core-api-routes-errors-and-composition)
 builds an HTTP operation, an SSE stream and a WebSocket RPC method in one app,
-then generates Python and TypeScript consumers from them.
+then generates Python and TypeScript consumers from them. The
+[combined SDK example](../examples/canonical_errors/README.md) links the server,
+configuration, committed generated files and runnable consumers. Both consumers
+exercise real HTTP/SSE/RPC success and shared problem handling.
 
 | Server declaration | Contract source | Generated domain API | Boilerplate handled by the binding |
 | --- | --- | --- | --- |
