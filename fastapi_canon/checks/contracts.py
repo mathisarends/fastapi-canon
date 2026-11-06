@@ -26,6 +26,9 @@ _RPC_CHANNELS = frozenset(
     }
 )
 _ERROR = "fastapi_canon.Error"
+_ERRORS = frozenset(
+    {_ERROR, "fastapi_canon.error.Error", "fastapi_canon.error.error.Error"}
+)
 _DEPENDENCIES = {
     "fastapi.Depends",
     "fastapi.params.Depends",
@@ -90,6 +93,7 @@ def _keyword(node: ast.Call, name: str) -> ast.expr | None:
 class _Checker:
     def __init__(self, source: _Source) -> None:
         self.source = source
+        self._catalog_cache: dict[str, str] | None = None
         # flow-analysis unit seam
         self._analyzer = _Analyzer(source)
 
@@ -223,6 +227,41 @@ class _Checker:
         self._unknown(operation, f"unresolved contract sequence: {ast.unparse(node)}")
         return []
 
+    def _catalog(self) -> dict[str, str]:
+        if self._catalog_cache is None:
+            touched = set(self.source.touched)
+            catalog: dict[str, str] = {}
+            for module, node in self.source.error_declarations:
+                scope, sequence = self.source.value(node, module)
+                if not isinstance(sequence, ast.List | ast.Tuple):
+                    continue
+                for element in sequence.elts:
+                    mapped = self._mapped_error(element, scope)
+                    if mapped is not None:
+                        catalog[mapped[0]] = mapped[1]
+            self.source.touched = touched
+            self._catalog_cache = catalog
+        return self._catalog_cache
+
+    def _mapped_error(self, element: ast.expr, module: str) -> tuple[str, str] | None:
+        identity = self.source.resolve(element, module)
+        scope, definition = self.source.value(element, module)
+        if (
+            identity is None
+            or not isinstance(definition, ast.Call)
+            or self.source.resolve(definition.func, scope) not in _ERRORS
+        ):
+            return None
+        exception_node = (
+            definition.args[0] if definition.args else _keyword(definition, "exception")
+        )
+        exception = (
+            self.source.resolve(exception_node, scope) if exception_node else None
+        )
+        if exception is None or not self.source.exception(exception):
+            return None
+        return exception, identity
+
     def _errors(
         self, node: ast.expr | None, module: str, operation: _Operation
     ) -> dict[str, str]:
@@ -230,13 +269,10 @@ class _Checker:
         for scope, element in self._sequence(node, module, operation):
             identity = self.source.resolve(element, scope)
             scope, definition = self.source.value(element, scope)
-            if not isinstance(definition, ast.Call) or self.source.resolve(
-                definition.func, scope
-            ) not in {
-                _ERROR,
-                "fastapi_canon.error.Error",
-                "fastapi_canon.error.error.Error",
-            }:
+            if (
+                not isinstance(definition, ast.Call)
+                or self.source.resolve(definition.func, scope) not in _ERRORS
+            ):
                 self._unknown(
                     operation, f"unresolved Error definition: {ast.unparse(element)}"
                 )
@@ -392,30 +428,10 @@ class _Checker:
                 self._unknown(
                     operation, "expanded keyword arguments may change the contract"
                 )
-        catalog: dict[str, str] = {}
+        # Composition maps every declared Error application-wide.
+        catalog = dict(self._catalog())
         declared: dict[str, str] = {}
         for scope, layer in layers:
-            registry_node = _keyword(layer, "error_registry")
-            if registry_node is not None:
-                registry_scope, registry = self.source.value(registry_node, scope)
-                if isinstance(registry, ast.Call) and self.source.resolve(
-                    registry.func, registry_scope
-                ) in {
-                    "fastapi_canon.error.ErrorRegistry",
-                    "fastapi_canon.error.registry.ErrorRegistry",
-                }:
-                    if any(item.arg is None for item in registry.keywords):
-                        self._unknown(
-                            operation,
-                            "expanded ErrorRegistry keyword arguments may change the contract",
-                        )
-                    catalog.update(
-                        self._errors(
-                            _keyword(registry, "errors"), registry_scope, operation
-                        )
-                    )
-                else:
-                    self._unknown(operation, "unresolved ErrorRegistry declaration")
             declared.update(self._errors(_keyword(layer, "raises"), scope, operation))
         if decorator is not None:
             declared.update(

@@ -9,8 +9,7 @@ import pytest
 from fastapi_canon.cli import main
 
 PRELUDE = """
-from fastapi_canon import APIRouter, Error
-from fastapi_canon.error import ErrorRegistry
+from fastapi_canon import APIRouter, Error, Feature
 from fastapi_canon.integrations.websockets import RpcChannel
 from fastapi_canon.router import CanonRouter
 raise RuntimeError('Source must never be imported')
@@ -43,8 +42,16 @@ def analyze(
     return run
 
 
-@pytest.mark.parametrize("mapping", ["none", "registered", "declared"])
-@pytest.mark.parametrize("location", ["global", "local"])
+@pytest.mark.parametrize(
+    ("mapping", "location"),
+    [
+        ("none", "global"),
+        ("none", "local"),
+        ("registered", "global"),
+        ("declared", "global"),
+        ("declared", "local"),
+    ],
+)
 def test_factory_error_mappings_and_helpers(
     analyze: Callable[[str], tuple[int, dict[str, Any]]], mapping: str, location: str
 ) -> None:
@@ -53,17 +60,19 @@ def test_factory_error_mappings_and_helpers(
     )
     global_declaration = declaration if location == "global" else ""
     local_declaration = declaration if location == "local" else "pass"
-    registry = (
-        "error_registry=ErrorRegistry(errors=[missing])"
+    # A feature lists application-wide errors that no operation declares.
+    listed = (
+        "feature = Feature(name='api', errors=[missing])"
         if mapping == "registered"
         else ""
     )
     raises = ", raises=[missing]" if mapping == "declared" else ""
     status, report = analyze(f"""
 {global_declaration}
+{listed}
 def create_router():
     {local_declaration}
-    router = APIRouter({registry})
+    router = APIRouter()
     def helper(): fail()
     @router.get('/'{raises})
     def endpoint(): helper()
@@ -176,24 +185,24 @@ def factory():
     assert [d["code"] for d in operation["diagnostics"]] == ["CAN002"]
 
 
-def test_multiple_returned_routers_keep_their_registries(
+def test_multiple_returned_routers_share_the_application_catalog(
     analyze: Callable[[str], tuple[int, dict[str, Any]]],
 ) -> None:
     status, report = analyze("""
+missing = Error(Missing, status=404, code='missing', title='Missing')
 def factory():
-    missing = Error(Missing, status=404, code='missing', title='Missing')
-    first = APIRouter(error_registry=ErrorRegistry(errors=[missing]))
+    first = APIRouter()
     second = APIRouter()
-    @first.get('/')
-    def registered(): fail()
+    @first.get('/', raises=[missing])
+    def declared(): fail()
     @second.get('/')
-    def unmapped(): fail()
+    def undeclared(): fail()
     return first, second
 """)
-    registered, unmapped = report["operations"]
+    declared, undeclared = report["operations"]
     assert status == 1 and report["incomplete_operations"] == 0
-    assert [d["code"] for d in registered["diagnostics"]] == ["CAN001"]
-    assert [d["code"] for d in unmapped["diagnostics"]] == ["CAN002"]
+    assert declared["diagnostics"] == []
+    assert [d["code"] for d in undeclared["diagnostics"]] == ["CAN001"]
 
 
 @pytest.mark.parametrize(
@@ -320,8 +329,7 @@ def factory():
     Router = APIRouter
     prefix = PREFIX
     errors = [*ERRORS] + []
-    registry = ErrorRegistry(errors=errors)
-    router = Router(prefix=prefix, error_registry=registry, raises=errors)
+    router = Router(prefix=prefix, raises=errors)
     @router.get('/')
     def endpoint(): fail()
     return router

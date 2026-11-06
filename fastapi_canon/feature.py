@@ -36,7 +36,7 @@ from fastapi_canon.diagnostics import (
     OperationInfo,
 )
 from fastapi_canon.error import ErrorRegistry
-from fastapi_canon.error.contracts import INSTALLED_REGISTRY_STATE_KEY
+from fastapi_canon.error.contracts import INSTALLED_REGISTRY_STATE_KEY, AnyError
 from fastapi_canon.exceptions import ErrorConfigurationError, FeatureConfigurationError
 from fastapi_canon.injected_route import InjectedRoute, _endpoint_dependencies
 from fastapi_canon.injection import injected_resolver_dependency
@@ -50,6 +50,7 @@ from fastapi_canon.openapi import (
     install_openapi_contracts,
     validate_openapi_contracts,
 )
+from fastapi_canon.policy import normalize_raises
 from fastapi_canon.request_logging import install_request_logging
 from fastapi_canon.router import CanonRouter
 from fastapi_canon.scopes import _install_scopes
@@ -97,10 +98,12 @@ class Feature:
     providers: tuple[Provider | Callable[[], Provider], ...]
     instrumentation: tuple[Instrumentation, ...]
     mcp: tuple[McpMount, ...]
-    errors: ErrorRegistry | None
+    errors: tuple[AnyError, ...]
+    """Errors this feature contributes: ``errors=`` plus declared ``raises``."""
     exception_handlers: tuple[ExceptionHandlerSpec, ...]
     lifespan: FeatureLifespan | None
     checks: tuple[FeatureCheck, ...]
+    _registry: ErrorRegistry | None = field(repr=False, compare=False)
 
     def __init__(
         self,
@@ -110,7 +113,7 @@ class Feature:
         providers: Sequence[Provider | Callable[[], Provider]] = (),
         instrumentation: Sequence[Instrumentation] = (),
         mcp: Sequence[McpMount] = (),
-        errors: ErrorRegistry | None = None,
+        errors: Sequence[AnyError] = (),
         exception_handlers: Sequence[ExceptionHandlerSpec] = (),
         lifespan: FeatureLifespan | None = None,
         checks: Sequence[FeatureCheck] = (),
@@ -153,11 +156,13 @@ class Feature:
             ExceptionHandlerSpec,
             f"feature {normalized_name!r} exception_handlers",
         )
-        raw_errors: object = errors
         raw_lifespan: object = lifespan
-        if raw_errors is not None and not isinstance(raw_errors, ErrorRegistry):
-            msg = f"feature {normalized_name!r} errors must be an ErrorRegistry instance or None"
-            raise FeatureConfigurationError(msg)
+        try:
+            listed = normalize_raises(
+                errors, parameter=f"feature {normalized_name!r} errors"
+            )
+        except ErrorConfigurationError as error:
+            raise FeatureConfigurationError(str(error)) from error
         if raw_lifespan is not None and not callable(raw_lifespan):
             msg = f"feature {normalized_name!r} lifespan must be callable or None"
             raise FeatureConfigurationError(msg)
@@ -168,7 +173,10 @@ class Feature:
         resolved_errors = _merge_errors(
             tuple(
                 (normalized_name, registry)
-                for registry in (errors, router_errors)
+                for registry in (
+                    ErrorRegistry(errors=listed) if listed else None,
+                    router_errors,
+                )
                 if registry is not None
             ),
             name=normalized_name,
@@ -179,7 +187,10 @@ class Feature:
         object.__setattr__(self, "routers", normalized_routers)
         object.__setattr__(self, "providers", normalized_providers)
         object.__setattr__(self, "instrumentation", normalized_instrumentation)
-        object.__setattr__(self, "errors", resolved_errors)
+        object.__setattr__(
+            self, "errors", resolved_errors.errors if resolved_errors else ()
+        )
+        object.__setattr__(self, "_registry", resolved_errors)
         object.__setattr__(self, "exception_handlers", normalized_handlers)
         object.__setattr__(self, "lifespan", lifespan)
 
@@ -500,9 +511,7 @@ def _prepare_composition(app: FastAPI, composition: Composition) -> _Preparation
             feature.name for feature in composition.features if feature.routers
         ),
         "errors": tuple(
-            feature.name
-            for feature in composition.features
-            if feature.errors is not None
+            feature.name for feature in composition.features if feature.errors
         ),
     }
 
@@ -771,9 +780,9 @@ def _prepare_registry(
     app: FastAPI, composition: Composition, routers: tuple[APIRouter, ...] | None
 ) -> ErrorRegistry:
     registries = tuple(
-        (feature.name, feature.errors)
+        (feature.name, feature._registry)
         for feature in composition.features
-        if feature.errors is not None
+        if feature._registry is not None
     )
     if composition.router_factory is not None and routers:
         # The application router's own raises and policy extend every feature.

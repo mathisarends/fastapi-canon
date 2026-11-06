@@ -12,8 +12,7 @@ PRELUDE = """
 from abc import ABC, abstractmethod
 from typing import Protocol
 from dishka import Provider, Scope, provide
-from fastapi_canon import APIRouter, Error, Inject
-from fastapi_canon.error import ErrorRegistry
+from fastapi_canon import APIRouter, Error, Feature, Inject
 
 class Missing(Exception):
     pass
@@ -23,7 +22,8 @@ class Conflict(Exception):
 
 missing = Error(Missing, status=404, code="missing", title="Missing")
 conflict = Error(Conflict, status=409, code="conflict", title="Conflict")
-router = APIRouter(error_registry=ErrorRegistry(errors=[missing, conflict]))
+router = APIRouter()
+feature = Feature(name='api', routers=[router], errors=[missing, conflict])
 
 class Repository(ABC):
     @abstractmethod

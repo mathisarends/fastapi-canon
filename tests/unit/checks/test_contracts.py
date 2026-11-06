@@ -11,8 +11,7 @@ from fastapi_canon.cli import main
 PRELUDE = """
 from collections.abc import AsyncIterator
 from fastapi import Depends
-from fastapi_canon import APIRouter, Error, Inject
-from fastapi_canon.error import ErrorRegistry
+from fastapi_canon import APIRouter, Error, Feature, Inject
 from fastapi_canon.integrations.websockets import RpcChannel
 
 class Missing(Exception):
@@ -22,9 +21,9 @@ class Unmapped(Exception):
     pass
 
 missing = Error(Missing, status=404, code="missing", title="Missing")
-registry = ErrorRegistry(errors=[missing])
-router = APIRouter(error_registry=registry)
-channel = RpcChannel("projects", error_registry=registry)
+router = APIRouter()
+channel = RpcChannel("projects")
+feature = Feature(name="projects", routers=[router], errors=[missing])
 """
 
 
@@ -136,8 +135,8 @@ def test_rpc_method_errors_need_raises(
 ) -> None:
     prelude = (
         PRELUDE.replace(
-            '"projects", error_registry=registry)',
-            '"projects", error_registry=registry, raises=[missing])',
+            'RpcChannel("projects")',
+            'RpcChannel("projects", raises=[missing])',
         )
         if shared
         else PRELUDE

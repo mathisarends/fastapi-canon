@@ -15,13 +15,7 @@ from fastapi_canon.error.openapi import InheritedContract
 from fastapi_canon.error.types import OpenAPIResponses
 from fastapi_canon.error.validation import unique_instances
 from fastapi_canon.exceptions import ConfigurationError, ResponseConfigurationError
-from fastapi_canon.policy import (
-    RouterPolicy,
-    merge_policy_registry,
-    normalize_raises,
-    validate_policy,
-    validate_registry,
-)
+from fastapi_canon.policy import RouterPolicy, normalize_raises, validate_policy
 from fastapi_canon.response import CanonResponse
 
 
@@ -37,7 +31,6 @@ class CanonRouter(APIRouter):
         self,
         *,
         namespace: str | None = None,
-        error_registry: ErrorRegistry | None = None,
         raises: Sequence[AnyError] = (),
         http_statuses: Sequence[int] = (),
         policy: RouterPolicy | None = None,
@@ -54,11 +47,10 @@ class CanonRouter(APIRouter):
                 "namespace must be a dotted public identifier or None"
             )
         self.namespace = namespace
-        validate_registry(error_registry)
         validate_policy(policy)
-        error_registry = merge_policy_registry(error_registry, policy)
         self.policy = policy
-        self.error_registry = error_registry
+        # Collected from raises; Composition merges it into the application catalog.
+        self.error_registry: ErrorRegistry | None = None
         self._included_error_registries: list[ErrorRegistry] = []
         self.raises = normalize_raises(raises, parameter="raises")
         self.http_statuses = _normalize_http_statuses(http_statuses)

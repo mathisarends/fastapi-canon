@@ -10,8 +10,7 @@ from fastapi_canon.cli import main
 
 PRELUDE = """
 from collections.abc import AsyncIterator
-from fastapi_canon import APIRouter, Error
-from fastapi_canon.error import ErrorRegistry
+from fastapi_canon import APIRouter, Error, Feature
 raise RuntimeError('The source module must never be imported')
 
 class Missing(Exception): pass
@@ -37,7 +36,8 @@ def analyze(
             prelude = prelude.replace(
                 "router = APIRouter()",
                 "missing = Error(Missing, status=404, code='missing', title='Missing')\n"
-                "router = APIRouter(error_registry=ErrorRegistry(errors=[missing]))",
+                "router = APIRouter()\n"
+                "feature = Feature(name='api', routers=[router], errors=[missing])",
             )
         if mapping == "declared":
             body = body.replace(

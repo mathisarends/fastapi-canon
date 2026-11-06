@@ -13,6 +13,7 @@ from fastapi_canon import (
     CanonResponse,
     Composition,
     Error,
+    ErrorOptions,
     Feature,
     RouterPolicy,
 )
@@ -43,11 +44,7 @@ AUTHENTICATION_REQUIRED = Error(
 )
 FORBIDDEN = Error(Forbidden, status=403, code="forbidden", title="Forbidden")
 MISSING = Error(MissingItem, status=403, code="missing_item", title="Missing item")
-AUTH_ERRORS = ErrorRegistry(
-    errors=[AUTHENTICATION_REQUIRED, FORBIDDEN],
-    type_base="https://example.test/problems",
-)
-ITEM_ERRORS = ErrorRegistry(errors=[MISSING], type_base="https://example.test/problems")
+PROBLEMS = ErrorOptions(type_base="https://example.test/problems")
 
 
 async def require_user(authorization: str | None = Header(default=None)) -> None:
@@ -56,7 +53,6 @@ async def require_user(authorization: str | None = Header(default=None)) -> None
 
 
 PROTECTED = RouterPolicy(
-    error_registry=AUTH_ERRORS,
     dependencies=[Depends(require_user)],
     raises=[AUTHENTICATION_REQUIRED, FORBIDDEN],
 )
@@ -65,9 +61,7 @@ PROTECTED = RouterPolicy(
 def test_policy_copies_sequences_and_is_frozen() -> None:
     dependencies = [Depends(require_user)]
     errors = [AUTHENTICATION_REQUIRED]
-    policy = RouterPolicy(
-        error_registry=AUTH_ERRORS, dependencies=dependencies, raises=errors
-    )
+    policy = RouterPolicy(dependencies=dependencies, raises=errors)
     dependencies.clear()
     errors.clear()
     assert len(policy.dependencies) == 1
@@ -79,7 +73,6 @@ def test_policy_copies_sequences_and_is_frozen() -> None:
 @pytest.mark.parametrize(
     ("options", "message"),
     [
-        ({"error_registry": object()}, "error_registry must be"),
         ({"raises": "invalid"}, "must be a sequence"),
         ({"dependencies": None}, "must be a sequence"),
         ({"dependencies": "invalid"}, "must be a sequence"),
@@ -107,7 +100,6 @@ def test_router_policy_combines_contracts_dependencies_and_dishka_injection() ->
 
     router = CanonRouter(
         policy=PROTECTED,
-        error_registry=ITEM_ERRORS,
         raises=[FORBIDDEN],
         dependencies=[Depends(local_dependency)],
         route_class=DishkaRoute,
@@ -118,7 +110,7 @@ def test_router_policy_combines_contracts_dependencies_and_dishka_injection() ->
         return value
 
     feature = Feature(name="items", routers=[router], providers=[Services()])
-    composition = Composition(features=(feature,))
+    composition = Composition(features=(feature,), errors=PROBLEMS)
     app = composition.build(FastAPI())
     with TestClient(app) as client:
         response = client.get("/items")
@@ -143,7 +135,7 @@ def test_router_policy_combines_contracts_dependencies_and_dishka_injection() ->
     }
     assert router.policy is PROTECTED
     assert router.raises == (AUTHENTICATION_REQUIRED, FORBIDDEN)
-    assert feature.errors is not None and feature.errors.contains(MISSING)
+    assert MISSING in feature.errors
 
 
 def test_router_factory_policy_extends_nested_feature_routers() -> None:
@@ -216,15 +208,14 @@ def test_invalid_policy_type_is_rejected() -> None:
 @pytest.mark.parametrize("scope", ["router", "composition"])
 def test_policy_registry_collisions_are_rejected(scope: str) -> None:
     other = Error(Forbidden, status=403, code="other_forbidden", title="Other")
-    registry = ErrorRegistry(errors=[other], type_base=AUTH_ERRORS.type_base)
     app = FastAPI()
     original_routes = tuple(app.routes)
     with pytest.raises(ErrorConfigurationError, match="exception"):
         if scope == "router":
-            CanonRouter(policy=PROTECTED, error_registry=registry)
+            CanonRouter(policy=PROTECTED, raises=[other])
         else:
             Composition(
-                features=(Feature(name="other", errors=registry),),
+                features=(Feature(name="other", errors=[other]),),
                 router_factory=lambda: CanonRouter(policy=PROTECTED),
             ).build(app)
     assert tuple(app.routes) == original_routes
@@ -267,8 +258,8 @@ def test_dependency_only_policy_preserves_normalizers_and_deduplicates_execution
 
 
 def test_parent_raises_extend_included_operations() -> None:
-    parent = CanonRouter(error_registry=AUTH_ERRORS, raises=[FORBIDDEN])
-    child = CanonRouter(error_registry=ITEM_ERRORS)
+    parent = CanonRouter(raises=[FORBIDDEN])
+    child = CanonRouter()
     child.get("/child", raises=[MISSING])(lambda: None)
     sibling = APIRouter()
     sibling.get("/sibling")(lambda: None)
@@ -289,13 +280,14 @@ def test_parent_raises_extend_included_operations() -> None:
 
 
 def test_parent_raises_extend_operations_included_without_composition() -> None:
-    parent = CanonRouter(error_registry=AUTH_ERRORS, raises=[FORBIDDEN])
+    parent = CanonRouter(raises=[FORBIDDEN])
     child = APIRouter()
     child.get("/child")(lambda: None)
     parent.include_router(child)
     app = FastAPI()
     app.include_router(parent)
-    AUTH_ERRORS.install(app)
+    # Manual assembly without Composition installs a registry directly.
+    ErrorRegistry(errors=[FORBIDDEN]).install(app)
     responses = app.openapi()["paths"]["/child"]["get"]["responses"]
     assert responses["403"]["content"]["application/problem+json"]["schema"] == {
         "$ref": "#/components/schemas/ForbiddenProblem"
@@ -304,10 +296,7 @@ def test_parent_raises_extend_operations_included_without_composition() -> None:
 
 def test_inherited_422_includes_automatic_validation() -> None:
     invalid = Error(ValueError, status=422, code="invalid_input", title="Invalid input")
-    policy = RouterPolicy(
-        error_registry=ErrorRegistry(errors=[invalid], type_base=AUTH_ERRORS.type_base),
-        raises=[invalid],
-    )
+    policy = RouterPolicy(raises=[invalid])
     router = CanonRouter()
 
     @router.get("/items/{item_id}")
