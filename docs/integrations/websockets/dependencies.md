@@ -28,6 +28,28 @@ async def create(params: CreateTask, store: Inject[TaskStore]) -> int:
 `store` is invisible to callers and to OpenRPC. Only `CreateTask` is serialized
 on the wire.
 
+## Context terms
+
+Canon uses "context" for two different mechanisms. Both are named after what they
+supply to handlers, not after when they run:
+
+| Term | Declared with | When it runs | Supplies |
+| --- | --- | --- | --- |
+| Connection context | `include_channel(..., context=async_function)` or `CanonWebSocketRouter` `context=` | Once per WebSocket, before acceptance | One typed value from the function's return annotation, available as `Inject[T]` |
+| Hook | `hooks=(function, ...)` next to a connection context | During that preparation, only when reachable | Reusable typed values, looked up by return type; requires `context=` |
+| Injected service | Dishka provider or a `resolver=` | On demand when a handler asks for `Inject[T]` | Application services such as repositories |
+| Server values | `channel.create_server(context=object_or_mapping)` | Fixed when the server is built | Known objects, by concrete type or by an explicit type mapping; for small applications and tests |
+
+A connection context is a function that prepares a value per connection. Server
+values are plain objects supplied up front, and they take precedence over a
+resolver. The keyword is the same only because each supplies "context" values to
+handlers; the parameters accept different shapes and are not interchangeable.
+If you need per-connection admission, authentication or resource preparation, use
+`include_channel(..., context=function)`. If you only have a few known objects in
+a test or script, pass them to `create_server(context=...)`. Do not pass a
+connection-context function there: `create_server` registers it as a plain object
+rather than calling it.
+
 ## Pass known values as context
 
 For small applications and tests, pass an object or a type-to-value mapping to
