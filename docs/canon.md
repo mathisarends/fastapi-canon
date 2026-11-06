@@ -134,6 +134,24 @@ There is one installed command, `fastapi-canon`, also available as
 | `fastapi-canon check errors` | Check HTTP, SSE, RPC and WebRTC error declarations without importing application code |
 | `fastapi-canon skill install` | Install the bundled backend-building skill and resources into `.agents` and `.claude`; `--force` refreshes both, `--destination` selects one directory |
 
+### Choosing a generation command
+
+Start with `fastapi-canon generate`. Use the others only for the cases below.
+
+| Need | Command | Notes |
+| --- | --- | --- |
+| One SDK for a service (HTTP, SSE, RPC, WebRTC) in Python and TypeScript | `fastapi-canon generate` with `[codegen]` in `fastapi-canon.toml` | Preferred. Plans all sources together; `--check`/`--diff` detect drift, `--offline` reads saved contracts |
+| Contract files only (OpenAPI, OpenRPC, WebRTC) for review or other tools | `fastapi-canon contracts export --app module:app --output-dir DIR` | `--kind` selects one contract; `--check`/`--diff` detect drift; starts no lifespans |
+| SSE client with accepted-diagnostics control or a stored `[tool.fastapi-canon.sse]` table | `fastapi-canon sse schema/generate/check/sync` | `--strict`, `--allow-diagnostics`, `--diagnostics` and `sync` have no common equivalent |
+| WebSocket client from an `RpcChannel` or `RpcContract` without a FastAPI app, or with socket-protocol bindings | `fastapi-canon websockets schema/generate` | `--binding`, `--transport-module`, `--api-root`, `--api-name`, `--server` and a multi-client `--config` manifest |
+| Browser client for WebRTC sessions only | `fastapi-canon webrtc contract/generate` | TypeScript only; `--client-name`, saved contract via `--contract` |
+
+Each specialized family keeps its own configuration and ownership manifest, so a
+directory is owned by one workflow: do not generate the same output with `generate`
+and a specialized command. Nothing is deprecated; the specialized commands remain
+supported for the capabilities above. Common generation covers JSON HTTP, SSE, RPC,
+raw-socket and WebRTC bindings with the [support limits](unified-canon-concept.md#connections-and-supported-scope).
+
 The specialized emitters retain their configuration, runtime options and ownership
 manifests. The preferred `fastapi-canon generate` workflow plans sources together and
 owns one combined SDK output per target. It includes a JSON HTTP binding as well
