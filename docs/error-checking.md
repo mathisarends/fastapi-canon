@@ -422,9 +422,11 @@ routers are actually mounted, follow `dependency_overrides`, or validate compose
 registries from other features. Pass all relevant source roots, retain runtime
 contract validation and test the application's intended error paths.
 
-When the scanned source contains `Composition(router_policy=...)`, the checker
-marks operations incomplete and suppresses guessed contract gaps: determining
-which operations inherit that policy requires analyzing application mounting.
+When the scanned source includes routers into a Canon router that declares
+`raises`, `http_statuses` or `policy` (directly or through
+`Composition(router_factory=...)`), the checker marks operations incomplete and
+suppresses guessed contract gaps: determining which operations inherit those
+contracts requires analyzing application mounting.
 
 Plain FastAPI routers are skipped. Supported Canon HTTP, SSE, RPC and WebRTC
 declarations are described above. Analysis follows supported explicit generator

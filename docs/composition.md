@@ -200,8 +200,10 @@ checks and deduplicates identical Error instances. Policy errors precede router 
 errors; local declarations extend the shared contract. Policy dependencies run
 before local router dependencies, with FastAPI's normal dependency caching.
 
-To apply a policy across every feature router in a composition, including nested
-routers, pass it at the composition boundary instead:
+A router's `raises`, `http_statuses` and `policy` behave like its
+`dependencies`: they apply to its own operations and to every HTTP operation it
+includes with `include_router()`. To apply a policy across every feature router
+in a composition, including nested routers, give it to the application router:
 
 ```python
 composition = Composition(
@@ -209,33 +211,30 @@ composition = Composition(
         projects_feature,
         users_feature,
     ),
-    router_policy=protected,
-    router_factory=lambda: APIRouter(prefix="/api/v1"),
+    router_factory=lambda: APIRouter(prefix="/api/v1", policy=protected),
 )
 ```
 
-`router_policy` merges its catalog with the feature registries and applies its
-dependencies to the installed routes. Its error contracts extend the generated
-HTTP operations, including typed SSE operations. Errors sharing a status produce
-one combined Problem schema. A conflicting manual `responses=` declaration is
-rejected before installation. A policy's `422` error replaces FastAPI's automatic
-validation response just as a router-level `raises` declaration does.
+The application router's catalog merges with the feature registries. Inherited
+errors extend the generated HTTP operations, including typed SSE operations.
+Errors sharing a status produce one combined Problem schema. A conflicting
+manual `responses=` declaration is rejected when the OpenAPI document is
+compiled, and `Composition.build()` compiles it before installation. An
+inherited `422` error replaces FastAPI's automatic validation response just as
+a local `raises` declaration does.
 
-Composition policies leave the original feature routers unchanged, so the same
-features can be installed in another app with a different policy. Routes mounted
-outside the composition do not acquire its prerequisites or declared errors.
-Hidden routes execute the dependencies but have no OpenAPI operation to extend.
-The application error registry still handles registered exceptions globally;
-policy declarations are not a runtime exception allowlist.
+Inheritance leaves the original feature routers unchanged, so the same features
+can be installed in another app with a different application router. Routes
+mounted outside that router do not acquire its prerequisites or declared
+errors. Hidden routes execute the dependencies but have no OpenAPI operation to
+extend. The application error registry still handles registered exceptions
+globally; declarations are not a runtime exception allowlist.
 
-`APIRouter(policy=...)` shares error contracts with operations declared directly
-on that router, like router-level `raises`. Use `Composition(router_policy=...)`
-for contracts across included child routers; the meaning of ordinary `raises=`
-and `include_router()` is unchanged. Endpoints resolve `Inject[T]` and
-`FromDishka[T]` through the route class of the router where they are declared;
-a composition policy does not replace route classes. WebRTC sessions declare their admission contracts with
-`raises=` and `dependencies=` on `@router.webrtc(...)`; composition HTTP contract
-compilation does not extend the separate WebRTC session descriptor.
+Endpoints resolve `Inject[T]` and `FromDishka[T]` through the route class of
+the router where they are declared; an including router does not replace route
+classes. WebRTC sessions declare their admission contracts with `raises=` and
+`dependencies=` on `@router.webrtc(...)`; inherited HTTP contracts do not extend
+the separate WebRTC session descriptor.
 
 ### Dishka
 

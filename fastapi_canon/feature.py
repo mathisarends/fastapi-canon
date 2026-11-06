@@ -37,7 +37,6 @@ from fastapi_canon.diagnostics import (
 )
 from fastapi_canon.error import ErrorRegistry
 from fastapi_canon.error.contracts import INSTALLED_REGISTRY_STATE_KEY
-from fastapi_canon.error.openapi import install_policy_contracts
 from fastapi_canon.exceptions import ErrorConfigurationError, FeatureConfigurationError
 from fastapi_canon.injected_route import InjectedRoute, _endpoint_dependencies
 from fastapi_canon.injection import injected_resolver_dependency
@@ -51,7 +50,6 @@ from fastapi_canon.openapi import (
     install_openapi_contracts,
     validate_openapi_contracts,
 )
-from fastapi_canon.policy import RouterPolicy
 from fastapi_canon.request_logging import install_request_logging
 from fastapi_canon.router import CanonRouter
 from fastapi_canon.scopes import _install_scopes
@@ -232,7 +230,6 @@ class Composition:
     features: tuple[Feature, ...]
     errors: ErrorOptions
     router_factory: Callable[[], APIRouter] | None
-    router_policy: RouterPolicy | None
     telemetry: Telemetry | None
     request_logging: bool
     mcp: McpOptions | None
@@ -244,7 +241,6 @@ class Composition:
         features: Sequence[Feature] = (),
         errors: ErrorOptions | None = None,
         router_factory: Callable[[], APIRouter] | None = None,
-        router_policy: RouterPolicy | None = None,
         telemetry: Telemetry | None = None,
         request_logging: bool = False,
         mcp: McpOptions | None = None,
@@ -269,22 +265,15 @@ class Composition:
         _validate_unique_feature_names(normalized_features)
         raw_errors: object = errors
         raw_router_factory: object = router_factory
-        raw_router_policy: object = router_policy
         if raw_errors is not None and not isinstance(raw_errors, ErrorOptions):
             msg = "errors must be an ErrorOptions instance or None"
             raise FeatureConfigurationError(msg)
         if raw_router_factory is not None and not callable(raw_router_factory):
             msg = "router_factory must be callable or None"
             raise FeatureConfigurationError(msg)
-        if raw_router_policy is not None and not isinstance(
-            raw_router_policy, RouterPolicy
-        ):
-            msg = "router_policy must be a RouterPolicy instance or None"
-            raise FeatureConfigurationError(msg)
         object.__setattr__(self, "features", normalized_features)
         object.__setattr__(self, "errors", errors or ErrorOptions())
         object.__setattr__(self, "router_factory", router_factory)
-        object.__setattr__(self, "router_policy", router_policy)
         object.__setattr__(self, "overrides", ())
 
     def build(self, app: FastAPI) -> FastAPI:
@@ -352,8 +341,6 @@ class _Installation:
     errors: ErrorOptions
     router_factory: Callable[[], APIRouter] | None = field(compare=False)
     router_factory_id: int | None
-    router_policy: RouterPolicy | None = field(compare=False)
-    router_policy_id: int | None
     telemetry: Telemetry | None = field(compare=False)
     telemetry_id: int | None
     request_logging: bool
@@ -369,7 +356,6 @@ class _Preparation:
     routers: tuple[APIRouter, ...]
     registry: ErrorRegistry | None
     container: AsyncContainer | None
-    policy_operations: frozenset[str]
     description: CompositionInfo | None
     missing_dependency: ModuleNotFoundError | None
     mcp_runtime: McpRuntime | None
@@ -410,12 +396,6 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         ),
         override_ids=tuple(id(source) for source in composition.overrides),
         container=None,
-        router_policy=composition.router_policy,
-        router_policy_id=(
-            id(composition.router_policy)
-            if composition.router_policy is not None
-            else None
-        ),
     )
     installed = getattr(app.state, _INSTALLATION_STATE_KEY, None)
     if installed is not None:
@@ -442,9 +422,7 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
     registry = prepared.registry
     if registry is None:
         raise FeatureConfigurationError("Composed error catalog is unavailable")
-    policy = composition.router_policy
     container = prepared.container
-    policy_operations = prepared.policy_operations
 
     if telemetry is not None:
         from fastapi_canon.integrations.opentelemetry.native import install
@@ -463,8 +441,6 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         include_http_exceptions=composition.errors.include_http_exceptions,
         include_unhandled_error=composition.errors.include_unhandled_error,
     )
-    if policy is not None and policy.raises:
-        install_policy_contracts(app, policy.raises, policy_operations)
     if composition.mcp is not None:
         from fastapi_canon.integrations.mcp.runtime import install_mcp
 
@@ -497,8 +473,6 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         errors=composition.errors,
         router_factory=composition.router_factory,
         router_factory_id=requested.router_factory_id,
-        router_policy=policy,
-        router_policy_id=requested.router_policy_id,
         override_ids=requested.override_ids,
         container=container,
         description=prepared.description,
@@ -592,7 +566,7 @@ def _prepare_composition(app: FastAPI, composition: Composition) -> _Preparation
         "errors",
         "canon.errors.E001",
         "Use compatible error definitions and one explicit application type base.",
-        lambda: _prepare_registry(app, composition),
+        lambda: _prepare_registry(app, composition, routers),
     )
     container, container_ok = attempt(
         "providers",
@@ -621,7 +595,6 @@ def _prepare_composition(app: FastAPI, composition: Composition) -> _Preparation
             "Use synchronous factories that borrow the APP container without starting resources.",
             lambda: prepare_runtime(mcp_options, container),
         )
-    policy_operations: frozenset[str] = frozenset()
     description = None
     if routers_ok and registry_ok and handlers_ok and routers is not None:
         description, described = attempt(
@@ -639,7 +612,6 @@ def _prepare_composition(app: FastAPI, composition: Composition) -> _Preparation
                 ),
                 routers,
                 registry,
-                composition.router_policy,
                 app.router,
             ),
         )
@@ -662,7 +634,7 @@ def _prepare_composition(app: FastAPI, composition: Composition) -> _Preparation
             issue.code in {"canon.routing.E002", "canon.routing.E003"}
             for issue in issues
         ):
-            operations, _ = attempt(
+            attempt(
                 "http.contracts",
                 "canon.contracts.E001",
                 "Match route response contracts to the composed error catalog.",
@@ -674,10 +646,8 @@ def _prepare_composition(app: FastAPI, composition: Composition) -> _Preparation
                     include_validation_error=composition.errors.include_validation_error,
                     include_http_exceptions=composition.errors.include_http_exceptions,
                     include_unhandled_error=composition.errors.include_unhandled_error,
-                    router_policy=composition.router_policy,
                 ),
             )
-            policy_operations = operations or frozenset()
         else:
             checks.append(CheckResult("http.contracts", "skipped"))
     else:
@@ -696,7 +666,6 @@ def _prepare_composition(app: FastAPI, composition: Composition) -> _Preparation
         routers or (),
         registry,
         container,
-        policy_operations,
         description,
         missing_dependencies[0] if missing_dependencies else None,
         mcp_runtime,
@@ -736,7 +705,6 @@ def _prepare_feature_routers(
     return _prepare_routers(
         _flatten_routers(composition.features),
         composition.router_factory,
-        composition.router_policy,
         lambda prefix: _validate_websocket_paths(app, composition.features, prefix),
     )
 
@@ -799,15 +767,19 @@ def _validate_mcp_routes(
                         )
 
 
-def _prepare_registry(app: FastAPI, composition: Composition) -> ErrorRegistry:
+def _prepare_registry(
+    app: FastAPI, composition: Composition, routers: tuple[APIRouter, ...] | None
+) -> ErrorRegistry:
     registries = tuple(
         (feature.name, feature.errors)
         for feature in composition.features
         if feature.errors is not None
     )
-    policy = composition.router_policy
-    if policy is not None and policy.error_registry is not None:
-        registries = (("router policy", policy.error_registry), *registries)
+    if composition.router_factory is not None and routers:
+        # The application router's own raises and policy extend every feature.
+        root = routers[0]
+        if isinstance(root, CanonRouter) and root.error_registry is not None:
+            registries = (("router_factory", root.error_registry), *registries)
     registry = _merge_errors(
         registries,
         name=composition.errors.registry_name,
@@ -1370,12 +1342,6 @@ def _validate_applied_composition(app: object, composition: Composition) -> None
         or installed.override_ids
         != tuple(id(source) for source in composition.overrides)
         or installed.router_factory_id != expected_router_factory_id
-        or installed.router_policy_id
-        != (
-            id(composition.router_policy)
-            if composition.router_policy is not None
-            else None
-        )
     ):
         msg = "composition must be applied to the application before validation"
         raise FeatureConfigurationError(msg)
@@ -1570,21 +1536,6 @@ def _provided_keys(provider: Provider) -> tuple[DependencyKey, ...]:
 def _prepare_routers(
     routers: tuple[APIRouter, ...],
     router_factory: Callable[[], APIRouter] | None,
-    router_policy: RouterPolicy | None,
-    validate_paths: Callable[[str], None],
-) -> tuple[APIRouter, ...]:
-    prepared = _prepare_application_router(routers, router_factory, validate_paths)
-    if router_policy is None or not router_policy.dependencies:
-        return prepared
-    wrapper = APIRouter(dependencies=list(router_policy.dependencies))
-    for router in prepared:
-        wrapper.include_router(router)
-    return (wrapper,)
-
-
-def _prepare_application_router(
-    routers: tuple[APIRouter, ...],
-    router_factory: Callable[[], APIRouter] | None,
     validate_paths: Callable[[str], None],
 ) -> tuple[APIRouter, ...]:
     if router_factory is None:
@@ -1606,7 +1557,7 @@ def _prepare_application_router(
         for router in routers:
             wrapper.include_router(router)
     except Exception as error:
-        msg = "composition router failed to include feature routers"
+        msg = f"composition router failed to include feature routers: {error}"
         raise FeatureConfigurationError(msg) from error
     return (wrapper,)
 
@@ -1711,8 +1662,7 @@ def _validate_error_installation(
     include_validation_error: bool,
     include_http_exceptions: bool,
     include_unhandled_error: bool,
-    router_policy: RouterPolicy | None,
-) -> frozenset[str]:
+) -> None:
     if app.openapi_schema is not None:
         msg = "install features before generating or caching OpenAPI"
         raise FeatureConfigurationError(msg)
@@ -1743,17 +1693,6 @@ def _validate_error_installation(
         validation_app.include_router(router)
     for spec in handler_specs:
         validation_app.add_exception_handler(spec.exception, spec.handler)
-    operations: frozenset[str] = frozenset()
-    if router_policy is not None and router_policy.raises:
-        policy_router = APIRouter()
-        for router in routers:
-            policy_router.include_router(router)
-        operations = frozenset(
-            f"{method} {operation.path}"
-            for operation in _operation_headers(policy_router)
-            if operation.include_in_schema
-            for method in operation.methods
-        )
     try:
         if registry is not None:
             registry.install(
@@ -1764,12 +1703,9 @@ def _validate_error_installation(
             )
         else:
             install_openapi_contracts(validation_app)
-        if router_policy is not None and router_policy.raises:
-            install_policy_contracts(validation_app, router_policy.raises, operations)
         validation_app.openapi()
     except ErrorConfigurationError as error:
         raise FeatureConfigurationError(str(error)) from error
-    return operations
 
 
 def _router_lifespans(

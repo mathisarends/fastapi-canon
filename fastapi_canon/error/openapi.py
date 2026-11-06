@@ -7,7 +7,10 @@ from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import FastAPI
 from pydantic import ValidationError
+from starlette.routing import BaseRoute, Match, NoMatchFound
+from starlette.types import Receive, Scope, Send
 
+from fastapi_canon.contract_routes import iter_contract_routes
 from fastapi_canon.error.contracts import (
     ERRORS_EXTENSION,
     HTTP_STATUSES_EXTENSION,
@@ -28,10 +31,51 @@ from fastapi_canon.error.types import (
 from fastapi_canon.exceptions import ErrorConfigurationError
 
 if TYPE_CHECKING:
+    from starlette.datastructures import URLPath
+
     from fastapi_canon.response import CanonResponse
 
 _PROBLEM_MEDIA_TYPE = "application/problem+json"
 _MISSING = object()
+
+
+class InheritedContract(BaseRoute):
+    """Carry a router's declared errors to every operation it includes.
+
+    FastAPI applies router-level ``callbacks`` to included operations, with both
+    eager and lazy inclusion, and documents only ``APIRoute`` callbacks. Canon
+    reads this marker when it compiles the OpenAPI document.
+    """
+
+    def __init__(
+        self, errors: tuple[AnyError, ...], http_statuses: tuple[int, ...]
+    ) -> None:
+        self.errors = errors
+        self.http_statuses = http_statuses
+        self.include_in_schema = False
+
+    def matches(self, scope: Scope) -> tuple[Match, Scope]:
+        return Match.NONE, {}
+
+    def url_path_for(self, name: str, /, **path_params: Any) -> URLPath:
+        raise NoMatchFound(name, path_params)
+
+    async def handle(self, scope: Scope, receive: Receive, send: Send) -> None:
+        raise RuntimeError("An inherited error contract is not an endpoint")
+
+
+def inherited_contract(route: object) -> tuple[tuple[AnyError, ...], tuple[int, ...]]:
+    """Return errors and HTTP statuses that enclosing routers declare."""
+    markers = [
+        callback
+        for callback in getattr(route, "callbacks", None) or ()
+        if isinstance(callback, InheritedContract)
+    ]
+    errors = {id(error): error for marker in markers for error in marker.errors}
+    statuses = dict.fromkeys(
+        status for marker in markers for status in marker.http_statuses
+    )
+    return tuple(errors.values()), tuple(statuses)
 
 
 def install_openapi(
@@ -81,8 +125,7 @@ def install_openapi(
             include_validation_error=current.include_validation_error,
             include_http_exceptions=current.include_http_exceptions,
             include_internal_error=current.include_internal_error,
-            policy_errors=installation.policy_errors,
-            policy_operations=installation.policy_operations,
+            inherited=_inherited_operations(app),
         )
         app.openapi_schema = compiled
         return compiled
@@ -102,164 +145,6 @@ class _OpenAPIConfiguration:
 @dataclass(slots=True)
 class _OpenAPIInstallation:
     configuration: _OpenAPIConfiguration
-    policy_errors: tuple[AnyError, ...] = ()
-    policy_operations: frozenset[str] = frozenset()
-
-
-def install_policy_contracts(
-    app: FastAPI, errors: tuple[AnyError, ...], operations: frozenset[str]
-) -> None:
-    """Scope composition contracts using operation names from generated OpenAPI."""
-    installed = getattr(app.state, INSTALLED_OPENAPI_STATE_KEY, None)
-    if not isinstance(installed, _OpenAPIInstallation):
-        raise ErrorConfigurationError(
-            "install the OpenAPI compiler before router policy"
-        )
-    if app.openapi_schema is not None:
-        raise ErrorConfigurationError("install router policy before caching OpenAPI")
-    installed.policy_errors = errors
-    installed.policy_operations = operations
-
-
-def _compile_document(
-    registry: ErrorCatalog | None,
-    document: dict[str, Any],
-    *,
-    include_validation_error: bool,
-    include_http_exceptions: bool,
-    include_internal_error: bool = False,
-    policy_errors: tuple[AnyError, ...] = (),
-    policy_operations: frozenset[str] = frozenset(),
-) -> dict[str, Any]:
-    result = copy.deepcopy(document)
-    components = result.setdefault("components", {}).setdefault("schemas", {})
-    if registry is not None:
-        _add_component(components, "Problem", _base_problem_schema())
-
-        for error in registry.errors:
-            _add_component(
-                components,
-                error.effective_schema_name,
-                _compile_error_schema(registry, error),
-            )
-
-    if include_validation_error:
-        if registry is None:
-            msg = "validation error normalization requires an error registry"
-            raise ErrorConfigurationError(msg)
-        _add_component(
-            components,
-            "RequestValidationProblem",
-            _request_validation_schema(registry),
-        )
-
-    if include_internal_error:
-        if registry is None or registry.type_base is None:
-            raise ErrorConfigurationError(
-                "internal error normalization requires type_base"
-            )
-        _add_component(
-            components, "InternalServerProblem", _internal_error_schema(registry)
-        )
-
-    operation_ids: dict[str, str] = {}
-    for path, operation in iter_operations(result):
-        operation_id = operation.get("operationId")
-        if operation_id is not None:
-            if not isinstance(operation_id, str) or not operation_id.strip():
-                raise ErrorConfigurationError(
-                    f"route {path!r} has an invalid operationId"
-                )
-            previous = operation_ids.get(operation_id)
-            if previous is not None:
-                raise ErrorConfigurationError(
-                    f"duplicate operationId {operation_id!r} on {previous} and {path}; "
-                    "declare a unique operation_id for each operation"
-                )
-            operation_ids[operation_id] = path
-
-        stream = operation.get("x-canon-stream")
-        if stream is not None:
-            if stream.get("version") != 1:
-                raise ErrorConfigurationError(
-                    "Canon streams require an installed error registry"
-                )
-            identities = stream.pop("errorIds", [])
-            lookup = (
-                {str(id(error)): error for error in registry.errors}
-                if registry is not None
-                else {}
-            )
-            if any(identity not in lookup for identity in identities):
-                raise ErrorConfigurationError("Canon stream declares an unknown error")
-            stream["problemEvent"] = "canon.problem"
-            stream["completeEvent"] = "canon.complete"
-            stream["problems"] = []
-            for identity in identities:
-                assert registry is not None
-                error = lookup[identity]
-                name = error.effective_schema_name + "Embedded"
-                schema = compile_problem_schema(registry, error, include_status=False)
-                _add_component(
-                    components, name, _rewrite_local_definitions(schema, name)
-                )
-                stream["problems"].append({"$ref": f"#/components/schemas/{name}"})
-        responses = operation.setdefault("responses", {})
-        if stream is not None:
-            _compile_stream_contract(stream, responses, components, registry)
-
-        _errors, http_statuses, _success = contracts_from_responses(
-            path, responses, registry
-        )
-        if path in policy_operations and policy_errors:
-            if registry is None:
-                raise ErrorConfigurationError(
-                    "router policy requires an error registry"
-                )
-            _compose_policy_responses(
-                path, responses, registry, policy_errors, _errors, http_statuses
-            )
-        if http_statuses and not include_http_exceptions:
-            msg = (
-                f"route {path!r} declares normalized HTTP responses, "
-                "but HTTP exception normalization is disabled"
-            )
-            raise ErrorConfigurationError(msg)
-        for status in http_statuses:
-            _add_component(
-                components, _http_component_name(status), _http_problem_schema(status)
-            )
-        for response in responses.values():
-            if isinstance(response, dict):
-                if ERRORS_EXTENSION in response or HTTP_STATUSES_EXTENSION in response:
-                    _identify_problem_types(path, response, components)
-                response.pop(ERRORS_EXTENSION, None)
-                response.pop(HTTP_STATUSES_EXTENSION, None)
-                success_media_type = response.pop(SUCCESS_EXTENSION, _MISSING)
-                if success_media_type is not _MISSING:
-                    _retain_success_content(response, success_media_type)
-        if include_validation_error:
-            _replace_default_validation_response(responses)
-            if "422" in responses:
-                _add_builtin_response(
-                    components,
-                    responses,
-                    422,
-                    "request_validation_error",
-                    "RequestValidationProblem",
-                    "Request validation failed",
-                )
-        if include_internal_error:
-            _add_builtin_response(
-                components,
-                responses,
-                500,
-                "internal_server_error",
-                "InternalServerProblem",
-                "Internal Server Error",
-            )
-
-    return result
 
 
 def compile_responses(
@@ -378,6 +263,169 @@ def compile_problem_schema(
     return schema
 
 
+def _inherited_operations(
+    app: FastAPI,
+) -> dict[str, tuple[tuple[AnyError, ...], tuple[int, ...]]]:
+    result: dict[str, tuple[tuple[AnyError, ...], tuple[int, ...]]] = {}
+    for path, route in iter_contract_routes(app.routes, include_mounts=False):
+        errors, statuses = inherited_contract(route)
+        if errors or statuses:
+            for method in getattr(route, "methods", None) or ():
+                result[f"{method} {path}"] = (errors, statuses)
+    return result
+
+
+def _compile_document(
+    registry: ErrorCatalog | None,
+    document: dict[str, Any],
+    *,
+    include_validation_error: bool,
+    include_http_exceptions: bool,
+    include_internal_error: bool = False,
+    inherited: Mapping[str, tuple[tuple[AnyError, ...], tuple[int, ...]]] | None = None,
+) -> dict[str, Any]:
+    result = copy.deepcopy(document)
+    components = result.setdefault("components", {}).setdefault("schemas", {})
+    if registry is not None:
+        _add_component(components, "Problem", _base_problem_schema())
+
+        for error in registry.errors:
+            _add_component(
+                components,
+                error.effective_schema_name,
+                _compile_error_schema(registry, error),
+            )
+
+    if include_validation_error:
+        if registry is None:
+            msg = "validation error normalization requires an error registry"
+            raise ErrorConfigurationError(msg)
+        _add_component(
+            components,
+            "RequestValidationProblem",
+            _request_validation_schema(registry),
+        )
+
+    if include_internal_error:
+        if registry is None or registry.type_base is None:
+            raise ErrorConfigurationError(
+                "internal error normalization requires type_base"
+            )
+        _add_component(
+            components, "InternalServerProblem", _internal_error_schema(registry)
+        )
+
+    operation_ids: dict[str, str] = {}
+    for path, operation in iter_operations(result):
+        operation_id = operation.get("operationId")
+        if operation_id is not None:
+            if not isinstance(operation_id, str) or not operation_id.strip():
+                raise ErrorConfigurationError(
+                    f"route {path!r} has an invalid operationId"
+                )
+            previous = operation_ids.get(operation_id)
+            if previous is not None:
+                raise ErrorConfigurationError(
+                    f"duplicate operationId {operation_id!r} on {previous} and {path}; "
+                    "declare a unique operation_id for each operation"
+                )
+            operation_ids[operation_id] = path
+
+        stream = operation.get("x-canon-stream")
+        if stream is not None:
+            if stream.get("version") != 1:
+                raise ErrorConfigurationError(
+                    "Canon streams require an installed error registry"
+                )
+            identities = stream.pop("errorIds", [])
+            lookup = (
+                {str(id(error)): error for error in registry.errors}
+                if registry is not None
+                else {}
+            )
+            if any(identity not in lookup for identity in identities):
+                raise ErrorConfigurationError("Canon stream declares an unknown error")
+            stream["problemEvent"] = "canon.problem"
+            stream["completeEvent"] = "canon.complete"
+            stream["problems"] = []
+            for identity in identities:
+                assert registry is not None
+                error = lookup[identity]
+                name = error.effective_schema_name + "Embedded"
+                schema = compile_problem_schema(registry, error, include_status=False)
+                _add_component(
+                    components, name, _rewrite_local_definitions(schema, name)
+                )
+                stream["problems"].append({"$ref": f"#/components/schemas/{name}"})
+        responses = operation.setdefault("responses", {})
+        if stream is not None:
+            _compile_stream_contract(stream, responses, components, registry)
+
+        _errors, http_statuses, _success = contracts_from_responses(
+            path, responses, registry
+        )
+        if inherited is not None and path in inherited:
+            if registry is None:
+                raise ErrorConfigurationError(
+                    "inherited router errors require an error registry"
+                )
+            if operation.get("callbacks") == {}:
+                # Only Canon's contract markers were callbacks of this operation.
+                del operation["callbacks"]
+            shared, shared_statuses = inherited[path]
+            _compose_inherited_responses(
+                path,
+                responses,
+                registry,
+                (shared, shared_statuses),
+                (_errors, http_statuses),
+            )
+            _errors, http_statuses, _success = contracts_from_responses(
+                path, responses, registry
+            )
+        if http_statuses and not include_http_exceptions:
+            msg = (
+                f"route {path!r} declares normalized HTTP responses, "
+                "but HTTP exception normalization is disabled"
+            )
+            raise ErrorConfigurationError(msg)
+        for status in http_statuses:
+            _add_component(
+                components, _http_component_name(status), _http_problem_schema(status)
+            )
+        for response in responses.values():
+            if isinstance(response, dict):
+                if ERRORS_EXTENSION in response or HTTP_STATUSES_EXTENSION in response:
+                    _identify_problem_types(path, response, components)
+                response.pop(ERRORS_EXTENSION, None)
+                response.pop(HTTP_STATUSES_EXTENSION, None)
+                success_media_type = response.pop(SUCCESS_EXTENSION, _MISSING)
+                if success_media_type is not _MISSING:
+                    _retain_success_content(response, success_media_type)
+        if include_validation_error:
+            _replace_default_validation_response(responses)
+            if "422" in responses:
+                _add_builtin_response(
+                    components,
+                    responses,
+                    422,
+                    "request_validation_error",
+                    "RequestValidationProblem",
+                    "Request validation failed",
+                )
+        if include_internal_error:
+            _add_builtin_response(
+                components,
+                responses,
+                500,
+                "internal_server_error",
+                "InternalServerProblem",
+                "Internal Server Error",
+            )
+
+    return result
+
+
 def _compile_error_schema(
     registry: ErrorCatalog,
     error: AnyError,
@@ -392,17 +440,18 @@ def _compile_error_schema(
     )
 
 
-def _compose_policy_responses(
+def _compose_inherited_responses(
     path: str,
     responses: dict[str, Any],
     registry: ErrorCatalog,
-    shared: tuple[AnyError, ...],
-    local: tuple[AnyError, ...],
-    http_statuses: tuple[int, ...],
+    shared: tuple[tuple[AnyError, ...], tuple[int, ...]],
+    local: tuple[tuple[AnyError, ...], tuple[int, ...]],
 ) -> None:
-    declared = tuple({id(error): error for error in (*shared, *local)}.values())
-    generated = compile_responses(registry, declared, http_statuses=http_statuses)
-    for status in dict.fromkeys(error.status for error in shared):
+    errors = tuple({id(error): error for error in (*shared[0], *local[0])}.values())
+    generated = compile_responses(
+        registry, errors, http_statuses=tuple(dict.fromkeys((*shared[1], *local[1])))
+    )
+    for status in dict.fromkeys((*(error.status for error in shared[0]), *shared[1])):
         key = str(status)
         existing = responses.get(key)
         if existing is not None and not (
@@ -411,8 +460,9 @@ def _compose_policy_responses(
             or (status == 422 and _is_default_validation_response(existing))
         ):
             msg = (
-                f"route {path!r} router policy response status {status} "
-                "conflicts with a FastAPI responses declaration"
+                f"route {path!r} inherits response status {status} from an "
+                "including router, which conflicts with a FastAPI responses "
+                "declaration"
             )
             raise ErrorConfigurationError(msg)
         responses[key] = generated[status]

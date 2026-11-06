@@ -374,11 +374,12 @@ class _Checker:
                     layers.insert(0, (scope, policy))
                 else:
                     self._unknown(operation, "unresolved RouterPolicy declaration")
-        for scope, line in self.source.composition_policies:
+        for scope, line in self.source.inherited_contracts:
             operation.diagnostics.append(
                 _Diagnostic(
                     "CAN003",
-                    "composition policy mounting is outside source-declaration analysis",
+                    "router contracts inherited through include_router are outside "
+                    "source-declaration analysis",
                     str(self.source.paths[scope]),
                     line,
                 )
