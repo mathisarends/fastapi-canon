@@ -21,7 +21,6 @@ tests/
 examples/                      Runnable applications and their generated clients
 docs/                          Library, integration and contributor documentation
   integrations/                Detailed transport guides
-  history/                     Predecessor changelogs and licenses
 scripts/                       Development, distribution and release entrypoints
 ```
 

@@ -245,7 +245,7 @@ of the pipelined path. It covers frame decoding, validation, dispatch,
 serialization and queueing, but excludes the ASGI server, WebSocket framing and
 network. Compare runs on the same idle machine.
 
-[Back to documentation](index.md)
+[Back to documentation](README.md)
 
 # Application heartbeats
 

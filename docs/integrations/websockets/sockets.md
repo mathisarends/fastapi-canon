@@ -497,4 +497,4 @@ live server. A CDP binding has the same shape: in Python it wraps an existing
 CDP client such as cdpify around the socket, and in TypeScript it types
 commands and events with the `devtools-protocol` package.
 
-[Back to documentation](index.md)
+[Back to documentation](README.md)

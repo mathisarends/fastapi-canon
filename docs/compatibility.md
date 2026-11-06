@@ -139,11 +139,11 @@ consolidation; follow the [package migration guide](package-migration.md)
 and regenerate clients using the 0.10.0 changelog notes.
 Streams 0.5.0, Canon 0.8.1 and RPCKit 0.4.1 were published on 2026-10-25; Canon
 0.8.0 earlier that day; WebRTC 0.3.0 on 2026-10-24. Follow the
-[Streams 0.5.0 notes](history/fastapi-streams.md#050---2026-10-25)
+[Streams 0.5.0 notes](https://github.com/mathisarends/fastapi_canon/blob/21c74910ea7304cb136af7bfb3953dcafcc2325d/docs/history/fastapi-streams.md#050---2026-10-25)
 when regenerating Python stream clients, the
 [Canon router-policy migration notes](../CHANGELOG.md#080---2026-10-25)
 when updating constructor wrappers and the
-[WebRTC migration notes](history/fastapi-webrtc.md#030---2026-10-24)
+[WebRTC migration notes](https://github.com/mathisarends/fastapi_canon/blob/21c74910ea7304cb136af7bfb3953dcafcc2325d/docs/history/fastapi-webrtc.md#030---2026-10-24)
 before upgrading custom engines. The [release record](releases.md#current-versions)
 links the verified source and publication workflows.
 Package metadata defines dependency ranges; the root `uv.lock` selects development

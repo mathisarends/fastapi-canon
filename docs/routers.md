@@ -253,7 +253,7 @@ up all connection-owned work. This adds no new wire protocol and requires no SDK
 runtime changes. Binary transfers and raw socket protocols use their own endpoints;
 they are not silently multiplexed into a JSON-RPC channel mount.
 
-See [WebSocket streams](integrations/websockets/index.md) for controls, limits,
+See [WebSocket streams](integrations/websockets/README.md) for controls, limits,
 error mappings, dependency lifetimes and generated resource APIs. Operation names
 and endpoint names must be unique across the application when exporting a common SDK.
 

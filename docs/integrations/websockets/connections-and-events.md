@@ -336,7 +336,7 @@ and `max_message_bytes` rejects oversized incoming frames. Calls on one connecti
 `1` when strict arrival order is required. Pass `None` only when intentionally
 disabling the byte limit.
 
-[Back to documentation](index.md)
+[Back to documentation](README.md)
 ## Draining connections
 
 Pass one `RpcDrain()` instance as `include_channel(..., drain=drain)` to every

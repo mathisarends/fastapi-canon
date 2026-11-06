@@ -11,7 +11,7 @@ names are intentional compatibility points. Subsequent releases have source and
 generated-client breaking changes, including the 0.3.0 socket API changes and
 removal of server-to-client RPC. Follow the package [migration guide](integrations/websockets/migration.md)
 and [Canon changelog](../CHANGELOG.md), together with the
-[standalone history](history/fastapi-rpckit.md), rather than assuming the
+[standalone history](https://github.com/mathisarends/fastapi_canon/blob/21c74910ea7304cb136af7bfb3953dcafcc2325d/docs/history/fastapi-rpckit.md), rather than assuming the
 current API is identical to the imported predecessor.
 
 ## Regression scope

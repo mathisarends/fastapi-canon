@@ -242,4 +242,4 @@ The in-memory demo session is for illustrating integration; use the application'
 session service and explicit production Origin allowlist. The tests cover denied
 handshakes, an authenticated call, and expiry of an established connection.
 
-[Back to documentation](index.md)
+[Back to documentation](README.md)

@@ -2,7 +2,7 @@
 
 This guide covers connection lifecycle, capacity limits and SDK resilience.
 Use the linked guides for configuration and the [Canon changelog](../../../CHANGELOG.md)
-for current breaking changes. The [standalone changelog](../../history/fastapi-rpckit.md)
+for current breaking changes. The [standalone changelog](https://github.com/mathisarends/fastapi_canon/blob/21c74910ea7304cb136af7bfb3953dcafcc2325d/docs/history/fastapi-rpckit.md)
 records earlier releases.
 
 ## What existing applications need to know
@@ -157,5 +157,5 @@ interface; `RpcMetadataTransport` is removed. Catch `RpcConnectionLostError`
 instead of the unused `RpcConnectionClosed`. TypeScript clients use
 `onStateChange` instead of `onDisconnect`; direct transports expose `closed`.
 Pool openers take `(endpoint, signal)`. See the migration section in
-[standalone changelog](../../history/fastapi-rpckit.md) for those earlier changes,
+[standalone changelog](https://github.com/mathisarends/fastapi_canon/blob/21c74910ea7304cb136af7bfb3953dcafcc2325d/docs/history/fastapi-rpckit.md) for those earlier changes,
 then apply the [Canon migration guide](migration.md) for the current router API.

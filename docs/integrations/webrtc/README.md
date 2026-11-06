@@ -209,7 +209,7 @@ give the server-side engine internal relay URLs.
 - [Remote send-only engines and per-viewer leases](../../../examples/webrtc/remote_video/README.md)
 - [Optional browser video health observation](media-health.md)
 - [Typed HTTP admission and short-lived tickets](admission-tickets.md)
-- [Changelog](../../history/fastapi-webrtc.md)
+- [Changelog](https://github.com/mathisarends/fastapi_canon/blob/21c74910ea7304cb136af7bfb3953dcafcc2325d/docs/history/fastapi-webrtc.md)
 - Runnable example: [`examples/webrtc/practice`](../../../examples/webrtc/practice). Its generated
   client is in `examples/webrtc/practice/client`.
 

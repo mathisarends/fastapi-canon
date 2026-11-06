@@ -1,429 +1,176 @@
 # fastapi-canon
 
-The canonical FastAPI API for people and coding agents: declare features, typed
-operations and public errors once, then generate the SDK your consumers use.
-Canon gives recurring application problems a shared solution: feature wiring,
-Dishka lifecycle, error mapping, streaming contracts and client boilerplate.
+**Typed APIs, streams, and clients for FastAPI.**
 
-Keep business logic in ordinary Python. Canon carries its public contracts from
-the server into OpenAPI/OpenRPC and generated Python and TypeScript clients.
-The generated API follows your domain: `client.projects.get()`,
-`client.projects.events()` and `client.projects.cancel()`.
+Define operations and public errors in Python. Generate Python and TypeScript
+clients for HTTP, SSE, and WebSockets.
 
-## Contents
+Built from the recurring problems my coding agents and I ran into while building
+FastAPI applications: streaming responses, inconsistent errors, duplicated client
+code, and application wiring.
 
-- [Core features](#core-features)
-- [Install](#install)
-- [Core API: routes, errors and composition](#core-api-routes-errors-and-composition)
-- [Streams: typed events from server to SDK](#streams-typed-events-from-server-to-sdk)
-- [WebSockets: RPC calls as domain methods](#websockets-rpc-calls-as-domain-methods)
-- [MCP features](#mcp-features)
-- [Generate and use the SDK](#generate-and-use-the-sdk)
-- [Check that errors are mapped and declared](#check-that-errors-are-mapped-and-declared)
-- [Documentation](#documentation)
-- [Repository layout](#repository-layout)
+Streaming tokens is straightforward—until you need typed events, predictable
+failures, and a client that knows when the stream actually finished.
 
-## Core features
+## Define it in Python. Use it from your client.
 
-| Declare | Canon provides |
-| --- | --- |
-| `Feature` + `Composition` | Ordered router/provider installation, one Dishka container and managed startup/shutdown. |
-| `Error` + `raises=` | Declare and automatically register shared public problems for runtime responses, contracts and generated SDKs. |
-| `APIRouter` + `CanonResponse` | Familiar FastAPI routes with composable error and success contracts, including JSON, empty and binary responses. |
-| `router.sse(...)` | Typed SSE events, declared terminal problems and explicit completion, consumed through async iteration. |
-| `RpcChannel` + `router.include_channel(...)` | Compose methods and message streams under namespaces, then mount them on one WebSocket path. |
-| `router.webrtc(...)` | WebRTC session factories with signaling, admission and resource cleanup. |
-| `fastapi-canon generate` | One domain SDK per target, shared models/errors, internal protocol bindings and drift checks. |
-| `export_contracts(app)` / `fastapi-canon contracts export` | Export registered HTTP/SSE, RPC and WebRTC contracts from one composed app. |
-| `fastapi-canon check errors` | Source analysis for missing error mappings/declarations, with explicit incomplete-analysis diagnostics. |
-| `Composition.check()` / `.inspect()` | Structured configuration diagnostics and immutable installed HTTP snapshots, also available through the CLI. |
-| `fastapi-canon explain CODE` | Offline meaning, example, repair and guide for built-in codes; see the [prepared source interface](docs/diagnostics.md). |
-| Optional WebRTC and telemetry | Typed media-session contracts and explicit OpenTelemetry instrumentation at the composition boundary. |
-
-The [public API guide](docs/canon.md) maps these responsibilities to imports.
-The [shared router guide](docs/routers.md) shows HTTP, SSE, RPC and WebRTC on one
-`from fastapi_canon import APIRouter`, including reusable channel composition.
-
-## Install
-
-The current published release is **0.15.0**. See the
-[0.15.0 upgrade guide](docs/package-migration.md#upgrade-to-0150)
-for the unified WebSocket stream API, managed SDK resources and optional MCP
-integration. Upgrade servers and regenerated clients together. For earlier
-versions, also follow the preceding migration sections.
-
-```console
-uv add fastapi-canon
-uv add "fastapi-canon[sse,websockets]"
-uv add --dev "fastapi-canon[codegen]"
-uv run fastapi-canon --help
-```
-
-The base includes FastAPI, Pydantic and Dishka. All integrations live in the same
-`fastapi-canon` distribution; extras select their dependencies. Add `webrtc`
-for media sessions, `aiortc` for the reference media engine, or `otel` for
-telemetry. The optional `otel-httpx` and `otel-sqlalchemy` extras enable
-[explicit resource adapters](docs/telemetry.md#explicit-resource-adapters).
-See [installation and migration](docs/package-migration.md).
-Python 3.12–3.14 is supported; see [compatibility](docs/compatibility.md).
-
-## Core API: routes, errors and composition
-
-Save this as `src/app.py`. A domain exception stays ordinary Python; its public
-mapping drives both the HTTP response and the exported operation contract. The
-next sections add a stream and an RPC method to the same router; keep the
-composition block at the end of the file and add them above it.
-
-```python
-from fastapi import FastAPI
-from pydantic import BaseModel
-
-from fastapi_canon import APIRouter, Composition, Error, ErrorOptions, Feature
-
-
-class ProjectMissing(Exception):
-    pass
-
-
-class Project(BaseModel):
-    id: int
-
-
-project_missing = Error(
-    ProjectMissing,
-    status=404,
-    code="project_missing",
-    title="Project not found",
-    detail="Choose another project.",
-)
-router = APIRouter()
-
-
-def require_project(project_id: int) -> None:
-    if project_id == 0:
-        raise ProjectMissing()
-
-
-@router.get(
-    "/projects/{project_id}",
-    operation_id="projects.get",
-    response_model=Project,
-    raises=[project_missing],
-)
-async def get_project(project_id: int) -> dict[str, int]:
-    require_project(project_id)
-    return {"id": project_id}
-
-
-feature = Feature(name="projects", routers=[router])
-composition = Composition(
-    features=(feature,),
-    errors=ErrorOptions(type_base="https://api.example.com/problems"),
-)
-app = composition.build(FastAPI())
-```
-
-`build` checks every operation contract before installing the feature, then
-confirms the installed app compiles to valid OpenAPI.
-`GET /projects/1` returns `{"id": 1}`. `GET /projects/0` returns a 404
-`application/problem+json` response with the stable type
-`https://api.example.com/problems/project_missing` and code `project_missing`.
-The same problem is documented in OpenAPI. An explicit `operation_id` gives
-codegen the public SDK name `projects.get`; `response_model=Project` supplies its
-typed result and validates the server's returned data.
-
-A feature can also contribute Dishka `providers=`, a `lifespan=` and optional
-`instrumentation=`. Composition owns installation and cleanup. Shared
-`RouterPolicy` declarations reduce repeated authentication, dependencies and
-error contracts. See the [core API guide](docs/composition.md),
-[router policies](docs/composition.md#router-policies) and
-[shared problem contracts](docs/problems.md).
-
-## Streams: typed events from server to SDK
-
-Add a stream to the same router, reusing the error definition and lookup above:
+Declare a typed stream on Canon's `APIRouter`:
 
 ```python
 from collections.abc import AsyncIterator
 
-from fastapi import Depends
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+from fastapi_canon import APIRouter, Composition, Feature
 
 
-class ProjectEvent(BaseModel):
-    sequence: int
+class Token(BaseModel):
+    text: str
 
 
-@router.sse(
-    "/projects/{project_id}/events",
-    operation_id="projects.events",
-    dependencies=[Depends(require_project)],
-    raises=[project_missing],
-)
-async def events(project_id: int) -> AsyncIterator[ProjectEvent]:
-    yield ProjectEvent(sequence=1)
-    if project_id == 2:
-        raise ProjectMissing()
+router = APIRouter()
+
+
+@router.sse("/tokens", operation_id="generation.tokens")
+async def tokens() -> AsyncIterator[Token]:
+    yield Token(text="Hello")
+    yield Token(text=" world")
+
+
+app = Composition(
+    features=(Feature(name="generation", routers=[router]),),
+).build(FastAPI())
 ```
 
-The event model becomes the generated iterator's item type.
-`raises=` registers errors and describes both HTTP admission failures and terminal
-stream failures. Before response start, Canon sends an HTTP problem; during
-generator execution, it sends `canon.problem` and closes the stream. Put admission
-checks in dependencies: generator bodies run after the response begins.
-
-The generated SDK handles SSE framing and JSON decoding, yields business events,
-consumes `canon.complete`, and raises `ProblemError` on `canon.problem`.
-Unexpected EOF raises `TransportError`; malformed control frames raise
-`ProtocolError`. Consumers write an ordinary `async for` loop and can distinguish
-completion from a broken connection. No application-specific SSE parser or
-second error mapping is needed.
-
-See [Canon stream contracts](docs/streams.md),
-[stream clients](docs/integrations/sse/clients.md) and
-[terminal problem behavior](docs/problems.md#what-goes-over-the-wire).
-
-## WebSockets: RPC calls as domain methods
-
-Add a WebSocket method using the same public error definition, and mount its
-channel on the same router:
-
-```python
-from fastapi_canon.integrations.websockets import RpcChannel
-
-projects = RpcChannel("projects")
-
-
-class CancelProject(BaseModel):
-    project_id: int
-
-
-@projects.method(raises=[project_missing])
-async def cancel(params: CancelProject) -> None:
-    require_project(params.project_id)
-
-
-router.include_channel(projects, path="/ws")
-```
-
-The composition block at the end of the file now installs HTTP, SSE and RPC from
-one feature router. Install a server and run the application from the project root:
-
-```console
-uv add --dev uvicorn
-uv run uvicorn src.app:app --reload
-```
-
-The contract describes `projects.cancel` and its typed parameters and failures.
-Methods request application services with `Inject[T]`, resolved from the
-composition's Dishka container. Codegen handles request IDs, serialization,
-response correlation and typed problem errors; the consumer calls `client.projects.cancel(...)`. HTTP, SSE and RPC
-share the SDK's public model/error runtime. Protocol bindings stay internal.
-
-WebSockets also support notifications, message streams, typed sockets and binary
-streams, with explicit session lifecycles. See [services and channels](docs/integrations/websockets/services.md),
-[generated clients](docs/integrations/websockets/clients.md) and
-[socket contracts](docs/integrations/websockets/sockets.md).
-
-## MCP features
-
-Install `fastapi-canon[mcp]` for FastMCP feature mounts with Dishka `Inject[T]`.
-See the [MCP guide](docs/integrations/mcp/README.md) for composition, namespaces,
-endpoint defaults and supported execution lifetimes.
-
-## Generate and use the SDK
-
-Save `fastapi-canon.toml` at the project root. This configuration exports the app
-above and generates both language targets from its HTTP/SSE and RPC contracts:
-
-```toml
-[codegen]
-version = 1
-
-[codegen.sources.api]
-kind = "openapi"
-source = "src.app:app"
-output = "contracts/openapi.json"
-
-[codegen.sources.control]
-kind = "openrpc"
-source = "src.app:app"
-output = "contracts/openrpc.json"
-
-[codegen.targets.browser]
-language = "typescript"
-sources = ["api", "control"]
-output = "frontend/generated"
-
-[codegen.targets.python]
-language = "python"
-sources = ["api", "control"]
-output = "api_client"
-package = "api_client"
-```
+With a [codegen configuration](docs/quickstart.md#generate-and-use-the-sdk)
+pointing at your app, generate both clients. For this SSE-only example, keep
+only the OpenAPI source and use `sources = ["api"]` for both targets:
 
 ```console
 uv run fastapi-canon generate
-uv run fastapi-canon generate --check --diff
 ```
 
-For the HTTP-only example, omit `sources.control` and use `sources = ["api"]`
-on each target. A stream-only addition uses the same OpenAPI source as HTTP.
-`--check --diff` checks generated files and exported contracts without writing;
-use it in CI to catch drift. Offline generation can consume saved contracts
-without importing application code.
-
-The generated TypeScript API:
+TypeScript:
 
 ```typescript
-import { createClient, ProblemError } from "./generated";
+import { createClient } from "./generated";
 
 const client = createClient({ baseUrl: "http://localhost:8000" });
 try {
-  const project = await client.projects.get({ projectId: 1 });
-  for await (const event of client.projects.events({ projectId: project.id })) {
-    console.log(event.sequence);
+  for await (const token of client.generation.tokens()) {
+    console.log(token.text);
   }
-  await client.projects.cancel({ projectId: project.id });
-} catch (error) {
-  if (error instanceof ProblemError) console.error(error.problem.type);
-  else throw error;
 } finally {
   await client.close();
 }
 ```
 
-The same domain API in Python, inside an async function:
+Python, inside an async function:
 
 ```python
-from api_client import ApiClient, ProblemError
+from api_client import ApiClient
 
 async with ApiClient("http://localhost:8000") as client:
-    try:
-        project = await client.projects.get(project_id=1)
-        async for event in client.projects.events(project_id=project.id):
-            print(event.sequence)
-        await client.projects.cancel(project_id=project.id)
-    except ProblemError as error:
-        print(error.problem.type)
+    async for token in client.generation.tokens():
+        print(token.text)
 ```
 
-Generated SDKs do not depend on Canon. Python consumers install Pydantic, `httpx`
-(or configured `httpx2`) and `websockets` for RPC; TypeScript uses fetch/DOM APIs
-and the `ESNext.Disposable` type library. Bindings connect lazily, and closing the
-client releases resources it owns. Shared semantic model identities avoid
-duplicating DTOs across contracts.
+The event model becomes the client's item type. Canon handles framing, decoding
+and explicit stream completion. Declared terminal problems raise `ProblemError`;
+an unexpected EOF raises `TransportError`.
 
-The [codegen guide](docs/unified-canon-concept.md) covers naming, model identity,
-connection/auth options, operation selection and output ownership. It also
-documents limits: unified HTTP generation supports JSON and declared SSE;
-unsupported multipart/file operations must be explicitly excluded. WebRTC
-generation targets TypeScript. The [runnable canonical-errors example](examples/canonical_errors/app.py)
-includes a complete multi-transport configuration.
+The same SDK can expose HTTP lookups and WebSocket RPC calls such as
+`client.projects.get(...)` and `client.projects.cancel(...)`, with shared models
+and public problem errors. See the [complete walkthrough](docs/quickstart.md).
 
-## Check that errors are mapped and declared
+## What Canon handles
 
-An error contract is useful only if it describes the failures the code can raise.
-Check the core example without importing or starting the application:
+- **HTTP, SSE and WebSockets:** typed operations, event streams and RPC methods,
+  with generated Python and TypeScript clients.
+- **Public errors:** map domain exceptions once, declare them with `raises=`,
+  and carry the contract into HTTP RFC 9457 Problem Details, streams and SDKs.
+- **Static checks and code generation:** find missing error mappings and
+  declarations, report incomplete analysis, and catch generated-client drift in CI.
+- **Application composition:** features contribute routers, Dishka providers and
+  lifespans; composition owns installation and cleanup.
+- **Instrumentation:** declare observed services and ports at the feature boundary
+  without adding telemetry annotations to business logic.
+
+Generated SDKs do not depend on Canon. Python clients use Pydantic, an HTTP client
+and, for RPC, `websockets`; TypeScript clients use fetch/DOM APIs.
+See [client generation](docs/unified-canon-concept.md) for supported operations
+and target requirements.
+
+## Install
+
+```console
+uv add "fastapi-canon[sse,websockets]"
+uv add --dev "fastapi-canon[codegen]"
+```
+
+For HTTP-only applications, use `uv add fastapi-canon`. The base includes
+FastAPI, Pydantic and Dishka. Python 3.12–3.14 is supported.
+
+The current published release is **0.15.0**. See the
+[upgrade guide](docs/package-migration.md#upgrade-to-0150) and
+[tested compatibility](docs/compatibility.md). Upgrade servers and regenerated
+clients together.
+
+## Instrument application boundaries
+
+Add the `otel` extra and declare the services or ports to observe:
+
+```python
+from fastapi_canon import Feature
+from fastapi_canon.integrations.opentelemetry import instrument
+
+tasks = Feature(
+    name="tasks",
+    routers=(router,),
+    providers=(TaskProvider,),
+    instrumentation=instrument(
+        TaskRepository,
+        TaskService,
+        expected=(TaskNotFound,),
+    ),
+)
+```
+
+This excerpt uses your application's router, provider and service types.
+Enable it with `Composition(..., telemetry=Telemetry(...))`. Canon observes
+declared async methods through Dishka and adds port spans alongside HTTP
+telemetry. Your application owns SDK providers and exporters.
+See the [instrumentation guide](docs/telemetry.md) for a complete setup.
+
+## Check contracts in CI
 
 ```console
 uv run fastapi-canon check errors src --strict --require-complete
+uv run fastapi-canon generate --check --diff
 ```
 
-The checker follows supported endpoint, service, helper and dependency calls.
-It compares escaping application exceptions with the registry and the combined
-policy/router/operation `raises=` declarations:
+The static checker follows supported application calls and dependencies; it
+reports unresolved paths rather than claiming complete coverage. Use it alongside
+runtime tests. The generator checks exported contracts and client files for drift.
 
-| Finding | Meaning | Example fix |
-| --- | --- | --- |
-| `CAN001` | A mapped error is missing from `raises=`. | Restore `raises=[project_missing]` on `get_project`. |
-| `CAN002` | An application exception has no mapping in `raises` or the router's registry. | Define its public `Error` and declare it in `raises`. |
-| `CAN003` | Analysis could not resolve a declaration or execution path. | Inspect the reported path and supported patterns. |
+## Learn more
 
-For example, remove `raises=[project_missing]` from the HTTP operation above:
-the checker follows `get_project -> require_project` and reports `CAN002` because
-the error is no longer registered by that declaration. With an explicit registry
-mapping, a missing declaration produces `CAN001`.
-`--strict` fails CI for mapping/declaration gaps; `--require-complete` also fails
-for incomplete analysis or no supported operations. `--format json` produces a
-machine-readable report for tooling and agents.
+Start with the [quickstart](docs/quickstart.md), then choose a
+[task guide](docs/README.md) or a [runnable example](examples/README.md).
 
-This checks supported explicit source paths, not every possible runtime failure.
-Calls on abstract Dishka ports follow the implementations bound by the
-`Provider` classes in the scanned roots; unbound ports and dynamic code leave
-analysis incomplete. The checker
-covers `APIRouter` HTTP operations, `.sse()` streams and `.webrtc()` sessions,
-and `RpcChannel` methods.
-Calls into installed libraries such as Pydantic or SQLAlchemy contribute no
-application errors; application callbacks passed to them are still followed.
-Keep runtime contract validation and behavioral tests. See
-[error checking](docs/error-checking.md) for boundaries and
-CI options.
+Optional integrations also include [WebRTC media sessions](docs/integrations/webrtc/README.md),
+[MCP](docs/integrations/mcp/README.md) and [database resources](docs/database.md).
 
-## Documentation
-
-Canon includes a [`build-canon-backend` skill](fastapi_canon/skills/build-canon-backend/SKILL.md)
-for agents working on **your application**. From your backend project, run:
+For coding agents, install the bundled
+[`build-canon-backend` skill](fastapi_canon/skills/build-canon-backend/SKILL.md)
+from your application project:
 
 ```console
 uv run fastapi-canon skill install
 ```
 
-The command installs identical copies, including all references, into
-`.agents/skills/build-canon-backend` and `.claude/skills/build-canon-backend`,
-creating missing directories. Existing destinations require `--force`. To update
-both copies to the bundle shipped with the newest compatible Canon release:
-
-```console
-uv sync --upgrade-package fastapi-canon
-uv run fastapi-canon skill install --force
-```
-
-Installation itself uses the installed Canon version and does not download a
-different skill. `--force` replaces the complete skill directories, removing old
-resources and local edits; keep custom guidance outside those directories.
-Use `--destination <skill-directory>` to install only at a custom location (or
-only `.agents/skills/build-canon-backend` for the previous behavior).
-The skill progressively loads concise references for components and Composition
-wiring, folder structure, HTTP features, resources, transports/SDKs and testing.
-
-| Goal | Start here |
-| --- | --- |
-| Build a feature with routes, providers and lifespans | [Core API and composition](docs/composition.md) |
-| Choose canonical imports and ownership boundaries | [Public API](docs/canon.md) |
-| Map domain errors across HTTP, SSE and RPC | [Shared problems](docs/problems.md) |
-| Check mapping/declaration coverage | [Error checking](docs/error-checking.md) |
-| Diagnose composition and explain installed HTTP operations | [System checks and introspection](docs/system-checks.md) |
-| Generate Python and TypeScript domain SDKs | [Codegen workflow](docs/unified-canon-concept.md) |
-| Export schemas without handwritten URL maps or runtime secrets | [Application contracts](docs/contracts.md) |
-| Build typed SSE streams | [Stream contracts](docs/streams.md), [SSE guide index](docs/integrations/sse/index.md) |
-| Build WebSocket RPC, streams or sockets | [WebSocket guide index](docs/integrations/websockets/index.md) |
-| Add WebRTC sessions | [WebRTC contracts](docs/webrtc.md) |
-| Add tracing and metrics | [Telemetry](docs/telemetry.md) |
-| Log HTTP responses and correlate traces | [Request logging](docs/request-logging.md) |
-| Upgrade an existing application | [Package migration](docs/package-migration.md), [RPC migration](docs/integrations/websockets/migration.md) |
-| Run a complete application | [Reference service](examples/reference-service/README.md), [HTTP/SSE/RPC example](examples/stack_service.py) |
-| Contribute or prepare a release | [Contributing](docs/contributing.md), [guardrails](docs/architecture-guardrails.md), [compatibility](docs/compatibility.md), [releases](docs/releases.md) |
-
-## Repository layout
-
-This repository builds one distribution, `fastapi-canon`, directly from its root
-`pyproject.toml`. The source package is `fastapi_canon/`; all optional integrations
-ship in that same wheel. Development uses one root Python environment and one
-Node toolchain, without a package workspace.
-
-| Location | Contents |
-| --- | --- |
-| [`fastapi_canon/`](fastapi_canon) | Composition, HTTP contracts, optional integrations and generators |
-| [`tests/`](tests) | Separate unit, integration and contract roots; fixtures, TypeScript and browser suites |
-| [`examples/`](examples) | Runnable applications and their generated clients, including the reference service |
-| [`docs/`](docs) | Library, transport and contributor documentation; predecessor history |
-| [`scripts/`](scripts) | Development and release entrypoints |
-
-See [repository architecture](docs/architecture.md) for ownership and dependency
-rules, [contributing](docs/contributing.md) for root commands,
-[compatibility](docs/compatibility.md) for tested scope and
-[releases](docs/releases.md) for artifact verification and publication.
-
-The imported repositories remain available in Git history. Current development
-and future releases use `mathisarends/fastapi_canon`; historical releases and
-predecessor repositories are preserved.
+For updates and destination options, see
+[the skill installation guide](docs/package-migration.md#agent-skill).
+Contributor commands and repository architecture live in
+[contributing](docs/contributing.md).

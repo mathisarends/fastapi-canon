@@ -69,7 +69,7 @@ represent another PyPI distribution.
 | Short service scopes | `fastapi_canon.Scoped`, `ServiceScope` | [Databases](database.md) |
 | HTTP routes and contracts | `fastapi_canon.APIRouter`, `RouterPolicy`, `Error`, `ErrorOptions`, `CanonResponse`; `fastapi_canon.error.ErrorRegistry`, `Problem` | [HTTP contracts](composition.md#error-contracts) |
 | Typed SSE | `APIRouter.sse()` | [SSE contracts](streams.md) |
-| WebSocket JSON-RPC | `APIRouter.include_channel()` with `fastapi_canon.integrations.websockets.RpcChannel` | [WebSockets](integrations/websockets/index.md) |
+| WebSocket JSON-RPC | `APIRouter.include_channel()` with `fastapi_canon.integrations.websockets.RpcChannel` | [WebSockets](integrations/websockets/README.md) |
 | Raw WebSocket messages and binary streams | `fastapi_canon.integrations.websockets.CanonWebSocketRouter`, `RpcSocket` | [Sockets](integrations/websockets/sockets.md) |
 | WebRTC with Canon admission errors | `APIRouter.webrtc()`, `fastapi_canon.integrations.webrtc.Session` | [WebRTC admission](webrtc.md) |
 | Contract export | `fastapi_canon.export_contracts`, `fastapi_canon.contracts.Contracts`, `fastapi-canon contracts export` | [Application export](contracts.md) |
@@ -184,9 +184,9 @@ are changed through generators/templates and checked for drift.
 | [Releases](releases.md) | Prepared versions, publication gates and historical evidence |
 
 Transport guides live in `docs/integrations/`, examples in `examples/` and suites
-in the shared test roots. Historical changelogs and licenses live in `docs/history/`
-with their original distribution names. Releases use one Canon changelog, version,
-tag and artifact set.
+in the shared test roots. Historical changelogs remain available in Git history;
+the root `LICENSE` retains the imported code's MIT notice. Releases use one Canon
+changelog, version, tag and artifact set.
 
 ## MCP composition
 

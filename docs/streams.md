@@ -221,7 +221,7 @@ and set `namespace="projects"` on the router with a function named `events`, or
 choose an explicit name such as `operation_id="projects.events"`, to generate
 `client.projects.events(...)`. Python and TypeScript consumers use async
 iteration. The binding handles framing, decoding, terminal problems and
-completion. The [README walkthrough](../README.md#streams-typed-events-from-server-to-sdk)
+completion. The [quickstart](quickstart.md#streams-typed-events-from-server-to-sdk)
 shows the server declaration, configuration and both client languages.
 See [automatic operation names](routers.md#automatic-http-and-sse-operation-names)
 for naming precedence, stable SDK names and collision checks in the Canon CLI.

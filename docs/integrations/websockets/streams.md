@@ -289,4 +289,4 @@ Starting an operation and opening its byte stream remain two explicit actions.
 For example, call a regular `start()` RPC method first and then open its sibling
 stream. The contract does not currently link a stream to a start method.
 
-[Back to documentation](index.md)
+[Back to documentation](README.md)

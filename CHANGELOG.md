@@ -980,7 +980,7 @@ and [PyPI](https://pypi.org/project/fastapi-canon/0.8.1/).
   imports continue to work without Streams, RPCkit or WebRTC.
 - Streams 0.5.0 changes the connect timeout of SDK-owned generated Python HTTP
   clients. Regenerate stream SDKs and follow the
-  [Streams 0.5.0 upgrade notes](docs/history/fastapi-streams.md) if a client
+  [Streams 0.5.0 upgrade notes](https://github.com/mathisarends/fastapi_canon/blob/21c74910ea7304cb136af7bfb3953dcafcc2325d/docs/history/fastapi-streams.md) if a client
   relied on an unbounded connect time.
 
 ## 0.8.0 - 2026-10-25
@@ -1036,7 +1036,7 @@ and [PyPI](https://pypi.org/project/fastapi-canon/0.7.0/).
 - Pin the optional `fastapi-canon[webrtc]` integration to WebRTC 0.3.0. Custom
   engines must use its public `StrEnum` types and keyword-only engine/channel
   options; follow the
-  [WebRTC migration notes](docs/history/fastapi-webrtc.md#030---2026-10-24).
+  [WebRTC migration notes](https://github.com/mathisarends/fastapi_canon/blob/21c74910ea7304cb136af7bfb3953dcafcc2325d/docs/history/fastapi-webrtc.md#030---2026-10-24).
   Canon core and the Streams integration keep their existing behavior.
 
 ## 0.6.0 - 2026-10-20
@@ -1072,7 +1072,7 @@ and [PyPI](https://pypi.org/project/fastapi-canon/0.7.0/).
   Canon's public API and composition behavior remain unchanged.
 - Regenerate stream SDKs once and commit the updated provenance manifest before
   running drift checks; follow the
-  [Streams 0.4.0 upgrade notes](docs/history/fastapi-streams.md).
+  [Streams 0.4.0 upgrade notes](https://github.com/mathisarends/fastapi_canon/blob/21c74910ea7304cb136af7bfb3953dcafcc2325d/docs/history/fastapi-streams.md).
 - Generate absolute commit-pinned changelog links in published release notes.
 
 ## 0.5.3 - 2026-10-18
@@ -1082,7 +1082,7 @@ and [PyPI](https://pypi.org/project/fastapi-canon/0.7.0/).
   Canon's public API and composition behavior remain unchanged; core imports
   continue to work without Streams or RPCkit.
 - Regenerate stream SDKs to adopt runtime improvements; follow the
-  [Streams 0.3.1 upgrade notes](docs/history/fastapi-streams.md).
+  [Streams 0.3.1 upgrade notes](https://github.com/mathisarends/fastapi_canon/blob/21c74910ea7304cb136af7bfb3953dcafcc2325d/docs/history/fastapi-streams.md).
 
 ## 0.5.2 - 2026-10-18
 
@@ -1090,7 +1090,7 @@ and [PyPI](https://pypi.org/project/fastapi-canon/0.7.0/).
   installation examples. Canon's composition/runtime API is unchanged.
 - Consumers regenerating Python stream SDKs must follow the stricter request
   validation and diagnostic migration in the
-  [Streams 0.3.0 changelog](docs/history/fastapi-streams.md).
+  [Streams 0.3.0 changelog](https://github.com/mathisarends/fastapi_canon/blob/21c74910ea7304cb136af7bfb3953dcafcc2325d/docs/history/fastapi-streams.md).
 
 ## 0.5.1 - 2026-10-18
 
@@ -1099,7 +1099,7 @@ and [PyPI](https://pypi.org/project/fastapi-canon/0.7.0/).
 
 - Pin the optional Streams integration and development tooling to 0.2.0.
   Regenerated Python SDKs now enforce supported scalar constraints; follow the
-  [Streams upgrade notes](docs/history/fastapi-streams.md). Canon core remains
+  [Streams upgrade notes](https://github.com/mathisarends/fastapi_canon/blob/21c74910ea7304cb136af7bfb3953dcafcc2325d/docs/history/fastapi-streams.md). Canon core remains
   independent of Streams and RPCkit.
 
 - Correct Streams integration installation examples to match the pinned dependency.

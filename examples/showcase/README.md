@@ -75,4 +75,6 @@ uv run python -c "import json; from pathlib import Path; from examples.showcase.
 Use that document as input to your OpenAPI client generator. It includes domain
 problems, normalized request validation, and internal failures. Application
 startup validates the same document automatically. See the
-[concept guide](../../CONCEPTS.md) for the ownership and transport contracts.
+[composition guide](../../docs/composition.md) for feature ownership and lifecycle
+contracts. For generated Python and TypeScript clients, follow the
+[Projects example](../canonical_errors/README.md).

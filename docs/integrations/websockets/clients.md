@@ -10,7 +10,7 @@ For one public domain API across HTTP, SSE and WebSockets, use
 OpenRPC and OpenAPI sources, shares public models and problem errors, and exposes
 calls such as `client.projects.cancel(...)`. Its internal binding handles
 serialization, request IDs, response correlation and connection ownership.
-The [README walkthrough](../../../README.md#websockets-rpc-calls-as-domain-methods)
+The [quickstart](../../quickstart.md#websockets-rpc-calls-as-domain-methods)
 shows a channel method beside its generated Python and TypeScript calls.
 The specialized workflow below retains RPC-specific generation options and
 separate output ownership.
@@ -537,7 +537,7 @@ come from the document. See
 [`examples/websockets/generated_clients`](../../../examples/websockets/generated_clients) for complete
 generated Python and TypeScript packages.
 
-[Back to documentation](index.md)
+[Back to documentation](README.md)
 # Connection keepalive
 
 Generated TypeScript `connect()` enables application heartbeats when the OpenRPC
