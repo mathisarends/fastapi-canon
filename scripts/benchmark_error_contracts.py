@@ -24,15 +24,14 @@ _ROOT = Path(__file__).resolve().parents[1]
 
 def _project(root: Path, features: int, routes: int, depth: int) -> None:
     (root / "errors.py").write_text(
-        "from fastapi_canon import Error\n"
-        "from fastapi_canon.error import ErrorRegistry\n"
+        "from fastapi_canon import Error, Feature\n"
         "class Failure(Exception): pass\n"
         "class Missing(Failure): pass\n"
         "class Unauthorized(Exception): pass\n"
         "missing = Error(Missing, status=404, code='missing', title='Missing')\n"
         "unauthorized = Error(Unauthorized, status=401, code='unauthorized', "
         "title='Unauthorized')\n"
-        "registry = ErrorRegistry(errors=[missing, unauthorized])\n",
+        "feature = Feature(name='errors', errors=[missing, unauthorized])\n",
         encoding="utf-8",
     )
     helpers = [
@@ -59,9 +58,9 @@ def _project(root: Path, features: int, routes: int, depth: int) -> None:
         lines = [
             "from dishka import FromDishka",
             "from fastapi_canon import APIRouter",
-            "from errors import registry, missing, unauthorized",
+            "from errors import missing, unauthorized",
             "from shared import Service, Identity",
-            "router = APIRouter(error_registry=registry, raises=[unauthorized])",
+            "router = APIRouter(raises=[unauthorized])",
         ]
         for route in range(routes):
             declared = "[]" if route % 5 == 0 else "[missing]"
