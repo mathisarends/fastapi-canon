@@ -12,10 +12,10 @@ The next release containing the breaking changes below must be 0.16.0.
   router's `raises` and `policy` extend its children, and
   `Composition(router_policy=...)` becomes
   `router_factory=lambda: APIRouter(policy=...)`.
-- Declare public errors once with `raises=` across HTTP, SSE and RPC. Composition
-  automatically collects their `Error` instances; separate registry entries are
-  no longer required. SSE uses the same declaration for admission and terminal
-  stream failures.
+- Declare public errors only with `raises=` across HTTP, SSE, RPC and WebRTC.
+  Composition collects their `Error` instances; `error_registry=` is gone and
+  `Feature(errors=[...])` lists the few errors no operation declares. SSE uses
+  the same declaration for admission and terminal stream failures.
 - Register reusable WebSocket admission functions with `hooks=(function, ...)`.
   `Inject[T]` obtains their results by return type or resolves application services
   through DI. The shared `APIRouter.include_channel(...)` forwards these options;
@@ -263,6 +263,30 @@ The next release containing the breaking changes below must be 0.16.0.
   `composition.router_policy` origin no longer exists. The error-contract checker
   marks operations incomplete (CAN003) when routers are included into a Canon
   router that declares `raises`, `http_statuses` or `policy`.
+- `error_registry=` is removed from `APIRouter`, `CanonRouter`,
+  `CanonStreamRouter`, `CanonWebRtcRouter`, `RouterPolicy` and `RpcChannel`, and
+  `RouterPolicy.error_registry` no longer exists. `raises=` is the only
+  declaration on routers, policies, channels and operations. Delete
+  `error_registry=...` arguments whose errors are already declared in `raises=`;
+  move errors that no operation declares into `Feature(errors=[...])`.
+- `Feature(errors=...)` takes a sequence of `Error` instances instead of an
+  `ErrorRegistry`, and `Feature.errors` is a tuple of `Error` (empty instead of
+  `None`). Migrate `Feature(errors=ErrorRegistry(errors=[a, b]))` to
+  `Feature(errors=[a, b])`, `feature.errors.errors` to `feature.errors` and
+  `feature.errors.contains(a)` to `a in feature.errors`.
+- A problem-type URI prefix can no longer be attached to a router, policy or
+  channel through `ErrorRegistry(type_base=...)`. Set it once with
+  `Composition(errors=ErrorOptions(type_base=...))`; an explicit `Error.type`
+  keeps its own URI. Applications assembled without `Composition` install
+  `ErrorRegistry(errors=[...], type_base=...).install(app)`, which stays public in
+  `fastapi_canon.error` for that purpose. Standalone SSE streams and RPC channels
+  resolve URIs through the installed catalog.
+- The error-contract checker's catalog is now every `Error` referenced in a
+  `raises=` or `errors=` keyword in the scanned source. A mapping listed only in
+  `Feature(errors=[...])` reports `CAN001` for operations that raise it without
+  declaring it. `ErrorRegistry(...)` declarations no longer contribute mappings,
+  and the `CAN002` message names the application catalog instead of the router
+  registry.
 - Supported nested route factories now report contract gaps instead of blanket
   CAN003, and their operation names become `module.factory.<locals>.endpoint`.
   Before adopting 0.16.0, update report-name filters and map/declare newly exposed
