@@ -135,7 +135,9 @@ distinct operation IDs and schema visibility do not change request dispatch.
 ## HTTP and SSE endpoint dependency preflight
 
 Preflight reads endpoint `Inject[T]` and `FromDishka[T]` roots for Canon's default
-`InjectedRoute`, native `DishkaRoute` and recognized Dishka-decorated HTTP routes.
+`InjectedRoute`, native `DishkaRoute` and recognized Dishka-decorated HTTP routes,
+plus `Inject[T]` parameters of nested FastAPI dependencies. Those dependencies run
+before a stream starts, so they are checked through REQUEST scope.
 `canon.providers.E003` identifies the feature, effective method/path, service and
 component when the prepared graph cannot supply a root at its execution scope.
 Both a missing container and an unrelated valid provider graph are diagnosed.

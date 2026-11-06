@@ -22,6 +22,13 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- `Inject[T]` resolves application services in ordinary FastAPI dependency
+  functions, not only in endpoint parameters. Authentication and precondition
+  dependencies no longer need Dishka's `@inject` with `FromDishka[T]`;
+  `app.dependency_overrides` keeps addressing the original function, and
+  composition preflight reports missing bindings of nested dependencies
+  (`canon.providers.E003`) before installation.
+
 - Documentation records the DX decisions on MCP activation, the shared router
   prefix, feature metadata ownership, WebSocket `context=` terminology and the
   preferred generation command, and explains MCP error masking with `ToolError`.

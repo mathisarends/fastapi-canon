@@ -7,12 +7,19 @@ from dataclasses import dataclass, field, replace
 from inspect import iscoroutine, iscoroutinefunction
 from typing import TYPE_CHECKING, Any
 
-from dishka import AsyncContainer, Provider, Scope, make_async_container
+from dishka import (
+    DEFAULT_COMPONENT,
+    AsyncContainer,
+    Provider,
+    Scope,
+    make_async_container,
+)
 from dishka.entities.key import DependencyKey
 from dishka.exceptions import DishkaError  # type: ignore[attr-defined]  # not exported
 from dishka.integrations.base import is_dishka_injected
 from dishka.integrations.fastapi import DishkaRoute
 from fastapi import APIRouter, FastAPI
+from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute
 from starlette.routing import Match, Route, WebSocketRoute, compile_path
 from starlette.types import ExceptionHandler, Lifespan
@@ -33,6 +40,7 @@ from fastapi_canon.error.contracts import INSTALLED_REGISTRY_STATE_KEY
 from fastapi_canon.error.openapi import install_policy_contracts
 from fastapi_canon.exceptions import ErrorConfigurationError, FeatureConfigurationError
 from fastapi_canon.injected_route import InjectedRoute, _endpoint_dependencies
+from fastapi_canon.injection import injected_resolver_dependency
 from fastapi_canon.introspection import (
     _describe,
     _http_routes,
@@ -1074,15 +1082,22 @@ def _check_http_dependencies(
             )
             checks.append(CheckResult(name, "incomplete"))
             continue
-        if dependencies and external:
+        nested = _nested_injections(route.dependant)
+        if (dependencies or nested) and external:
             checks.append(CheckResult(name, "skipped"))
             continue
         stream = bool(route.openapi_extra and "x-canon-stream" in route.openapi_extra)
         scope = Scope.APP if stream else Scope.REQUEST
+        # FastAPI dependencies run before a stream starts, inside the request scope.
         missing = [
             key
             for key in dependencies
             if not _dependency_available(container, key, scope)
+        ] + [
+            key
+            for key in nested
+            if key not in dependencies
+            and not _dependency_available(container, key, Scope.REQUEST)
         ]
         for key in missing:
             qualified = _qualified_name(key.type_hint)
@@ -1098,6 +1113,18 @@ def _check_http_dependencies(
                 )
             )
         checks.append(CheckResult(name, "failed" if missing else "passed"))
+
+
+def _nested_injections(dependant: Dependant | None) -> tuple[DependencyKey, ...]:
+    pending = list(dependant.dependencies) if dependant is not None else []
+    keys: list[DependencyKey] = []
+    while pending:
+        current = pending.pop(0)
+        service = injected_resolver_dependency(current.call)
+        if service is not None:
+            keys.append(DependencyKey(service, DEFAULT_COMPONENT))
+        pending.extend(current.dependencies)
+    return tuple(dict.fromkeys(keys))
 
 
 def _check_operations(

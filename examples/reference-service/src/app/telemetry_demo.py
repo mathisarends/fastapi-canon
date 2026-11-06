@@ -7,10 +7,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import httpx2
-from dishka import FromDishka, Provider, Scope, provide
-from dishka.integrations.fastapi import inject
+from dishka import Provider, Scope, provide
 from fastapi import FastAPI
-from fastapi_canon import APIRouter, Composition, ErrorOptions, Feature
+from fastapi_canon import APIRouter, Composition, ErrorOptions, Feature, Inject
 from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
 from fastapi_canon.integrations.opentelemetry.httpx import instrument_httpx
 from fastapi_canon.integrations.opentelemetry.sqlalchemy import instrument_sqlalchemy
@@ -168,8 +167,7 @@ def _notification_feature() -> Feature:
     router = APIRouter()
 
     @router.post("/demo/notify")
-    @inject
-    async def notify(gateway: FromDishka[NotificationGateway]) -> dict[str, str]:
+    async def notify(gateway: Inject[NotificationGateway]) -> dict[str, str]:
         logger.info("Sending notification")
         await gateway.send()
         return {"status": "sent"}

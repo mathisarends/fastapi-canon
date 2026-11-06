@@ -19,8 +19,7 @@ Save this as `app.py` and run `uvicorn app:app` with Uvicorn installed:
 from collections.abc import AsyncIterator
 from typing import Annotated
 
-from dishka import AsyncContainer, FromDishka, Provider, Scope, provide
-from dishka.integrations.fastapi import inject
+from dishka import AsyncContainer, Provider, Scope, provide
 from fastapi import Depends, FastAPI, Header
 from pydantic import BaseModel
 
@@ -30,6 +29,7 @@ from fastapi_canon import (
     Error,
     ErrorOptions,
     Feature,
+    Inject,
     ServiceScope,
 )
 
@@ -85,8 +85,7 @@ async def require_authentication(
         raise AuthenticationRequired
 
 
-@inject
-async def require_existing_run(run_id: str, runs: FromDishka[RunService]) -> None:
+async def require_existing_run(run_id: str, runs: Inject[RunService]) -> None:
     await runs.require_existing(run_id)
 
 
@@ -104,7 +103,7 @@ router = APIRouter(
     operation_id="run_events",
 )
 async def events(
-    run_id: str, runs: FromDishka[ServiceScope[RunService]]
+    run_id: str, runs: Inject[ServiceScope[RunService]]
 ) -> AsyncIterator[RunEvent]:
     async with runs() as service:
         snapshot = [event async for event in service.events(run_id)]
@@ -140,15 +139,16 @@ closing it before yielding frames. For an unbounded stream, fetch short batches
 in separate scopes rather than materializing the entire stream or keeping a
 database session open. APP-scoped services can also be injected directly.
 
-`APIRouter` resolves `Inject[T]` and `FromDishka[T]` parameters of HTTP and SSE
-endpoints without `@inject`. FastAPI dependency functions such as
-`require_existing_run` are not endpoints, so decorate them with `@inject`.
-Run the resource check in that dependency: the generator's own parameters are
+`Inject[T]` resolves application services in HTTP and SSE endpoints and in
+ordinary FastAPI dependency functions such as `require_existing_run`, without
+`@inject`. `APIRouter` also resolves Dishka's `FromDishka[T]` in endpoint
+parameters; dependency functions using `FromDishka[T]` still need Dishka's
+`@inject`. Run the resource check in that dependency: the generator's own parameters are
 resolved on its first iteration, after the response has started, and a failure
 there becomes a terminal stream problem rather than an HTTP problem. Resolve any
 service that must fail as an HTTP problem in a dependency first. See
 [Dishka's FastAPI integration](https://dishka.readthedocs.io/en/stable/integrations/fastapi.html)
-for `FromDishka` and dependency injection details.
+for Dishka's own markers and dependency injection details.
 
 ## Router and operation options
 
@@ -179,7 +179,7 @@ from http import HTTPMethod
     operation_id="create_run_events",
 )
 async def create_events(
-    run_id: str, runs: FromDishka[RunService]
+    run_id: str, runs: Inject[RunService]
 ) -> AsyncIterator[RunEvent]:
     async for event in runs.events(run_id):
         yield event

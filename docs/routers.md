@@ -19,7 +19,10 @@ generators. Existing specialized routers remain supported.
 ## Typed callable endpoints
 
 The default router resolves `Inject[T]` and `FromDishka[T]` for ordinary functions,
-typed callable instances, bound methods and `functools.partial`. Async and sync
+typed callable instances, bound methods and `functools.partial`. `Inject[T]` also
+works in FastAPI dependency functions, such as an authentication dependency that
+needs a token verifier; no `@inject` decorator is involved, and
+`app.dependency_overrides` keeps addressing the original function. Async and sync
 forms keep their execution behavior; DI values stay out of the public request
 schema. Module/class future annotations and inherited call methods are supported.
 

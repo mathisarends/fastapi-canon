@@ -1,8 +1,7 @@
 from collections.abc import AsyncIterator
 from typing import Literal
 
-from dishka import FromDishka, Provider, Scope, provide
-from dishka.integrations.fastapi import inject
+from dishka import Provider, Scope, provide
 from fastapi import FastAPI
 from pydantic import BaseModel
 
@@ -58,13 +57,11 @@ def create_app() -> FastAPI:
     channel = RpcChannel("counter")
 
     @router.post("/counter", operation_id="increment_counter")
-    @inject
-    async def increment_http(operations: FromDishka[Operations]) -> IncrementResult:
+    async def increment_http(operations: Inject[Operations]) -> IncrementResult:
         return IncrementResult(value=operations.increment())
 
     @router.sse("/counter/events", operation_id="counter_events")
-    @inject
-    async def events(counter: FromDishka[Counter]) -> AsyncIterator[CounterEvent]:
+    async def events(counter: Inject[Counter]) -> AsyncIterator[CounterEvent]:
         yield CounterEvent(value=counter.value)
 
     @channel.method("increment")

@@ -4,8 +4,7 @@ from collections.abc import AsyncIterator
 from http import HTTPMethod
 from typing import Annotated, Literal
 
-from dishka import AsyncContainer, FromDishka, Provider, Scope, provide
-from dishka.integrations.fastapi import inject
+from dishka import AsyncContainer, Provider, Scope, provide
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
@@ -14,6 +13,7 @@ from fastapi_canon import (
     Composition,
     Error,
     Feature,
+    Inject,
     ServiceScope,
 )
 from fastapi_canon.error import ErrorRegistry
@@ -93,8 +93,7 @@ async def require_authentication(
         raise AuthenticationRequired
 
 
-@inject
-async def require_existing_run(run_id: int, runs: FromDishka[RunService]) -> None:
+async def require_existing_run(run_id: int, runs: Inject[RunService]) -> None:
     await runs.require_existing(run_id)
 
 
@@ -114,9 +113,8 @@ router = APIRouter(
     raises=[run_not_found],
     dependencies=[Depends(require_existing_run)],
 )
-@inject
 async def events(
-    run_id: int, runs: FromDishka[ServiceScope[RunService]]
+    run_id: int, runs: Inject[ServiceScope[RunService]]
 ) -> AsyncIterator[RunEvent]:
     async with runs() as service:
         snapshot = [event async for event in service.events(run_id)]
@@ -131,9 +129,8 @@ async def events(
     raises=[run_not_found],
     dependencies=[Depends(require_existing_run)],
 )
-@inject
 async def create_events(
-    run_id: int, body: RunRequest, runs: FromDishka[ServiceScope[RunService]]
+    run_id: int, body: RunRequest, runs: Inject[ServiceScope[RunService]]
 ) -> AsyncIterator[RunEvent]:
     async with runs() as service:
         snapshot = [event async for event in service.events(run_id, steps=body.steps)]
