@@ -15,10 +15,11 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from fastapi_canon import CanonRouter, Composition, Feature
+from fastapi_canon import Composition, Feature
 from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
 from fastapi_canon.integrations.opentelemetry.httpx import instrument_httpx
 from fastapi_canon.integrations.opentelemetry.sqlalchemy import instrument_sqlalchemy
+from fastapi_canon.router import CanonRouter
 from tests.fixtures.telemetry import SpanCapture
 
 

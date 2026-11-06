@@ -55,9 +55,7 @@ _ROUTER_DECLARATIONS = frozenset(
     {
         "fastapi_canon.APIRouter",
         "fastapi_canon.api_router.APIRouter",
-        "fastapi_canon.CanonRouter",
         "fastapi_canon.router.CanonRouter",
-        "fastapi_canon.RpcChannel",
         "fastapi_canon.integrations.websockets.RpcChannel",
         "fastapi_canon.integrations.websockets.channel.RpcChannel",
     }
@@ -66,7 +64,6 @@ _FACTORY_DECLARATIONS = _ROUTER_DECLARATIONS | {
     "fastapi_canon.Error",
     "fastapi_canon.error.Error",
     "fastapi_canon.error.error.Error",
-    "fastapi_canon.ErrorRegistry",
     "fastapi_canon.error.ErrorRegistry",
     "fastapi_canon.error.registry.ErrorRegistry",
     "fastapi_canon.RouterPolicy",

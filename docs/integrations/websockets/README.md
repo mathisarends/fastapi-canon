@@ -89,7 +89,8 @@ Mount a channel on the feature's `APIRouter` and let `Composition` install it:
 
 ```python
 from fastapi import FastAPI
-from fastapi_canon import APIRouter, Composition, Feature, RpcChannel
+from fastapi_canon import APIRouter, Composition, Feature
+from fastapi_canon.integrations.websockets import RpcChannel
 
 greetings = RpcChannel("greetings")
 
@@ -119,7 +120,8 @@ Channels group related operations and provide their namespace; a service mounts
 them on a socket. Their dispatch logic can also be called directly:
 
 ```python
-from fastapi_canon import APIRouter, Inject, RpcChannel
+from fastapi_canon import APIRouter, Inject
+from fastapi_canon.integrations.websockets import RpcChannel
 from fastapi_canon.integrations.websockets import RpcModel, RpcSuccess
 
 

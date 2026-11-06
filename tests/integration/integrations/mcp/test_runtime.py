@@ -15,7 +15,8 @@ from fastmcp.server.middleware import Middleware, MiddlewareContext
 from fastmcp.utilities.asgi_transport import StreamingASGITransport
 from mcp import MCPError
 
-from fastapi_canon import Composition, Feature, FeatureConfigurationError
+from fastapi_canon import Composition, Feature
+from fastapi_canon.exceptions import FeatureConfigurationError
 from fastapi_canon.integrations.mcp import (
     Inject,
     McpMount,
@@ -286,7 +287,7 @@ async def test_shared_database_transactions_commit_and_rollback() -> None:
     from sqlalchemy import text
     from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-    from fastapi_canon import Database
+    from fastapi_canon.integrations.database import Database
 
     class Store:
         def __init__(self, session: AsyncSession) -> None:

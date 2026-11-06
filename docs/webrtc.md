@@ -11,10 +11,10 @@ from fastapi_canon import (
     Composition,
     Error,
     ErrorOptions,
-    ErrorRegistry,
     Feature,
     export_contracts,
 )
+from fastapi_canon.error import ErrorRegistry
 from fastapi_canon.integrations.webrtc import Session
 from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine
 

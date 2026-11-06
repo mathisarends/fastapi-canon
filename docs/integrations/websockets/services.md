@@ -16,7 +16,8 @@ Pydantic model, and their return annotation describes the result.
 ```python
 from fastapi import FastAPI
 
-from fastapi_canon import APIRouter, Composition, Feature, RpcChannel, export_contracts
+from fastapi_canon import APIRouter, Composition, Feature, export_contracts
+from fastapi_canon.integrations.websockets import RpcChannel
 from fastapi_canon.integrations.websockets import RpcModel
 
 

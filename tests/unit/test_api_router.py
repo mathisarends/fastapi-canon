@@ -3,7 +3,8 @@ import sys
 
 import pytest
 
-from fastapi_canon import APIRouter, ConfigurationError
+from fastapi_canon import APIRouter
+from fastapi_canon.exceptions import ConfigurationError
 
 
 def test_core_router_import_keeps_optional_transports_lazy() -> None:

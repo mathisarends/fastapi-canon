@@ -28,12 +28,10 @@ from fastapi_canon.diagnostics import (
     FeatureCheck,
     OperationInfo,
 )
-from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
+from fastapi_canon.error import ErrorRegistry
 from fastapi_canon.error.contracts import INSTALLED_REGISTRY_STATE_KEY
 from fastapi_canon.error.openapi import install_policy_contracts
-from fastapi_canon.error.types import (
-    FeatureConfigurationError as FeatureConfigurationError,
-)
+from fastapi_canon.exceptions import ErrorConfigurationError, FeatureConfigurationError
 from fastapi_canon.injected_route import InjectedRoute, _endpoint_dependencies
 from fastapi_canon.introspection import (
     _describe,
@@ -57,9 +55,6 @@ if TYPE_CHECKING:
 
 
 type FeatureLifespan = Lifespan[FastAPI]
-type ProviderFactory = Callable[[], Provider]
-type ProviderSource = Provider | ProviderFactory
-type RouterFactory = Callable[[], APIRouter]
 
 _INSTALLATION_STATE_KEY = "_fastapi_canon_installation"
 _DEFAULT_TYPE_BASE = "urn:fastapi-canon:problem"
@@ -93,7 +88,7 @@ class Feature:
 
     name: str
     routers: tuple[APIRouter, ...]
-    providers: tuple[ProviderSource, ...]
+    providers: tuple[Provider | Callable[[], Provider], ...]
     instrumentation: tuple[Instrumentation, ...]
     mcp: tuple[McpMount, ...]
     errors: ErrorRegistry | None
@@ -106,7 +101,7 @@ class Feature:
         *,
         name: str,
         routers: Sequence[APIRouter] = (),
-        providers: Sequence[ProviderSource] = (),
+        providers: Sequence[Provider | Callable[[], Provider]] = (),
         instrumentation: Sequence[Instrumentation] = (),
         mcp: Sequence[McpMount] = (),
         errors: ErrorRegistry | None = None,
@@ -228,19 +223,19 @@ class Composition:
 
     features: tuple[Feature, ...]
     errors: ErrorOptions
-    router_factory: RouterFactory | None
+    router_factory: Callable[[], APIRouter] | None
     router_policy: RouterPolicy | None
     telemetry: Telemetry | None
     request_logging: bool
     mcp: McpOptions | None
-    overrides: tuple[ProviderSource, ...]
+    overrides: tuple[Provider | Callable[[], Provider], ...]
 
     def __init__(
         self,
         *,
         features: Sequence[Feature] = (),
         errors: ErrorOptions | None = None,
-        router_factory: RouterFactory | None = None,
+        router_factory: Callable[[], APIRouter] | None = None,
         router_policy: RouterPolicy | None = None,
         telemetry: Telemetry | None = None,
         request_logging: bool = False,
@@ -296,7 +291,7 @@ class Composition:
         validate_openapi_contracts(app)
         return app
 
-    def override(self, *providers: ProviderSource) -> Composition:
+    def override(self, *providers: Provider | Callable[[], Provider]) -> Composition:
         """Return a copy whose *providers* replace existing Dishka bindings.
 
         Overrides are added after every feature provider, so their bindings win.
@@ -347,7 +342,7 @@ class _Installation:
     features: tuple[Feature, ...] = field(compare=False)
     feature_ids: tuple[int, ...]
     errors: ErrorOptions
-    router_factory: RouterFactory | None = field(compare=False)
+    router_factory: Callable[[], APIRouter] | None = field(compare=False)
     router_factory_id: int | None
     router_policy: RouterPolicy | None = field(compare=False)
     router_policy_id: int | None
@@ -1428,9 +1423,9 @@ def _flatten_routers(features: tuple[Feature, ...]) -> tuple[APIRouter, ...]:
 
 
 def _unique_provider_sources(
-    values: Sequence[ProviderSource], *, owner: str
-) -> tuple[ProviderSource, ...]:
-    result: list[ProviderSource] = []
+    values: Sequence[Provider | Callable[[], Provider]], *, owner: str
+) -> tuple[Provider | Callable[[], Provider], ...]:
+    result: list[Provider | Callable[[], Provider]] = []
     seen: set[int] = set()
     for index, value in enumerate(values):
         raw_value: object = value
@@ -1450,7 +1445,7 @@ def _unique_provider_sources(
 
 def _flatten_provider_sources(
     features: tuple[Feature, ...],
-) -> tuple[tuple[str, ProviderSource], ...]:
+) -> tuple[tuple[str, Provider | Callable[[], Provider]], ...]:
     return tuple(
         (feature.name, provider)
         for feature in features
@@ -1484,7 +1479,7 @@ def _reject_duplicate_contributions(
 
 
 def _materialize_providers(
-    sources: tuple[tuple[str, ProviderSource], ...],
+    sources: tuple[tuple[str, Provider | Callable[[], Provider]], ...],
 ) -> tuple[_MaterializedProvider, ...]:
     result: list[_MaterializedProvider] = []
     for feature_name, source in sources:
@@ -1547,7 +1542,7 @@ def _provided_keys(provider: Provider) -> tuple[DependencyKey, ...]:
 
 def _prepare_routers(
     routers: tuple[APIRouter, ...],
-    router_factory: RouterFactory | None,
+    router_factory: Callable[[], APIRouter] | None,
     router_policy: RouterPolicy | None,
     validate_paths: Callable[[str], None],
 ) -> tuple[APIRouter, ...]:
@@ -1562,7 +1557,7 @@ def _prepare_routers(
 
 def _prepare_application_router(
     routers: tuple[APIRouter, ...],
-    router_factory: RouterFactory | None,
+    router_factory: Callable[[], APIRouter] | None,
     validate_paths: Callable[[str], None],
 ) -> tuple[APIRouter, ...]:
     if router_factory is None:

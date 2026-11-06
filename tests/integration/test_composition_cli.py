@@ -12,7 +12,9 @@ def application_module(tmp_path: Path) -> Path:
     (tmp_path / "diagnostic_app.py").write_text(
         dedent("""
         from fastapi import FastAPI
-        from fastapi_canon import CanonRouter, CheckIssue, Composition, Feature
+        from fastapi_canon import Composition, Feature
+        from fastapi_canon.diagnostics import CheckIssue
+        from fastapi_canon.router import CanonRouter
 
         def warning(context):
             return [CheckIssue("projects.W001", "Optional export missing", "Declare an export.", severity="warning")]
@@ -120,7 +122,8 @@ def test_cli_check_reports_a_conflict_before_application_installation(
 ) -> None:
     (tmp_path / "invalid_app.py").write_text(
         dedent("""
-        from fastapi_canon import CanonRouter, Composition, Feature
+        from fastapi_canon import Composition, Feature
+        from fastapi_canon.router import CanonRouter
         first = CanonRouter()
         second = CanonRouter()
         first.get("/first", operation_id="duplicate")(lambda: "first")

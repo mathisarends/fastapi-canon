@@ -4,7 +4,7 @@ from collections.abc import Iterator, Mapping
 from typing import Any, Protocol
 
 from fastapi_canon.error.error import Error
-from fastapi_canon.error.types import ErrorConfigurationError
+from fastapi_canon.exceptions import ErrorConfigurationError
 
 type AnyError = Error[Any]
 

@@ -6,7 +6,8 @@ from dishka.integrations.fastapi import inject
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from fastapi_canon import APIRouter, Composition, Feature, Inject, RpcChannel
+from fastapi_canon import APIRouter, Composition, Feature, Inject
+from fastapi_canon.integrations.websockets import RpcChannel
 
 __all__ = [
     "app",

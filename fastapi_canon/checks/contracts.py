@@ -15,22 +15,17 @@ from fastapi_canon.checks.analysis import (
 )
 from fastapi_canon.checks.source import _Definition, _Source
 
-_CANON_ROUTER = "fastapi_canon.CanonRouter"
 _API_ROUTERS = frozenset(
     {"fastapi_canon.APIRouter", "fastapi_canon.api_router.APIRouter"}
 )
-_CANON_ROUTERS = frozenset(
-    {_CANON_ROUTER, "fastapi_canon.router.CanonRouter", *_API_ROUTERS}
-)
+_CANON_ROUTERS = frozenset({"fastapi_canon.router.CanonRouter", *_API_ROUTERS})
 _RPC_CHANNELS = frozenset(
     {
-        "fastapi_canon.RpcChannel",
         "fastapi_canon.integrations.websockets.RpcChannel",
         "fastapi_canon.integrations.websockets.channel.RpcChannel",
     }
 )
 _ERROR = "fastapi_canon.Error"
-_REGISTRY = "fastapi_canon.ErrorRegistry"
 _DEPENDENCIES = {
     "fastapi.Depends",
     "fastapi.params.Depends",
@@ -405,7 +400,6 @@ class _Checker:
                 if isinstance(registry, ast.Call) and self.source.resolve(
                     registry.func, registry_scope
                 ) in {
-                    _REGISTRY,
                     "fastapi_canon.error.ErrorRegistry",
                     "fastapi_canon.error.registry.ErrorRegistry",
                 }:

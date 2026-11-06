@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from threading import Lock
 from weakref import WeakKeyDictionary
 
-from fastapi_canon.error.types import FeatureConfigurationError
+from fastapi_canon.exceptions import FeatureConfigurationError
 
 _OWNERS: WeakKeyDictionary[object, bool] = WeakKeyDictionary()
 _LOCK = Lock()

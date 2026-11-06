@@ -48,13 +48,11 @@ WebRTC. Core routing does not depend back on transports. Included RPC channels
 are independent snapshots, preserving their functions, errors and resolver scopes.
 The application layer retains the corresponding transitive SSE edge when
 consuming the root facade, alongside its existing RPC and WebRTC edges.
-`public_exports.py` owns lazy root lookups for optional integrations. Its outer
-exports role may reach the integrations it exposes. Applications, showcases and
-development/generation entrypoints may consume that role; lower runtime layers
-cannot. Database implementation modules import their lower-level definitions
-directly instead of depending back on the root's optional export lookup. The root
-remains a re-export-only facade, and core imports do not load RPC, database or
-media runtimes.
+The root facade re-exports only application-building names and has no lazy
+lookups. Optional integration types, such as `RpcChannel` and `Database`, are
+imported from their `fastapi_canon.integrations.*` facade. The root remains a
+re-export-only facade, and core imports do not load RPC, database or media
+runtimes.
 
 `contracts.py` belongs to composition and coordinates the existing RPC and WebRTC
 contract renderers with native HTTP/SSE OpenAPI. This adds an explicit composition

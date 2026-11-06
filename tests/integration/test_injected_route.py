@@ -12,9 +12,9 @@ from fastapi_canon import (
     APIRouter,
     Composition,
     Feature,
-    FeatureConfigurationError,
     Inject,
 )
+from fastapi_canon.exceptions import FeatureConfigurationError
 
 
 class Store:

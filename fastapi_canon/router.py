@@ -13,7 +13,7 @@ from fastapi_canon.error import Error, ErrorConfigurationError, ErrorRegistry
 from fastapi_canon.error.contracts import SUCCESS_EXTENSION, AnyError
 from fastapi_canon.error.types import OpenAPIResponses
 from fastapi_canon.error.validation import unique_instances
-from fastapi_canon.exceptions import ConfigurationError
+from fastapi_canon.exceptions import ConfigurationError, ResponseConfigurationError
 from fastapi_canon.policy import (
     RouterPolicy,
     merge_policy_registry,
@@ -21,7 +21,7 @@ from fastapi_canon.policy import (
     validate_policy,
     validate_registry,
 )
-from fastapi_canon.response import CanonResponse, ResponseConfigurationError
+from fastapi_canon.response import CanonResponse
 
 
 class CanonRouter(APIRouter):

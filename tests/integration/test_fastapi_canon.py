@@ -16,17 +16,18 @@ from starlette.types import Message
 
 from fastapi_canon import (
     CanonResponse,
-    CanonRouter,
     Composition,
-    ConfigurationError,
     Error,
-    ErrorConfigurationError,
     ErrorOptions,
-    ErrorRegistry,
     Feature,
+)
+from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
+from fastapi_canon.exceptions import (
+    ConfigurationError,
     FeatureConfigurationError,
     ResponseConfigurationError,
 )
+from fastapi_canon.router import CanonRouter
 
 
 class Missing(Exception):

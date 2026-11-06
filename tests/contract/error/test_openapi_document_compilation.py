@@ -3,7 +3,8 @@ from typing import Any, cast
 import pytest
 from fastapi import FastAPI
 
-from fastapi_canon import CanonResponse, ErrorConfigurationError, ErrorRegistry
+from fastapi_canon import CanonResponse
+from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
 
 
 def test_custom_openapi_is_compiled_without_matching_router_objects() -> None:

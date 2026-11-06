@@ -31,7 +31,7 @@ Keep environment loading and credentials in application settings:
 
 ```python
 from pathlib import Path
-from fastapi_canon import AlembicMigrations, Database
+from fastapi_canon.integrations.database import AlembicMigrations, Database
 from app.persistence import metadata
 from app.settings import settings
 
@@ -103,7 +103,7 @@ Pass `engine_context` to attach engine-local instrumentation without an addition
 Dishka decorator:
 
 ```python
-from fastapi_canon import Database
+from fastapi_canon.integrations.database import Database
 from fastapi_canon.integrations.opentelemetry.sqlalchemy import (
     SqlAlchemyInstrumentation,
 )
@@ -383,7 +383,7 @@ those cases locally; CI also runs them. See the
 Repositories can inject `TransactionLocks` alongside their session:
 
 ```python
-from fastapi_canon import TransactionLocks
+from fastapi_canon.integrations.database import TransactionLocks
 
 
 async def reserve(self, allocation_key: int) -> None:

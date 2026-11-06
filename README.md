@@ -188,7 +188,7 @@ Add a WebSocket method using the same public error definition, and mount its
 channel on the same router:
 
 ```python
-from fastapi_canon import RpcChannel
+from fastapi_canon.integrations.websockets import RpcChannel
 
 projects = RpcChannel("projects")
 

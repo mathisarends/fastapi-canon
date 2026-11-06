@@ -10,10 +10,10 @@ from fastapi_canon import (
     Composition,
     Error,
     ErrorOptions,
-    ErrorRegistry,
     Feature,
     export_contracts,
 )
+from fastapi_canon.error import ErrorRegistry
 from fastapi_canon.integrations.sse import CanonStreamRouter
 from fastapi_canon.integrations.webrtc import Session, WebRtcRouter
 from fastapi_canon.integrations.websockets import (

@@ -168,7 +168,7 @@ for `FromDishka` and dependency injection details.
 For a separate POST operation, add this before constructing the feature/app:
 
 ```python
-from fastapi_canon import HTTPMethod
+from http import HTTPMethod
 
 
 @router.sse(

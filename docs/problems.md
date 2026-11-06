@@ -44,7 +44,8 @@ from collections.abc import AsyncIterator
 from fastapi import Depends
 from pydantic import BaseModel
 
-from fastapi_canon import APIRouter, RpcChannel
+from fastapi_canon import APIRouter
+from fastapi_canon.integrations.websockets import RpcChannel
 
 router = APIRouter()
 projects = RpcChannel("projects")

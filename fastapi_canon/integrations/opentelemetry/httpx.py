@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from importlib import import_module
 from typing import TYPE_CHECKING
 
-from fastapi_canon.error.types import FeatureConfigurationError
+from fastapi_canon.exceptions import FeatureConfigurationError
 from fastapi_canon.integrations.opentelemetry.declarations import Telemetry
 from fastapi_canon.integrations.opentelemetry.resources import _claim
 

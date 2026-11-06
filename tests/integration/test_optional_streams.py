@@ -21,10 +21,11 @@ def test_core_import_runtime_and_missing_extra_diagnostic() -> None:
         # FastAPI itself may import native SSE and telemetry support at startup.
         sys.modules.pop("fastapi.sse", None)
         sys.meta_path.insert(0, NoOptionalTools())
-        from fastapi_canon import HTTPMethod, CanonRouter, Composition, Feature
+        from fastapi_canon import APIRouter, Composition, Feature
+        from http import HTTPMethod
         import fastapi_canon.integrations
 
-        router = CanonRouter()
+        router = APIRouter()
         @router.api_route("/health", methods=[HTTPMethod.GET])
         async def health() -> dict[str, str]:
             return {"status": "ok"}

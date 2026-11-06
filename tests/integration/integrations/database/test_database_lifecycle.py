@@ -13,7 +13,8 @@ from fastapi import FastAPI
 from sqlalchemy import Column, MetaData, String, Table, event, text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from fastapi_canon import AlembicMigrations, Composition, Database, Feature
+from fastapi_canon import Composition, Feature
+from fastapi_canon.integrations.database import AlembicMigrations, Database
 
 
 @pytest.mark.parametrize(

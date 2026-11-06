@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from starlette.types import Scope as ASGIScope
 
-from fastapi_canon.error.types import FeatureConfigurationError
+from fastapi_canon.exceptions import FeatureConfigurationError
 
 if TYPE_CHECKING:
     from dishka import Provider

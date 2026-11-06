@@ -8,7 +8,8 @@ messages and operations, while registered routes determine their effective paths
 ## Python API
 
 ```python
-from fastapi_canon import Contracts, export_contracts
+from fastapi_canon import export_contracts
+from fastapi_canon.contracts import Contracts
 
 app = create_app()
 contracts: Contracts = export_contracts(app)

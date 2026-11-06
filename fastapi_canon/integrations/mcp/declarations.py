@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from inspect import iscoroutinefunction
 from typing import TYPE_CHECKING
 
-from fastapi_canon.error.types import FeatureConfigurationError
+from fastapi_canon.exceptions import FeatureConfigurationError
 
 if TYPE_CHECKING:
     from dishka import AsyncContainer

@@ -17,10 +17,10 @@ from examples.canonical_errors.app import create_app, project_missing
 from fastapi_canon import (
     Composition,
     ErrorOptions,
-    ErrorRegistry,
     Feature,
     export_contracts,
 )
+from fastapi_canon.error import ErrorRegistry
 from fastapi_canon.integrations.sse.codegen.ir import build_ir as stream_ir
 from fastapi_canon.integrations.sse.codegen.openapi import export_schema
 from fastapi_canon.integrations.sse.codegen.python import generate_python

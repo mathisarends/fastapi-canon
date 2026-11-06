@@ -7,7 +7,8 @@ authentication in the hosting framework before calling fastapi_canon.integration
 ```python
 from collections.abc import AsyncIterator
 
-from fastapi_canon import APIRouter, Inject, RpcChannel
+from fastapi_canon import APIRouter, Inject
+from fastapi_canon.integrations.websockets import RpcChannel
 from fastapi_canon.integrations.websockets import RpcConnection, RpcModel
 
 tasks = RpcChannel("tasks")

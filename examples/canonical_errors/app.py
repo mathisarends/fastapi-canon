@@ -9,8 +9,8 @@ from fastapi_canon import (
     Error,
     ErrorOptions,
     Feature,
-    RpcChannel,
 )
+from fastapi_canon.integrations.websockets import RpcChannel
 
 
 class ProjectMissing(Exception):

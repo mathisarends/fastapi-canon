@@ -1,6 +1,6 @@
 import pytest
 
-from fastapi_canon import FeatureConfigurationError
+from fastapi_canon.exceptions import FeatureConfigurationError
 from fastapi_canon.integrations.mcp import McpOptions
 
 

@@ -4,12 +4,11 @@ from fastapi import APIRouter, FastAPI
 from fastapi_canon import (
     Composition,
     Error,
-    ErrorConfigurationError,
     ErrorOptions,
-    ErrorRegistry,
     Feature,
-    validate_openapi_contracts,
 )
+from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
+from fastapi_canon.openapi import validate_openapi_contracts
 
 
 class DeclaredError(Exception):
