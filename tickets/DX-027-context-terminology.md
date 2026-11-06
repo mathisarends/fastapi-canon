@@ -63,7 +63,7 @@ injected services and server values and tells the reader which to use.
 
 ## Completion
 
-- Implementation or decision PR: PR_LINK
+- Implementation or decision PR: [#99](https://github.com/mathisarends/fastapi-canon/pull/99)
 - Final commit and verification: documentation only. Signatures verified in `fastapi_canon/integrations/websockets/adapters/fastapi.py`
 and `channel.py`; the swapped-argument behavior was reproduced with a throwaway
 script. The existing context/hook scenarios are unchanged and were not

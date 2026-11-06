@@ -67,7 +67,7 @@ with its repair.
 
 ## Completion
 
-- Implementation or decision PR: PR_LINK
+- Implementation or decision PR: [#99](https://github.com/mathisarends/fastapi-canon/pull/99)
 - Final commit and verification: documentation only. `tests/integration/integrations/mcp/test_runtime.py`
 (33 passed) includes `test_mounts_require_explicit_composition_options`, which
 pins the current behavior, and `test_native_fastmcp_tools_need_no_providers` for

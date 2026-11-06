@@ -61,7 +61,7 @@ paths and operation IDs.
 
 ## Completion
 
-- Implementation or decision PR: PR_LINK
+- Implementation or decision PR: [#99](https://github.com/mathisarends/fastapi-canon/pull/99)
 - Final commit and verification: documentation only. A throwaway script built the same feature with and without
 the factory and printed `inspect()` operations and `app.openapi()` paths (results
 in the table above). No runtime, signature or default changed.

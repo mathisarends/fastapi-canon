@@ -70,7 +70,7 @@ where to declare namespaces and tags.
 
 ## Completion
 
-- Implementation or decision PR: PR_LINK
+- Implementation or decision PR: [#99](https://github.com/mathisarends/fastapi-canon/pull/99)
 - Final commit and verification: documentation only. The decision relies on the implemented rules in
 `docs/routers.md` and the existing duplicate-ID preflight; no exported contract,
 public identifier or default changed, so no drift or generator checks were needed.

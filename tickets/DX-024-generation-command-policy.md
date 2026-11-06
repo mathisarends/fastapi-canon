@@ -63,7 +63,7 @@ for manifests and outputs, and a next-minor `### Breaking changes` entry.
 
 ## Completion
 
-- Implementation or decision PR: PR_LINK
+- Implementation or decision PR: [#99](https://github.com/mathisarends/fastapi-canon/pull/99)
 - Final commit and verification: documentation only. Every command's `--help` was run and compared with the
 matrix. `fastapi-canon contracts export --app app:app` wrote `openapi.json` and
 `openrpc.json` for `examples/canonical_errors`; `fastapi-canon generate --check`

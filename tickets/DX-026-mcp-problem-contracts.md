@@ -71,7 +71,7 @@ with real-harness tests.
 
 ## Completion
 
-- Implementation or decision PR: PR_LINK
+- Implementation or decision PR: [#99](https://github.com/mathisarends/fastapi-canon/pull/99)
 - Final commit and verification: documentation only. `tests/integration/integrations/mcp/test_runtime.py`
 (33 passed) covers failing tools as native `isError` results with rollback. The
 table above came from a throwaway script that mounted one tool and one HTTP route
