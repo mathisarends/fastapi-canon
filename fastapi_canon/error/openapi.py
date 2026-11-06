@@ -20,12 +20,12 @@ from fastapi_canon.error.contracts import (
 )
 from fastapi_canon.error.problem import Problem
 from fastapi_canon.error.types import (
-    ErrorConfigurationError,
     JsonValue,
     OpenAPIResponse,
     OpenAPIResponses,
     http_problem_title,
 )
+from fastapi_canon.exceptions import ErrorConfigurationError
 
 if TYPE_CHECKING:
     from fastapi_canon.response import CanonResponse

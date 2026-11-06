@@ -698,7 +698,8 @@ Routers that Canon does not create, such as generated or third-party
 
 ```python
 from fastapi import APIRouter as FastAPIRouter
-from fastapi_canon import CanonResponse, install_openapi_contracts
+from fastapi_canon import CanonResponse
+from fastapi_canon.openapi import install_openapi_contracts
 
 generated_router = FastAPIRouter()
 

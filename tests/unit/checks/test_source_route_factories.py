@@ -9,7 +9,10 @@ import pytest
 from fastapi_canon.cli import main
 
 PRELUDE = """
-from fastapi_canon import APIRouter, CanonRouter, Error, ErrorRegistry, RpcChannel
+from fastapi_canon import APIRouter, Error
+from fastapi_canon.error import ErrorRegistry
+from fastapi_canon.integrations.websockets import RpcChannel
+from fastapi_canon.router import CanonRouter
 raise RuntimeError('Source must never be imported')
 class Missing(Exception): pass
 def fail(): raise Missing()

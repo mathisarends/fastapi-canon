@@ -223,7 +223,7 @@ For Canon-owned database engines, pass a reusable declaration to the engine
 context hook:
 
 ```python
-from fastapi_canon import Database
+from fastapi_canon.integrations.database import Database
 from fastapi_canon.integrations.opentelemetry.sqlalchemy import (
     SqlAlchemyInstrumentation,
 )

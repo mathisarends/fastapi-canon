@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from http import HTTPMethod
 from typing import cast
 
 import pytest
@@ -10,16 +11,13 @@ from fastapi.utils import generate_unique_id
 
 from fastapi_canon import (
     CanonResponse,
-    CanonRouter,
     Composition,
-    ConfigurationError,
     Error,
-    ErrorConfigurationError,
-    ErrorRegistry,
     Feature,
-    HTTPMethod,
-    ResponseConfigurationError,
 )
+from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
+from fastapi_canon.exceptions import ConfigurationError, ResponseConfigurationError
+from fastapi_canon.router import CanonRouter
 
 
 class AuthenticationRequired(Exception):

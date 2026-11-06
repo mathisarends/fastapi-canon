@@ -11,15 +11,14 @@ from fastapi.testclient import TestClient
 
 from fastapi_canon import (
     CanonResponse,
-    CanonRouter,
     Composition,
     Error,
-    ErrorConfigurationError,
-    ErrorRegistry,
     Feature,
-    FeatureConfigurationError,
     RouterPolicy,
 )
+from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
+from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.router import CanonRouter
 
 
 class AuthenticationRequired(Exception):

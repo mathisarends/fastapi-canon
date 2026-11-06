@@ -9,12 +9,12 @@ from typing import Self, cast
 from fastapi_canon.error.contracts import SUCCESS_EXTENSION
 from fastapi_canon.error.error import _freeze_json_mapping, _validate_header_name
 from fastapi_canon.error.types import (
-    ErrorConfigurationError,
     JsonValue,
     OpenAPIHeader,
     OpenAPIResponse,
     OpenAPIResponses,
 )
+from fastapi_canon.exceptions import ErrorConfigurationError
 
 type ResponseHeaders = Sequence[str] | Mapping[str, OpenAPIHeader]
 
@@ -22,10 +22,6 @@ _MEDIA_TYPE_PATTERN = re.compile(
     r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+/[!#$%&'*+.^_`|~0-9A-Za-z-]+$"
 )
 _NO_CONTENT_STATUSES = frozenset({204, 304})
-
-
-class ResponseConfigurationError(ErrorConfigurationError):
-    """Raised when a Canon response conflicts with its FastAPI route."""
 
 
 @dataclass(frozen=True, slots=True, init=False)

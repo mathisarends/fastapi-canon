@@ -5,7 +5,8 @@ import pytest
 from dishka import Provider, Scope, make_async_container, provide
 from fastapi import FastAPI
 
-from fastapi_canon import Composition, Feature, FeatureConfigurationError
+from fastapi_canon import Composition, Feature
+from fastapi_canon.exceptions import FeatureConfigurationError
 from fastapi_canon.integrations.opentelemetry import Telemetry
 from tests.fixtures.telemetry import SpanCapture
 

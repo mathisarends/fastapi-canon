@@ -15,17 +15,17 @@ from fastapi_canon import (
     APIRouter as ApplicationRouter,
 )
 from fastapi_canon import (
-    CanonRouter,
     Composition,
     Error,
     ErrorOptions,
-    ErrorRegistry,
     Feature,
-    FeatureConfigurationError,
     Inject,
     RouterPolicy,
 )
+from fastapi_canon.error import ErrorRegistry
+from fastapi_canon.exceptions import FeatureConfigurationError
 from fastapi_canon.integrations.sse import CanonStreamRouter
+from fastapi_canon.router import CanonRouter
 
 
 class NotAuthenticated(Exception):

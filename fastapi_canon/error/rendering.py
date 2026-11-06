@@ -6,7 +6,8 @@ from pydantic import BaseModel, ValidationError
 
 from fastapi_canon.error.error import Error, freeze_headers
 from fastapi_canon.error.problem import Problem
-from fastapi_canon.error.types import ErrorConfigurationError, JsonValue
+from fastapi_canon.error.types import JsonValue
+from fastapi_canon.exceptions import ErrorConfigurationError
 
 type AnyError = Error[Any]
 

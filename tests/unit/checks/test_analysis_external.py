@@ -9,7 +9,8 @@ import pytest
 from fastapi_canon.cli import main
 
 PRELUDE = """
-from fastapi_canon import APIRouter, Error, ErrorRegistry
+from fastapi_canon import APIRouter, Error
+from fastapi_canon.error import ErrorRegistry
 
 class Missing(Exception):
     pass

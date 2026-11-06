@@ -15,7 +15,8 @@ from logging.handlers import BufferingHandler
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, Depends, FastAPI, Header, WebSocket
+from fastapi import APIRouter as FastAPIRouter
+from fastapi import Depends, FastAPI, Header, WebSocket
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, ConfigDict
 from starlette.websockets import WebSocketDisconnect
@@ -64,7 +65,7 @@ def _main() -> None:
         _unified_codegen()
     routers = []
     if "fastapi-canon" in selected:
-        from fastapi_canon import CanonRouter
+        from fastapi_canon import APIRouter
 
         _cli("generate")
         if not (
@@ -75,7 +76,7 @@ def _main() -> None:
         _cli("db")
         _skill_check()
         _shared_problem_check()
-        http = CanonRouter()
+        http = APIRouter()
 
         @http.get("/health")
         async def health() -> dict[str, str]:
@@ -290,7 +291,7 @@ def _mcp_check(selected: set[str]) -> None:
 def _database_check(selected: set[str]) -> None:
     if "--database" not in selected:
         return
-    from fastapi_canon import Database
+    from fastapi_canon.integrations.database import Database
 
     options = {}
     if "--sqlmodel" in selected:
@@ -304,7 +305,8 @@ def _database_check(selected: set[str]) -> None:
 
     async def exercise() -> None:
         from dishka import Scope
-        from fastapi_canon import AlembicMigrations, Composition
+        from fastapi_canon import Composition
+        from fastapi_canon.integrations.database import AlembicMigrations
         from sqlalchemy import Column, MetaData, String, Table, insert, select
         from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -408,7 +410,7 @@ def _observation_check(*, enabled: bool) -> None:
     """Exercise installed decorators with no optional SDK or source overrides."""
     from dishka import FromDishka, Provider, Scope, provide
     from dishka.integrations.fastapi import inject
-    from fastapi_canon import CanonRouter, Composition, Feature
+    from fastapi_canon import APIRouter, Composition, Feature
     from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
 
     global_provider = None
@@ -425,7 +427,7 @@ def _observation_check(*, enabled: bool) -> None:
     class Dependencies(Provider):
         port = provide(Port, scope=Scope.REQUEST)
 
-    router = CanonRouter()
+    router = APIRouter()
 
     @router.get("/observed")
     @inject
@@ -457,11 +459,12 @@ def _canon_check() -> None:
         root = Path(temporary)
         source = root / "api.py"
         source.write_text(
-            "from fastapi_canon import CanonRouter, Error, ErrorRegistry\n"
+            "from fastapi_canon import APIRouter, Error\n"
+            "from fastapi_canon.error import ErrorRegistry\n"
             "class Missing(Exception): pass\n"
             "missing = Error(Missing, status=404, code='missing', title='Missing')\n"
             "registry = ErrorRegistry(errors=[missing])\n"
-            "router = CanonRouter(error_registry=registry)\n"
+            "router = APIRouter(error_registry=registry)\n"
             "@router.get('/')\n"
             "def endpoint(): raise Missing()\n",
             encoding="utf-8",
@@ -718,7 +721,8 @@ def _webrtc_router(engine, *, canon=False):
 
     declarations = {}
     if canon:
-        from fastapi_canon import Error, ErrorRegistry
+        from fastapi_canon import Error
+        from fastapi_canon.error import ErrorRegistry
         from fastapi_canon.integrations.webrtc import CanonWebRtcRouter
 
         denied = Error(
@@ -884,13 +888,13 @@ def _rpc_codegen(rpc) -> None:
 def _router_policies() -> None:
     """Check the public policy API against installed wheels, including minima."""
     from fastapi_canon import (
-        CanonRouter,
+        APIRouter,
         Composition,
         Error,
-        ErrorRegistry,
         Feature,
         RouterPolicy,
     )
+    from fastapi_canon.error import ErrorRegistry
 
     class AuthenticationRequired(Exception):
         pass
@@ -922,7 +926,7 @@ def _router_policies() -> None:
         raises=[authentication_required],
     )
     for direct in (False, True):
-        router = CanonRouter(
+        router = APIRouter(
             policy=policy if direct else None, error_registry=item_errors
         )
         router.get("/policy", raises=[item_denied])(lambda: "ok")
@@ -979,7 +983,7 @@ async def _scoped_check() -> None:
 
 
 def _shared_problem_check() -> None:
-    from fastapi_canon import CanonRouter, Composition, Error, ErrorOptions, Feature
+    from fastapi_canon import APIRouter, Composition, Error, ErrorOptions, Feature
 
     class Missing(Exception):
         pass
@@ -991,13 +995,13 @@ def _shared_problem_check() -> None:
         title="Item missing",
         extensions={"replacement": None},
     )
-    router = CanonRouter()
+    router = APIRouter()
 
     @router.get("/missing", raises=[missing])
     async def fail() -> None:
         raise Missing("private")
 
-    parent = APIRouter()
+    parent = FastAPIRouter()
     parent.include_router(router)
     app = Composition(
         features=(Feature(name="missing", routers=[parent]),),

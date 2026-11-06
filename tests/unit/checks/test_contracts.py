@@ -11,7 +11,9 @@ from fastapi_canon.cli import main
 PRELUDE = """
 from collections.abc import AsyncIterator
 from fastapi import Depends
-from fastapi_canon import APIRouter, Error, ErrorRegistry, Inject, RpcChannel
+from fastapi_canon import APIRouter, Error, Inject
+from fastapi_canon.error import ErrorRegistry
+from fastapi_canon.integrations.websockets import RpcChannel
 
 class Missing(Exception):
     pass

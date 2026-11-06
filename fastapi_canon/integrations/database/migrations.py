@@ -44,7 +44,7 @@ class AlembicMigrations:
             template.read_text(encoding="utf-8"), encoding="utf-8"
         )
         (self.directory / "env.py").write_text(
-            "from fastapi_canon import run_alembic_environment\n\n"
+            "from fastapi_canon.integrations.database import run_alembic_environment\n\n"
             "run_alembic_environment()\n",
             encoding="utf-8",
         )

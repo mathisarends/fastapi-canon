@@ -262,7 +262,8 @@ the installation snapshot.
 ## Add a feature check
 
 ```python
-from fastapi_canon import CheckContext, CheckIssue, Feature
+from fastapi_canon import Feature
+from fastapi_canon.diagnostics import CheckContext, CheckIssue
 
 
 def check_export(context: CheckContext) -> list[CheckIssue]:

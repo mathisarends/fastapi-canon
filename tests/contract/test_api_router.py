@@ -2,8 +2,9 @@ from collections.abc import AsyncIterator
 
 from fastapi import FastAPI
 
-from fastapi_canon import APIRouter, Composition, Feature, RpcChannel, export_contracts
+from fastapi_canon import APIRouter, Composition, Feature, export_contracts
 from fastapi_canon.integrations.webrtc import Session
+from fastapi_canon.integrations.websockets import RpcChannel
 
 
 def test_one_router_exports_http_sse_rpc_and_webrtc_with_effective_paths() -> None:

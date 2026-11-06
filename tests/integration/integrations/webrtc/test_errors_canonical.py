@@ -8,12 +8,11 @@ from fastapi.testclient import TestClient
 from fastapi_canon import (
     Composition,
     Error,
-    ErrorConfigurationError,
     ErrorOptions,
-    ErrorRegistry,
     Feature,
     RouterPolicy,
 )
+from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
 from fastapi_canon.integrations.webrtc import CanonWebRtcRouter, Session
 from fastapi_canon.integrations.webrtc.codegen.typescript import generate_typescript
 from fastapi_canon.integrations.webrtc.contract import build_contract

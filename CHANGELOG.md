@@ -437,6 +437,37 @@ The next release containing the breaking changes below must be 0.16.0.
   Later Canon releases widen these ranges after the upstream canary passes. See
   [upstream internals](docs/compatibility.md#upstream-internals).
 
+- The `fastapi_canon` root exports only the names needed to build an
+  application: `APIRouter`, `CanonResponse`, `Composition`, `Error`,
+  `ErrorOptions`, `ExceptionHandlerSpec`, `Feature`, `Inject`,
+  `ResponseHeaders`, `RouterPolicy`, `Scoped`, `ServiceScope`,
+  `export_contracts` and `__version__`. The root no longer resolves optional
+  integration names lazily. Before adopting 0.16.0, update imports of the
+  removed names:
+
+  | Removed root import | Replacement |
+  | --- | --- |
+  | `RpcChannel` | `fastapi_canon.integrations.websockets.RpcChannel` |
+  | `Database`, `AlembicMigrations`, `TransactionLocks`, `run_alembic_environment` | `fastapi_canon.integrations.database` |
+  | `ErrorRegistry`, `Problem`, `ErrorConfigurationError` | `fastapi_canon.error` |
+  | `ConfigurationError`, `ErrorConfigurationError`, `FeatureConfigurationError`, `ResponseConfigurationError` | `fastapi_canon.exceptions` |
+  | `CheckContext`, `CheckIssue`, `CheckReport`, `CheckResult`, `FeatureCheck`, `CompositionInfo`, `DependencyInfo`, `ErrorInfo`, `FeatureInfo`, `OperationInfo` | `fastapi_canon.diagnostics` |
+  | `install_openapi_contracts`, `validate_openapi_contracts` | `fastapi_canon.openapi` |
+  | `Contracts` | `fastapi_canon.contracts` |
+  | `HTTPMethod` | `http.HTTPMethod` from the standard library |
+  | `CanonRouter` | `fastapi_canon.APIRouter`, which accepts the same router options |
+  | `ProviderFactory`, `ProviderSource`, `RouterFactory` | No replacement; annotate with `Provider \| Callable[[], Provider]` or `Callable[[], fastapi.APIRouter]` |
+
+  All configuration errors are now defined in `fastapi_canon.exceptions`; class
+  identity and the `ValueError` base are unchanged, so existing `except` clauses
+  keep working once their imports are updated. Projects initialized with
+  `AlembicMigrations` have a generated `migrations/env.py` that imports
+  `run_alembic_environment` from the root; change that line to
+  `from fastapi_canon.integrations.database import run_alembic_environment`.
+  Modules other than the root, `error`, `diagnostics`, `exceptions`, `openapi`,
+  `contracts` and the documented `integrations` facades are internal; see
+  [public namespaces](docs/canon.md#public-namespaces).
+
 ### Fixed
 
 - `fastapi-canon check errors` analyzes operations declared on the shared
@@ -488,7 +519,8 @@ The next release containing the breaking changes below must be 0.16.0.
   itself does not change transport injection; the separate WebSocket/MCP
   `Inject[T]` additions and admission changes are described above.
 
-- Use `from fastapi_canon import APIRouter, RpcChannel` for a feature's shared
+- Use `from fastapi_canon import APIRouter` and
+  `from fastapi_canon.integrations.websockets import RpcChannel` for a feature's shared
   HTTP, SSE, RPC and WebRTC declarations. Mount reusable channel groups with
   `router.include_channel(channel, path=...)`; the mount captures a snapshot, so
   later changes to the source group do not alter existing endpoints. Grouped

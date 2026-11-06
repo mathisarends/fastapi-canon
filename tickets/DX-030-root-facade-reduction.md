@@ -1,6 +1,6 @@
 # DX-030: Reduce the root facade to application-building names
 
-- Status: Open
+- Status: In progress
 - Priority: P2
 - Kind: Feature (breaking public API)
 - Baseline: `df05e84` (2026-11-06)
@@ -40,26 +40,26 @@ Out of scope: WebSocket, SSE and WebRTC facades (DX-031, DX-032).
 
 ## Acceptance criteria
 
-- [ ] `fastapi_canon.__all__` contains exactly the kept names, and every removed
+- [x] `fastapi_canon.__all__` contains exactly the kept names, and every removed
       name raises `AttributeError`/`ImportError` from the root. No aliases.
-- [ ] Removed names import from their target: `fastapi_canon.diagnostics`,
+- [x] Removed names import from their target: `fastapi_canon.diagnostics`,
       `.error`, `.exceptions`, `.openapi`, `.contracts`,
       `.integrations.database`, `.integrations.websockets`, or `http.HTTPMethod`.
-- [ ] `FeatureConfigurationError` and `ResponseConfigurationError` are defined in
+- [x] `FeatureConfigurationError` and `ResponseConfigurationError` are defined in
       `exceptions.py` (moved, not re-exported from `feature.py`/`response.py`), so
       `exceptions` keeps no dependency on composition or response modules.
-- [ ] `CanonRouter`, `ProviderFactory`, `ProviderSource` and `RouterFactory` are no
+- [x] `CanonRouter`, `ProviderFactory`, `ProviderSource` and `RouterFactory` are no
       longer exported anywhere public; internal users import them by module path.
       Public signatures of `Feature`, `Composition` and `Composition.override()`
       spell out `Provider | Callable[[], Provider]` and `Callable[[], APIRouter]`
       instead of the aliases. No public signature references `CanonRouter`.
-- [ ] The root no longer needs `public_exports.__getattr__`; remove the module if
+- [x] The root no longer needs `public_exports.__getattr__`; remove the module if
       nothing else uses it. `import fastapi_canon` and root CLI help still load no
       optional runtime (database, websockets, codegen, telemetry, media engines).
-- [ ] `docs/canon.md` lists the public submodules from DX-023 and states that
+- [x] `docs/canon.md` lists the public submodules from DX-023 and states that
       other modules are internal. README, guides, examples, skill and smoke
       script use the new paths; `rg "from fastapi_canon import"` shows only kept names.
-- [ ] `CHANGELOG.md` `### Breaking changes` contains the root old/new import table.
+- [x] `CHANGELOG.md` `### Breaking changes` contains the root old/new import table.
       Release impact: next minor (see DX-023 release note).
 
 ## Verification
@@ -71,6 +71,6 @@ Out of scope: WebSocket, SSE and WebRTC facades (DX-031, DX-032).
 
 ## Completion
 
-- Implementation or decision PR:
-- Final commit and verification:
-- Remaining follow-ups:
+- Implementation or decision PR: [#105](https://github.com/mathisarends/fastapi-canon/pull/105)
+- Final commit and verification: `db192b7`; ruff, format, mypy, Smelt (`--fail-on warning`), pre-commit and pytest (2742 passed, 26 skipped) pass. Consumer imports from the root use only kept names.
+- Remaining follow-ups: [DX-031](DX-031-websocket-facade-reduction.md), [DX-032](DX-032-transport-router-adapters.md).

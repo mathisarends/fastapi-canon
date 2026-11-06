@@ -21,7 +21,7 @@ from fastapi_canon.error.contracts import (
     ErrorCatalog,
     contracts_from_responses,
 )
-from fastapi_canon.error.types import FeatureConfigurationError
+from fastapi_canon.exceptions import FeatureConfigurationError
 from fastapi_canon.policy import RouterPolicy
 from fastapi_canon.router import CanonRouter
 

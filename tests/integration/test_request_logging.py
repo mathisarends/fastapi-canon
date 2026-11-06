@@ -14,8 +14,10 @@ from starlette.background import BackgroundTask
 from starlette.responses import Response
 from starlette.types import Message, Scope
 
-from fastapi_canon import CanonRouter, Composition, Feature, FeatureConfigurationError
+from fastapi_canon import Composition, Feature
 from fastapi_canon.error import Error, ErrorRegistry
+from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.router import CanonRouter
 
 
 class TaskNotFound(Exception):

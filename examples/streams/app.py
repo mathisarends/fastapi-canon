@@ -1,6 +1,7 @@
 """Run with: uv run --with uvicorn uvicorn examples.streams.app:app."""
 
 from collections.abc import AsyncIterator
+from http import HTTPMethod
 from typing import Annotated, Literal
 
 from dishka import AsyncContainer, FromDishka, Provider, Scope, provide
@@ -12,11 +13,10 @@ from fastapi_canon import (
     APIRouter,
     Composition,
     Error,
-    ErrorRegistry,
     Feature,
-    HTTPMethod,
     ServiceScope,
 )
+from fastapi_canon.error import ErrorRegistry
 
 
 class AuthenticationRequired(Exception):

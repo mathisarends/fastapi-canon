@@ -12,7 +12,8 @@ once through `Feature`:
 ```python
 from collections.abc import AsyncIterator
 
-from fastapi_canon import APIRouter, Inject, RpcChannel
+from fastapi_canon import APIRouter, Inject
+from fastapi_canon.integrations.websockets import RpcChannel
 
 from backend.features.projects.application import ProjectService
 

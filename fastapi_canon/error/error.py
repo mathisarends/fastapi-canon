@@ -11,13 +11,13 @@ from pydantic import BaseModel, ValidationError
 from fastapi_canon.error.types import (
     CODE_PATTERN,
     Detail,
-    ErrorConfigurationError,
     Extensions,
     Headers,
     JsonValue,
     OpenAPIHeader,
     is_absolute_uri,
 )
+from fastapi_canon.exceptions import ErrorConfigurationError
 
 _RESERVED_MEMBERS = frozenset({"type", "title", "status", "detail", "instance", "code"})
 _HEADER_NAME_PATTERN = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")

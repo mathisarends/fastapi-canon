@@ -6,12 +6,8 @@ from fastapi import APIRouter as FastAPIRouter
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
-from fastapi_canon import (
-    APIRouter,
-    Composition,
-    Feature,
-    FeatureConfigurationError,
-)
+from fastapi_canon import APIRouter, Composition, Feature
+from fastapi_canon.exceptions import FeatureConfigurationError
 from fastapi_canon.integrations.sse import CanonStreamRouter
 from tests.fixtures.injected_endpoints import EndpointStore, reader
 

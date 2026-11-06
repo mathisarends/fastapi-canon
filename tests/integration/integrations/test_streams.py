@@ -19,6 +19,8 @@ from starlette.types import Scope as ASGIScope
 
 pytest.importorskip("fastapi_canon.integrations.sse")
 
+from http import HTTPMethod
+
 from examples.streams.app import (
     RunCompleted,
     RunEvent,
@@ -34,16 +36,14 @@ from examples.streams.app import (
 )
 from fastapi_canon import (
     APIRouter,
-    CanonRouter,
     Composition,
     Error,
-    ErrorConfigurationError,
-    ErrorRegistry,
     Feature,
-    HTTPMethod,
     RouterPolicy,
 )
+from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
 from fastapi_canon.integrations.sse import CanonStreamRouter, StreamRouter
+from fastapi_canon.router import CanonRouter
 
 AUTH = {"Authorization": "Bearer demo"}
 
