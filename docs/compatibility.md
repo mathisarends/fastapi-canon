@@ -1,5 +1,32 @@
 # Compatibility
 
+## Upstream internals
+
+Canon relies on some upstream behavior that is not documented as public API.
+The table records each coupling and how it is guarded. Remove a row when the
+code moves to a documented API.
+
+| Upstream | Internal behavior | Used by | Guard |
+| --- | --- | --- | --- |
+| FastAPI | `app._telemetry` configuration dictionary | `otel` native bridge | Version and field check before installation; telemetry bridge check |
+| FastAPI | `APIRoute.dependant` / `Dependant` fields and `ModelField` attributes | Composition inspection, WebRTC contracts | Introspection and contract tests |
+| FastAPI | `iter_route_contexts` and `RouteContext` (0.140+) | Effective route paths | Fallback below 0.140; route tests |
+| FastAPI | Mutating `router.routes` before `include_router` | Request-scope installation | Scope tests for direct and included routes |
+| FastAPI | `openapi_extra` passed by identity to included routes | Declaration origins and endpoint lookup | Introspection tests through nested includes |
+| Dishka | Container registry, provider factories and `__dishka_orig_func__` | Composition checks, injected routes | Range `<1.11` |
+| Dishka | `dishka.integrations.base` injection helpers | HTTP, WebSocket and WebRTC injection | Range `<1.11` |
+| aiortc | Transceiver `_codecs` / `_headerExtensions` | Re-offers keep negotiated codecs | Range `<1.16` |
+| aioice | `_connection._nominated` / `_protocols` | Selected-pair stats, Windows close workaround | Best effort; failures are suppressed |
+
+FastAPI releases minor versions too often to cap the core range per minor.
+Instead, the weekly `Upstream canary` workflow upgrades `uv.lock` in CI only and
+runs `scripts/check.py all`, the telemetry bridge check and the distribution
+smoke against the newest versions the declared ranges allow. On 2026-11-05 the
+full suite passed with FastAPI 0.162.0, Starlette 1.10.0 and aioice 0.13.0.
+Dishka and aiortc ranges are capped at the verified minor and widened in a
+release after the canary passes. Run the canary manually with
+`workflow_dispatch` before widening a range.
+
 ## MCP integration
 
 Canon 0.15.0 adds the optional `mcp` extra with FastMCP >=4.1.3,<5 and

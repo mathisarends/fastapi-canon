@@ -9,8 +9,7 @@ from contextlib import aclosing
 from inspect import Parameter
 from typing import Annotated, Any, cast, get_type_hints
 
-from dishka import AsyncContainer, DependencyKey
-from dishka.entities.component import DEFAULT_COMPONENT
+from dishka import DEFAULT_COMPONENT, AsyncContainer, DependencyKey
 from dishka.integrations.base import default_parse_dependency, wrap_injection
 from fastapi import Depends, Request
 from fastapi.routing import APIRoute

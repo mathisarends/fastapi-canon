@@ -192,6 +192,9 @@ The next release containing the breaking changes below must be 0.16.0.
   builds and late collision checks reconstruct the regex from the effective
   declared path instead of failing with an AttributeError.
 
+- Telemetry configuration errors name the current core minimum, FastAPI 0.121,
+  instead of 0.115.
+
 ### Breaking changes
 
 - Supported context-manager paths can now expose CAN001/CAN002 gaps previously
@@ -395,6 +398,13 @@ The next release containing the breaking changes below must be 0.16.0.
   relevant normalizer. Normalization flags must be booleans, and `ErrorOptions`
   now validates registry names and absolute, query-free, fragment-free type bases
   at construction instead of accepting invalid values until installation.
+- The core now requires `dishka>=1.10,<1.11`, and the `aiortc` extra requires
+  `aiortc>=1.14,<1.16`. Composition reads Dishka's container registry and
+  injection helpers, and the aiortc engine preserves negotiated codecs through
+  transceiver internals; neither upstream guarantees them across minor releases.
+  Before adopting 0.16.0, keep Dishka on 1.10.x and aiortc on 1.14.x or 1.15.x.
+  Later Canon releases widen these ranges after the upstream canary passes. See
+  [upstream internals](docs/compatibility.md#upstream-internals).
 
 ### Fixed
 
