@@ -114,6 +114,11 @@ The same rule applies to the standalone `CanonStreamRouter`.
 - A custom FastAPI `generate_unique_id_function=` replaces Canon's default rule.
   `APIRouter.sse()` uses the same generator as the owning router.
 
+`APIRouter.sse()` accepts the route options typed as `StreamOptions`: `methods`,
+`operation_id`, `summary`, `description`, `tags`, `dependencies`, `raises`,
+`status_code` and the other documentation options of `get()`. Response model and
+response class options are absent, because a stream infers its event model.
+
 `Feature.name` identifies a feature in diagnostics and lifecycle only; it is not a
 public API name. Public names come from the declaration that owns them: the
 router `namespace`, an explicit `operation_id` and `tags`, and an `RpcChannel`
@@ -227,8 +232,9 @@ router.include_channel(tasks, path="/{project_id}/tasks/session", namespace="tas
 Call `include_channel()` multiple times to register multiple endpoints. Each
 connection has its own limits, pending requests and message streams. Its
 `context`, `resolver`, `middleware`, `limits` and other RPC options configure the
-existing WebSocket adapter. `dependencies=` runs ordinary FastAPI dependencies
-before acceptance. Native FastAPI router prefixes and dependency overrides apply.
+existing WebSocket adapter. They are typed as `ChannelOptions`, so editors
+complete them and type checkers reject unknown names. `dependencies=` runs
+ordinary FastAPI dependencies before acceptance. Native FastAPI router prefixes and dependency overrides apply.
 When Composition installs Dishka providers, omitted `resolver=` automatically
 uses the application's container for `Inject[T]` in methods, streams and context
 hooks. APP, SESSION and REQUEST lifetimes retain their existing cleanup behavior.
@@ -286,8 +292,8 @@ both pre-response failures and terminal stream failures with `raises=`. Errors
 are registered automatically; no separate registry entry is required.
 Perform admission checks in dependencies, before generator execution starts.
 
-`webrtc()` accepts the existing session options: `role`, `media`, `data_channels`,
-`limits`, `max_sessions`, `dependencies` and `raises`. Engine, ICE-server, event-hook
+`webrtc()` accepts the existing session options, typed as `SessionOptions`: `role`,
+`media`, `data_channels`, `limits`, `max_sessions`, `dependencies` and `raises`. Engine, ICE-server, event-hook
 and origin options are also accepted on the decorator; the factory may supply an
 engine through its returned `Session`. Each declaration owns its endpoint limits
 and cleanup. Yield dependencies remain open through session cleanup. Composition
