@@ -185,6 +185,9 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Fixed
 
+- HTTP injection and Canon SSE reuse `Annotated[Request, ...]` parameters instead
+  of adding a second request parameter that causes missing-argument failures.
+
 - CLI help explains target/factory syntax, default and repeatable target
   selection, JSON/text modes, import/lifespan behavior and command-specific
   exit policies. Source read errors identify the invoked public command.

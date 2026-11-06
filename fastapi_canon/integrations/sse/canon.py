@@ -78,11 +78,12 @@ def _terminal_stream(
     item_type = get_args(hints["return"])[0]
     adapter = TypeAdapter(item_type)
     signature = inspect.signature(endpoint)
+    request_hints = get_type_hints(endpoint)
     existing_request = next(
         (
             p.name
             for p in signature.parameters.values()
-            if hints.get(p.name, p.annotation) is Request
+            if request_hints.get(p.name, p.annotation) is Request
         ),
         None,
     )
