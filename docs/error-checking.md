@@ -318,6 +318,76 @@ unresolved `super().__init__`, inherited dispatch and nested route factories
 remain explicit boundaries. Its strict/require-complete command still exits 1;
 this change does not claim a fully validated reference application.
 
+## Local context managers
+
+Source checking follows explicit calls in local sync `__enter__`/`__exit__`
+methods and async `__aenter__`/`__aexit__` methods, as well as the `with` body.
+Methods must be ordinary, undecorated, nongenerator definitions on the resolved
+class itself. Direct construction, typed local/parameter instances and local
+factories with a class return annotation are supported; coroutine factories must
+be awaited. A simple `as name` binding uses the enter return annotation, including
+`Self`. Destructured or mutating bindings remain incomplete.
+
+Exit methods with implicit None, bare `return`, `return None` or `return False`
+do not suppress body exceptions. A single top-level literal `return True`
+suppresses body exceptions, while errors in that exit method still escape.
+Multiple managers enter left to right and exit in reverse order; outer
+suppression also applies to errors entering an inner manager. A straight-line
+unconditional enter raise skips that manager's body and exit; a straight-line
+unconditional exit raise replaces inner errors. Other branching/call paths use
+the existing conservative union of possible explicit escapes.
+
+Unknown, computed or conditional suppression retains CAN003 and possible body
+gaps. Exception argument values are not simulated. Inherited/decorated methods,
+generator-based protocols, protocol kind mismatches and unresolved/external
+managers retain CAN003; body helpers are still inspected. In particular,
+SQLAlchemy and arbitrary library managers are not assumed harmless. This is
+explicit exception analysis, not a model of every implicit Python protocol error.
+
+For example, `with Manager(): require_item(item_id)` now follows
+`require_item` when Manager has local nonsuppressing methods, preserving its
+mapping/declaration diagnostics. Enter/exit helper traces include the protocol
+method. An enclosing supported `try/except` can catch these errors normally.
+The source module is never imported.
+
+The reference-service comparison is unchanged by this slice: six operations,
+zero gaps and five incomplete operations, with strict/require-complete exit 1.
+Its remaining findings concern `super`, inherited dispatch and nested route
+factories rather than supported context managers.
+
+## Direct local route factories
+
+A synchronous, undecorated factory without parameters can declare local
+APIRouter/CanonRouter instances (or RpcChannels), nested operations and local
+helpers, then return the router/channel or a literal tuple/list of them. The
+checker indexes these declarations without calling the factory. Static Error,
+ErrorRegistry and RouterPolicy declarations, literal values/collections and
+aliases are resolved in that factory's own scope. Straightforward module-level
+helpers and imported declarations remain available. Factory-local class
+construction, imports, arbitrary setup calls and dynamic captures remain outside
+this bounded subset.
+
+Supported nested functions have stable names such as
+`app.create_router.<locals>.endpoint`; path and decorator line remain separate
+report fields. Two factories with a local `endpoint` keep independent symbols,
+registries and helper call paths. Calling a factory twice does not duplicate its
+source declaration. Distinct local routers keep separate contracts, including
+when a factory returns several routers.
+
+Parameters, conditional setup, reassigned local declarations, computed/unresolved
+captures, dynamic router selection and factory decorators retain CAN003. Repeated
+local function names also remain incomplete with source-line-qualified fallback
+names. Arbitrary endpoint decorators retain their ordinary incomplete-flow
+finding. Async/generator factories and general closure execution are not inferred.
+
+This still reports source-owned declarations, including uncalled factories. It
+does not establish mounting, URL prefixes, runtime reachability or successful
+factory execution. Use composition inspection and runtime tests for those claims.
+The reference-service report remains six operations, zero gaps and five incomplete
+operations (strict/require-complete exit 1). Its two telemetry factories return an
+application/Feature and include dynamic setup, so they remain explicitly outside
+this slice; their diagnostic messages do not change.
+
 ## Analysis boundaries
 
 `complete` describes analysis of the supported explicit source paths, not proof
@@ -328,12 +398,12 @@ Explicit built-in exceptions are outside the application-error comparison.
 
 Unresolved calls, unbound abstract ports, decorated hooks of library-based
 classes, custom decorators,
-recursive calls, dynamic contracts, nested route factories, deferred coroutine
+recursive calls, dynamic contracts, unsupported route factories, deferred coroutine
 execution and unsupported control flow produce `CAN003`. `for`, `async for` and
 `while` loops are analyzed like branches that may run; iterating a call to a
 generator follows the generator's body. Supported comprehensions and deferred
-generator expressions are described above. Context managers, `match` and
-`except*` are currently outside the supported flow analysis. Reassigned module declarations and detected contract mutations also
+generator expressions and local context managers are described above. `match`
+and `except*` are currently outside the supported flow analysis. Reassigned module declarations and detected contract mutations also
 prevent a complete result, including assignments with type annotations. Expanded
 `ErrorRegistry(**config)` arguments are unresolved contracts: the checker reports
 `CAN003` and suppresses guessed gaps for those operations. Dishka providers are

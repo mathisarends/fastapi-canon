@@ -532,7 +532,7 @@ def endpoint(): pass
     assert report.incomplete == 1
 
 
-def test_nested_route_factory_is_reported(tmp_path: Path) -> None:
+def test_direct_nested_route_factory_is_complete(tmp_path: Path) -> None:
     report = analyze(
         tmp_path,
         """
@@ -544,7 +544,11 @@ def create_router():
     return router
 """,
     )
-    assert codes(report) == ["CAN003"]
+    assert codes(report) == []
+    assert report.incomplete == 0
+    assert [operation.function for operation in report.operations] == [
+        "api.create_router.<locals>.endpoint"
+    ]
 
 
 def test_unawaited_coroutine_is_not_an_http_error(tmp_path: Path) -> None:

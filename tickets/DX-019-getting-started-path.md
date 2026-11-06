@@ -4,7 +4,7 @@
 - Priority: P2
 - Kind: Documentation
 - Baseline: `a366702` (2026-11-05)
-- Depends on: [DX-009](DX-009-documentation-release-and-links.md)
+- Depends on: [DX-009](https://github.com/mathisarends/fastapi-canon/pull/89)
 - Earlier review: X6; X1-X4 are largely completed.
 
 ## Problem and reproduction

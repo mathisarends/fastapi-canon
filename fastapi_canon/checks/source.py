@@ -51,6 +51,27 @@ _ITERATORS = frozenset(
     for module in ("collections.abc", "typing")
     for name in ("Iterator", "AsyncIterator", "Generator", "AsyncGenerator")
 )
+_ROUTER_DECLARATIONS = frozenset(
+    {
+        "fastapi_canon.APIRouter",
+        "fastapi_canon.api_router.APIRouter",
+        "fastapi_canon.CanonRouter",
+        "fastapi_canon.router.CanonRouter",
+        "fastapi_canon.RpcChannel",
+        "fastapi_canon.integrations.websockets.RpcChannel",
+        "fastapi_canon.integrations.websockets.channel.RpcChannel",
+    }
+)
+_FACTORY_DECLARATIONS = _ROUTER_DECLARATIONS | {
+    "fastapi_canon.Error",
+    "fastapi_canon.error.Error",
+    "fastapi_canon.error.error.Error",
+    "fastapi_canon.ErrorRegistry",
+    "fastapi_canon.error.ErrorRegistry",
+    "fastapi_canon.error.registry.ErrorRegistry",
+    "fastapi_canon.RouterPolicy",
+    "fastapi_canon.policy.RouterPolicy",
+}
 
 
 def _walk_error(error: OSError) -> None:
@@ -144,7 +165,152 @@ class _Source:
                 for item in call.keywords
             ):
                 source.composition_policies.append((module, call.lineno))
+        source._index_route_factories()
         return source
+
+    def _index_route_factories(self) -> None:
+        for factory in list(self.definitions.values()):
+            node = factory.node
+            if (
+                factory.owner
+                or not isinstance(node, ast.FunctionDef)
+                or node.decorator_list
+                or node.args.posonlyargs
+                or node.args.args
+                or node.args.kwonlyargs
+                or node.args.vararg
+                or node.args.kwarg
+                or not node.body
+                or not isinstance(node.body[-1], ast.Return)
+                or not any(
+                    isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef)
+                    for item in node.body
+                )
+            ):
+                continue
+            names: list[str] = []
+            values: list[ast.expr] = []
+            supported = True
+            for statement in node.body[:-1]:
+                if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef):
+                    names.append(statement.name)
+                elif isinstance(statement, ast.Assign) and all(
+                    isinstance(target, ast.Name) for target in statement.targets
+                ):
+                    names.extend(
+                        target.id
+                        for target in statement.targets
+                        if isinstance(target, ast.Name)
+                    )
+                    values.append(statement.value)
+                elif (
+                    isinstance(statement, ast.AnnAssign)
+                    and isinstance(statement.target, ast.Name)
+                    and statement.value
+                ):
+                    names.append(statement.target.id)
+                    values.append(statement.value)
+                elif isinstance(statement, ast.Pass) or (
+                    isinstance(statement, ast.Expr)
+                    and isinstance(statement.value, ast.Constant)
+                    and isinstance(statement.value.value, str)
+                ):
+                    continue
+                else:
+                    supported = False
+            returned = node.body[-1].value
+            returns = (
+                returned.elts
+                if isinstance(returned, ast.Tuple | ast.List)
+                else [returned]
+            )
+            if (
+                not supported
+                or len(names) != len(set(names))
+                or not returns
+                or not all(isinstance(item, ast.Name) for item in returns)
+            ):
+                continue
+            scope = f"{factory.name}.<locals>"
+            self.paths[scope] = self.paths[factory.module]
+            for name in self.bindings.keys() | self.definitions.keys():
+                parent, _, local = name.rpartition(".")
+                if parent == factory.module and local not in names:
+                    self.bindings[f"{scope}.{local}"] = name
+            indexed: set[str] = set()
+            self._index(scope, node.body[:-1], package=False, names=indexed)
+            valid_values = all(
+                self._route_factory_value(value, scope) for value in values
+            )
+            for item in returns:
+                assert item is not None
+                module, value = self.value(item, scope)
+                if (
+                    not isinstance(value, ast.Call)
+                    or self.resolve(value.func, module) not in _ROUTER_DECLARATIONS
+                ):
+                    valid_values = False
+            if not valid_values:
+                self.paths.pop(scope)
+                self.bindings = {
+                    name: value
+                    for name, value in self.bindings.items()
+                    if not name.startswith(f"{scope}.")
+                }
+                self.definitions = {
+                    name: definition
+                    for name, definition in self.definitions.items()
+                    if not name.startswith(f"{scope}.")
+                }
+                self.uncertain.pop(scope, None)
+                continue
+            self.uncertain.setdefault(scope, []).extend(
+                self.uncertain.get(factory.module, [])
+            )
+            indexed_nodes = {id(self.definitions[name].node) for name in indexed}
+            self.nested = [
+                definition
+                for definition in self.nested
+                if id(definition.node) not in indexed_nodes
+            ]
+
+    def _route_factory_value(
+        self, node: ast.expr, module: str, seen: frozenset[int] = frozenset()
+    ) -> bool:
+        if id(node) in seen:
+            return False
+        seen = seen | {id(node)}
+        if isinstance(node, ast.Constant):
+            return True
+        if isinstance(node, ast.Name | ast.Attribute):
+            resolved = self.resolve(node, module)
+            if resolved in _FACTORY_DECLARATIONS or resolved in self.definitions:
+                return True
+            scope, value = self.value(node, module)
+            return (value is not node or scope != module) and self._route_factory_value(
+                value, scope, seen
+            )
+        if isinstance(node, ast.Call):
+            return self.resolve(node.func, module) in _FACTORY_DECLARATIONS and all(
+                self._route_factory_value(value, module, seen)
+                for value in [*node.args, *(item.value for item in node.keywords)]
+            )
+        if isinstance(node, ast.List | ast.Tuple | ast.Set):
+            return all(
+                self._route_factory_value(value, module, seen) for value in node.elts
+            )
+        if isinstance(node, ast.Dict):
+            return all(
+                self._route_factory_value(value, module, seen)
+                for value in [*(key for key in node.keys if key), *node.values]
+            )
+        if isinstance(node, ast.Starred):
+            return self._route_factory_value(node.value, module, seen)
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+            return self._route_factory_value(
+                node.left, module, seen
+            ) and self._route_factory_value(node.right, module, seen)
+        return False
 
     def _index(
         self, module: str, body: list[ast.stmt], *, package: bool, names: set[str]

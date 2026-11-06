@@ -22,6 +22,20 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- Documentation records the DX decisions on MCP activation, the shared router
+  prefix, feature metadata ownership, WebSocket `context=` terminology and the
+  preferred generation command, and explains MCP error masking with `ToolError`.
+  No runtime behavior or public API changed.
+- Source checking resolves bounded direct local router/channel factories without
+  executing them. HTTP/SSE/RPC endpoints, static error contracts and helper calls
+  use independent lexical scopes and stable factory-qualified names. Dynamic
+  captures/setup and unsupported factories remain incomplete.
+
+- Source checking follows supported local sync/async context-manager enter,
+  body and exit calls. Literal exit suppression and multiple-manager order are
+  modeled; unknown suppression, external/decorated/inherited protocols and
+  unsupported bindings retain CAN003 without importing application code.
+
 - Source error checking follows explicit calls in eager list/set/dict
   comprehensions, including iterable/filter/result paths, nested clauses and
   supported async forms. Comprehension bindings stay local. Generator expression
@@ -207,6 +221,18 @@ The next release containing the breaking changes below must be 0.16.0.
   Python 3.13.
 
 ### Breaking changes
+
+- Supported nested route factories now report contract gaps instead of blanket
+  CAN003, and their operation names become `module.factory.<locals>.endpoint`.
+  Before adopting 0.16.0, update report-name filters and map/declare newly exposed
+  escaping errors. Path and decorator line remain separate report fields; see
+  [factory coverage](docs/error-checking.md#direct-local-route-factories).
+
+- Supported context-manager paths can now expose CAN001/CAN002 gaps previously
+  hidden behind unsupported `with`/`async with` statements. Before enabling strict
+  checking on 0.16.0, map these escaping errors and declare them in `raises`.
+  Keep CAN003 for managers whose suppression/protocol remains unknown; see
+  [context-manager coverage](docs/error-checking.md#local-context-managers).
 
 - Source checking can now report CAN001/CAN002 for newly followed comprehension
   paths that previously retained incomplete analysis. Before adopting 0.16.0,

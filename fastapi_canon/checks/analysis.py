@@ -339,6 +339,130 @@ class _Analyzer:
             )
         return flow
 
+    def _context_manager(
+        self,
+        node: ast.With | ast.AsyncWith,
+        function: _Definition,
+        env: _Environment,
+        stack: tuple[str, ...],
+        reraised: tuple[_Escape, ...],
+        index: int = 0,
+    ) -> _Flow:
+        if index == len(node.items):
+            return self.block(node.body, function, env, stack, reraised)
+        item = node.items[index]
+        flow = self.expression(item.context_expr, function, env, stack)
+        manager = self._context_type(item.context_expr, function, env)
+        asynchronous = isinstance(node, ast.AsyncWith)
+        enter = (
+            self.source.method(manager, "__aenter__" if asynchronous else "__enter__")
+            if manager
+            else None
+        )
+        exit_method = (
+            self.source.method(manager, "__aexit__" if asynchronous else "__exit__")
+            if manager
+            else None
+        )
+        supported = enter is not None and exit_method is not None
+        for method in (enter, exit_method):
+            if method is None:
+                continue
+            method_node = method.node
+            if (
+                not isinstance(method_node, ast.FunctionDef | ast.AsyncFunctionDef)
+                or isinstance(method_node, ast.AsyncFunctionDef) != asynchronous
+                or _generator(method_node)
+                or method_node.decorator_list
+                or method.owner != manager
+            ):
+                supported = False
+        if not supported:
+            flow.unknowns.append(
+                _Unknown(
+                    "unresolved or unsupported context manager protocol",
+                    function.name,
+                    item.context_expr.lineno,
+                )
+            )
+        else:
+            assert enter is not None
+            flow.extend(self._traced(function, self.function(enter, stack)))
+            if _always_raises(enter.node):
+                return flow
+        local = env.copy()
+        if item.optional_vars is not None:
+            self._invalidate(item.optional_vars, local)
+            if isinstance(item.optional_vars, ast.Name) and supported and enter:
+                enter_node = enter.node
+                assert isinstance(enter_node, ast.FunctionDef | ast.AsyncFunctionDef)
+                returned = (
+                    self.source.annotation(enter_node.returns, enter.module)
+                    if enter_node.returns
+                    else None
+                )
+                if returned in {"typing.Self", "typing_extensions.Self"}:
+                    returned = manager
+                local[item.optional_vars.id] = returned or ""
+            elif not isinstance(item.optional_vars, ast.Name):
+                flow.unknowns.append(
+                    _Unknown(
+                        "unsupported context manager binding target",
+                        function.name,
+                        item.optional_vars.lineno,
+                    )
+                )
+        inner = self._context_manager(node, function, local, stack, reraised, index + 1)
+        if supported:
+            assert exit_method is not None
+            mode = _suppression(exit_method.node)
+            if mode is None:
+                flow.unknowns.append(
+                    _Unknown(
+                        "context manager exception suppression is unresolved",
+                        function.name,
+                        item.context_expr.lineno,
+                    )
+                )
+            if mode is True or _always_raises(exit_method.node):
+                inner.escapes.clear()
+            flow.extend(inner)
+            flow.extend(self._traced(function, self.function(exit_method, stack)))
+        else:
+            flow.extend(inner)
+        return flow
+
+    def _context_type(
+        self, node: ast.expr, function: _Definition, env: _Environment
+    ) -> str | None:
+        awaited = isinstance(node, ast.Await)
+        expression = node.value if isinstance(node, ast.Await) else node
+        target = expression.func if isinstance(expression, ast.Call) else expression
+        resolved = self.source.resolve(target, function.module, env)
+        definition = self.source.definitions.get(resolved or "")
+        if isinstance(expression, ast.Call) and definition:
+            if isinstance(definition.node, ast.ClassDef):
+                return definition.name if not awaited else None
+            if (
+                isinstance(definition.node, ast.FunctionDef | ast.AsyncFunctionDef)
+                and isinstance(definition.node, ast.AsyncFunctionDef) == awaited
+                and not _generator(definition.node)
+                and definition.node.returns
+            ):
+                returned = self.source.annotation(
+                    definition.node.returns, definition.module
+                )
+                result = self.source.definitions.get(returned or "")
+                if result and isinstance(result.node, ast.ClassDef):
+                    return result.name
+        elif (
+            definition
+            and isinstance(definition.node, ast.ClassDef)
+            and self.source.key(expression) in env
+        ):
+            return definition.name
+        return None
+
     def _construct(
         self,
         definition: _Definition,
@@ -706,6 +830,10 @@ class _Analyzer:
                     )
                 self._invalidate(node, env)
                 continue
+            if isinstance(node, ast.With | ast.AsyncWith):
+                flow.extend(self._context_manager(node, function, env, stack, reraised))
+                self._invalidate(node, env)
+                continue
             if isinstance(node, ast.If):
                 flow.extend(self.expression(node.test, function, env, stack))
                 flow.extend(
@@ -791,7 +919,7 @@ class _Analyzer:
                 continue
             if isinstance(node, ast.Pass | ast.Break | ast.Continue):
                 continue
-            # Context managers, loops, match, try*, etc. need more control-flow knowledge.
+            # Match, try*, etc. need more control-flow knowledge.
             flow.unknowns.append(
                 _Unknown(
                     f"unsupported statement: {type(node).__name__}",
@@ -835,6 +963,42 @@ def _operation_decorator(decorator: ast.expr) -> bool:
         and isinstance(decorator.func, ast.Attribute)
         and decorator.func.attr in {*_ROUTE_METHODS, *_TRANSPORT_METHODS, _RPC_METHOD}
     )
+
+
+def _always_raises(node: ast.AST) -> bool:
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+        for statement in node.body:
+            if isinstance(statement, ast.Return):
+                return False
+            if isinstance(statement, ast.Raise):
+                return True
+            if not isinstance(
+                statement, ast.Expr | ast.Assign | ast.AnnAssign | ast.Pass
+            ):
+                return False
+    return False
+
+
+def _suppression(node: ast.AST) -> bool | None:
+    if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+        return None
+    returns = [
+        child for child in _executed_nodes(node.body) if isinstance(child, ast.Return)
+    ]
+    if not returns:
+        return False
+    # The bounded protocol model does not evaluate conditional return values.
+    if len(returns) != 1 or returns[0] not in node.body:
+        return None
+    value = returns[0].value
+    if value is None:
+        return False
+    if isinstance(value, ast.Constant):
+        if value.value is None or value.value is False:
+            return False
+        if value.value is True:
+            return True
+    return None
 
 
 def _generator(node: ast.AST) -> bool:

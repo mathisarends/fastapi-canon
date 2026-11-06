@@ -52,6 +52,13 @@ Clients see `portfolio_get_portfolio` with only `portfolio_id` in its input sche
 endpoint. Namespaces are explicit public API identifiers, independent of feature
 names. Duplicate namespaces or server instances fail during composition.
 Contributing mounts requires explicit `Composition(mcp=McpOptions())` activation.
+Mounts alone never open an endpoint. The activation is deliberate: authentication
+is configured only on `McpOptions(auth=...)` (a mounted server's own `auth` is
+rejected), so an endpoint created implicitly from a mount would be
+unauthenticated, and its path and ownership would be implicit. A feature
+that declares mounts without `McpOptions` fails composition with `Features with MCP
+mounts require Composition(mcp=McpOptions())`; add `mcp=McpOptions()` (or
+`McpOptions(auth=...)`) to the `Composition`.
 
 When auth or root middleware depends on application services, use
 `McpOptions(auth_factory=..., middleware_factory=...)`. Each synchronous factory
@@ -169,6 +176,13 @@ endpoint. HTTP request-bound providers are not portable MCP
 dependencies. No authentication identity or tenant is inferred from tool arguments.
 
 This first integration uses FastMCP's native error handling. It does not add a
-Canon problem binding or generate MCP clients. Injected sync handlers, deferred
+Canon problem binding or generate MCP clients. A domain exception that HTTP maps
+through `raises=` to a Problem arrives from an MCP tool as a native `isError` result
+with FastMCP's text, not a Problem document. Unless the child server masks errors
+(`McpServer("Name", mask_error_details=True)`), that text includes the exception
+message, even when `McpOptions(mask_error_details=True)` is set, because the root
+option does not rewrite children. Mask child servers that call code raising
+internal exceptions, and raise `fastmcp.exceptions.ToolError` with a message safe
+for callers for expected failures; its text is still delivered when masking is on. Injected sync handlers, deferred
 generator results, background tasks and worker bootstrap are outside this
 version's support. `McpServer` rejects `task=True` in its component decorators explicitly.
