@@ -1,0 +1,18 @@
+[codegen]
+version = 1
+
+[codegen.sources.api]
+kind = "openapi"
+source = "examples.showcase.app:app"
+output = "contracts/openapi.json"
+
+[codegen.sources.api.operations]
+get_product = "catalog.get"
+reserve_product = "catalog.reserve"
+get_health = "status.health"
+
+[codegen.targets.python]
+language = "python"
+sources = ["api"]
+output = "dist/generated/python/catalog_client"
+package = "catalog_client"

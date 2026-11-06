@@ -1,7 +1,4 @@
-from dishka import FromDishka
-from dishka.integrations.fastapi import inject
-
-from fastapi_canon import APIRouter
+from fastapi_canon import APIRouter, Inject
 
 from .errors import product_not_found, product_unavailable, registry
 from .models import Product, Reservation
@@ -15,10 +12,9 @@ router = APIRouter(
 
 
 @router.get("/{product_id}", operation_id="get_product", raises=[product_not_found])
-@inject
 async def get_product(
     product_id: str,
-    catalog: FromDishka[CatalogService],
+    catalog: Inject[CatalogService],
 ) -> Product:
     return catalog.get_product(product_id)
 
@@ -28,10 +24,9 @@ async def get_product(
     operation_id="reserve_product",
     raises=[product_not_found, product_unavailable],
 )
-@inject
 async def reserve_product(
     product_id: str,
     reservation: Reservation,
-    catalog: FromDishka[CatalogService],
+    catalog: Inject[CatalogService],
 ) -> Product:
     return catalog.reserve_product(product_id, reservation.quantity)
