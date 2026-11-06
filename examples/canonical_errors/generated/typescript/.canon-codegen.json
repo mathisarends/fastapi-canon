@@ -1,0 +1,57 @@
+{
+  "files": [
+    "client.ts",
+    "errors.ts",
+    "index.ts",
+    "internal/api_sse/client.ts",
+    "internal/api_sse/index.ts",
+    "internal/api_sse/projects/api.ts",
+    "internal/api_sse/projects/index.ts",
+    "internal/api_sse/transport/errors.ts",
+    "internal/api_sse/transport/sse.ts",
+    "internal/api_sse/types.ts",
+    "internal/control_jsonrpc/client.ts",
+    "internal/control_jsonrpc/core.ts",
+    "internal/control_jsonrpc/endpoints.ts",
+    "internal/control_jsonrpc/errors.ts",
+    "internal/control_jsonrpc/index.ts",
+    "internal/control_jsonrpc/models.ts",
+    "internal/control_jsonrpc/namespaces/index.ts",
+    "internal/control_jsonrpc/namespaces/projects.ts",
+    "internal/control_jsonrpc/routes.ts",
+    "internal/control_jsonrpc/transport.ts",
+    "internal/runtime.ts",
+    "models.ts"
+  ],
+  "generator": {
+    "name": "fastapi-canon",
+    "version": "0.15.0"
+  },
+  "language": "typescript",
+  "mappings": {
+    "api": {
+      "excludeOperations": [],
+      "identities": {},
+      "includeOperations": null,
+      "names": {},
+      "operations": {}
+    },
+    "control": {
+      "excludeOperations": [],
+      "identities": {},
+      "includeOperations": null,
+      "names": {},
+      "operations": {}
+    }
+  },
+  "options": {
+    "clientName": "ApiClient",
+    "httpClient": "httpx",
+    "package": "api_client"
+  },
+  "sources": {
+    "api": "21f56948eab35969a4903ab894669755648126024aa77f6606d59cfefc301cd8",
+    "control": "1420af46671167979c3c2a4561f56eae663b4b2f5e1961828ae877aeac36c3d3"
+  },
+  "version": 1
+}

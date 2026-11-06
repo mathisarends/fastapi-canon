@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "strict": true,
+    "lib": ["ES2022", "DOM", "ESNext.Disposable"],
+    "types": ["node"],
+    "rootDir": ".",
+    "outDir": "dist/consumer"
+  },
+  "include": ["consume.ts"]
+}

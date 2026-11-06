@@ -728,6 +728,57 @@ def test_terminal_only_nested_problem_definitions_share_identity(
             ast.parse(content)
 
 
+@pytest.mark.parametrize("offline", [False, True])
+def test_committed_combined_example_has_exact_generator_drift(offline: bool) -> None:
+    root = Path(__file__).resolve().parents[3]
+    config = load_config(root / "examples/canonical_errors/fastapi-canon.toml")
+    changed, report = generate(config, check=True, offline=offline, diff=True)
+    assert not changed, report
+
+
+@pytest.mark.parametrize("language", ["python", "typescript"])
+@pytest.mark.asyncio
+async def test_committed_combined_consumers_use_real_http_sse_rpc(
+    tmp_path: Path, language: str
+) -> None:
+    from tests.unit.integrations.webrtc.server import serve
+
+    root = Path(__file__).resolve().parents[3]
+    example = root / "examples/canonical_errors"
+    if language == "python":
+        command = [sys.executable, str(example / "consume.py"), "--base-url"]
+    else:
+        node = shutil.which("node")
+        compiler = root / "node_modules/typescript/bin/tsc"
+        if node is None or not compiler.exists():
+            pytest.skip("Run pnpm install --frozen-lockfile --ignore-scripts")
+        compiled = subprocess.run(
+            [
+                sys.executable,
+                str(root / "scripts/compile_combined_example.py"),
+                "--out-dir",
+                str(tmp_path),
+            ],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        assert compiled.returncode == 0, compiled.stdout + compiled.stderr
+        command = [node, str(tmp_path / "consume.js")]
+    async with serve(create_app()) as websocket_url:
+        output = await _run_combined_consumer(
+            [*command, websocket_url.replace("ws://", "http://", 1)], root
+        )
+    assert json.loads(output) == {
+        "project": 1,
+        "events": [1],
+        "rpc": "cancelled",
+        "problems": ["http", "admission", "terminal", "rpc"],
+    }
+
+
 def _inputs() -> tuple[tuple[SourceConfig, dict[str, Any]], ...]:
     api, rpc = copy.deepcopy(export_schema(app)), _example_openrpc()
     color = {
@@ -765,3 +816,20 @@ def _example_openrpc() -> dict[str, Any]:
     document = export_contracts(create_app(), kinds=("openrpc",)).openrpc
     assert document is not None
     return document
+
+
+async def _run_combined_consumer(command: list[str], root: Path) -> str:
+    process = await asyncio.create_subprocess_exec(
+        *command,
+        cwd=root,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=40)
+        assert process.returncode == 0, stdout.decode() + stderr.decode()
+        return stdout.decode()
+    finally:
+        if process.returncode is None:
+            process.kill()
+            await asyncio.wait_for(process.wait(), timeout=5)

@@ -1,0 +1,60 @@
+{
+  "files": [
+    "__init__.py",
+    "client.py",
+    "errors.py",
+    "internal/__init__.py",
+    "internal/api_sse/__init__.py",
+    "internal/api_sse/runtime.py",
+    "internal/control_jsonrpc/__init__.py",
+    "internal/control_jsonrpc/client.py",
+    "internal/control_jsonrpc/endpoints.py",
+    "internal/control_jsonrpc/errors.py",
+    "internal/control_jsonrpc/internal/__init__.py",
+    "internal/control_jsonrpc/internal/connection.py",
+    "internal/control_jsonrpc/internal/core.py",
+    "internal/control_jsonrpc/internal/errors.py",
+    "internal/control_jsonrpc/internal/metadata.py",
+    "internal/control_jsonrpc/internal/transport.py",
+    "internal/control_jsonrpc/internal/unset.py",
+    "internal/control_jsonrpc/models.py",
+    "internal/control_jsonrpc/namespaces/__init__.py",
+    "internal/control_jsonrpc/namespaces/projects.py",
+    "internal/control_jsonrpc/routes.py",
+    "internal/control_jsonrpc/transport.py",
+    "internal/runtime.py",
+    "models.py",
+    "py.typed"
+  ],
+  "generator": {
+    "name": "fastapi-canon",
+    "version": "0.15.0"
+  },
+  "language": "python",
+  "mappings": {
+    "api": {
+      "excludeOperations": [],
+      "identities": {},
+      "includeOperations": null,
+      "names": {},
+      "operations": {}
+    },
+    "control": {
+      "excludeOperations": [],
+      "identities": {},
+      "includeOperations": null,
+      "names": {},
+      "operations": {}
+    }
+  },
+  "options": {
+    "clientName": "ApiClient",
+    "httpClient": "httpx",
+    "package": "api_client"
+  },
+  "sources": {
+    "api": "21f56948eab35969a4903ab894669755648126024aa77f6606d59cfefc301cd8",
+    "control": "1420af46671167979c3c2a4561f56eae663b4b2f5e1961828ae877aeac36c3d3"
+  },
+  "version": 1
+}

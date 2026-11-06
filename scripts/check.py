@@ -115,6 +115,15 @@ def _main() -> None:
             )
             _run(_REFERENCE, "-m", "pytest", "-q")
         elif gate == "clients":
+            _run(
+                _ROOT,
+                "-m",
+                "fastapi_canon",
+                "generate",
+                "--config",
+                "examples/canonical_errors/fastapi-canon.toml",
+                "--check",
+            )
             for name in ("generated_clients", "socket_protocol", "typed_socket"):
                 _run(
                     _ROOT,

@@ -1,0 +1,4 @@
+# These exact generator-owned artifacts are checked for drift and executed by
+# real HTTP/SSE/RPC consumers. Formatting them separately would create drift.
+extend = "../../../pyproject.toml"
+extend-exclude = ["python/api_client"]
