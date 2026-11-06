@@ -230,6 +230,23 @@ errors. Hidden routes execute the dependencies but have no OpenAPI operation to
 extend. The application error registry still handles registered exceptions
 globally; declarations are not a runtime exception allowlist.
 
+An included router cannot opt out of its parent's policy, just as it cannot
+drop the parent's `dependencies`. When an application mixes public and
+protected routes, keep the application router free of the policy and attach it
+where it applies: to individual routers, or to a parent router that includes
+only the protected ones.
+
+```python
+composition = Composition(
+    features=(projects_feature, users_feature),
+    router_factory=lambda: APIRouter(prefix="/api/v1"),
+)
+
+projects = APIRouter(prefix="/projects", policy=protected)  # requires a user
+health = APIRouter(prefix="/health")  # public
+projects_feature = Feature(name="projects", routers=[projects, health])
+```
+
 Endpoints resolve `Inject[T]` and `FromDishka[T]` through the route class of
 the router where they are declared; an including router does not replace route
 classes. WebRTC sessions declare their admission contracts with `raises=` and
