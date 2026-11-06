@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Any
+from collections.abc import Awaitable, Callable, Sequence
+from enum import Enum
+from typing import TYPE_CHECKING, Any, TypedDict, Unpack
 
 from fastapi import APIRouter as FastAPIRouter
 from fastapi.params import Depends
 from fastapi.routing import APIWebSocketRoute
 from pydantic import BaseModel
-from starlette.routing import WebSocketRoute
+from starlette.routing import BaseRoute, WebSocketRoute
 
 from fastapi_canon.contract_routes import iter_contract_routes
 from fastapi_canon.exceptions import ConfigurationError
@@ -18,8 +19,85 @@ from fastapi_canon.injected_route import InjectedRoute, inject_endpoint
 from fastapi_canon.router import CanonRouter
 
 if TYPE_CHECKING:
-    from fastapi_canon.integrations.webrtc import Engine, EventHook, IceServerSource
-    from fastapi_canon.integrations.websockets import RpcChannel
+    from fastapi_canon.error.contracts import AnyError
+    from fastapi_canon.integrations.webrtc import (
+        DataChannelSpec,
+        Engine,
+        EventHook,
+        IceServerSource,
+        MediaPolicy,
+        Role,
+        SessionLimits,
+    )
+    from fastapi_canon.integrations.websockets import (
+        RpcBeforeAccept,
+        RpcChannel,
+        RpcDrain,
+        RpcErrorBinding,
+        RpcErrorMapper,
+        RpcLimits,
+        RpcMiddlewareLike,
+        RpcRejections,
+        RpcResolverLike,
+    )
+    from fastapi_canon.integrations.websockets.adapters.fastapi import (
+        FastApiResolver,
+    )
+
+
+class StreamOptions(TypedDict, total=False):
+    """Operation options accepted by ``APIRouter.sse()``.
+
+    Streams infer their response model and always use ``EventSourceResponse``,
+    so the response options of ``APIRouter.get()`` are not available here.
+    """
+
+    methods: list[str] | None
+    operation_id: str | None
+    summary: str | None
+    description: str | None
+    tags: list[str | Enum] | None
+    dependencies: Sequence[Depends] | None
+    raises: Sequence[AnyError]
+    http_statuses: Sequence[int]
+    status_code: int | None
+    responses: dict[int | str, dict[str, Any]] | None
+    response_description: str
+    deprecated: bool | None
+    include_in_schema: bool
+    name: str | None
+    openapi_extra: dict[str, Any] | None
+    callbacks: list[BaseRoute] | None
+
+
+class ChannelOptions(TypedDict, total=False):
+    """Connection options accepted by ``APIRouter.include_channel()``."""
+
+    version: int
+    context: Callable[..., Awaitable[Any]] | None
+    resolver: RpcResolverLike | FastApiResolver | None
+    hooks: Sequence[Callable[..., Any]]
+    rejects: Sequence[RpcErrorBinding[Any]]
+    rejections: RpcRejections | None
+    middleware: Sequence[RpcMiddlewareLike]
+    error_mapper: RpcErrorMapper | None
+    limits: RpcLimits | None
+    strict_errors: bool
+    drain: RpcDrain | None
+    before_accept: RpcBeforeAccept | None
+
+
+class SessionOptions(TypedDict, total=False):
+    """Session options accepted by ``APIRouter.webrtc()``."""
+
+    name: str | None
+    role: Role
+    media: MediaPolicy | None
+    data_channels: Sequence[DataChannelSpec]
+    limits: SessionLimits | None
+    max_sessions: int | None
+    dependencies: Sequence[Depends] | None
+    raises: Sequence[AnyError]
 
 
 class APIRouter(CanonRouter):
@@ -82,7 +160,7 @@ class APIRouter(CanonRouter):
         path_model: type[BaseModel] | None = None,
         subprotocol: str | None = None,
         summary: str | None = None,
-        **options: Any,
+        **options: Unpack[ChannelOptions],
     ) -> None:
         """Mount a channel snapshot at one JSON-RPC WebSocket endpoint.
 
@@ -135,7 +213,7 @@ class APIRouter(CanonRouter):
         )
 
     def sse[Endpoint: Callable[..., Any]](
-        self, path: str, **options: Any
+        self, path: str, **options: Unpack[StreamOptions]
     ) -> Callable[[Endpoint], Endpoint]:
         """Declare typed SSE with serialization and terminal completion/problems."""
         from fastapi_canon.integrations.sse import CanonStreamRouter
@@ -169,12 +247,11 @@ class APIRouter(CanonRouter):
         ice_servers: IceServerSource | None = None,
         on_event: EventHook | None = None,
         allowed_origins: Sequence[str] | None = None,
-        **options: Any,
+        **options: Unpack[SessionOptions],
     ) -> Callable[[Factory], Factory]:
         """Declare a WebRTC session factory with managed signaling and cleanup.
 
-        Session options include media, data_channels, limits, max_sessions,
-        dependencies and raises. A factory may also supply its session's engine.
+        A factory may also supply its session's engine.
         """
         from fastapi_canon.integrations.webrtc import CanonWebRtcRouter
 

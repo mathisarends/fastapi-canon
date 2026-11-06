@@ -22,6 +22,11 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- `APIRouter.sse()`, `include_channel()` and `webrtc()` declare their forwarded
+  options as typed keyword arguments (`StreamOptions`, `ChannelOptions` and
+  `SessionOptions` in `fastapi_canon.api_router`). Editors complete them and type
+  checkers reject misspelled options at the call site instead of at import time.
+  Runtime behavior is unchanged.
 - `Inject[T]` resolves application services in ordinary FastAPI dependency
   functions, not only in endpoint parameters. Authentication and precondition
   dependencies no longer need Dishka's `@inject` with `FromDishka[T]`;
