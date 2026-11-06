@@ -70,11 +70,13 @@ def test_snapshot_records_effective_paths_dependencies_and_error_origins() -> No
     composition = Composition(
         features=(Feature(name="projects", routers=[router]),),
         errors=ErrorOptions(type_base="https://example.test/problems"),
-        router_factory=lambda: CanonRouter(prefix="/api/v1"),
-        router_policy=RouterPolicy(
-            error_registry=auth,
-            raises=[auth_error],
-            dependencies=[Depends(require_authenticated_user)],
+        router_factory=lambda: CanonRouter(
+            prefix="/api/v1",
+            policy=RouterPolicy(
+                error_registry=auth,
+                raises=[auth_error],
+                dependencies=[Depends(require_authenticated_user)],
+            ),
         ),
     )
     app = composition.build(FastAPI())
@@ -88,7 +90,7 @@ def test_snapshot_records_effective_paths_dependencies_and_error_origins() -> No
     assert [
         (dep.name.rsplit(".", 1)[-1], dep.origin) for dep in operation.dependencies
     ] == [
-        ("require_authenticated_user", "composition.router_policy"),
+        ("require_authenticated_user", "composition.router_factory"),
         ("require_project", "operation"),
     ]
     assert [
@@ -99,7 +101,7 @@ def test_snapshot_records_effective_paths_dependencies_and_error_origins() -> No
             "authentication_required",
             "https://example.test/problems/authentication_required",
             401,
-            "composition.router_policy",
+            "composition.router_factory",
         ),
         (
             "project_missing",
@@ -199,7 +201,7 @@ def test_application_and_factory_dependencies_keep_their_origins() -> None:
     )
 
 
-def test_path_converters_share_openapi_paths_and_policy_contracts() -> None:
+def test_path_converters_share_openapi_paths_and_inherited_contracts() -> None:
     failure = Error(
         NotAuthenticated,
         code="authentication_required",
@@ -213,7 +215,7 @@ def test_path_converters_share_openapi_paths_and_policy_contracts() -> None:
     router.get("/files/{path:path}", operation_id="files.get")(lambda path: path)
     composition = Composition(
         features=(Feature(name="files", routers=[router]),),
-        router_policy=RouterPolicy(error_registry=registry, raises=[failure]),
+        router_factory=lambda: CanonRouter(error_registry=registry, raises=[failure]),
     )
     app = composition.build(FastAPI())
     operation = composition.inspect(app).operation_by_id("files.get")

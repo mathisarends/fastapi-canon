@@ -146,7 +146,7 @@ def test_router_policy_combines_contracts_dependencies_and_dishka_injection() ->
     assert feature.errors is not None and feature.errors.contains(MISSING)
 
 
-def test_composition_policy_preserves_nested_router_definitions() -> None:
+def test_router_factory_policy_extends_nested_feature_routers() -> None:
     child = CanonRouter()
 
     @child.get("/items/{item_id}", raises=[MISSING])
@@ -165,12 +165,10 @@ def test_composition_policy_preserves_nested_router_definitions() -> None:
     parent = APIRouter()
     parent.include_router(child)
     feature = Feature(name="items", routers=[parent])
+    policy = RouterPolicy(dependencies=PROTECTED.dependencies, raises=PROTECTED.raises)
     composition = Composition(
         features=(feature,),
-        router_policy=RouterPolicy(
-            dependencies=PROTECTED.dependencies, raises=PROTECTED.raises
-        ),
-        router_factory=lambda: CanonRouter(prefix="/api"),
+        router_factory=lambda: CanonRouter(prefix="/api", policy=policy),
     )
     protected = FastAPI()
     protected.get("/health")(lambda: "ok")
@@ -210,24 +208,9 @@ def test_composition_policy_preserves_nested_router_definitions() -> None:
     assert child.raises == ()
 
 
-def test_composition_policy_identity_is_part_of_installation() -> None:
-    feature = Feature(name="empty")
-    composition = Composition(features=(feature,), router_policy=PROTECTED)
-    app = composition.build(FastAPI())
-    assert composition.build(app) is app
-    assert Composition(features=(feature,), router_policy=PROTECTED).build(app) is app
-    different = Composition(features=(feature,), router_policy=RouterPolicy())
-    with pytest.raises(FeatureConfigurationError, match="different composition"):
-        different.build(app)
-
-
-@pytest.mark.parametrize("scope", ["router", "composition"])
-def test_invalid_policy_type_is_rejected(scope: str) -> None:
+def test_invalid_policy_type_is_rejected() -> None:
     with pytest.raises(ErrorConfigurationError, match="RouterPolicy instance"):
-        if scope == "router":
-            CanonRouter(policy=object())  # type: ignore[arg-type]
-        else:
-            Composition(router_policy=object())  # type: ignore[arg-type]
+        CanonRouter(policy=object())  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize("scope", ["router", "composition"])
@@ -242,19 +225,20 @@ def test_policy_registry_collisions_are_rejected(scope: str) -> None:
         else:
             Composition(
                 features=(Feature(name="other", errors=registry),),
-                router_policy=PROTECTED,
+                router_factory=lambda: CanonRouter(policy=PROTECTED),
             ).build(app)
     assert tuple(app.routes) == original_routes
 
 
-def test_composition_policy_rejects_manual_collision_before_installation() -> None:
+def test_inherited_status_rejects_manual_collision_before_installation() -> None:
     router = CanonRouter()
     router.get("/items", responses={401: {"description": "Manual error"}})(lambda: None)
     app = FastAPI()
     original_routes = tuple(app.routes)
-    with pytest.raises(FeatureConfigurationError, match="policy response status 401"):
+    with pytest.raises(FeatureConfigurationError, match="inherits response status 401"):
         Composition(
-            features=(Feature(name="items", routers=[router]),), router_policy=PROTECTED
+            features=(Feature(name="items", routers=[router]),),
+            router_factory=lambda: CanonRouter(policy=PROTECTED),
         ).build(app)
     assert tuple(app.routes) == original_routes
     assert app.openapi_schema is None
@@ -272,7 +256,8 @@ def test_dependency_only_policy_preserves_normalizers_and_deduplicates_execution
     router = CanonRouter(policy=policy)
     router.get("/items")(lambda: None)
     app = Composition(
-        features=(Feature(name="items", routers=[router]),), router_policy=policy
+        features=(Feature(name="items", routers=[router]),),
+        router_factory=lambda: CanonRouter(policy=policy),
     ).build(FastAPI())
     assert TestClient(app).get("/items").status_code == 200
     assert calls == ["called"]
@@ -281,18 +266,43 @@ def test_dependency_only_policy_preserves_normalizers_and_deduplicates_execution
     ]["schema"] == {"$ref": "#/components/schemas/InternalServerProblem"}
 
 
-def test_existing_parent_raises_remain_local_to_parent_operations() -> None:
+def test_parent_raises_extend_included_operations() -> None:
     parent = CanonRouter(error_registry=AUTH_ERRORS, raises=[FORBIDDEN])
-    child = CanonRouter()
+    child = CanonRouter(error_registry=ITEM_ERRORS)
+    child.get("/child", raises=[MISSING])(lambda: None)
+    sibling = APIRouter()
+    sibling.get("/sibling")(lambda: None)
+    parent.include_router(child)
+    app = Composition(
+        features=(Feature(name="parent", routers=[parent, sibling]),)
+    ).build(FastAPI())
+    document = app.openapi()
+    schema = document["paths"]["/child"]["get"]["responses"]["403"]["content"][
+        "application/problem+json"
+    ]["schema"]
+    assert schema["oneOf"] == [
+        {"$ref": "#/components/schemas/ForbiddenProblem"},
+        {"$ref": "#/components/schemas/MissingItemProblem"},
+    ]
+    assert "callbacks" not in document["paths"]["/child"]["get"]
+    assert "403" not in document["paths"]["/sibling"]["get"]["responses"]
+
+
+def test_parent_raises_extend_operations_included_without_composition() -> None:
+    parent = CanonRouter(error_registry=AUTH_ERRORS, raises=[FORBIDDEN])
+    child = APIRouter()
     child.get("/child")(lambda: None)
     parent.include_router(child)
-    app = Composition(features=(Feature(name="parent", routers=[parent]),)).build(
-        FastAPI()
-    )
-    assert "403" not in app.openapi()["paths"]["/child"]["get"]["responses"]
+    app = FastAPI()
+    app.include_router(parent)
+    AUTH_ERRORS.install(app)
+    responses = app.openapi()["paths"]["/child"]["get"]["responses"]
+    assert responses["403"]["content"]["application/problem+json"]["schema"] == {
+        "$ref": "#/components/schemas/ForbiddenProblem"
+    }
 
 
-def test_composition_policy_422_includes_automatic_validation() -> None:
+def test_inherited_422_includes_automatic_validation() -> None:
     invalid = Error(ValueError, status=422, code="invalid_input", title="Invalid input")
     policy = RouterPolicy(
         error_registry=ErrorRegistry(errors=[invalid], type_base=AUTH_ERRORS.type_base),
@@ -305,7 +315,8 @@ def test_composition_policy_422_includes_automatic_validation() -> None:
         return item_id
 
     app = Composition(
-        features=(Feature(name="items", routers=[router]),), router_policy=policy
+        features=(Feature(name="items", routers=[router]),),
+        router_factory=lambda: CanonRouter(policy=policy),
     ).build(FastAPI())
     response = app.openapi()["paths"]["/items/{item_id}"]["get"]["responses"]["422"]
     assert response["content"]["application/problem+json"]["schema"] == {

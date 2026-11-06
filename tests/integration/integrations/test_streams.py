@@ -396,7 +396,8 @@ def test_composition_policy_preserves_typed_sse_and_runs_before_streaming() -> N
         raises=[run_not_found],
     )
     application = Composition(
-        features=(Feature(name="events", routers=[selected]),), router_policy=policy
+        features=(Feature(name="events", routers=[selected]),),
+        router_factory=lambda: CanonRouter(policy=policy),
     ).build(FastAPI())
     responses = application.openapi()["paths"]["/policy-events"]["get"]["responses"]
     assert responses["200"] == expected

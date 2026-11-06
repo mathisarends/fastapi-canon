@@ -91,7 +91,7 @@ class _Source:
     uncertain: dict[str, list[str]] = field(default_factory=dict)
     nested: list[_Definition] = field(default_factory=list)
     touched: set[str] = field(default_factory=set)
-    composition_policies: list[tuple[str, int]] = field(default_factory=list)
+    inherited_contracts: list[tuple[str, int]] = field(default_factory=list)
     roots: list[Path] = field(default_factory=list)
     _externals: dict[str, bool] = field(default_factory=dict)
     _methods: frozenset[str] | None = None
@@ -135,8 +135,14 @@ class _Source:
                     source._index(module, tree.body, package=package, names=names)
                     indexed = {id(source.definitions[name].node) for name in names}
                     for node in ast.walk(tree):
-                        if isinstance(node, ast.Call) and any(
-                            item.arg == "router_policy" for item in node.keywords
+                        if isinstance(node, ast.Call) and (
+                            (
+                                isinstance(node.func, ast.Attribute)
+                                and node.func.attr == "include_router"
+                            )
+                            or any(
+                                item.arg == "router_factory" for item in node.keywords
+                            )
                         ):
                             calls.append((module, node))
                         elif (
@@ -151,19 +157,65 @@ class _Source:
                                 )
                             )
         for module, call in calls:
-            if source.resolve(call.func, module) in {
+            if isinstance(call.func, ast.Attribute):
+                parent: ast.expr | None = call.func.value
+            elif source.resolve(call.func, module) in {
                 "fastapi_canon.Composition",
                 "fastapi_canon.feature.Composition",
-            } and any(
-                item.arg == "router_policy"
-                and not (
-                    isinstance(item.value, ast.Constant) and item.value.value is None
-                )
-                for item in call.keywords
+            }:
+                parent = _keyword(call, "router_factory")
+            else:
+                parent = None
+            if parent is not None and source._extends_included_routes(
+                parent, module, set()
             ):
-                source.composition_policies.append((module, call.lineno))
+                source.inherited_contracts.append((module, call.lineno))
         source._index_route_factories()
         return source
+
+    def _extends_included_routes(
+        self, node: ast.expr, module: str, seen: set[int]
+    ) -> bool:
+        # A Canon router's raises, http_statuses and policy extend the
+        # operations it includes.
+        module, node = self.value(node, module)
+        if id(node) in seen:
+            return False
+        seen.add(id(node))
+        if isinstance(node, ast.Lambda):
+            return self._extends_included_routes(node.body, module, seen)
+        if isinstance(node, ast.Call):
+            name = self.resolve(node.func, module)
+            keywords = node.keywords
+        elif isinstance(node, ast.Name | ast.Attribute):
+            # A factory function passed by reference.
+            name = self.resolve(node, module)
+            keywords = []
+        else:
+            return False
+        if name in _ROUTER_DECLARATIONS:
+            return any(
+                item.arg is None
+                or (
+                    item.arg in {"raises", "http_statuses", "policy"}
+                    and not (
+                        isinstance(item.value, ast.Constant)
+                        and item.value.value is None
+                    )
+                )
+                for item in keywords
+            )
+        definition = self.definitions.get(name) if name is not None else None
+        if definition is None or not isinstance(
+            definition.node, ast.FunctionDef | ast.AsyncFunctionDef
+        ):
+            return False
+        return any(
+            isinstance(statement, ast.Return)
+            and statement.value is not None
+            and self._extends_included_routes(statement.value, definition.module, seen)
+            for statement in ast.walk(definition.node)
+        )
 
     def _index_route_factories(self) -> None:
         for factory in list(self.definitions.values()):

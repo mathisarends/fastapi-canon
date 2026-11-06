@@ -932,7 +932,8 @@ def _router_policies() -> None:
         router.get("/policy", raises=[item_denied])(lambda: "ok")
         feature = Feature(name="policy", routers=[router])
         composition = Composition(
-            features=(feature,), router_policy=None if direct else policy
+            features=(feature,),
+            router_factory=None if direct else lambda: APIRouter(policy=policy),
         )
         app = composition.build(FastAPI())
         with TestClient(app) as client:

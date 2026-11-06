@@ -244,8 +244,7 @@ For SSE, use the generator callable passed to the stream declaration, including
 when automatic injection and terminal processing wrap it. Explicit user decorators
 keep the registered callable's identity; lookup does not unwrap those decorators.
 
-Origins distinguish `application`, `composition.router_policy`,
-`composition.router_factory`, `router.include_router`, `router.policy`, `router`,
+Origins distinguish `application`, `composition.router_factory`, `router.include_router`, `router.policy`, `router`,
 `operation` and nested/parameter `dependency` declarations where applicable.
 Plain FastAPI response metadata without a Canon declaration uses `route` for
 its error origin. These describe provenance, not an authentication property.

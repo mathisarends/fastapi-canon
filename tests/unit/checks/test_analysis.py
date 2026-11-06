@@ -822,19 +822,46 @@ def endpoint(): raise Missing()
     assert codes(report) == ["CAN003"]
 
 
-def test_composition_policy_is_incomplete_instead_of_guessing(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "mounting",
+    [
+        "Composition(router_factory=lambda: CanonRouter(raises=[missing]))",
+        "def make(): return CanonRouter(policy=RouterPolicy(raises=[missing]))\n"
+        "composition = Composition(router_factory=make)",
+        "parent = CanonRouter(raises=[missing])\nparent.include_router(router)",
+    ],
+)
+def test_inherited_router_contracts_are_incomplete_instead_of_guessing(
+    tmp_path: Path, mounting: str
+) -> None:
     report = analyze(
         tmp_path,
         PRELUDE
-        + """
+        + f"""
 from fastapi_canon import Composition, RouterPolicy
-composition = Composition(router_policy=RouterPolicy(error_registry=registry, raises=[missing]))
+{mounting}
 @router.get('/')
 def endpoint(): raise Missing()
 """,
     )
     assert codes(report) == ["CAN003"]
-    assert "composition policy mounting" in report.operations[0].diagnostics[0].message
+    assert "include_router" in report.operations[0].diagnostics[0].message
+
+
+def test_plain_router_factory_keeps_contract_analysis(tmp_path: Path) -> None:
+    report = analyze(
+        tmp_path,
+        PRELUDE
+        + """
+from fastapi_canon import Composition
+composition = Composition(router_factory=lambda: CanonRouter(prefix='/api'))
+parent = CanonRouter(prefix='/v1')
+parent.include_router(router)
+@router.get('/')
+def endpoint(): raise Missing()
+""",
+    )
+    assert codes(report) == ["CAN001"]
 
 
 def test_shared_helpers_are_analyzed_once_per_run(

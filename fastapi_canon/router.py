@@ -11,6 +11,7 @@ from starlette.routing import get_name
 
 from fastapi_canon.error import Error, ErrorConfigurationError, ErrorRegistry
 from fastapi_canon.error.contracts import SUCCESS_EXTENSION, AnyError
+from fastapi_canon.error.openapi import InheritedContract
 from fastapi_canon.error.types import OpenAPIResponses
 from fastapi_canon.error.validation import unique_instances
 from fastapi_canon.exceptions import ConfigurationError, ResponseConfigurationError
@@ -25,7 +26,12 @@ from fastapi_canon.response import CanonResponse
 
 
 class CanonRouter(APIRouter):
-    """Compose response contracts and name operations from their endpoint functions."""
+    """Compose response contracts and name operations from their endpoint functions.
+
+    Like router dependencies, the router's ``raises``, ``http_statuses`` and
+    ``policy`` apply to its own operations and to every HTTP operation it
+    includes with ``include_router``.
+    """
 
     def __init__(
         self,
@@ -69,6 +75,13 @@ class CanonRouter(APIRouter):
         super().__init__(**kwargs)
         # Specialized transport constructors need not accept HTTP naming options.
         self.generate_unique_id_function = generate_id
+        if self.raises or self.http_statuses:
+            # FastAPI applies router callbacks to every operation the router adds
+            # or includes, which carries this contract to child routes.
+            self.callbacks = [
+                *(self.callbacks or ()),
+                InheritedContract(self.raises, self.http_statuses),
+            ]
 
     @property
     def error_registries(self) -> tuple[ErrorRegistry, ...]:

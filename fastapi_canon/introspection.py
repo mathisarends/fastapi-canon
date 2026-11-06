@@ -21,9 +21,9 @@ from fastapi_canon.error.contracts import (
     ErrorCatalog,
     contracts_from_responses,
 )
+from fastapi_canon.error.openapi import inherited_contract
 from fastapi_canon.exceptions import FeatureConfigurationError
 from fastapi_canon.injection import injected_resolver_dependency
-from fastapi_canon.policy import RouterPolicy
 from fastapi_canon.router import CanonRouter
 
 
@@ -39,13 +39,13 @@ class _HttpRoute:
     dependant: Dependant | None
     openapi_extra: Mapping[str, Any] | None
     original_route: APIRoute
+    callbacks: tuple[object, ...] = ()
 
 
 def _describe(
     features: Sequence[tuple[str, tuple[APIRouter, ...], tuple[str, ...]]],
     routers: tuple[APIRouter, ...],
     catalog: ErrorCatalog | None,
-    policy: RouterPolicy | None,
     application_router: APIRouter,
 ) -> CompositionInfo:
     sources = [
@@ -70,21 +70,26 @@ def _describe(
     operations: list[OperationInfo] = []
     for (name, router, source), route in zip(sources, effective, strict=True):
         dependencies = _dependencies(
-            route, source, router, policy, application_router.dependencies
+            route, source, router, application_router.dependencies
         )
         errors: list[ErrorInfo] = []
-        shared = policy.raises if policy is not None else ()
         declared, _, _ = contracts_from_responses(route.path, route.responses, catalog)
+        inherited, _ = inherited_contract(route)
+        owned, _ = inherited_contract(source)
         error_origins = dict(getattr(source.openapi_extra, "_error_origins", ()))
-        for error in dict.fromkeys((*shared, *declared)):
+        for error in dict.fromkeys((*inherited, *declared)):
             origin = error_origins.get(str(id(error)), "route")
-            if error in shared:
-                origin = "composition.router_policy"
-            elif origin == "route" and isinstance(router, CanonRouter):
+            if origin == "route" and isinstance(router, CanonRouter):
                 if router.policy is not None and error in router.policy.raises:
                     origin = "router.policy"
                 elif error in router.raises:
                     origin = "router"
+            if origin == "route" and any(error is item for item in inherited):
+                origin = (
+                    "router.include_router"
+                    if any(error is item for item in owned)
+                    else "composition.router_factory"
+                )
             errors.append(
                 ErrorInfo(
                     error.code,
@@ -137,6 +142,7 @@ def _http_routes(router: APIRouter) -> Iterator[_HttpRoute]:
                 route.dependant,
                 route.openapi_extra,
                 original,
+                tuple(route.callbacks or ()),
             )
 
 
@@ -164,7 +170,6 @@ def _dependencies(
     route: _HttpRoute,
     source: _HttpRoute,
     router: APIRouter,
-    policy: RouterPolicy | None,
     application_dependencies: Sequence[Depends],
 ) -> tuple[DependencyInfo, ...]:
     original = getattr(source, "original_route", source)
@@ -182,9 +187,6 @@ def _dependencies(
         for dependency in router.policy.dependencies:
             origins[id(dependency)] = "router.policy"
     origins.update(declared)
-    if policy is not None:
-        for dependency in policy.dependencies:
-            origins[id(dependency)] = "composition.router_policy"
     for dependency in application_dependencies:
         origins[id(dependency)] = "application"
     result = [

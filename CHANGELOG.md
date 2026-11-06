@@ -8,6 +8,10 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### TL;DR
 
+- Router contracts follow `include_router()` like dependencies: an including
+  router's `raises` and `policy` extend its children, and
+  `Composition(router_policy=...)` becomes
+  `router_factory=lambda: APIRouter(policy=...)`.
 - Declare public errors once with `raises=` across HTTP, SSE and RPC. Composition
   automatically collects their `Error` instances; separate registry entries are
   no longer required. SSE uses the same declaration for admission and terminal
@@ -241,6 +245,24 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Breaking changes
 
+- `Composition(router_policy=...)` is removed. A Canon router's `raises`,
+  `http_statuses` and `policy` now extend every HTTP operation it includes with
+  `include_router()`, like its `dependencies`, so the application router carries
+  composition-wide contracts. Migrate
+  `Composition(router_policy=P, router_factory=lambda: APIRouter(prefix="/api"))`
+  to `Composition(router_factory=lambda: APIRouter(prefix="/api", policy=P))`;
+  without a factory use `router_factory=lambda: APIRouter(policy=P)`.
+- Parent router `raises=`, `http_statuses=` and `policy=` are no longer local to
+  the parent's own operations. Included child operations now document those
+  errors in OpenAPI, the composition snapshot and generated clients. Move
+  declarations that should stay local onto the parent's routes or a sibling
+  router. A child's manual `responses=` entry for an inherited status is
+  rejected like a local collision.
+- Composition snapshots report errors and dependencies contributed by the
+  application router with origin `composition.router_factory`; the
+  `composition.router_policy` origin no longer exists. The error-contract checker
+  marks operations incomplete (CAN003) when routers are included into a Canon
+  router that declares `raises`, `http_statuses` or `policy`.
 - Supported nested route factories now report contract gaps instead of blanket
   CAN003, and their operation names become `module.factory.<locals>.endpoint`.
   Before adopting 0.16.0, update report-name filters and map/declare newly exposed

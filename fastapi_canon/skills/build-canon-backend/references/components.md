@@ -15,7 +15,7 @@ uv run python -c "import inspect; from fastapi_canon import Composition, Feature
 | `APIRouter` | One feature router: HTTP contracts, typed SSE, JSON-RPC channel mounts, WebRTC sessions | `Feature(routers=[router])` |
 | `RpcChannel`, `Inject` | Typed JSON-RPC methods/events and their injected dependencies | `router.include_channel(channel, path=...)` |
 | `Error`, `ErrorRegistry` | Public problem identity and exception mapping | `raises=` automatically registers definitions; explicit registries add undeclared errors |
-| `RouterPolicy` | Reusable HTTP prerequisites and documented failures | Router `policy=` or composition `router_policy=` |
+| `RouterPolicy` | Reusable HTTP prerequisites and documented failures | Router `policy=`; an including or `router_factory` router extends its children |
 | Dishka `Provider` | Bind application services and ports to their implementations | `Feature(providers=[ProviderClass])` |
 | `Feature` | Immutable contributions of one feature: routers, providers, errors, lifespan, checks, instrumentation, MCP mounts | Ordered `Composition(features=(...))` |
 | `Composition` | Install routes, error contracts and one Dishka container; own startup and cleanup | `composition.build(FastAPI())` |
