@@ -50,7 +50,7 @@ def inject_endpoint[EndpointT: Callable[..., Any]](endpoint: EndpointT) -> Endpo
             "Endpoint constructors with injection need a typed function or callable instance"
         )
     if inspect.iscoroutinefunction(endpoint) or inspect.isasyncgenfunction(endpoint):
-        wrapped = _inject_async(endpoint, hints, parameters)
+        wrapped = _inject_async(endpoint, parameters)
     else:
         wrapped = _inject_sync(endpoint, hints, parameters)
     wrapped.__dict__["__canon_declared_endpoint__"] = getattr(
@@ -183,11 +183,12 @@ def _parse_dependency(parameter: Parameter, hint: Any) -> DependencyKey | None:
 
 
 def _inject_async[EndpointT: Callable[..., Any]](
-    endpoint: EndpointT, hints: dict[str, Any], parameters: Any
+    endpoint: EndpointT, parameters: Any
 ) -> EndpointT:
     # FastAPI supplies the request to only one parameter, so reuse an existing one.
+    request_hints = get_type_hints(endpoint)
     request_name = next(
-        (name for name in parameters if hints.get(name) is Request), None
+        (name for name in parameters if request_hints.get(name) is Request), None
     )
     additional_params: list[Parameter] = []
     if request_name is None:

@@ -5,6 +5,7 @@ import copy
 import importlib
 import json
 import shutil
+import socket
 import subprocess
 import sys
 from dataclasses import replace
@@ -110,6 +111,52 @@ def test_unified_python_calls_streams_and_model_error_identity(tmp_path: Path) -
         sys.path.remove(str(tmp_path))
         for name in tuple(sys.modules):
             if name == "unified_test" or name.startswith("unified_test."):
+                del sys.modules[name]
+
+
+async def test_concurrent_binding_failures_preserve_the_connect_error(
+    tmp_path: Path,
+) -> None:
+    package = "concurrent_binding_sdk"
+    files = render(
+        build_plan(((SourceConfig("control", "openrpc"), _example_openrpc()),)),
+        TargetConfig("python", "python", ("control",), tmp_path, package=package),
+    )
+    for name, content in files.items():
+        target = tmp_path / package / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+    sys.path.insert(0, str(tmp_path))
+    try:
+        sdk = importlib.import_module(package)
+        binding = importlib.import_module(f"{package}.internal.control_jsonrpc")
+        # Reserve a local port without listening: every real connection is refused.
+        with socket.socket() as reserved:
+            reserved.bind(("127.0.0.1", 0))
+            port = reserved.getsockname()[1]
+            async with (
+                asyncio.timeout(10),
+                sdk.ApiClient(
+                    f"http://127.0.0.1:{port}", bindings={"control": {"lazy": False}}
+                ) as client,
+            ):
+                results = await asyncio.gather(
+                    client.projects.cancel(project_id=1),
+                    client.projects.cancel(project_id=2),
+                    return_exceptions=True,
+                )
+                assert len(results) == 2
+                assert all(
+                    isinstance(error, binding.RpcConnectError) for error in results
+                )
+                # A failed shared initialization must leave the binding retryable.
+                with pytest.raises(binding.RpcConnectError) as retried:
+                    await client.projects.cancel(project_id=3)
+                assert all(retried.value is not error for error in results)
+    finally:
+        sys.path.remove(str(tmp_path))
+        for name in tuple(sys.modules):
+            if name == package or name.startswith(package + "."):
                 del sys.modules[name]
 
 

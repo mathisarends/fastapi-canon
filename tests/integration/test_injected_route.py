@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import AsyncIterator, Iterator
+from typing import Annotated
 
 import pytest
 from dishka import Provider, Scope, make_async_container, provide
@@ -133,6 +134,50 @@ def test_injected_parameters_are_absent_from_the_public_contract() -> None:
 
     assert [parameter["name"] for parameter in operation["parameters"]] == ["item_id"]
     assert "requestBody" not in operation
+
+
+@pytest.mark.parametrize("annotated", [False, True])
+def test_http_injection_reuses_the_declared_request(annotated: bool) -> None:
+    lifecycle = Lifecycle()
+    router = APIRouter()
+
+    async def read(request: Request, store: Inject[Store]) -> dict[str, object]:
+        return {"path": request.url.path, "store": store.identifier}
+
+    if annotated:
+        read.__annotations__["request"] = Annotated[Request, "request metadata"]
+    router.get("/request")(read)
+    app = compose(router, lifecycle)
+    with TestClient(app) as client:
+        response = client.get("/request")
+    assert response.status_code == 200
+    assert response.json() == {"path": "/request", "store": 1}
+    assert lifecycle.closed == [1]
+
+
+@pytest.mark.parametrize("injected", [False, True])
+def test_sse_reuses_an_annotated_request(injected: bool) -> None:
+    router = APIRouter()
+
+    async def plain(
+        request: Annotated[Request, "request metadata"],
+    ) -> AsyncIterator[str]:
+        yield request.url.path
+
+    async def with_clock(
+        request: Annotated[Request, "request metadata"], clock: Inject[Clock]
+    ) -> AsyncIterator[str]:
+        yield f"{request.url.path} at {clock.now()}"
+
+    router.sse("/events")(with_clock if injected else plain)
+    app = compose(router, Lifecycle())
+    with TestClient(app) as client:
+        response = client.get("/events")
+    assert response.status_code == 200
+    expected = "/events at noon" if injected else "/events"
+    assert f'data: "{expected}"' in response.text
+    assert "event: canon.complete" in response.text
+    assert "event: canon.problem" not in response.text
 
 
 def test_existing_dishka_declarations_keep_working() -> None:
