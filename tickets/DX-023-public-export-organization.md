@@ -218,7 +218,7 @@ Keep: `RpcChannel`, `CanonWebSocketRouter`, `RpcModel`, `Inject`, `RpcConnection
 
 ## Completion
 
-- Implementation or decision PR:
+- Implementation or decision PR: [#102](https://github.com/mathisarends/fastapi-canon/pull/102)
 - Final commit and verification: Inventory script run against `df05e84`; facade
   modules, target submodules and the generator import rewrite verified in source.
 - Remaining follow-ups: DX-030, DX-031, DX-032.
