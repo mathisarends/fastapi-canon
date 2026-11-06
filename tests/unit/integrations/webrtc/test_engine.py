@@ -6,19 +6,21 @@ from typing import Any
 
 import pytest
 from fastapi_canon.integrations.webrtc import (
-    ConnectionState,
-    ConnectionStats,
-    DescriptionType,
     Direction,
-    EngineCapabilities,
     MediaKind,
-    MediaStats,
     MessageFormat,
     Role,
     SessionEvent,
     SessionEventKind,
 )
 from fastapi_canon.integrations.webrtc.engine import ChannelParameters
+from fastapi_canon.integrations.webrtc.engines import (
+    ConnectionState,
+    ConnectionStats,
+    DescriptionType,
+    EngineCapabilities,
+    MediaStats,
+)
 from fastapi_canon.integrations.webrtc.protocol import (
     DescriptionPayload,
     SessionMessage,

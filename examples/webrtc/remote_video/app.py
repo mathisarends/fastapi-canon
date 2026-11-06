@@ -6,13 +6,8 @@ from typing import Protocol
 
 from examples.webrtc.remote_video.engine import RemoteVideoEngine, VideoLease
 from fastapi import FastAPI
-from fastapi_canon.integrations.webrtc import (
-    Direction,
-    MediaPolicy,
-    Role,
-    Session,
-    WebRtcRouter,
-)
+from fastapi_canon.integrations.webrtc import Direction, MediaPolicy, Role, Session
+from fastapi_canon.integrations.webrtc.router import WebRtcRouter
 
 
 class VideoService(Protocol):

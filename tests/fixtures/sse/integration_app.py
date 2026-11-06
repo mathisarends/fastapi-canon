@@ -4,7 +4,7 @@ from typing import Annotated
 
 from examples.sse.agent_runs import router as runs_router
 from fastapi import APIRouter, Depends, FastAPI, Header, Query
-from fastapi_canon.integrations.sse import StreamRouter
+from fastapi_canon.integrations.sse.router import StreamRouter
 from pydantic import BaseModel
 
 from tests.fixtures.sse.models_app import router as models_router

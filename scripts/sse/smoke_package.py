@@ -13,7 +13,7 @@ from typing import Literal
 
 import fastapi_canon.integrations.sse
 from fastapi import FastAPI
-from fastapi_canon.integrations.sse import StreamRouter
+from fastapi_canon.integrations.sse.router import StreamRouter
 from pydantic import BaseModel
 
 
@@ -32,9 +32,7 @@ def _main() -> None:
         Path(fastapi_canon.integrations.sse.__file__).resolve()
     )
     assert (
-        version("fastapi-canon")
-        == fastapi_canon.integrations.sse.__version__
-        == args.expected_version
+        version("fastapi-canon") == fastapi_canon.__version__ == args.expected_version
     )
     router = StreamRouter()
 

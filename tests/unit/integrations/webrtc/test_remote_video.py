@@ -9,12 +9,10 @@ import pytest
 from examples.webrtc.remote_video.app import create_app, create_router
 from examples.webrtc.remote_video.engine import RemoteVideoEngine, VideoLease
 from fastapi_canon.integrations.webrtc import (
-    DescriptionType,
     ErrorCode,
     Session,
     SessionLimits,
     WebRtcError,
-    WebRtcRouter,
 )
 from fastapi_canon.integrations.webrtc.engine import (
     ConnectionState,
@@ -24,6 +22,8 @@ from fastapi_canon.integrations.webrtc.engine import (
     SessionDescription,
     SignalingState,
 )
+from fastapi_canon.integrations.webrtc.engines import DescriptionType
+from fastapi_canon.integrations.webrtc.router import WebRtcRouter
 
 from tests.unit.integrations.webrtc.fake_engine import FakeEngine, NativeTrack, sdp
 from tests.unit.integrations.webrtc.server import serve

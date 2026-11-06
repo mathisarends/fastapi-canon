@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 from typing import Annotated, Literal
 
 from fastapi import FastAPI, Header, Query
-from fastapi_canon.integrations.sse import StreamRouter
+from fastapi_canon.integrations.sse.router import StreamRouter
 from pydantic import BaseModel, Field
 
 

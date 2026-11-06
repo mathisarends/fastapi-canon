@@ -33,9 +33,9 @@ from fastapi_canon.integrations.webrtc import (
     Role,
     Session,
     SessionLimits,
-    WebRtcRouter,
 )
 from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine
+from fastapi_canon.integrations.webrtc.router import WebRtcRouter
 from pydantic import BaseModel, Field
 
 DEMO_TOKEN = "demo"

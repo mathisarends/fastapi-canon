@@ -19,9 +19,9 @@ from fastapi_canon.integrations.webrtc import (
     Session,
     SessionEvent,
     SessionLimits,
-    WebRtcRouter,
 )
 from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine
+from fastapi_canon.integrations.webrtc.router import WebRtcRouter
 from pydantic import BaseModel
 from tests.unit.integrations.webrtc.peer_client import PeerClient
 from tests.unit.integrations.webrtc.server import serve

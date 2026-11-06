@@ -7,10 +7,10 @@ import pytest
 from examples.sse.agent_runs import app
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException
 from fastapi.testclient import TestClient
-from fastapi_canon.integrations.sse import StreamRouter
 from fastapi_canon.integrations.sse.codegen.ir import build_ir
 from fastapi_canon.integrations.sse.codegen.openapi import export_schema
 from fastapi_canon.integrations.sse.codegen.python import generate_python
+from fastapi_canon.integrations.sse.router import StreamRouter
 from pydantic import BaseModel, Field, TypeAdapter
 from tests.unit.integrations.sse.codegen.helpers import load_models
 

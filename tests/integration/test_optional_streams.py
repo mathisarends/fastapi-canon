@@ -37,13 +37,14 @@ def test_core_import_runtime_and_missing_extra_diagnostic() -> None:
         assert not any(name.startswith("fastapi_canon.integrations.sse") for name in sys.modules)
         assert not any(name.startswith("fastapi_canon.integrations.webrtc") for name in sys.modules)
         try:
-            from fastapi_canon.integrations.sse import CanonStreamRouter
+            router.sse("/events")
         except ModuleNotFoundError as exc:
             assert exc.name == "fastapi.sse"
             assert "fastapi-canon[sse]" in str(exc)
         else:
             raise AssertionError("The integration must require the optional dependency")
-        from fastapi_canon.integrations.webrtc import CanonWebRtcRouter
+        from fastapi_canon.integrations.webrtc import SessionCapacity
+        from fastapi_canon.integrations.webrtc.engines import Engine
         from fastapi_canon.integrations.websockets import RpcChannel
         from fastapi_canon.cli import main
         for args in (["--help"], ["websockets", "--help"], ["webrtc", "--help"]):

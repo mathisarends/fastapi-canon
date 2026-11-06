@@ -91,10 +91,10 @@ def _main() -> None:
         _database_check(selected)
         _mcp_check(selected)
     if "sse" in selected:
-        from fastapi_canon.integrations.sse import StreamRouter
+        from fastapi_canon.integrations.sse.router import StreamRouter
 
         if "fastapi-canon" in selected:
-            from fastapi_canon.integrations.sse import CanonStreamRouter
+            from fastapi_canon.integrations.sse.canon import CanonStreamRouter
 
             streams = CanonStreamRouter()
         else:
@@ -696,7 +696,7 @@ class _RecordingEngine:
     """Counts peers; admission must reject sessions before reaching it."""
 
     def __init__(self) -> None:
-        from fastapi_canon.integrations.webrtc import EngineCapabilities
+        from fastapi_canon.integrations.webrtc.engines import EngineCapabilities
 
         self.capabilities = EngineCapabilities(
             trickle_ice=True, ice_restart=False, renegotiation=False
@@ -713,7 +713,8 @@ class _RecordingEngine:
 
 def _webrtc_router(engine, *, canon=False):
     from fastapi import HTTPException, Query
-    from fastapi_canon.integrations.webrtc import DataChannelSpec, Session, WebRtcRouter
+    from fastapi_canon.integrations.webrtc import DataChannelSpec, Session
+    from fastapi_canon.integrations.webrtc.router import WebRtcRouter
 
     class AdmissionDenied(Exception):
         pass
@@ -721,7 +722,7 @@ def _webrtc_router(engine, *, canon=False):
     declarations = {}
     if canon:
         from fastapi_canon import Error
-        from fastapi_canon.integrations.webrtc import CanonWebRtcRouter
+        from fastapi_canon.integrations.webrtc.canon import CanonWebRtcRouter
 
         denied = Error(
             AdmissionDenied,

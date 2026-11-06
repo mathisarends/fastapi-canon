@@ -527,7 +527,7 @@ def test_canonical_names_wire_aliases_and_primitive_results(tmp_path: Path) -> N
     from pydantic.alias_generators import to_camel
 
     from fastapi_canon import Composition, Feature
-    from fastapi_canon.integrations.sse import CanonStreamRouter
+    from fastapi_canon.integrations.sse.canon import CanonStreamRouter
     from fastapi_canon.integrations.websockets import RpcChannel
     from fastapi_canon.router import CanonRouter
 
@@ -715,7 +715,7 @@ def test_terminal_only_nested_problem_definitions_share_identity(
     from pydantic import BaseModel
 
     from fastapi_canon import Composition, Error, ErrorOptions, Feature
-    from fastapi_canon.integrations.sse import CanonStreamRouter
+    from fastapi_canon.integrations.sse.canon import CanonStreamRouter
 
     class Leaf(BaseModel):
         count: int

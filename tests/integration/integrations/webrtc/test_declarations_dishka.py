@@ -25,9 +25,9 @@ from fastapi_canon.integrations.webrtc import (
     MediaPolicy,
     Peer,
     Session,
-    WebRtcRouter,
 )
 from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine
+from fastapi_canon.integrations.webrtc.router import WebRtcRouter
 from starlette.testclient import WebSocketDenialResponse
 
 

@@ -217,7 +217,7 @@ def test_diagnostic_report_cannot_overwrite_inputs_or_generated_files(tmp_path):
 def test_report_describes_actual_target_phases_and_stable_schema_content(
     tmp_path, target, backend
 ):
-    from fastapi_canon.integrations.sse import __version__
+    from fastapi_canon import __version__
 
     document = event_document(str)
     schema, report = tmp_path / "openapi.json", tmp_path / "report.json"

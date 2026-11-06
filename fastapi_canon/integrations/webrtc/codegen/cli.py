@@ -10,7 +10,7 @@ from typing import Any, cast
 
 from fastapi import FastAPI
 
-from fastapi_canon.integrations.webrtc import __version__
+from fastapi_canon import __version__
 from fastapi_canon.integrations.webrtc.codegen.typescript import (
     DEFAULT_CLIENT_NAME,
     ContractError,

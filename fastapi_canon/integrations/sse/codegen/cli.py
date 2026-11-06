@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import FastAPI
 
-from fastapi_canon.integrations.sse import __version__
+from fastapi_canon import __version__
 from fastapi_canon.integrations.sse.codegen.openapi import (
     ContractError,
     Document,
