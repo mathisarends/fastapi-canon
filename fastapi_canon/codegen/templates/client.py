@@ -13,7 +13,13 @@ from urllib.parse import quote, urlsplit, urlunsplit
 import httpx
 from pydantic import TypeAdapter, ValidationError
 
-from .problem import ProblemError, ProtocolError, TransportError, parse_problem
+from .problem import (
+    HttpError,
+    ProtocolError,
+    TransportError,
+    parse_problem,
+    problem_error,
+)
 
 
 class UnsetType:
@@ -26,14 +32,8 @@ UNSET = UnsetType()
 @dataclass(frozen=True)
 class RequestOptions:
     headers: dict[str, str] | None = None
-    timeout: float | None = None
+    timeout: float | UnsetType | None = UNSET
     unknown_events: Literal["error", "ignore"] = "error"
-
-
-class HttpError(TransportError):
-    def __init__(self, status: int) -> None:
-        self.status = status
-        super().__init__(f"HTTP {status}")
 
 
 class Runtime:
@@ -90,15 +90,18 @@ class Runtime:
             raise ValueError(
                 "JSON-RPC authentication belongs to binding connection options"
             )
-        client = await self.binding(source)
-        method = client
-        for part in path:
-            method = getattr(method, part)
         task = asyncio.current_task()
         assert task is not None
         self.tasks.add(task)
         try:
-            async with asyncio.timeout(options.timeout if options else None):
+            timeout = options.timeout if options else UNSET
+            async with asyncio.timeout(
+                None if isinstance(timeout, UnsetType) else timeout
+            ):
+                client = await self.binding(source)
+                method = client
+                for part in path:
+                    method = getattr(method, part)
                 return await method(
                     **{
                         name: value
@@ -250,6 +253,12 @@ class Runtime:
         path, query, headers, body = self.prepare(
             spec, values, parameter_types, options
         )
+        stream_kwargs: dict[str, Any] = {}
+        if isinstance(options.timeout, UnsetType):
+            if self.owns_http:
+                stream_kwargs["timeout"] = None
+        else:
+            stream_kwargs["timeout"] = options.timeout
         return transport.stream(
             path,
             spec["method"],
@@ -261,7 +270,8 @@ class Runtime:
             headers=headers,
             body=body,
             options=request_options(
-                timeout=options.timeout, unknown_events=options.unknown_events
+                unknown_events=options.unknown_events,
+                **stream_kwargs,
             ),
         )
 
@@ -295,13 +305,16 @@ class Runtime:
         assert task is not None
         self.tasks.add(task)
         try:
+            request_kwargs: dict[str, Any] = {}
+            if not isinstance(options.timeout, UnsetType):
+                request_kwargs["timeout"] = options.timeout
             try:
                 response = await self.http.request(
                     spec["method"],
                     self.base_url + "/" + path.lstrip("/"),
                     params=tuple(query),
                     headers=headers,
-                    timeout=options.timeout,
+                    **request_kwargs,
                     content=content,
                 )
             except httpx.HTTPError as exc:
@@ -322,8 +335,12 @@ class Runtime:
                             )
                     except (ValueError, ValidationError) as exc:
                         raise ProtocolError("Invalid HTTP problem") from exc
-                    raise ProblemError(problem)
-                raise HttpError(response.status_code)
+                    raise problem_error(problem)
+                try:
+                    details = response.json()
+                except ValueError:
+                    details = response.text[:65536]
+                raise HttpError(response, details)
             if not 200 <= response.status_code < 300:
                 raise ProtocolError("Unexpected HTTP response status")
             status = str(response.status_code)

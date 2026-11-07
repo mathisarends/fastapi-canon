@@ -278,9 +278,12 @@ async context managers. No `sse`/`rpc` prefix is added to domain methods.
 
 ## Names and shared models
 
-OpenAPI naming uses configuration, `x-canon-operation`, dotted operation IDs, or
-first tag plus operation ID. JSON-RPC and WebRTC use declared operation/session
-names. Override explicitly when adapting existing contracts:
+OpenAPI naming uses configuration, `x-canon-operation`, then the operation ID.
+Tags only organize API documentation and never affect SDK names. An unqualified
+ID produces a root method. Prefer `APIRouter(namespace="projects")` for stable
+domain groups; explicit dotted operation IDs remain supported. JSON-RPC and
+WebRTC use declared operation/session names. Override explicitly when adapting
+existing contracts:
 
 ```toml
 [codegen.sources.api.operations]
@@ -349,6 +352,81 @@ HTTP/SSE request options and JSON-RPC call options retain their binding's
 semantics. Python uses task cancellation and optional timeouts; TypeScript calls
 and SSE support `AbortSignal`. Accepted raw/WebRTC sessions retain their protocol
 close/error semantics and do not receive SSE terminal frames.
+
+### Public SDK methods and failures
+
+Common TypeScript SDKs support explicit resource management:
+
+```typescript
+import { createClient, ProjectMissingError, type Project } from "./generated/index.js";
+
+await using client = createClient({ baseUrl: "https://api.example.com" });
+try {
+  const project: Project = await client.projects.get(
+    { projectId: 1 },
+    { timeoutMs: 5_000 },
+  );
+} catch (error) {
+  if (error instanceof ProjectMissingError) showProblem(error.problem);
+  else throw error;
+}
+```
+
+`timeoutMs` covers the complete HTTP/RPC call, including connection establishment.
+RPC `CallOptions` also accepts declared request metadata. HTTP `HttpOptions`
+accepts request headers. Authentication for a WebSocket connection remains in
+its typed binding options: browser WebSockets cannot set arbitrary HTTP headers.
+Calls without parameters accept options directly, for example
+`client.system.status({ timeoutMs: 1_000 })`. Deadlines raise native
+`TimeoutError` DOMExceptions; caller cancellation preserves its abort reason.
+
+SSE `StreamOptions` has `openTimeoutMs` until response headers arrive and
+`idleTimeoutMs` while waiting for the next business event. Heartbeats and ignored
+unknown events do not reset that idle deadline; time spent processing a yielded
+event does not count. Both limits are optional. Cancellation preserves the caller's
+abort reason; a stream deadline raises a native `TimeoutError` DOMException.
+
+Each declared canonical problem has one public error class shared by HTTP, SSE
+and RPC. Its payload contains only the server's public contract. Unknown problem
+type URIs remain generic `ProblemError` instances, even if their code is familiar.
+The root exports reachable domain models and problem models; protocol envelopes
+and generated implementation aliases stay in the internal model module.
+
+Each TypeScript call also has a typed `.safe()` method:
+
+```typescript
+const result = await client.projects.get.safe({ projectId: 1 });
+if (result.ok) render(result.data);
+else if (result.kind === "declared") showProblem(result.problem);
+else showUnexpectedProblem(result.problem);
+```
+
+The declared branch contains the operation's problem union, including documented
+framework problems. The unexpected branch preserves an unknown public problem.
+Transport failures, invalid protocol responses, non-problem HTTP errors, deadlines
+and cancellation still throw. Streams report problems during iteration and do
+not have a `.safe()` method. TypeScript retains static payload types and standard
+problem-member checks; it does not add full runtime validation of extension fields.
+
+The public `HttpError` exposes `status`, `details` and `response` for deliberate
+inspection of non-problem HTTP failures. Its message contains only the status;
+TypeScript body and response properties are non-enumerable. SDKs never log the
+body or headers automatically. Public error payloads do not include server
+exception messages or internal causes unless the application explicitly publishes
+such fields.
+
+Python exports the same canonical error classes and `HttpError`. An omitted
+`RequestOptions.timeout` inherits the injected HTTP client's configuration;
+explicit `None` disables its timeout. An explicit RPC timeout includes lazy
+binding initialization. Generated package imports remain valid when the package
+is renamed or embedded inside another package.
+Streams using a facade-owned Python HTTP client retain their unlimited read
+timeout; injected clients keep their own timeout unless explicitly overridden.
+
+TypeScript output supports browser bundlers and Node ESM (`NodeNext` resolution),
+using explicit `.js` module paths. Import the generated `index.js` entry point.
+Human-readable output summarizes validation constraint limitations; use
+`--format json` to inspect each source-located diagnostic.
 
 Unified HTTP generation supports JSON bodies/responses, scalar path/header
 parameters and exploded scalar-array query parameters. Multipart/files, cookies,

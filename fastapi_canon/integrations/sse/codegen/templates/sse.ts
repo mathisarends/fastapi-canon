@@ -12,6 +12,10 @@ export interface ClientOptions {
 export interface RequestOptions {
   headers?: HeadersInit;
   signal?: AbortSignal;
+  /** Maximum time until response headers arrive. */
+  openTimeoutMs?: number;
+  /** Maximum wait for the next business event; heartbeats do not reset it. */
+  idleTimeoutMs?: number;
   /**
    * "forward" (default) yields every decoded event. "ignore" skips JSON objects
    * whose discriminator is a string tag the generated union does not declare.
@@ -260,6 +264,11 @@ export async function* stream<T>(
   const onAbort = () => controller.abort(options.signal?.reason);
   options.signal?.addEventListener("abort", onAbort, { once: true });
   if (options.signal?.aborted) onAbort();
+  const openTimeout = options.openTimeoutMs === undefined ? undefined : setTimeout(
+    () => controller.abort(new DOMException("Stream open timed out", "TimeoutError")),
+    options.openTimeoutMs,
+  );
+  let idleTimeout: ReturnType<typeof setTimeout> | undefined;
   let response: Response | undefined;
   let bodyHandled = false;
   try {
@@ -278,6 +287,7 @@ export async function* stream<T>(
         ...(request.body === undefined ? {} : { body: request.body }),
         ...(client.credentials === undefined ? {} : { credentials: client.credentials }),
       });
+      if (openTimeout !== undefined) clearTimeout(openTimeout);
     } catch (cause) {
       controller.signal.throwIfAborted();
       throw new TransportError("Failed to fetch SSE stream", { cause });
@@ -306,13 +316,23 @@ export async function* stream<T>(
     bodyHandled = true;
     try {
       const events = parseSSE<T>(response.body, controller.signal, request.canonStream);
-      if (known === undefined || request.events === undefined) {
-        yield* events;
-      } else {
-        const { discriminator } = request.events;
-        for await (const event of events) {
-          if (!isUnknownEvent(event, discriminator, known)) yield event;
+      const iterator = events[Symbol.asyncIterator]();
+      try {
+        for (;;) {
+          if (options.idleTimeoutMs !== undefined) idleTimeout = setTimeout(
+            () => controller.abort(new DOMException("Stream idle timed out", "TimeoutError")),
+            options.idleTimeoutMs,
+          );
+          let item = await iterator.next();
+          while (!item.done && known !== undefined && request.events !== undefined && isUnknownEvent(item.value, request.events.discriminator, known)) {
+            item = await iterator.next();
+          }
+          if (idleTimeout !== undefined) clearTimeout(idleTimeout);
+          if (item.done) return;
+          yield item.value;
         }
+      } finally {
+        await iterator.return?.();
       }
     } catch (cause) {
       controller.signal.throwIfAborted();
@@ -320,6 +340,8 @@ export async function* stream<T>(
       throw new TransportError("SSE stream read failed", { cause });
     }
   } finally {
+    if (openTimeout !== undefined) clearTimeout(openTimeout);
+    if (idleTimeout !== undefined) clearTimeout(idleTimeout);
     options.signal?.removeEventListener("abort", onAbort);
     try {
       if (!bodyHandled && response?.body && !response.body.locked) {

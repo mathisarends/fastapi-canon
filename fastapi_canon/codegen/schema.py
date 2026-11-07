@@ -16,6 +16,12 @@ _RESERVED = {
     "ApiClient",
     "ClientOptions",
     "RequestOptions",
+    "CallOptions",
+    "HttpOptions",
+    "StreamOptions",
+    "OperationResult",
+    "Options",
+    "HttpError",
     "JsonValue",
 }
 

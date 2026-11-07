@@ -86,13 +86,8 @@ def _openapi(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
                     path=location,
                 )
             ids[identity] = location
-            default = (
-                identity
-                if "." in identity
-                else ".".join([*(raw.get("tags") or ["api"])[:1], identity])
-            )
             name = _public_operation(
-                config, identity, raw.get("x-canon-operation", default)
+                config, identity, raw.get("x-canon-operation", identity)
             )
             parameters = []
             seen: dict[tuple[str, str], Any] = {}
@@ -280,6 +275,19 @@ def _openapi(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
                     tuple(parameters),
                     result,
                     raw.get("summary", ""),
+                    raw.get("description", ""),
+                    bool(raw.get("deprecated")),
+                    _operation_problems(
+                        document,
+                        {
+                            "responses": {
+                                key: value
+                                for key, value in raw.get("responses", {}).items()
+                                if not key.startswith("2")
+                            },
+                            "stream": raw.get("x-canon-stream", {}),
+                        },
+                    ),
                 )
             )
     return operations
@@ -311,6 +319,7 @@ def _openrpc(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
         *ir.sockets,
     )
     for route in routes:
+        raw: dict[str, Any] = {}
         kind: Interaction = "call"
         protocol: Protocol = "jsonrpc"
         parameters = []
@@ -393,6 +402,9 @@ def _openrpc(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
                 tuple(parameters),
                 result,
                 route.summary,
+                raw.get("description", ""),
+                bool(raw.get("deprecated")),
+                _operation_problems(document, raw.get("errors", [])),
             )
         )
     return operations
@@ -426,6 +438,42 @@ def _webrtc(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
             )
         )
     return operations
+
+
+def _operation_problems(document: dict[str, Any], value: Any) -> tuple[str, ...]:
+    found: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(item: Any) -> None:
+        if isinstance(item, list):
+            for child in item:
+                visit(child)
+        elif isinstance(item, dict):
+            reference = item.get("$ref", "")
+            if isinstance(reference, str) and reference.startswith(
+                "#/components/schemas/"
+            ):
+                name = reference.rsplit("/", 1)[-1]
+                if name in visited:
+                    return
+                visited.add(name)
+                schema = document.get("components", {}).get("schemas", {}).get(name, {})
+                properties = schema.get("properties", {})
+                if {
+                    "type",
+                    "title",
+                    "code",
+                } <= properties.keys() and "const" in properties["type"]:
+                    found.add(name)
+                else:
+                    visit(schema)
+            else:
+                for key, child in item.items():
+                    if key not in {"examples", "example", "default"}:
+                        visit(child)
+
+    visit(value)
+    return tuple(sorted(found))
 
 
 def _public_operation(

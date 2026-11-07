@@ -359,10 +359,16 @@ async def test_generated_python_stream_consumes_controls_and_exposes_typed_probl
                 ) as http,
                 sdk.Client("http://test", http_client=http) as client,
             ):
-                values = [value async for value in client.projects.events(project_id=1)]
+                values = [
+                    value
+                    async for value in client.projects.projects_events(project_id=1)
+                ]
                 assert [value.sequence for value in values] == [1]
                 with pytest.raises(sdk.ProblemError) as caught:
-                    _ = [value async for value in client.projects.events(project_id=2)]
+                    _ = [
+                        value
+                        async for value in client.projects.projects_events(project_id=2)
+                    ]
                 assert caught.value.problem.replacement is None
                 assert caught.value.problem.code == "project_missing"
                 assert (
@@ -370,7 +376,10 @@ async def test_generated_python_stream_consumes_controls_and_exposes_typed_probl
                     == "ProjectMissingProblemEmbedded"
                 )
                 with pytest.raises(sdk.ProblemError) as http_error:
-                    _ = [value async for value in client.projects.events(project_id=0)]
+                    _ = [
+                        value
+                        async for value in client.projects.projects_events(project_id=0)
+                    ]
                 assert http_error.value.problem.status == 404
 
 
@@ -400,7 +409,9 @@ async def test_python_stream_rejects_incomplete_or_malformed_controls_and_cleans
                     with pytest.raises(error_type):
                         _ = [
                             value
-                            async for value in client.projects.events(project_id=1)
+                            async for value in client.projects.projects_events(
+                                project_id=1
+                            )
                         ]
                 assert response.is_closed
 
@@ -641,11 +652,11 @@ const payload = {type: "https://api.example.com/problems/project_missing", title
 const collect = async (stream) => { const values = []; for await (const v of stream) values.push(v); return values; };
 const client = (wire, status = 200, type = "text/event-stream") => sse.createClient({baseUrl: "https://test", fetch: async () => new Response(wire, {status, headers: {"content-type": type}})});
 (async () => {
-  assert.deepEqual(await collect(client('data: {"sequence":1}\n\nevent: canon.complete\ndata: {}\n\n').projects.events({project_id: 1})), [{sequence:1}]);
-  await assert.rejects(collect(client(`event: canon.problem\ndata: ${JSON.stringify(payload)}\n\n`).projects.events({project_id:2})), e => e instanceof sse.ProblemError && e.problem.replacement === null && e.problem.future === true);
-  await assert.rejects(collect(client('data: {"sequence":1}\n\n').projects.events({project_id:1})), sse.TransportError);
-  await assert.rejects(collect(client('event: canon.complete\ndata: null\n\n').projects.events({project_id:1})), sse.ProtocolError);
-  await assert.rejects(collect(client(JSON.stringify({...payload,status:404}),404,"application/problem+json").projects.events({project_id:0})), e => e instanceof sse.ProblemError && e.problem.status === 404);
+  assert.deepEqual(await collect(client('data: {"sequence":1}\n\nevent: canon.complete\ndata: {}\n\n').projects.projectsEvents({project_id: 1})), [{sequence:1}]);
+  await assert.rejects(collect(client(`event: canon.problem\ndata: ${JSON.stringify(payload)}\n\n`).projects.projectsEvents({project_id:2})), e => e instanceof sse.ProblemError && e.problem.replacement === null && e.problem.future === true);
+  await assert.rejects(collect(client('data: {"sequence":1}\n\n').projects.projectsEvents({project_id:1})), sse.TransportError);
+  await assert.rejects(collect(client('event: canon.complete\ndata: null\n\n').projects.projectsEvents({project_id:1})), sse.ProtocolError);
+  await assert.rejects(collect(client(JSON.stringify({...payload,status:404}),404,"application/problem+json").projects.projectsEvents({project_id:0})), e => e instanceof sse.ProblemError && e.problem.status === 404);
   const error = rpcErrors.errorFromResponse(-32000, "", "Missing", undefined, payload);
   const listeners = new Map();
   const socket = {

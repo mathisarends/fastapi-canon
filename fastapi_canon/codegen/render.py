@@ -6,6 +6,7 @@ import posixpath
 import re
 from dataclasses import fields, is_dataclass, replace
 from importlib.resources import files
+from textwrap import indent
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -96,11 +97,57 @@ def render(
         if python
         else generate_typescript(contract)["types.ts"]
     )
+    if not python:
+        from fastapi_canon.integrations.sse.codegen.typescript import _render_type
+
+        for model in plan.models:
+            if not model.problem_type:
+                continue
+            fields = []
+            required = model.schema.get("required", [])
+            for name, schema in sorted(model.schema.get("properties", {}).items()):
+                annotation = _render_type(types.parse(schema))
+                annotation = annotation.replace("\n", "\n  ")
+                fields.append(
+                    f"  {json.dumps(name)}{'' if name in required else '?'}: {annotation};"
+                )
+            span = _typescript_declaration_span(models, model.name)
+            if span:
+                start, end = span
+                models = (
+                    models[:start]
+                    + f"export interface {model.name} extends Problem {{\n"
+                    + "\n".join(fields)
+                    + "\n}"
+                    + models[end:]
+                )
+        if any(model.problem_type for model in plan.models):
+            models = 'import type { Problem } from "./errors.js";\n' + models
     output = {
         "models.py" if python else "models.ts": models,
         "errors.py" if python else "errors.ts": _errors(plan, target),
     }
     canonical = {model.name for model in plan.models}
+    problem_errors = {
+        model.name: _error_name(model.name)
+        for model in plan.models
+        if model.problem_type
+    }
+    if len(set(problem_errors.values())) != len(problem_errors) or set(
+        problem_errors.values()
+    ) & (
+        canonical
+        | {
+            "HttpError",
+            "ProblemError",
+            "ProtocolError",
+            "TransportError",
+            target.client_name,
+        }
+    ):
+        raise GenerationError(
+            "A public problem error name collides with another model or error"
+        )
     for source in plan.sources:
         if source.kind == "openapi":
             if not any(
@@ -180,10 +227,12 @@ def render(
         for path, content in backend.items():
             if python:
                 content = _python_backend(
-                    content, path, prefix, target.package, canonical
+                    content, path, prefix, target.package, canonical, problem_errors
                 )
             else:
-                content = _typescript_backend(content, path, prefix, canonical)
+                content = _typescript_backend(
+                    content, path, prefix, canonical, problem_errors
+                )
             if path in {
                 "problem.py",
                 "internal/problem.py",
@@ -215,9 +264,47 @@ def render(
 
 def _errors(plan: Plan, target: TargetConfig) -> str:
     runtime = problem_runtime(target.language)
+    problems = [model for model in plan.models if model.problem_type]
     if target.language != "python":
-        return runtime
+        classes = "\n".join(
+            f"export class {_error_name(model.name)} extends ProblemError<Models.{model.name}> {{\n"
+            f"  override readonly name = {json.dumps(_error_name(model.name))};\n"
+            "}\n"
+            for model in problems
+        )
+        bindings = ",\n".join(
+            f"  {json.dumps(model.problem_type)}: {_error_name(model.name)}"
+            for model in problems
+        )
+        return (
+            runtime
+            + f"""
+import type * as Models from "./models.js";
+
+export class HttpError<T = unknown> extends TransportError {{
+  override readonly name = "HttpError";
+  declare readonly details: T;
+  declare readonly response: Response;
+  constructor(readonly status: number, details: T, response: Response, options?: ErrorOptions) {{
+    super(`HTTP ${{status}}`, options);
+    Object.defineProperties(this, {{ details: {{ value: details }}, response: {{ value: response }} }});
+  }}
+}}
+
+{classes}
+const problemTypes: Readonly<Record<string, new (problem: any) => ProblemError>> = {{
+{bindings}
+}};
+
+export function problemError(value: unknown, embedded = false): ProblemError {{
+  const problem = parseProblem(value, embedded);
+  const ErrorType = problemTypes[problem.type] ?? ProblemError;
+  return new ErrorType(problem);
+}}
+"""
+        )
     runtime = runtime.replace("def parse_problem(", "def _parse_problem(")
+    runtime = runtime.replace("def problem_error(", "def _basic_problem_error(")
     bindings = ",\n".join(
         f"    {model.problem_type!r}: TypeAdapter(Models.{model.name})"
         for model in plan.models
@@ -228,6 +315,11 @@ def _errors(plan: Plan, target: TargetConfig) -> str:
         + f"""
 from pydantic import TypeAdapter, ValidationError
 from . import models as Models
+
+{"".join(f"class {_error_name(model.name)}(ProblemError[Models.{model.name}]):\n    problem_adapter = TypeAdapter(Models.{model.name})\n\n\n" for model in problems)}
+_PROBLEM_ERRORS: dict[str, type[ProblemError[Any]]] = {{
+{",".join(f"{model.problem_type!r}: {_error_name(model.name)}" for model in problems)}
+}}
 
 _PROBLEM_MODELS: dict[str, TypeAdapter[Any]] = {{
 {bindings}
@@ -242,6 +334,13 @@ def parse_problem(value: Any, *, embedded: bool = False) -> Any:
         return adapter.validate_python(value)
     except ValidationError as exc:
         raise ProtocolError("Invalid declared problem payload") from exc
+
+
+def problem_error(value: Any, *, embedded: bool = False) -> ProblemError[Any]:
+    if isinstance(value, BaseModel):
+        value = value.model_dump(mode="json", by_alias=True, exclude_unset=True)
+    problem = parse_problem(value, embedded=embedded)
+    return _PROBLEM_ERRORS.get(problem.type, ProblemError)(problem)
 """
     )
 
@@ -250,8 +349,17 @@ def _alias(operation: Operation, name: str) -> str:
     return "".join(pascal(part) for part in operation.name) + pascal(name)
 
 
+def _error_name(model: str) -> str:
+    return model.removesuffix("Problem").removesuffix("Error") + "Error"
+
+
 def _python_backend(
-    content: str, path: str, prefix: str, package: str, canonical: set[str]
+    content: str,
+    path: str,
+    prefix: str,
+    package: str,
+    canonical: set[str],
+    problem_errors: dict[str, str],
 ) -> str:
     tree = ast.parse(content)
     lines = content.splitlines(keepends=True)
@@ -264,6 +372,35 @@ def _python_backend(
         else module.rsplit(".", 1)[0]
     )
     for node in tree.body:
+        if (
+            prefix.endswith("_sse")
+            and path == "runtime.py"
+            and isinstance(node, ast.ClassDef)
+            and node.name == "HttpError"
+        ):
+            edits.append(
+                (
+                    node.lineno,
+                    node.end_lineno or node.lineno,
+                    f"from {package}.errors import HttpError\n",
+                )
+            )
+        if path == "errors.py" and isinstance(node, ast.ClassDef):
+            for base_type in node.bases:
+                if (
+                    isinstance(base_type, ast.Subscript)
+                    and isinstance(base_type.value, ast.Name)
+                    and base_type.value.id == "ProblemError"
+                    and isinstance(base_type.slice, ast.Name)
+                    and base_type.slice.id in problem_errors
+                ):
+                    edits.append(
+                        (
+                            node.lineno,
+                            node.end_lineno or node.lineno,
+                            f"from {package}.errors import {problem_errors[base_type.slice.id]} as {node.name}\n",
+                        )
+                    )
         if isinstance(node, ast.ImportFrom):
             resolved = node.module or ""
             if node.level:
@@ -306,12 +443,53 @@ def _python_backend(
                 )
     for start, end, replacement in sorted(edits, reverse=True):
         lines[start - 1 : end] = [replacement]
-    return "".join(lines)
+    content = "".join(lines)
+    if prefix.endswith("_sse") and path == "runtime.py":
+        content = content.replace(
+            "raise ProblemError(problem)", "raise problem_error(problem)"
+        )
+        content = (
+            f"from {package}.errors import problem_error\n" + content
+            if "from __future__" not in content
+            else content.replace(
+                "from __future__ import annotations",
+                f"from __future__ import annotations\nfrom {package}.errors import problem_error",
+            )
+        )
+    return re.sub(
+        rf"\bfrom {re.escape(package)}\.",
+        "from " + "." * (len(parent.split(".")) - len(package.split(".")) + 1),
+        content,
+    )
 
 
 def _typescript_backend(
-    content: str, path: str, prefix: str, canonical: set[str]
+    content: str,
+    path: str,
+    prefix: str,
+    canonical: set[str],
+    problem_errors: dict[str, str],
 ) -> str:
+    if prefix.endswith("_sse") and path == "transport/errors.ts":
+        content = re.sub(
+            r"export class HttpError<T = unknown> extends TransportError \{.*?\n\}",
+            'import { HttpError } from "../../../errors.js";\nexport { HttpError };',
+            content,
+            flags=re.DOTALL,
+        )
+    if path == "errors.ts" and prefix.endswith("_jsonrpc"):
+        for model, error in problem_errors.items():
+            replacement = f'import {{ {error} as \\1 }} from "../../errors.js";\nexport {{ \\1 }};'
+            content = re.sub(
+                rf"export class (\w+) extends ProblemError<{re.escape(model)}> \{{[^}}]*\}}",
+                replacement,
+                content,
+            )
+    if prefix.endswith("_sse") and path == "transport/sse.ts":
+        content = 'import { problemError } from "../../../errors.js";\n' + content
+        content = content.replace(
+            "new ProblemError(parseProblem(value, true))", "problemError(value, true)"
+        ).replace("new ProblemError(problem)", "problemError(problem)")
     if prefix.endswith("_webrtc") and path == "runtime.ts":
         content = (
             'import { TransportError } from "../../errors.js";\n'
@@ -336,42 +514,14 @@ def _typescript_backend(
     if path in {"models.ts", "types.ts"}:
         # Canonical declarations are imported once; binding-specific event/error aliases stay private.
         for name in sorted(canonical):
-            pattern = rf"export (?:interface|type|const) {re.escape(name)}(?:\s|=|\{{)"
             found = False
             while True:
-                match = re.search(pattern, content)
-                if match is None:
+                span = _typescript_declaration_span(content, name)
+                if span is None:
                     break
                 found = True
-                start = match.start()
-                depth = 0
-                quote = ""
-                escape = False
-                end = match.end() - 1
-                for end in range(start, len(content)):
-                    char = content[end]
-                    if quote:
-                        if escape:
-                            escape = False
-                        elif char == "\\":
-                            escape = True
-                        elif char == quote:
-                            quote = ""
-                    elif char in "\"'`":
-                        quote = char
-                    elif char in "{[(":
-                        depth += 1
-                    elif char in "}])":
-                        depth -= 1
-                    elif char == ";" and depth == 0:
-                        break
-                    if (
-                        char == "}"
-                        and depth == 0
-                        and content[start : start + 16] == "export interface"
-                    ):
-                        break
-                content = content[:start] + content[end + 1 :]
+                start, end = span
+                content = content[:start] + content[end:]
             relative = posixpath.relpath(
                 "models.js", posixpath.dirname(prefix + "/" + path)
             )
@@ -386,8 +536,19 @@ def _typescript_backend(
 def _typescript_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
     imports = [
         'import type * as Models from "./models.js";',
-        'import { Runtime, type ClientOptions, type RequestOptions } from "./internal/runtime.js";',
+        'import { Runtime, operation, type ClientOptions, type CallOptions, type HttpOptions, type StreamOptions } from "./internal/runtime.js";',
     ]
+    documented_errors = sorted(
+        {
+            _error_name(problem)
+            for operation in plan.operations
+            for problem in operation.problems
+        }
+    )
+    if documented_errors:
+        imports.append(
+            "import type { " + ", ".join(documented_errors) + ' } from "./errors.js";'
+        )
     factories = []
     options = []
     for source in plan.sources:
@@ -437,17 +598,36 @@ def _typescript_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
     methods: dict[tuple[str, ...], str] = {}
     for operation in plan.operations:
         name = tuple(camel(part) for part in operation.name)
-        fields = "; ".join(
-            f"{camel(param.name)}{'' if param.required else '?'}: Models.{_alias(operation, param.name)}"
+        fields = "\n".join(
+            f"  {camel(param.name)}{'' if param.required else '?'}: {_public_type(param.schema, 'Models.' + _alias(operation, param.name), 'typescript')};"
             for param in operation.parameters
         )
-        params = f"params: {{ {fields} }}" + (
+        params = f"params: {{\n{fields}\n}}" + (
             " = {}" if not any(param.required for param in operation.parameters) else ""
         )
+        signature = params + ", " if operation.parameters else ""
         binding = operation.binding
-        result = "Models." + _alias(operation, "Result")
+        result = _public_type(
+            operation.result, "Models." + _alias(operation, "Result"), "typescript"
+        )
         if binding.protocol == "http":
             bodyless = binding.metadata["bodyless"]
+            responses = [
+                schema
+                for status, schema in binding.metadata["responses"].items()
+                if status not in bodyless
+            ]
+            if responses:
+                result = " | ".join(
+                    dict.fromkeys(
+                        _public_type(
+                            schema,
+                            "Models." + _alias(operation, "Result"),
+                            "typescript",
+                        )
+                        for schema in responses
+                    )
+                )
             if len(bodyless) == len(binding.metadata["responses"]):
                 result = "void"
             elif bodyless:
@@ -470,12 +650,9 @@ def _typescript_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
                     for param in operation.parameters
                 ],
             }
-            body = (
-                f"this.runtime.request<{result}>({json.dumps(spec)}, params, options)"
-            )
-            method = (
-                f"({params}, options?: RequestOptions): Promise<{result}> => {body}"
-            )
+            values = "params" if operation.parameters else "{}"
+            body = f"this.runtime.request<{result}>(\n{indent(json.dumps(spec, indent=2), '  ')},\n  {values},\n  options,\n)"
+            method = f"({signature}options?: HttpOptions): Promise<{result}> =>\n{indent(body, '  ')}"
         else:
             binding_source = binding.source + (
                 ":sse" if binding.protocol == "sse" else ""
@@ -530,34 +707,186 @@ def _typescript_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
                 if binding.protocol == "sse"
                 else binding_source + "Client"
             )
-            invoke = f"(await this.runtime.binding<{binding_type}>({json.dumps(binding_source)})){_access(path)}({', '.join(args)})"
+            arguments = indent(",\n".join(args), "  ")
+            invoke = f"(await this.runtime.binding<{binding_type}>(\n  {json.dumps(binding_source)},\n)){_access(path)}(\n{arguments}\n)"
             if operation.interaction == "stream" and binding.metadata.get(
                 "subscription"
             ):
-                method = f"({params}, options?: RequestOptions): ReturnType<{backend}> => this.runtime.session(async () => {invoke})"
+                method = f"({signature}options?: CallOptions): ReturnType<{backend}> =>\n  this.runtime.session(async () =>\n{indent(invoke, '    ')}\n  )"
             elif operation.interaction == "stream":
-                method = f"({params}, options?: RequestOptions): AsyncIterable<{result}> => this.runtime.stream(async () => {invoke}, options?.signal)"
+                stream_options = (
+                    "StreamOptions"
+                    if binding.protocol == "sse"
+                    else "Pick<CallOptions, 'signal'>"
+                )
+                method = f"({signature}options?: {stream_options}): AsyncIterable<{result}> =>\n  this.runtime.stream(\n    async () =>\n{indent(invoke, '      ')},\n    options?.signal,\n  )"
             elif operation.interaction == "session":
                 method = f"(...args: Parameters<{backend}>): ReturnType<{backend}> => this.runtime.session(async () => (await this.runtime.binding<{binding_source}Client>({json.dumps(binding_source)})){_access(path)}(...args))"
             else:
-                call = invoke.replace(", options)", ", requestOptions)").replace(
-                    "(options)", "(requestOptions)"
-                )
-                method = f"({params}, options?: RequestOptions): Promise<{result}> => this.runtime.call(async requestOptions => {call}, options)"
-        methods[name] = method
+                call = invoke.replace("\n  options\n)", "\n  requestOptions\n)")
+                method = f"({signature}options?: CallOptions): Promise<{result}> =>\n  this.runtime.call(\n    async requestOptions =>\n{indent(call, '      ')},\n    options,\n  )"
+        if operation.interaction == "call":
+            problems = (
+                " | ".join("Models." + problem for problem in operation.problems)
+                or "never"
+            )
+            types = [
+                model.problem_type
+                for model in plan.models
+                if model.name in operation.problems and model.problem_type
+            ]
+            method = f"operation<{problems}>({json.dumps(types)})(\n{indent(method, '  ')}\n)"
+        methods[name] = _typescript_doc(operation) + method
     body = _tree_ts(methods)
     client = (
         "\n".join(imports)
-        + f"\n\nexport interface Options extends ClientOptions {{ bindings?: {{ {' '.join(options)} }} }}\nexport class {target.client_name} {{\n  private readonly runtime: Runtime;\n  constructor(options: Options) {{ this.runtime = new Runtime(options); this.runtime.register({{{''.join(factories)}}}); }}\n  close(): Promise<void> {{ return this.runtime.close(); }}\n{body}\n}}\nexport function createClient(options: Options): {target.client_name} {{ return new {target.client_name}(options); }}\n"
+        + f"\n\nexport interface Options extends ClientOptions {{\n  bindings?: {{\n    {' '.join(options)}\n  }};\n}}\nexport class {target.client_name} {{\n  private readonly runtime: Runtime;\n  constructor(options: Options) {{\n    this.runtime = new Runtime(options);\n    this.runtime.register({{\n      {''.join(factories)}\n    }});\n  }}\n  close(): Promise<void> {{ return this.runtime.close(); }}\n  async [Symbol.asyncDispose](): Promise<void> {{ await this.close(); }}\n{body}\n}}\nexport function createClient(options: Options): {target.client_name} {{\n  return new {target.client_name}(options);\n}}\n"
     )
+    used = sorted(set(re.findall(r"Models\.(\w+)", client)))
+    client = client.replace(
+        'import type * as Models from "./models.js";',
+        "import type { " + ", ".join(used) + ' } from "./models.js";' if used else "",
+    )
+    client = client.replace("Models.", "")
     return {
         "client.ts": client,
-        "index.ts": 'export * from "./client.js";\nexport * from "./errors.js";\nexport * from "./models.js";\nexport type { RequestOptions } from "./internal/runtime.js";\n',
+        "index.ts": 'export * from "./client.js";\n'
+        + "export { ProblemError, TransportError, ProtocolError, HttpError"
+        + "".join(
+            ", " + _error_name(model.name)
+            for model in plan.models
+            if model.problem_type
+        )
+        + ' } from "./errors.js";\nexport type { Problem } from "./errors.js";\n'
+        + "".join(
+            f'export {"" if "enum" in model.schema else "type "}{{ {model.name} }} from "./models.js";\n'
+            for model in plan.models
+            if model.name in _public_model_names(plan)
+        )
+        + 'export type { CallOptions, HttpOptions, StreamOptions, OperationResult } from "./internal/runtime.js";\n',
     }
+
+
+def _public_model_names(plan: Plan) -> set[str]:
+    from fastapi_canon.codegen.selection import _references
+
+    models = {model.name: model.schema for model in plan.models}
+    names: set[str] = set()
+    prefix = "#/components/schemas/"
+    for operation in plan.operations:
+        names.update(_references(operation.result, prefix))
+        names.update(
+            _references(operation.binding.metadata.get("messages", {}), prefix)
+        )
+        for parameter in operation.parameters:
+            names.update(_references(parameter.schema, prefix))
+        names.update(operation.problems)
+    pending = list(names)
+    while pending:
+        schema = models.get(pending.pop(), {})
+        children = _references(schema, prefix) - names
+        names.update(children)
+        pending.extend(children)
+    return names & models.keys()
+
+
+def _typescript_declaration_span(content: str, name: str) -> tuple[int, int] | None:
+    match = re.search(
+        rf"export (?:interface|type|const) {re.escape(name)}(?:\s|=|\{{)", content
+    )
+    if match is None:
+        return None
+    depth = 0
+    quote = ""
+    escape = False
+    for end in range(match.start(), len(content)):
+        char = content[end]
+        if quote:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == quote:
+                quote = ""
+        elif char in "\"'`":
+            quote = char
+        elif char in "{[(":
+            depth += 1
+        elif char in "}])":
+            depth -= 1
+        elif char == ";" and depth == 0:
+            return match.start(), end + 1
+        if (
+            char == "}"
+            and depth == 0
+            and content[match.start() :].startswith("export interface")
+        ):
+            return match.start(), end + 1
+    raise GenerationError(f"Unterminated generated declaration {name!r}")
 
 
 def _access(path: list[str]) -> str:
     return "".join(f"[{json.dumps(part)}]" for part in path)
+
+
+def _public_type(schema: dict[str, Any], fallback: str, language: str) -> str:
+    reference = schema.get("$ref", "")
+    if isinstance(reference, str) and reference.startswith("#/components/schemas/"):
+        return "Models." + reference.rsplit("/", 1)[-1]
+    primitives = (
+        {
+            "string": "str",
+            "integer": "int",
+            "number": "float",
+            "boolean": "bool",
+            "null": "None",
+        }
+        if language == "python"
+        else {
+            "string": "string",
+            "integer": "number",
+            "number": "number",
+            "boolean": "boolean",
+            "null": "null",
+        }
+    )
+    kind = schema.get("type")
+    if (
+        isinstance(kind, str)
+        and kind in primitives
+        and "enum" not in schema
+        and "const" not in schema
+    ):
+        return primitives[kind]
+    if kind == "array":
+        item = _public_type(schema.get("items", {}), "Models.JsonValue", language)
+        return f"list[{item}]" if language == "python" else f"Array<{item}>"
+    branches = schema.get("anyOf", schema.get("oneOf", []))
+    if branches:
+        return " | ".join(
+            dict.fromkeys(
+                _public_type(branch, fallback, language) for branch in branches
+            )
+        )
+    return fallback
+
+
+def _typescript_doc(operation: Operation) -> str:
+    lines = [operation.summary, operation.description]
+    if operation.deprecated:
+        lines.append("@deprecated This operation is deprecated by the server contract.")
+    lines.extend(
+        f"@throws {{{_error_name(name)}}} Declared public problem."
+        for name in operation.problems
+    )
+    text = "\n\n".join(line for line in lines if line)
+    if not text:
+        return ""
+    return (
+        "/**\n"
+        + "\n".join(" * " + line for line in text.replace("*/", "* /").splitlines())
+        + "\n */\n"
+    )
 
 
 def _tree_ts(methods: dict[tuple[str, ...], str]) -> str:
@@ -569,12 +898,23 @@ def _tree_ts(methods: dict[tuple[str, ...], str]) -> str:
         node[path[-1]] = method
 
     def render_node(node: dict[str, Any], root: bool = False) -> str:
-        return "\n".join(
-            f"{'  readonly ' if root else ''}{key} {'=' if root else ':'} "
-            + ("{\n" + render_node(value) + "\n}" if isinstance(value, dict) else value)
-            + (";" if root else ",")
-            for key, value in node.items()
-        )
+        lines = []
+        for key, value in node.items():
+            doc = ""
+            if isinstance(value, str) and value.startswith("/**"):
+                doc, value = value.split(" */\n", 1)
+                doc += " */\n"
+            rendered = (
+                "{\n" + render_node(value) + "\n}" if isinstance(value, dict) else value
+            )
+            rendered = (
+                doc
+                + f"{'readonly ' if root else ''}{key} {'=' if root else ':'} "
+                + rendered
+                + (";" if root else ",")
+            )
+            lines.append("\n".join("  " + line for line in rendered.splitlines()))
+        return "\n".join(lines)
 
     return render_node(tree, True)
 
@@ -584,7 +924,7 @@ def _python_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
         "from __future__ import annotations",
         "from collections.abc import AsyncIterator",
         "from contextlib import AbstractAsyncContextManager",
-        "from typing import Any",
+        "from typing import Any, Self",
         "from . import models as Models",
         "from .internal.runtime import Runtime, RequestOptions, UNSET, UnsetType",
     ]
@@ -678,7 +1018,7 @@ def _python_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
         [
             "    async def aclose(self) -> None:",
             "        await self._runtime.aclose()",
-            f"    async def __aenter__(self) -> {target.client_name}:",
+            "    async def __aenter__(self) -> Self:",
             "        return self",
             "    async def __aexit__(self, *args: Any) -> None:",
             "        await self.aclose()",
@@ -687,14 +1027,34 @@ def _python_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
     classes.append("\n".join(lines))
     return {
         "client.py": "\n".join(imports) + "\n\n" + "\n\n".join(classes) + "\n",
-        "__init__.py": f"from .client import {target.client_name} as {target.client_name}\nfrom .errors import Problem as Problem, ProblemError as ProblemError, TransportError as TransportError, ProtocolError as ProtocolError\nfrom .internal.runtime import RequestOptions as RequestOptions\n",
+        "__init__.py": f"from .client import {target.client_name} as {target.client_name}\nfrom .errors import Problem as Problem, ProblemError as ProblemError, TransportError as TransportError, ProtocolError as ProtocolError, HttpError as HttpError\nfrom .internal.runtime import RequestOptions as RequestOptions\n"
+        + "".join(
+            f"from .errors import {_error_name(model.name)} as {_error_name(model.name)}\n"
+            for model in plan.models
+            if model.problem_type
+        ),
     }
 
 
 def _python_method(operation: Operation) -> list[str]:
+    lines = _python_method_body(operation)
+    documentation = "\n\n".join(
+        value for value in (operation.summary, operation.description) if value
+    )
+    if operation.problems:
+        documentation += "\n\nRaises:\n" + "\n".join(
+            f"    {_error_name(name)}: Declared public problem."
+            for name in operation.problems
+        )
+    if documentation:
+        lines.insert(1, "        " + repr(documentation.strip()))
+    return lines
+
+
+def _python_method_body(operation: Operation) -> list[str]:
     binding = operation.binding
     args = ", ".join(
-        f"{snake(param.name)}: Models.{_alias(operation, param.name)}"
+        f"{snake(param.name)}: {_public_type(param.schema, 'Models.' + _alias(operation, param.name), 'python')}"
         + (" | UnsetType = UNSET" if not param.required else "")
         for param in operation.parameters
     )
@@ -703,7 +1063,9 @@ def _python_method(operation: Operation) -> list[str]:
         + (args + ", " if args else "")
         + "options: RequestOptions | None = None"
     )
-    result = "Models." + _alias(operation, "Result")
+    result = _public_type(
+        operation.result, "Models." + _alias(operation, "Result"), "python"
+    )
     params = (
         "{"
         + ", ".join(
