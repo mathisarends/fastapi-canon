@@ -41,9 +41,11 @@ if TYPE_CHECKING:
         RpcErrorBinding,
         RpcErrorMapper,
         RpcLimits,
+        RpcMessageType,
         RpcMiddlewareLike,
         RpcRejections,
         RpcResolverLike,
+        RpcSocketProtocol,
     )
     from fastapi_canon.integrations.websockets.adapters.fastapi import (
         FastApiResolver,
@@ -76,7 +78,7 @@ class StreamOptions(TypedDict, total=False):
 
 
 class ChannelOptions(TypedDict, total=False):
-    """Connection options for ``include_channel``, ``include_stream`` and ``include_socket``."""
+    """Connection options for ``channel``, ``include_channel`` and socket decorators."""
 
     version: int
     context: Callable[..., Awaitable[Any]] | None
@@ -116,7 +118,24 @@ class APIRouter(CanonRouter):
 
     def __init__(self, **kwargs: Unpack[RouterOptions]) -> None:
         kwargs.setdefault("route_class", InjectedRoute)
+        self._pending_channels: list[tuple[RpcChannel, dict[str, Any]]] = []
         super().__init__(**kwargs)
+
+    @property
+    def routes(self) -> list[BaseRoute]:
+        """Routes, including channels declared with ``channel()`` (mounted now)."""
+        pending = getattr(self, "_pending_channels", None)
+        if pending:
+            self._pending_channels = []
+            for channel, settings in pending:
+                self.include_channel(channel, **settings)
+                # Later registrations would never reach the mounted snapshot.
+                channel.freeze()
+        return self._routes
+
+    @routes.setter
+    def routes(self, routes: list[BaseRoute]) -> None:
+        self._routes = routes
 
     def add_api_websocket_route(
         self,
@@ -193,75 +212,149 @@ class APIRouter(CanonRouter):
         if protocol.streams or protocol.sockets:
             raise ConfigurationError(
                 "include_channel accepts JSON-RPC methods, events and message streams; "
-                "mount binary streams with include_stream and sockets with include_socket"
+                "declare binary streams with @router.binary_stream and sockets with @router.socket"
             )
         adapter = CanonWebSocketRouter(prefix=self.prefix, **options)
         adapter.socket(
             path,
             channels=[snapshot],
-            name=name if name is not None else _channel_name(self.prefix + path),
+            name=self._endpoint_name(path, name),
             path_model=path_model,
             subprotocol=subprotocol,
             summary=summary,
         )
         self._include_websocket_adapter(adapter, path, dependencies)
 
-    def include_stream(
+    def channel(
         self,
-        stream: Callable[..., Any],
-        *,
         path: str,
+        *,
+        namespace: str | None = None,
         name: str | None = None,
         dependencies: Sequence[Depends] = (),
+        path_model: type[BaseModel] | None = None,
         subprotocol: str | None = None,
         summary: str | None = None,
         **options: Unpack[ChannelOptions],
-    ) -> None:
-        """Mount a ``@channel.stream`` binary stream at its own WebSocket endpoint.
+    ) -> RpcChannel:
+        """Declare a JSON-RPC WebSocket endpoint and return its channel.
 
-        The stream keeps its channel operation name. Connection options match
-        ``include_channel``; endpoint names default to the complete local path.
+        Register methods, events and message streams on the returned channel.
+        Operation names use the router's ``namespace`` unless ``namespace`` is
+        given. The channel is mounted when the router's routes are first read,
+        for example by ``include_router``. It is frozen afterwards, so later
+        registrations fail instead of being silently ignored. Use
+        ``include_channel`` to mount one channel at several paths.
         """
-        from fastapi_canon.integrations.websockets import CanonWebSocketRouter
+        from fastapi_canon.integrations.websockets import RpcChannel
 
-        adapter = CanonWebSocketRouter(prefix=self.prefix, **options)
-        adapter.stream(
-            path,
-            stream,
-            name=name if name is not None else _channel_name(self.prefix + path),
-            subprotocol=subprotocol,
-            summary=summary,
+        channel = RpcChannel(
+            namespace=self.namespace if namespace is None else namespace
         )
-        self._include_websocket_adapter(adapter, path, dependencies)
+        settings: dict[str, Any] = {
+            **options,
+            "path": path,
+            "name": name,
+            "dependencies": dependencies,
+            "path_model": path_model,
+            "subprotocol": subprotocol,
+            "summary": summary,
+        }
+        self._pending_channels.append((channel, settings))
+        return channel
 
-    def include_socket(
+    def binary_stream[Stream: Callable[..., Any]](
         self,
-        handler: Callable[..., Any],
-        *,
         path: str,
+        *,
+        content_type: str | None = None,
+        input_content_type: str | None = None,
+        summary: str | None = None,
         name: str | None = None,
         dependencies: Sequence[Depends] = (),
         subprotocol: str | None = None,
-        summary: str | None = None,
         **options: Unpack[ChannelOptions],
-    ) -> None:
-        """Mount a ``@channel.socket`` handler at its own WebSocket endpoint.
+    ) -> Callable[[Stream], Stream]:
+        """Declare a binary stream on its own WebSocket endpoint.
 
-        Typed handlers validate JSON messages from their annotations; handlers
-        injecting bare ``RpcSocket`` forward text and binary frames unchanged.
-        Connection options match ``include_channel``.
+        The signature sets the direction: an ``AsyncIterator[bytes]`` generator
+        sends frames, injected ``RpcBinaryInput``/``RpcBinaryOutput`` receive and
+        send them. The operation name is the router's ``namespace`` and the
+        function name. Connection options match ``include_channel``.
         """
-        from fastapi_canon.integrations.websockets import CanonWebSocketRouter
-
-        adapter = CanonWebSocketRouter(prefix=self.prefix, **options)
-        adapter.socket(
-            path,
-            handler,
-            name=name if name is not None else _channel_name(self.prefix + path),
-            subprotocol=subprotocol,
-            summary=summary,
+        from fastapi_canon.integrations.websockets import (
+            CanonWebSocketRouter,
+            RpcChannel,
         )
-        self._include_websocket_adapter(adapter, path, dependencies)
+
+        def decorate(stream: Stream) -> Stream:
+            channel = RpcChannel(namespace=self.namespace)
+            declare: Any = channel.stream(
+                content_type=content_type,
+                input_content_type=input_content_type,
+                summary=summary,
+            )
+            declare(stream)
+            adapter = CanonWebSocketRouter(prefix=self.prefix, **options)
+            adapter.stream(
+                path,
+                stream,
+                name=self._endpoint_name(path, name),
+                subprotocol=subprotocol,
+            )
+            self._include_websocket_adapter(adapter, path, dependencies)
+            return stream
+
+        return decorate
+
+    def socket[Handler: Callable[..., Any]](
+        self,
+        path: str,
+        *,
+        protocol: RpcSocketProtocol | None = None,
+        messages: Sequence[RpcMessageType] | None = None,
+        closes: Sequence[RpcErrorBinding[Any]] = (),
+        summary: str | None = None,
+        name: str | None = None,
+        dependencies: Sequence[Depends] = (),
+        subprotocol: str | None = None,
+        **options: Unpack[ChannelOptions],
+    ) -> Callable[[Handler], Handler]:
+        """Declare a message socket on its own WebSocket endpoint.
+
+        A handler taking a message and returning a response validates JSON from
+        its annotations. Inject ``RpcSocket[Incoming, Outgoing]`` for a typed
+        connection loop, or bare ``RpcSocket`` to forward text and binary frames
+        unchanged. The operation name is the router's ``namespace`` and the
+        function name. Connection options match ``include_channel``.
+        """
+        from fastapi_canon.integrations.websockets import (
+            CanonWebSocketRouter,
+            RpcChannel,
+        )
+
+        def decorate(handler: Handler) -> Handler:
+            channel = RpcChannel(namespace=self.namespace)
+            declaration: dict[str, Any] = {
+                "protocol": protocol,
+                "closes": closes,
+                "summary": summary,
+            }
+            if messages is not None:
+                declaration["messages"] = messages
+            declare: Any = channel.socket(**declaration)
+            declare(handler)
+            adapter = CanonWebSocketRouter(prefix=self.prefix, **options)
+            adapter.socket(
+                path,
+                handler,
+                name=self._endpoint_name(path, name),
+                subprotocol=subprotocol,
+            )
+            self._include_websocket_adapter(adapter, path, dependencies)
+            return handler
+
+        return decorate
 
     def sse[Endpoint: Callable[..., Any]](
         self, path: str, **options: Unpack[StreamOptions]
@@ -320,6 +413,9 @@ class APIRouter(CanonRouter):
             return factory
 
         return decorate
+
+    def _endpoint_name(self, path: str, name: str | None) -> str:
+        return name if name is not None else _channel_name(self.prefix + path)
 
     def _include_websocket_adapter(
         self, adapter: Any, path: str, dependencies: Sequence[Depends]

@@ -8,8 +8,9 @@ can contribute HTTP calls, typed SSE, JSON-RPC channels and WebRTC sessions:
 | `@router.get(...)`, `post(...)`, etc. | HTTP with Canon error/success contracts |
 | `@router.sse(...)` | Typed HTTP event stream, terminal problems and completion |
 | `router.include_channel(channel, path=...)` | JSON-RPC methods and message streams over one WebSocket |
-| `router.include_stream(stream, path=...)` | One `@channel.stream` binary stream on its own WebSocket |
-| `router.include_socket(handler, path=...)` | One typed or raw `@channel.socket` handler on its own WebSocket |
+| `session = router.channel(path)` | A JSON-RPC WebSocket; register methods, events and message streams on `session` |
+| `@router.binary_stream(path)` | A binary stream on its own WebSocket; the signature sets the direction |
+| `@router.socket(path)` | A typed or raw message socket on its own WebSocket |
 | `@router.websocket(...)` | Native FastAPI WebSocket handler and application protocol |
 | `@router.webrtc(...)` | WebRTC session factory, signaling, admission and cleanup |
 
@@ -233,7 +234,25 @@ app = Composition(features=[Feature(name="projects", routers=[router])]).build(
 ```
 
 One connection to `/projects/42/session` provides `projects.rename` and
-`tasks.create`. For example:
+`tasks.create`. For a single channel, declare it on the router instead:
+
+```python
+router = APIRouter(prefix="/projects", namespace="projects")
+session = router.channel("/{project_id}/session")
+
+
+@session.method()
+async def rename(params: RenameProject) -> str: ...
+```
+
+`router.channel(path, ...)` takes the options of `include_channel` and returns
+the channel. Operation names use the router's namespace. The channel is mounted
+when the router's routes are first read, for example when it is included in the
+application, and frozen afterwards: registering on it later fails explicitly.
+Use `RpcChannel` with `include_channel` to combine channels or mount one channel
+at several paths.
+
+A message on the composed session:
 
 ```json
 {"jsonrpc":"2.0","id":1,"method":"projects.rename","params":{"title":"Updated"}}
@@ -289,16 +308,20 @@ Normal completion and failures retain the existing terminal notifications.
 Cancelling one stream leaves other streams and methods usable; disconnect cleans
 up all connection-owned work. This adds no new wire protocol and requires no SDK
 runtime changes. Binary transfers and socket protocols use their own endpoints;
-they are not silently multiplexed into a JSON-RPC channel mount. Mount them on the
-same router with `include_stream()` and `include_socket()`:
+they are not silently multiplexed into a JSON-RPC channel mount. Declare them on
+the same router:
 
 ```python
-router.include_stream(preview, path="/{project_id}/preview")
-router.include_socket(terminal, path="/{project_id}/terminal")
+@router.binary_stream("/{project_id}/preview", content_type="image/jpeg")
+async def preview(project_id: int) -> AsyncIterator[bytes]: ...
+
+
+@router.socket("/{project_id}/terminal")
+async def terminal(message: Command) -> Output: ...
 ```
 
 `include_channel()` rejects a channel that contains binary streams or sockets and
-names these methods.
+points to these decorators.
 
 See [WebSocket streams](integrations/websockets/README.md) for controls, limits,
 error mappings, dependency lifetimes and generated resource APIs. Operation names

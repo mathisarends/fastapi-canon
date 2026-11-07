@@ -24,19 +24,24 @@ The next release containing the breaking changes below must be 0.16.0.
   `@router.sse(...)` and WebRTC sessions with `@router.webrtc(...)`; the SSE and
   WebRTC routers are internal. Engine, ICE, origin and limit options move to each
   declaration, and `SessionCapacity` shares a session budget across declarations.
-- Binary streams and sockets mount on `APIRouter` too:
-  `router.include_stream(...)` and `router.include_socket(...)`.
+- Every WebSocket endpoint is declared on `APIRouter` with its path:
+  `session = router.channel(path)` for JSON-RPC, `@router.binary_stream(path)`
+  and `@router.socket(path)`.
 - Dishka owns resources. Canon closes the admission REQUEST scope before
   acceptance. Return independently usable context data and put resources needed
   until disconnect in SESSION-scoped providers.
 
 ### Added
 
-- `APIRouter.include_stream(stream, path=...)` and
-  `APIRouter.include_socket(handler, path=...)` mount `@channel.stream` binary
-  streams and typed or raw `@channel.socket` handlers on the shared router. They
-  accept the connection options of `include_channel` and export the same
-  contracts as `CanonWebSocketRouter.stream()`/`.socket()`.
+- `router.channel(path, ...)` declares a JSON-RPC WebSocket and returns its
+  channel. Operation names use the router's namespace; the channel is mounted when
+  the router's routes are first read and frozen afterwards.
+- `@router.binary_stream(path, ...)` and `@router.socket(path, ...)` declare
+  binary streams and typed or raw message sockets on their own WebSocket. The
+  signature sets a stream's direction and a socket's message types. Operation
+  names use the router's namespace. They accept the connection options of
+  `include_channel` and export the same contracts as
+  `CanonWebSocketRouter.stream()`/`.socket()`.
 - HTTP decorators, router construction and router inclusion expose typed
   forwarded options. `Feature.errors` reflects current router declarations,
   including operations added after the feature was constructed. Composition

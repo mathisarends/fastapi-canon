@@ -27,7 +27,6 @@ message, in order:
 from pydantic import BaseModel, ConfigDict
 
 from fastapi_canon import APIRouter
-from fastapi_canon.integrations.websockets import RpcChannel
 
 
 class Ping(BaseModel):
@@ -39,21 +38,19 @@ class Pong(BaseModel):
     value: int
 
 
-channel = RpcChannel("messages")
+router = APIRouter(prefix="/messages", namespace="messages")
 
 
-@channel.socket("ping")
+@router.socket("/ping")
 async def ping(message: Ping) -> Pong:
     return Pong(value=message.value + 1)
-
-
-router = APIRouter()
-router.include_socket(ping, path="/messages/ping")
 ```
 
-`include_socket` mounts typed and untyped socket handlers with the connection
-options of `include_channel`. The specialized
-`CanonWebSocketRouter().socket(path, ping)` remains supported.
+`@router.socket` declares typed and untyped socket handlers with the connection
+options of `include_channel`, plus `protocol=`, `messages=` and `closes=`. The
+operation name is the router's namespace plus the function name (`messages.ping`).
+Handlers declared on an `RpcChannel` with `@channel.socket(...)` still mount with
+`CanonWebSocketRouter().socket(path, ping)`.
 
 The first parameter without `Inject[...]` is the incoming message; its name is
 not significant. Further non-injected parameters are path variables. Message
@@ -361,8 +358,11 @@ context function, `rejects=`, rejections, middleware, and a Dishka resolver
 apply unchanged:
 
 ```python
-router = APIRouter()
-router.include_socket(cdp, path="/browser/cdp", context=open_session)
+router = APIRouter(prefix="/browser", namespace="browser")
+
+
+@router.socket("/cdp", context=open_session)
+async def cdp(socket: Inject[RpcSocket]) -> None: ...
 ```
 
 Connection middleware sees sockets as connections. Every

@@ -19,7 +19,7 @@ The handler's signature determines the stream's direction:
 from collections.abc import AsyncIterator
 
 from fastapi_canon import APIRouter
-from fastapi_canon.integrations.websockets import Inject, RpcChannel
+from fastapi_canon.integrations.websockets import Inject
 
 
 class FrameSource:
@@ -27,27 +27,27 @@ class FrameSource:
         yield b"frame"
 
 
-media = RpcChannel("media")
+router = APIRouter(prefix="/projects", namespace="media")
 
 
-@media.stream(content_type="image/jpeg", summary="Live preview frames.")
+@router.binary_stream(
+    "/{project_id}/preview", content_type="image/jpeg", summary="Live preview frames."
+)
 async def preview(source: Inject[FrameSource]) -> AsyncIterator[bytes]:
     async for frame in source.frames():
         yield frame
-
-
-router = APIRouter(prefix="/projects")
-router.include_stream(preview, path="/{project_id}/preview")
 ```
 
-`include_stream` accepts the connection options of `include_channel` (`context=`,
-`hooks=`, `rejects=`, `limits=`, `middleware=` and so on). The specialized
-`CanonWebSocketRouter().stream(path, preview)` remains supported.
+`@router.binary_stream` accepts the connection options of `include_channel`
+(`context=`, `hooks=`, `rejects=`, `limits=`, `middleware=` and so on). The
+operation name is the router's namespace plus the function name. Streams declared
+on an `RpcChannel` with `@channel.stream(...)` still mount with
+`CanonWebSocketRouter().stream(path, preview)`.
 
 A generator stream must be annotated as `AsyncIterator[bytes]` or
 `AsyncGenerator[bytes, ...]`. Each decorated stream can be mounted once.
 
-The stream's operation name is `media.preview`; the mounted path becomes its
+The stream's operation name is `media.preview`; the declared path becomes its
 own WebSocket endpoint. Path variables are filled from the contract's server
 variables by generated clients.
 

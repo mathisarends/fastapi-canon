@@ -24,7 +24,12 @@ from fastapi_canon.exceptions import ConfigurationError
 from fastapi_canon.integrations.webrtc import SUBPROTOCOL, Session
 from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine
 from fastapi_canon.integrations.webrtc.events import SessionEvent, SessionEventKind
-from fastapi_canon.integrations.websockets import Inject, RpcChannel, RpcConnection
+from fastapi_canon.integrations.websockets import (
+    Inject,
+    ProtocolDefinitionError,
+    RpcChannel,
+    RpcConnection,
+)
 
 
 class Rename(BaseModel):
@@ -599,27 +604,24 @@ def test_webrtc_uses_real_engine_and_closes_factory_dependencies() -> None:
     assert lifecycle == ["open 42", "close 42"]
 
 
-def test_binary_streams_and_typed_sockets_mount_on_the_shared_router() -> None:
-    media = RpcChannel("media")
-
-    @media.stream(content_type="application/octet-stream")
-    async def preview(project_id: int, store: Inject[Store]) -> AsyncIterator[bytes]:
-        yield f"{project_id}:{store.identifier}".encode()
-
-    @media.socket("rename")
-    async def rename(message: Rename, store: Inject[Store]) -> Rename:
-        return Rename(title=f"{message.title} ({store.identifier})")
-
+def test_binary_streams_and_typed_sockets_are_declared_on_the_router() -> None:
     class Stores(Provider):
         @provide(scope=Scope.REQUEST)
         def store(self) -> Store:
             return Store(3)
 
-    router = APIRouter(prefix="/projects")
-    router.include_stream(preview, path="/{project_id}/preview")
-    router.include_socket(rename, path="/{project_id}/rename")
+    router = APIRouter(prefix="/projects", namespace="projects")
+
+    @router.binary_stream("/{project_id}/preview", content_type="image/jpeg")
+    async def preview(project_id: int, store: Inject[Store]) -> AsyncIterator[bytes]:
+        yield f"{project_id}:{store.identifier}".encode()
+
+    @router.socket("/{project_id}/rename")
+    async def rename(message: Rename, store: Inject[Store]) -> Rename:
+        return Rename(title=f"{message.title} ({store.identifier})")
+
     app = Composition(
-        features=[Feature(name="media", routers=[router], providers=[Stores()])]
+        features=[Feature(name="projects", routers=[router], providers=[Stores()])]
     ).build(FastAPI())
 
     with TestClient(app) as client:
@@ -630,15 +632,40 @@ def test_binary_streams_and_typed_sockets_mount_on_the_shared_router() -> None:
             assert socket.receive_json() == {"title": "Draft (3)"}
     document = export_contracts(app, kinds=("openrpc",)).documents["openrpc"]
     assert [
-        (stream["name"], stream["url"])
+        (stream["name"], stream["url"], stream["contentType"])
         for stream in document["x-rpckit-binary-streams"]
-    ] == [("media.preview", "{baseUrl}/projects/{project_id}/preview")]
+    ] == [("projects.preview", "{baseUrl}/projects/{project_id}/preview", "image/jpeg")]
     assert [
         (socket["name"], socket["url"]) for socket in document["x-rpckit-sockets"]
-    ] == [("media.rename", "{baseUrl}/projects/{project_id}/rename")]
+    ] == [("projects.rename", "{baseUrl}/projects/{project_id}/rename")]
 
 
-def test_channels_with_streams_or_sockets_point_to_their_own_mounts() -> None:
+def test_router_channel_mounts_methods_declared_after_it() -> None:
+    router = APIRouter(prefix="/projects", namespace="projects")
+    session = router.channel("/{project_id}/session")
+
+    @session.method()
+    async def rename(data: Rename, connection: Inject[RpcConnection]) -> str:
+        return f"{connection.path_params['project_id']}: {data.title}"
+
+    app = Composition(features=[Feature(name="projects", routers=[router])]).build(
+        FastAPI()
+    )
+
+    async def scenario() -> Any:
+        async with _connection(app, "/projects/42/session") as (incoming, outgoing):
+            await _send(incoming, 1, "projects.rename", {"title": "Updated"})
+            return (await _receive(outgoing))["result"]
+
+    assert asyncio.run(scenario()) == "42: Updated"
+    with pytest.raises(ProtocolDefinitionError, match="frozen"):
+
+        @session.method()
+        async def late() -> str:
+            return "never mounted"
+
+
+def test_channels_with_streams_or_sockets_point_to_router_declarations() -> None:
     channel = RpcChannel("media")
 
     @channel.stream(content_type="application/octet-stream")
@@ -646,7 +673,7 @@ def test_channels_with_streams_or_sockets_point_to_their_own_mounts() -> None:
         yield b""
 
     router = APIRouter()
-    with pytest.raises(ConfigurationError, match="include_stream"):
+    with pytest.raises(ConfigurationError, match=r"@router.binary_stream"):
         router.include_channel(channel, path="/media")
     assert router.routes == []
 
