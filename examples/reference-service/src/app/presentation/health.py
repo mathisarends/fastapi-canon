@@ -3,7 +3,7 @@ from fastapi_canon import APIRouter
 
 from app.presentation.schema import Schema
 
-router = APIRouter(tags=["system"])
+router = APIRouter(namespace="system", tags=["system"])
 
 
 class HealthResponse(Schema):
@@ -12,7 +12,6 @@ class HealthResponse(Schema):
 
 @router.get(
     "/health",
-    operation_id="get_health",
     response_model=HealthResponse,
     status_code=status.HTTP_200_OK,
 )

@@ -179,31 +179,21 @@ endpoint defaults and supported execution lifetimes.
 
 ## Generate and use the SDK
 
-Save `fastapi-canon.toml` at the project root. This configuration exports the app
-above and generates both language targets from its HTTP/SSE and RPC contracts:
+Save `fastapi-canon.toml` at the project root. This configuration exports every
+contract the app above has (HTTP/SSE, RPC and WebRTC) into `contracts/` and
+generates both language targets from them:
 
 ```toml
 [codegen]
 version = 1
-
-[codegen.sources.api]
-kind = "openapi"
-source = "src.app:app"
-output = "contracts/openapi.json"
-
-[codegen.sources.control]
-kind = "openrpc"
-source = "src.app:app"
-output = "contracts/openrpc.json"
+app = "src.app:app"
 
 [codegen.targets.browser]
 language = "typescript"
-sources = ["api", "control"]
 output = "frontend/generated"
 
 [codegen.targets.python]
 language = "python"
-sources = ["api", "control"]
 output = "api_client"
 package = "api_client"
 ```
@@ -213,8 +203,10 @@ uv run fastapi-canon generate
 uv run fastapi-canon generate --check --diff
 ```
 
-For the HTTP-only example, omit `sources.control` and use `sources = ["api"]`
-on each target. A stream-only addition uses the same OpenAPI source as HTTP.
+`app` derives one source per contract kind the application has: `http`
+(HTTP and SSE), `rpc` and `webrtc`. An HTTP-only app therefore exports only
+`contracts/openapi.json`; a stream-only addition uses the same OpenAPI source as
+HTTP.
 `--check --diff` checks generated files and exported contracts without writing;
 use it in CI to catch drift. Offline generation can consume saved contracts
 without importing application code.

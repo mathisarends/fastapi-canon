@@ -24,12 +24,33 @@ The next release containing the breaking changes below must be 0.16.0.
   `@router.sse(...)` and WebRTC sessions with `@router.webrtc(...)`; the SSE and
   WebRTC routers are internal. Engine, ICE, origin and limit options move to each
   declaration, and `SessionCapacity` shares a session budget across declarations.
+- Generate the SDK from one application with `[codegen] app = "module:app"`;
+  per-kind source tables and target `sources` lists are optional.
+- Every WebSocket endpoint is declared on `APIRouter` with its path:
+  `session = router.channel(path)` for JSON-RPC, `@router.binary_stream(path)`
+  and `@router.socket(path)`.
 - Dishka owns resources. Canon closes the admission REQUEST scope before
   acceptance. Return independently usable context data and put resources needed
   until disconnect in SESSION-scoped providers.
 
 ### Added
 
+- `[codegen] app = "module:app"` generates the SDK from one application. It
+  exports every contract kind the application has (`http`, `rpc`, `webrtc`
+  sources) into `contracts = "<dir>"` (default `contracts`), detects factories,
+  skips kinds without endpoints and removes their stale contract files. Targets
+  without `sources` use every configured source their language supports.
+  Explicit `[codegen.sources]` remain for saved inputs, mappings and selection;
+  their names cannot reuse a derived source name.
+- `router.channel(path, ...)` declares a JSON-RPC WebSocket and returns its
+  channel. Operation names use the router's namespace; the channel is mounted when
+  the router's routes are first read and frozen afterwards.
+- `@router.binary_stream(path, ...)` and `@router.socket(path, ...)` declare
+  binary streams and typed or raw message sockets on their own WebSocket. The
+  signature sets a stream's direction and a socket's message types. Operation
+  names use the router's namespace. They accept the connection options of
+  `include_channel` and export the same contracts as
+  `CanonWebSocketRouter.stream()`/`.socket()`.
 - HTTP decorators, router construction and router inclusion expose typed
   forwarded options. `Feature.errors` reflects current router declarations,
   including operations added after the feature was constructed. Composition
@@ -280,6 +301,11 @@ The next release containing the breaking changes below must be 0.16.0.
   checks run when their inputs change. Pushes to `main`, manual runs and the
   `full-ci` label run the complete matrix. The weekly upstream canary adds
   Python 3.13.
+- The reference service names its operations through router `namespace=`
+  (`tasks.create`, `tasks.list_recent`, `tasks.complete`, `system.health`)
+  instead of flat explicit operation IDs, so its generated SDK groups task
+  methods under `client.tasks`. The router guide imports `RpcChannel` from
+  `fastapi_canon.integrations.websockets`, where it is defined.
 
 ### Breaking changes
 

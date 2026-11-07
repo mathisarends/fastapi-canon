@@ -28,7 +28,10 @@ for the HTTP/authentication/contract regressions. The example uses the root
 Errors now use Canon's RFC 9457 `application/problem+json` contracts. The stable
 codes are `authentication_required`, `task_not_found`, and
 `request_validation_error`; `WWW-Authenticate: Bearer` is preserved for 401.
-Successful response schemas, paths, and operation IDs remain unchanged. The
+Successful response schemas and paths remain unchanged. Router `namespace=`
+values name the operations `tasks.create`, `tasks.list_recent`,
+`tasks.complete` and `system.health`, so generated SDKs group them as
+`client.tasks.create(...)` without explicit operation IDs. The
 versioned feature routes and the public `/health` endpoint are wired explicitly
 at the composition root.
 

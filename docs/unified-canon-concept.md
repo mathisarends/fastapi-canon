@@ -55,6 +55,33 @@ these tables with `tool.fastapi-canon`: `[tool.fastapi-canon.codegen]`,
 `[tool.fastapi-canon.codegen.sources.api]`, and so on. The package name scopes
 the configuration; `codegen` identifies the SDK generation settings.
 
+For one application, name it with `app` and omit the source tables:
+
+```toml
+[codegen]
+version = 1
+app = "app:create_app"
+contracts = "contracts"
+
+[codegen.targets.python]
+language = "python"
+output = "python/api_client"
+package = "api_client"
+```
+
+`app` accepts an application or a zero-argument factory. It derives the sources
+`http` (OpenAPI), `rpc` (OpenRPC) and `webrtc`, written to
+`<contracts>/openapi.json`, `openrpc.json` and `webrtc.json`; `contracts`
+defaults to `contracts`. A kind without registered endpoints is skipped and its
+stale contract file removed; `--offline` reads the files that exist. Targets
+without `sources` use every configured source their language supports; Python
+targets leave out WebRTC sources. The source names are the SDK
+binding keys, for example `bindings={"rpc": {...}}`.
+
+Use explicit source tables for saved inputs, several applications, name mappings
+or operation selection. They can be combined with `app` but cannot reuse a derived
+source name:
+
 ```toml
 [codegen]
 version = 1
