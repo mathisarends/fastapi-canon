@@ -81,7 +81,7 @@ app = Composition(features=(project_feature,)).build(FastAPI())
 ## Feature composition
 
 Use `composition.check(app)` for a structured preflight report before installation
-and `composition.inspect(app)` for an immutable description after installation.
+and `inspect_app(app)` for an immutable description after installation.
 See [composition checks and introspection](system-checks.md) for findings, feature
 checks, provenance, CLI commands and coverage boundaries.
 
@@ -164,7 +164,7 @@ composition = Composition(
 ```
 
 The prefix applies to every installed feature router, including nested routers.
-It appears in `Composition.inspect(app)` and in the exported OpenAPI paths
+It appears in `inspect_app(app)` and in the exported OpenAPI paths
 (`/projects/{project_id}` becomes `/api/v1/projects/{project_id}`) but does not
 change automatic operation IDs such as `projects.get_project`, which derive from
 router namespaces. Routes added directly to the app are not prefixed.

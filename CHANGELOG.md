@@ -196,10 +196,11 @@ The next release containing the breaking changes below must be 0.16.0.
 - `Composition.check(app)` provides structured preflight findings and per-check
   execution status without starting resources. `Feature(checks=...)` adds explicit
   synchronous checks over immutable composition descriptions.
-- `Composition.inspect(app)` explains installed HTTP operations, feature ownership,
+- `fastapi_canon.inspect_app(app)` explains installed HTTP operations, feature ownership,
   effective prefixes, provider-source names and dependency/error provenance.
   Look up operations by endpoint symbol with `operation(endpoint)` or by public
-  ID with the explicit `operation_by_id(...)` method.
+  ID with the explicit `operation_by_id(...)` method. It reads the snapshot that
+  `build` recorded on the application, so the composition is not passed again.
 - `fastapi-canon check composition` and `fastapi-canon inspect` expose the same
   Python APIs in text or versioned JSON, separately from import-free source checks.
 
@@ -217,7 +218,7 @@ The next release containing the breaking changes below must be 0.16.0.
   exit policies. Source read errors identify the invoked public command.
   Parsing, supported forms, defaults and exit conditions are unchanged.
 
-- `Composition.inspect(app).operation(events)` retains the declared SSE callable
+- `inspect_app(app).operation(events)` retains the declared SSE callable
   through terminal processing and automatic injection wrappers, including sync
   generators and nested prefixes. Explicit user decorators retain their own
   registered identity, and ambiguous registrations still require ID lookup.
