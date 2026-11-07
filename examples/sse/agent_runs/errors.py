@@ -1,13 +1,16 @@
+import sys
+from typing import cast
+
 from examples.sse.agent_runs.generated_python import (
     Client,
     HttpError,
+    Problem,
+    ProblemError,
     StreamParseError,
     TransportError,
 )
-from examples.sse.agent_runs.generated_python.models import StreamRunEventsErrorBody
-from pydantic import TypeAdapter, ValidationError
-
-_ERROR_BODY = TypeAdapter(StreamRunEventsErrorBody)
+from examples.sse.agent_runs.generated_python.models import RequestValidationProblem
+from pydantic import ValidationError
 
 
 async def consume_with_errors(client: Client, run_id: str) -> None:
@@ -17,15 +20,24 @@ async def consume_with_errors(client: Client, run_id: str) -> None:
                 print(event.message)
             else:
                 print(event)
-    except HttpError as error:
-        if error.status == 422:
+    except ProblemError:
+        # Canon reports rejected requests and stream failures as problem details.
+        # The generated error is generic; this client raises the shared Problem model.
+        error = cast(ProblemError[Problem], sys.exception())
+        if error.problem.code == "request_validation_error":
             try:
-                body = _ERROR_BODY.validate_python(error.details)
+                problem = RequestValidationProblem.model_validate(
+                    error.problem.model_dump(exclude_unset=True)
+                )
             except ValidationError:
                 pass
             else:
-                print("Invalid stream parameters", body.detail or [])
+                print("Invalid stream parameters", [e.detail for e in problem.errors])
                 return
+        print("Request failed", error.problem.code, error.problem.title)
+        raise
+    except HttpError as error:
+        # Responses that are not problem details, for example from a proxy.
         print("Unexpected HTTP response", error.status, error.details)
         raise
     except StreamParseError as error:

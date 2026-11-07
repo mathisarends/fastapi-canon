@@ -2,8 +2,36 @@
 
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
-export type HTTPValidationError = {
-  detail?: Array<ValidationError>;
+export type InternalServerProblem = {
+  code: "internal_server_error";
+  detail?: string;
+  instance?: string;
+  status: 500;
+  title: "Internal Server Error";
+  type: "urn:fastapi-canon:problem/internal_server_error";
+  [key: string]: "Internal Server Error" | "internal_server_error" | "urn:fastapi-canon:problem/internal_server_error" | 500 | JsonValue | string | undefined;
+};
+export type RequestValidationProblem = {
+  code: "request_validation_error";
+  detail?: string;
+  errors: Array<{
+  code: string;
+  detail: string;
+  in?: "path" | "query" | "header" | "cookie";
+  parameter?: string;
+  pointer?: string;
+}>;
+  instance?: string;
+  status: 422;
+  title: "Request validation failed";
+  type: "urn:fastapi-canon:problem/request_validation_error";
+  [key: string]: "Request validation failed" | "request_validation_error" | "urn:fastapi-canon:problem/request_validation_error" | 422 | Array<{
+  code: string;
+  detail: string;
+  in?: "path" | "query" | "header" | "cookie";
+  parameter?: string;
+  pointer?: string;
+}> | JsonValue | string | undefined;
 };
 export type RunCompleted = {
   run_id: string;
@@ -31,13 +59,4 @@ export type RunStarted = {
 export type TokenDelta = {
   text: string;
   type: typeof RunEventType.TOKEN_DELTA;
-};
-export type ValidationError = {
-  ctx?: {
-  [key: string]: JsonValue;
-};
-  input?: JsonValue;
-  loc: Array<string | number>;
-  msg: string;
-  type: string;
 };

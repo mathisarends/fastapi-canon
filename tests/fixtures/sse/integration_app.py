@@ -4,6 +4,7 @@ from typing import Annotated
 
 from examples.sse.agent_runs import router as runs_router
 from fastapi import APIRouter, Depends, FastAPI, Header, Query
+from fastapi_canon.error import ErrorRegistry
 from fastapi_canon.integrations.sse.router import StreamRouter
 from pydantic import BaseModel
 
@@ -63,8 +64,10 @@ parent = APIRouter(prefix="/compat")
 parent.include_router(router)
 app = FastAPI()
 app.include_router(parent)
-app.include_router(runs_router, prefix="/v1")
+app.include_router(runs_router)
 app.include_router(models_router)
+# Canon streams document their terminal problems through the installed catalog.
+ErrorRegistry(errors=[], type_base="urn:test:problems").install(app)
 
 
 @app.get("/health")

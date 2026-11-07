@@ -242,7 +242,12 @@ async def test_python_generated_requests_models_errors_and_client_ownership():
         return httpx.Response(
             200,
             headers={"Content-Type": "text/event-stream"},
-            stream=Chunks([b'data: {"type":"run.completed","run_id":"ok"}\n\n']),
+            stream=Chunks(
+                [
+                    b'data: {"type":"run.completed","run_id":"ok"}\n\n'
+                    b"event: canon.complete\ndata: {}\n\n"
+                ]
+            ),
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
@@ -300,7 +305,10 @@ async def test_request_timeouts_inherit_override_or_disable(options, expected):
         return httpx.Response(
             200,
             headers={"Content-Type": "text/event-stream"},
-            content='data: {"type":"run.completed","run_id":"ok"}\n\n',
+            content=(
+                'data: {"type":"run.completed","run_id":"ok"}\n\n'
+                "event: canon.complete\ndata: {}\n\n"
+            ),
         )
 
     async with (
@@ -394,6 +402,8 @@ def test_python_codegen_cli_and_snapshot(tmp_path):
                 "--output",
                 "examples/sse/agent_runs/generated_python",
                 "--strict",
+                "--allow-diagnostics",
+                "tests/fixtures/sse/agent_runs.python.diagnostics.json",
             ]
         )
         == 0

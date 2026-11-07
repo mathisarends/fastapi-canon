@@ -4,7 +4,7 @@ from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from fastapi_canon.integrations.sse.router import StreamRouter
+from fastapi_canon import APIRouter, Composition, Feature
 from pydantic import BaseModel, Field
 
 
@@ -44,10 +44,11 @@ def authorize(
         raise HTTPException(status_code=403, detail="Use Bearer demo-token")
 
 
-router = StreamRouter(prefix="/runs", tags=["agentRuns"])
+router = APIRouter(prefix="/v1/runs", tags=["agentRuns"])
+health_router = APIRouter(tags=["health"])
 
 
-@router.stream("/{run_id}/events", operation_id="stream_run_events")
+@router.sse("/{run_id}/events", operation_id="stream_run_events")
 async def stream_run_events(
     run_id: str,
     delay: Annotated[float, Query(ge=0, le=1)] = 0.01,
@@ -59,7 +60,7 @@ async def stream_run_events(
     yield RunCompleted(type="run.completed", run_id=run_id)
 
 
-@router.stream(
+@router.sse(
     "/{run_id}/events",
     methods=["POST"],
     operation_id="stream_prompt",
@@ -73,10 +74,12 @@ async def stream_prompt(run_id: str, body: RunRequest) -> AsyncIterator[RunEvent
     yield RunCompleted(type="run.completed", run_id=run_id)
 
 
-app = FastAPI(title="Agent runs", version="0.0.1")
-app.include_router(router, prefix="/v1")
-
-
-@app.get("/health", tags=["health"])
+@health_router.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+composition = Composition(
+    features=(Feature(name="agent_runs", routers=[router, health_router]),),
+)
+app = composition.build(FastAPI(title="Agent runs", version="0.0.1"))

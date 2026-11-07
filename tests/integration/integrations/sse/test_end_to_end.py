@@ -191,14 +191,15 @@ async def test_current_generated_python_client_preserves_wire_values_and_validat
                     server + "/v1/runs/bad/events", params={"delay": -1}
                 )
                 assert response.status_code == 422
-            with pytest.raises(sdk.HttpError) as raised:
+            # Canon streams report HTTP failures as problem details.
+            with pytest.raises(sdk.ProblemError) as raised:
                 _ = [
                     event
                     async for event in client.agent_runs.stream_prompt(
                         run_id="denied", body=sdk.models.RunRequest(prompt="Hello")
                     )
                 ]
-            assert raised.value.status in (401, 403)
+            assert raised.value.problem.status in (401, 403)
             events = [
                 event
                 async for event in client.agent_runs.stream_prompt(

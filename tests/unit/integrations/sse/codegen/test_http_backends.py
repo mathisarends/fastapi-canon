@@ -128,7 +128,10 @@ async def test_native_client_types_timeout_headers_models_and_ownership(http_bac
         return http.Response(
             200,
             headers={"Content-Type": "text/event-stream"},
-            content='data: {"type":"run.completed","run_id":"ok"}\n\n',
+            content=(
+                'data: {"type":"run.completed","run_id":"ok"}\n\n'
+                "event: canon.complete\ndata: {}\n\n"
+            ),
         )
 
     async with http.AsyncClient(
