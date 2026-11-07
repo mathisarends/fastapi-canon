@@ -24,6 +24,8 @@ The next release containing the breaking changes below must be 0.16.0.
   `@router.sse(...)` and WebRTC sessions with `@router.webrtc(...)`; the SSE and
   WebRTC routers are internal. Engine, ICE, origin and limit options move to each
   declaration, and `SessionCapacity` shares a session budget across declarations.
+- Generate the SDK from one application with `[codegen] app = "module:app"`;
+  per-kind source tables and target `sources` lists are optional.
 - Failing dependencies declare their errors once with `@raises(error)`; every
   operation, stream and WebRTC session using them inherits the contract.
 - Dishka owns resources. Canon closes the admission REQUEST scope before
@@ -32,6 +34,13 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- `[codegen] app = "module:app"` generates the SDK from one application. It
+  exports every contract kind the application has (`http`, `rpc`, `webrtc`
+  sources) into `contracts = "<dir>"` (default `contracts`), detects factories,
+  skips kinds without endpoints and removes their stale contract files. Targets
+  without `sources` use every configured source their language supports.
+  Explicit `[codegen.sources]` remain for saved inputs, mappings and selection;
+  their names cannot reuse a derived source name.
 - Dependencies declare their own errors with `@raises(error, ...)` from
   `fastapi_canon`. Every HTTP operation, typed SSE stream and WebRTC session that
   uses the dependency, as a parameter, through `dependencies=`, a router, a
