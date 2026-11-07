@@ -12,7 +12,7 @@ passes against FastAPI 0.143.0 and 0.162.0 on Python 3.12.
 
 These are preparation checks, not a publication record or exhaustive dependency
 coverage. The final source still needs exact-commit CI and the release dry run on
-`main`; the PyPI Trusted Publisher repository setting also remains open. See
+`main`. The owner confirmed the updated PyPI Trusted Publisher configuration. See
 [release preparation](releases.md#prepared-0160-unpublished). Historical published
 release evidence below remains unchanged.
 

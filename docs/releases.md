@@ -17,15 +17,15 @@ historical runs, tags and assets linked below remain in their original repositor
 Source metadata, internal pins and the reference service target 0.16.0. This is
 the next minor release required by the breaking changes since 0.15.0. Follow the
 [upgrade guide](package-migration.md#upgrade-to-0160) and regenerate both SDKs.
-The changelog date remains `Unreleased` until publication is authorized and the
-final source passes exact-commit CI. No 0.16.0 publication is recorded here.
+Publication is authorized and the changelog date is finalized as 2026-11-07.
+The final source must still pass exact-commit CI and the release dry run before
+publication. No 0.16.0 publication is recorded here.
 
 The GitHub repository is now `mathisarends/fastapi-canon`. Release metadata and
 active commands use that spelling; historical publication URLs below retain
-their original spelling. The PyPI Trusted Publisher still needs to be updated
-to repository `fastapi-canon` before publication; workflow `release.yml` and
-environment `pypi` stay the same. This account-level prerequisite is open and
-does not block source preparation. See the
+their original spelling. The owner confirmed that the PyPI Trusted Publisher
+now names repository `fastapi-canon`, workflow `release.yml` and environment
+`pypi`. The publication workflow will verify the OIDC exchange. See the
 [repository rename](repository-migration.md#repository-rename).
 
 ## Current versions

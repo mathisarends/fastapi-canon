@@ -16,7 +16,7 @@ PyPI project or add further Python import changes.
 Version 0.16.0 is prepared in source and has not yet been published. It contains
 breaking server APIs, generated-client interfaces and stricter preflight/static
 checks. Upgrade servers and regenerated Python/TypeScript SDKs together. The
-[complete breaking-change notes](../CHANGELOG.md#0160---unreleased) include the
+[complete breaking-change notes](../CHANGELOG.md#0160---2026-11-07) include the
 individual signatures and diagnostic coverage boundaries.
 
 ### Composition and public imports

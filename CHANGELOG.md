@@ -2,7 +2,7 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
-## 0.16.0 - Unreleased
+## 0.16.0 - 2026-11-07
 
 Prepared source release; not yet published. Upgrade servers and regenerated
 Python/TypeScript SDKs together. See the [upgrade guide](docs/package-migration.md#upgrade-to-0160).
