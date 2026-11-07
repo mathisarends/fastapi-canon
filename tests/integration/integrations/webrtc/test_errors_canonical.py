@@ -11,7 +11,6 @@ from fastapi_canon import (
     ErrorOptions,
     Feature,
     RouterPolicy,
-    raises,
 )
 from fastapi_canon.error import ErrorConfigurationError
 from fastapi_canon.integrations.webrtc import Session
@@ -84,38 +83,6 @@ def test_factory_and_dependency_problems_do_not_allocate_peers(
     }
     metadata = build_contract(app)["sessions"][0]["admission_errors"]
     assert len(metadata) == int(declared)
-
-
-def test_dependency_raises_declare_session_admission_errors() -> None:
-    router = CanonWebRtcRouter(engine=NoPeerEngine())
-
-    @raises(FORBIDDEN)
-    def authorize() -> None:
-        raise Forbidden()
-
-    @raises(MISSING)
-    def browser() -> str:
-        return "browser"
-
-    @router.session("/{browser_id}", dependencies=[Depends(authorize)])
-    async def video(name: Annotated[str, Depends(browser)]) -> Session:
-        raise Missing()
-
-    app = Composition(features=(Feature(name="browser", routers=[router]),)).build(
-        FastAPI()
-    )
-    codes = [
-        error["code"]
-        for error in build_contract(app)["sessions"][0]["admission_errors"]
-    ]
-    assert codes == ["browser_forbidden", "browser_missing"]
-    with (
-        TestClient(app) as client,
-        pytest.raises(WebSocketDenialResponse) as caught,
-        client.websocket_connect("/one"),
-    ):
-        pytest.fail("Denied session was accepted")
-    assert caught.value.json()["code"] == "browser_forbidden"
 
 
 def test_shared_local_contracts_use_composed_registry_and_effective_path() -> None:

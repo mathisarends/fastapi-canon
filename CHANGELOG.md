@@ -24,22 +24,11 @@ The next release containing the breaking changes below must be 0.16.0.
   `@router.sse(...)` and WebRTC sessions with `@router.webrtc(...)`; the SSE and
   WebRTC routers are internal. Engine, ICE, origin and limit options move to each
   declaration, and `SessionCapacity` shares a session budget across declarations.
-- Failing dependencies declare their errors once with `@raises(error)`; every
-  operation, stream and WebRTC session using them inherits the contract.
 - Dishka owns resources. Canon closes the admission REQUEST scope before
   acceptance. Return independently usable context data and put resources needed
   until disconnect in SESSION-scoped providers.
 
 ### Added
-
-- Dependencies declare their own errors with `@raises(error, ...)` from
-  `fastapi_canon`. Every HTTP operation, typed SSE stream and WebRTC session that
-  uses the dependency, as a parameter, through `dependencies=`, a router, a
-  `RouterPolicy`, `include_router(..., dependencies=...)` or a nested dependency,
-  documents and registers these errors as if it listed them in `raises=`.
-  `inspect_app()` reports them with the origin `dependency`, and
-  `fastapi-canon check errors` treats the decorator as the declaration instead
-  of an unresolved decorator. Explicit `raises=` declarations keep working.
 
 - HTTP decorators, router construction and router inclusion expose typed
   forwarded options. `Feature.errors` reflects current router declarations,

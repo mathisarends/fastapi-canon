@@ -18,12 +18,7 @@ from fastapi_canon.error.openapi import InheritedContract
 from fastapi_canon.error.types import OpenAPIResponses
 from fastapi_canon.error.validation import unique_instances
 from fastapi_canon.exceptions import ConfigurationError, ResponseConfigurationError
-from fastapi_canon.policy import (
-    RouterPolicy,
-    dependency_errors,
-    normalize_raises,
-    validate_policy,
-)
+from fastapi_canon.policy import RouterPolicy, normalize_raises, validate_policy
 from fastapi_canon.response import CanonResponse
 
 
@@ -100,8 +95,7 @@ class CanonRouter(APIRouter):
 
     Like router dependencies, the router's ``raises``, ``http_statuses`` and
     ``policy`` apply to its own operations and to every HTTP operation it
-    includes with ``include_router``. Errors declared with ``fastapi_canon.raises``
-    on router, policy or included dependencies extend that contract in the same way.
+    includes with ``include_router``.
     """
 
     def __init__(
@@ -137,14 +131,6 @@ class CanonRouter(APIRouter):
                 *policy.dependencies,
                 *(kwargs.get("dependencies") or ()),
             ]
-        declared = {id(error) for error in self.raises}
-        # Errors that only router dependencies declare; introspection labels them.
-        self._dependency_raises = tuple(
-            error
-            for error in dependency_errors(kwargs.get("dependencies") or ())
-            if id(error) not in declared
-        )
-        self.raises = _distinct((*self.raises, *self._dependency_raises))
         self._register_errors(self.raises)
         generate_id = kwargs.pop(
             "generate_unique_id_function", self._generate_operation_id
@@ -174,14 +160,6 @@ class CanonRouter(APIRouter):
         self, router: APIRouter, **kwargs: Unpack[IncludeRouterOptions]
     ) -> None:
         """Include routes and preserve ownership of their error definitions."""
-        errors = dependency_errors(kwargs.get("dependencies") or ())
-        if errors:
-            # Inclusion dependencies run for every included operation.
-            self._register_errors(errors)
-            kwargs["callbacks"] = [
-                *(kwargs.get("callbacks") or ()),
-                InheritedContract(errors, ()),
-            ]
         super().include_router(router, **kwargs)
         if isinstance(router, CanonRouter):
             self._included_error_registries.extend(router.error_registries)
@@ -240,12 +218,9 @@ class CanonRouter(APIRouter):
             kwargs.setdefault("response_class", _response_class(response))
 
         configured_responses = kwargs.pop("responses", None)
-        statuses = _normalize_http_statuses(http_statuses)
-        operation_dependencies = tuple(kwargs.get("dependencies") or ())
-        # Validate the declared contract before the endpoint is decorated.
-        responses = self._responses_for_route(
+        kwargs["responses"] = self._responses_for_route(
             local_raises,
-            http_statuses=statuses,
+            http_statuses=_normalize_http_statuses(http_statuses),
             response=response,
             configured=configured_responses,
         )
@@ -253,18 +228,8 @@ class CanonRouter(APIRouter):
         dependency_origins.update(
             {str(id(dep)): "operation" for dep in (kwargs.get("dependencies") or ())}
         )
-        error_origins = {
-            str(id(error)): "dependency" for error in self._dependency_raises
-        }
-        error_origins.update({str(id(error)): "operation" for error in local_raises})
-        dependency_only = {id(error) for error in self._dependency_raises}
-        error_origins.update(
-            {
-                str(id(error)): "router"
-                for error in self.raises
-                if id(error) not in dependency_only
-            }
-        )
+        error_origins = {str(id(error)): "operation" for error in local_raises}
+        error_origins.update({str(id(error)): "router" for error in self.raises})
         if self.policy is not None:
             dependency_origins.update(
                 {str(id(dep)): "router.policy" for dep in self.policy.dependencies}
@@ -274,33 +239,12 @@ class CanonRouter(APIRouter):
             )
 
         def register(endpoint: CallableT) -> CallableT:
-            known = {id(error) for error in (*self.raises, *local_raises)}
-            dependency_raises = tuple(
-                error
-                for error in dependency_errors(operation_dependencies, call=endpoint)
-                if id(error) not in known
-            )
-            self._register_errors(dependency_raises)
-            origins = {
-                **{str(id(error)): "dependency" for error in dependency_raises},
-                **error_origins,
-            }
             configured: APIRouteOptions = {
                 **kwargs,
-                "responses": (
-                    self._responses_for_route(
-                        (*local_raises, *dependency_raises),
-                        http_statuses=statuses,
-                        response=response,
-                        configured=configured_responses,
-                    )
-                    if dependency_raises
-                    else responses
-                ),
                 "openapi_extra": _RouteMetadata(
                     kwargs.get("openapi_extra") or {},
                     dependency_origins,
-                    origins,
+                    error_origins,
                     endpoint,
                     self.error_registry,
                 ),

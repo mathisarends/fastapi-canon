@@ -20,7 +20,6 @@ APPLICATION_NAMES = {
     "__version__",
     "export_contracts",
     "inspect_app",
-    "raises",
 }
 
 
