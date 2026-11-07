@@ -1,6 +1,7 @@
 # One router for an application feature
 
-Import `APIRouter` and `RpcChannel` from `fastapi_canon`. One application router
+Import `APIRouter` from `fastapi_canon` and `RpcChannel` from
+`fastapi_canon.integrations.websockets`. One application router
 can contribute HTTP calls, typed SSE, JSON-RPC channels and WebRTC sessions:
 
 | Declaration | Endpoint behavior |
