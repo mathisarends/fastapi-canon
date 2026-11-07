@@ -2,9 +2,10 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
-## Unreleased
+## 0.16.0 - Unreleased
 
-The next release containing the breaking changes below must be 0.16.0.
+Prepared source release; not yet published. Upgrade servers and regenerated
+Python/TypeScript SDKs together. See the [upgrade guide](docs/package-migration.md#upgrade-to-0160).
 
 ### TL;DR
 
@@ -582,9 +583,10 @@ The next release containing the breaking changes below must be 0.16.0.
 - `raises=` automatically registers canonical `Error` definitions on routers,
   policies, SSE streams, WebRTC admission and RPC channels/operations. Remove
   duplicate registry entries and `error_registry=` arguments used only to repeat
-  these declarations. Keep explicit registries for additional undeclared errors,
-  and configure a common problem URI prefix with `Composition(errors=ErrorOptions(
-  type_base=...))`. Repeated references to the same definition are deduplicated;
+  these declarations. List additional undeclared errors with
+  `Feature(errors=[...])`, and configure a common problem URI prefix with
+  `Composition(errors=ErrorOptions(type_base=...))`.
+  Repeated references to the same definition are deduplicated;
   conflicting definitions still fail configuration checks.
 - The new MCP factory fields extend `McpOptions` for 0.16.0. Move auth and shared
   middleware adapters that read `app.state.dishka_container` into synchronous

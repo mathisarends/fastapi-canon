@@ -1,4 +1,4 @@
-repository = "mathisarends/fastapi_canon"
+repository = "mathisarends/fastapi-canon"
 workflow = "release.yml"
 environment = "pypi"
 

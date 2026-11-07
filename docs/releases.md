@@ -1,6 +1,6 @@
 # Canon releases
 
-Release the unified `fastapi-canon` distribution from `mathisarends/fastapi_canon`.
+Release the unified `fastapi-canon` distribution from `mathisarends/fastapi-canon`.
 The root project is the sole publication target; the reference service is an
 installable example. `release.toml` maps package
 names, directories, modules and tag prefixes; `scripts/release.py` validates them.
@@ -11,6 +11,22 @@ evidence. Run all development and release-preparation commands below from the
 repository root.
 The [repository migration](repository-migration.md) records the cutover. The
 historical runs, tags and assets linked below remain in their original repositories.
+
+## Prepared 0.16.0 (unpublished)
+
+Source metadata, internal pins and the reference service target 0.16.0. This is
+the next minor release required by the breaking changes since 0.15.0. Follow the
+[upgrade guide](package-migration.md#upgrade-to-0160) and regenerate both SDKs.
+The changelog date remains `Unreleased` until publication is authorized and the
+final source passes exact-commit CI. No 0.16.0 publication is recorded here.
+
+The GitHub repository is now `mathisarends/fastapi-canon`. Release metadata and
+active commands use that spelling; historical publication URLs below retain
+their original spelling. The PyPI Trusted Publisher still needs to be updated
+to repository `fastapi-canon` before publication; workflow `release.yml` and
+environment `pypi` stay the same. This account-level prerequisite is open and
+does not block source preparation. See the
+[repository rename](repository-migration.md#repository-rename).
 
 ## Current versions
 
@@ -214,7 +230,7 @@ a publication; the verified 0.10.0 publication is recorded above.
 ## Publisher setup
 
 The required Trusted Publisher uses GitHub owner `mathisarends`, repository
-`fastapi_canon`, workflow filename `release.yml` and environment `pypi`. Configure
+`fastapi-canon`, workflow filename `release.yml` and environment `pypi`. Configure
 it on the existing PyPI `fastapi-canon` project before publishing from this
 repository; source changes do not update PyPI account settings. The GitHub
 environment permits `main`. See the [cutover checklist](repository-migration.md#cutover).
@@ -250,8 +266,8 @@ uv run --locked python scripts/release.py validate --package fastapi-canon --ver
 ## Dispatch a dry run
 
 ```console
-gh workflow run release.yml --repo mathisarends/fastapi_canon --ref main -f package=fastapi-canon -f version=NEXT_VERSION -f dry_run=true
-gh run list --repo mathisarends/fastapi_canon --workflow release.yml --limit 10
+gh workflow run release.yml --repo mathisarends/fastapi-canon --ref main -f package=fastapi-canon -f version=NEXT_VERSION -f dry_run=true
+gh run list --repo mathisarends/fastapi-canon --workflow release.yml --limit 10
 ```
 
 Choose the package and its prepared, unpublished version. Use the workflow filename
@@ -281,7 +297,7 @@ After final changelog dates and exact-source CI, dispatch the selected package
 with `dry_run=false` only when publication is explicitly authorized:
 
 ```console
-gh workflow run release.yml --repo mathisarends/fastapi_canon --ref main -f package=fastapi-canon -f version=NEXT_VERSION -f dry_run=false
+gh workflow run release.yml --repo mathisarends/fastapi-canon --ref main -f package=fastapi-canon -f version=NEXT_VERSION -f dry_run=false
 ```
 
 The `publish` job downloads and verifies the prepared artifacts and uploads only
@@ -305,7 +321,7 @@ Prereleases produce prerelease GitHub Releases. A PyPI-only upload is incomplete
 
 - A source fix requires a new commit, exact-source CI and a new run. Retry a
   transient failure on unchanged source with
-  `gh run rerun RUN_ID --failed --repo mathisarends/fastapi_canon`.
+  `gh run rerun RUN_ID --failed --repo mathisarends/fastapi-canon`.
   Historical publication runs must be resumed in the repository recorded by
   their original manifest, including `mathisarends/canon` for its past releases.
 - After upload/finalization failure, rerun only failed jobs on the original run.

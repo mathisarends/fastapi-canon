@@ -67,7 +67,7 @@ def test_release_rejects_stale_installation_docs(release_repo: Path) -> None:
     path = release_repo / "docs/streams.md"
     path.write_text("uv add fastapi-streams==0.0.1", encoding="utf-8")
     with pytest.raises(ValueError, match="install fastapi-canon extras"):
-        release.validate_release("fastapi-canon", "0.15.0", root=release_repo)
+        release.validate_release("fastapi-canon", "0.16.0", root=release_repo)
 
 
 @pytest.mark.parametrize(
@@ -90,12 +90,12 @@ def test_release_cli_includes_only_unpublished_predecessor_migrations(
     )
     changelog = release_repo / "CHANGELOG.md"
     source = (
-        f"# Changelog\n\n## 0.15.0 - {target_date}\n\n### Breaking changes\n\n"
+        f"# Changelog\n\n## 0.16.0 - {target_date}\n\n### Breaking changes\n\n"
         "- Regenerate SDKs.\n\n"
-        f"## 0.14.0 - {previous_date}\n\n### Breaking changes\n\n"
+        f"## 0.15.0 - {previous_date}\n\n### Breaking changes\n\n"
         "- Consolidation migration: replace old packages and imports.\n"
         "- [Migration](docs/package-migration.md).\n\n"
-        "## 0.13.0 - 2026-10-25\n\n- Already published changes.\n"
+        "## 0.14.0 - 2026-10-25\n\n- Already published changes.\n"
     )
     changelog.write_text(source, encoding="utf-8")
     report = release_repo / "dist/report/release.json"
@@ -107,7 +107,7 @@ def test_release_cli_includes_only_unpublished_predecessor_migrations(
             "--package",
             "fastapi-canon",
             "--version",
-            "0.15.0",
+            "0.16.0",
             "--report",
             str(report),
         ],
@@ -141,7 +141,7 @@ def test_release_notes_resolve_links_against_the_release_commit(
     original = path.read_bytes()
     notes = release._release_notes(release_repo, package, "0.5.4", commit)
     assert (
-        f"https://github.com/mathisarends/fastapi_canon/blob/{commit}/"
+        f"https://github.com/mathisarends/fastapi-canon/blob/{commit}/"
         "docs/package-migration.md"
     ) in notes
     assert "../fastapi-streams" not in notes
@@ -164,7 +164,7 @@ def test_release_notes_retain_external_links_titles_and_fragments(
     )
     commit = "b" * 40
     notes = release._release_notes(release_repo, package, "0.4.0", commit)
-    base = f"https://github.com/mathisarends/fastapi_canon/blob/{commit}"
+    base = f"https://github.com/mathisarends/fastapi-canon/blob/{commit}"
     assert f'{base}/docs/codegen.md#validation "Read this"' in notes
     assert f"{base}/docs/releases.md#verified" in notes
     assert f"{base}/CHANGELOG.md#upgrade" in notes
@@ -204,7 +204,7 @@ def test_breaking_pre_one_releases_require_next_minor(
             release._check_breaking_version(changelog, version, section)
 
 
-@pytest.mark.parametrize(("name", "version"), [("fastapi-canon", "0.15.0")])
+@pytest.mark.parametrize(("name", "version"), [("fastapi-canon", "0.16.0")])
 def test_release_validates_sources_without_importing_business_modules(
     release_repo: Path, name: str, version: str
 ) -> None:
@@ -249,21 +249,21 @@ def test_release_excludes_nonlibrary_targets(release_repo: Path, name: str) -> N
 @pytest.mark.parametrize(
     ("path", "before", "after", "message"),
     [
-        ("uv.lock", 'version = "0.15.0"', 'version = "0.4.0"', "uv.lock"),
+        ("uv.lock", 'version = "0.16.0"', 'version = "0.4.0"', "uv.lock"),
         (
             "fastapi_canon/_version.py",
-            '__version__ = "0.15.0"',
+            '__version__ = "0.16.0"',
             '__version__ = "9.9.9"',
             "__version__",
         ),
-        ("pyproject.toml", "==0.15.0", "==0.0.1", "Dependency pin"),
+        ("pyproject.toml", "==0.16.0", "==0.0.1", "Dependency pin"),
         (
             "examples/reference-service/pyproject.toml",
-            "fastapi-canon>=0.15,<0.16",
+            "fastapi-canon>=0.16,<0.17",
             "fastapi-canon>=0.4,<0.5",
             "Reference service",
         ),
-        ("CHANGELOG.md", "## 0.15.0", "## 9.9.9", "Changelog"),
+        ("CHANGELOG.md", "## 0.16.0", "## 9.9.9", "Changelog"),
     ],
 )
 def test_release_rejects_inconsistent_metadata(
@@ -274,7 +274,7 @@ def test_release_rejects_inconsistent_metadata(
         target.read_text("utf-8").replace(before, after), encoding="utf-8"
     )
     with pytest.raises(ValueError, match=message):
-        release.validate_release("fastapi-canon", "0.15.0", root=release_repo)
+        release.validate_release("fastapi-canon", "0.16.0", root=release_repo)
 
 
 # registry and execution
@@ -335,13 +335,13 @@ def test_publication_requires_final_changelog(release_repo: Path) -> None:
     changelog = release_repo / "CHANGELOG.md"
     lines = changelog.read_text("utf-8").splitlines()
     heading = next(
-        index for index, line in enumerate(lines) if line.startswith("## 0.15.0")
+        index for index, line in enumerate(lines) if line.startswith("## 0.16.0")
     )
-    lines[heading] = "## 0.15.0 (unreleased)"
+    lines[heading] = "## 0.16.0 (unreleased)"
     changelog.write_text("\n".join(lines) + "\n", encoding="utf-8")
     with pytest.raises(ValueError, match="Finalize the changelog"):
         release.validate_release(
-            "fastapi-canon", "0.15.0", root=release_repo, publish=True
+            "fastapi-canon", "0.16.0", root=release_repo, publish=True
         )
 
 
@@ -349,14 +349,14 @@ def test_publication_accepts_final_changelog(release_repo: Path) -> None:
     path = release_repo / "CHANGELOG.md"
     path.write_text(
         path.read_text("utf-8").replace(
-            "## 0.15.0 - Unreleased", "## 0.15.0 - 2026-11-01"
+            "## 0.16.0 - Unreleased", "## 0.16.0 - 2026-11-01"
         ),
         encoding="utf-8",
     )
     report = release.validate_release(
-        "fastapi-canon", "0.15.0", root=release_repo, publish=True
+        "fastapi-canon", "0.16.0", root=release_repo, publish=True
     )
-    assert report["version"] == "0.15.0"
+    assert report["version"] == "0.16.0"
 
 
 def test_github_release_rejects_former_repository(
@@ -369,7 +369,7 @@ def test_github_release_rejects_former_repository(
     )
     with pytest.raises(ValueError, match="wrong repository"):
         release.validate_release(
-            "fastapi-canon", "0.15.0", root=release_repo, github=True
+            "fastapi-canon", "0.16.0", root=release_repo, github=True
         )
 
 
@@ -377,12 +377,12 @@ def test_github_release_requires_successful_ci_for_exact_commit(
     release_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
-    monkeypatch.setenv("GITHUB_REPOSITORY", "mathisarends/fastapi_canon")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "mathisarends/fastapi-canon")
     monkeypatch.setenv("GITHUB_RUN_ID", "123")
     monkeypatch.setattr(release, "_gh", lambda endpoint: {"workflow_runs": []})
     with pytest.raises(ValueError, match="exact release commit"):
         release.validate_release(
-            "fastapi-canon", "0.15.0", root=release_repo, github=True
+            "fastapi-canon", "0.16.0", root=release_repo, github=True
         )
 
 
@@ -391,7 +391,7 @@ def test_existing_pypi_version(  # smelt: ignore[SMT423] -- two seams
     release_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
-    monkeypatch.setenv("GITHUB_REPOSITORY", "mathisarends/fastapi_canon")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "mathisarends/fastapi-canon")
     monkeypatch.setenv("GITHUB_RUN_ID", "123")
 
     def github(endpoint: str, **kwargs):
@@ -418,7 +418,7 @@ def test_existing_pypi_version(  # smelt: ignore[SMT423] -- two seams
     monkeypatch.setattr(release, "_pypi", lambda name, version: {})
     with pytest.raises(ValueError, match="already exists on PyPI"):
         release.validate_release(
-            "fastapi-canon", "0.15.0", root=release_repo, github=True
+            "fastapi-canon", "0.16.0", root=release_repo, github=True
         )
 
 
