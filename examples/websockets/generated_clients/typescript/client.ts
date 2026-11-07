@@ -120,11 +120,13 @@ export class AutomationClient {
       readonly reconnectMaxAttempts?: number | null | undefined;
       readonly reconnectShouldRetry?: ((error: unknown) => boolean) | undefined;
       readonly reconnectRandom?: (() => number) | undefined;
-      readonly onStateChange?: ((
-        server: ServerName,
-        state: RpcConnectionState,
-        error?: unknown,
-      ) => void) | undefined;
+      readonly onStateChange?:
+        | ((
+            server: ServerName,
+            state: RpcConnectionState,
+            error?: unknown,
+          ) => void)
+        | undefined;
       readonly streamSocketFactory?: BinaryWebSocketFactory | undefined;
       readonly streamQueueSize?: number | undefined;
       readonly socketConnectionFactory?: SocketConnectionFactory | undefined;

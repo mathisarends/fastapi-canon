@@ -112,11 +112,13 @@ export class CalculatorClient {
       readonly reconnectMaxAttempts?: number | null | undefined;
       readonly reconnectShouldRetry?: ((error: unknown) => boolean) | undefined;
       readonly reconnectRandom?: (() => number) | undefined;
-      readonly onStateChange?: ((
-        server: ServerName,
-        state: RpcConnectionState,
-        error?: unknown,
-      ) => void) | undefined;
+      readonly onStateChange?:
+        | ((
+            server: ServerName,
+            state: RpcConnectionState,
+            error?: unknown,
+          ) => void)
+        | undefined;
       readonly socketConnectionFactory?: SocketConnectionFactory | undefined;
       readonly socketQueueSize?: number | undefined;
 

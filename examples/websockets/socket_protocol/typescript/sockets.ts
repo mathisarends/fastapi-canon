@@ -110,15 +110,17 @@ export type SocketInfo = {
   readonly messageTypes: readonly SocketMessageType[];
   readonly subprotocols?: readonly string[] | undefined;
   readonly protocol?: SocketProtocol | undefined;
-  readonly variables?: Readonly<
-    Record<
-      string,
-      {
-        readonly default: string;
-        readonly enum?: readonly string[] | undefined;
-      }
-    >
-  > | undefined;
+  readonly variables?:
+    | Readonly<
+        Record<
+          string,
+          {
+            readonly default: string;
+            readonly enum?: readonly string[] | undefined;
+          }
+        >
+      >
+    | undefined;
 };
 
 export const sockets = {
@@ -174,7 +176,10 @@ export type SocketConnectionOptions = {
   readonly socketFactory?: SocketConnectionFactory | undefined;
 };
 
-type SocketCloseEvent = { readonly code?: number | undefined; readonly reason?: string };
+type SocketCloseEvent = {
+  readonly code?: number | undefined;
+  readonly reason?: string;
+};
 
 type SocketConnection = {
   binaryType: string;
@@ -327,10 +332,12 @@ function defaultSocketConnectionFactory(
 ): SocketConnection {
   const constructor = (
     globalThis as unknown as {
-      readonly WebSocket?: (new (
-        url: string | URL,
-        protocols?: readonly string[],
-      ) => SocketConnection) | undefined;
+      readonly WebSocket?:
+        | (new (
+            url: string | URL,
+            protocols?: readonly string[],
+          ) => SocketConnection)
+        | undefined;
     }
   ).WebSocket;
   if (constructor === undefined) {

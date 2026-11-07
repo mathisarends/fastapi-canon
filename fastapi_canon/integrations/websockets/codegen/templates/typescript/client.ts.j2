@@ -87,11 +87,13 @@ export class {{ client_name }} {
       readonly reconnectMaxAttempts?: number | null | undefined;
       readonly reconnectShouldRetry?: ((error: unknown) => boolean) | undefined;
       readonly reconnectRandom?: (() => number) | undefined;
-      readonly onStateChange?: ((
-        server: ServerName,
-        state: RpcConnectionState,
-        error?: unknown,
-      ) => void) | undefined;
+      readonly onStateChange?:
+        | ((
+            server: ServerName,
+            state: RpcConnectionState,
+            error?: unknown,
+          ) => void)
+        | undefined;
 {% if binary_streams %}      readonly streamSocketFactory?: BinaryWebSocketFactory | undefined;
       readonly streamQueueSize?: number | undefined;
 {% endif %}{% if sockets %}      readonly socketConnectionFactory?: SocketConnectionFactory | undefined;

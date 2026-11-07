@@ -51,7 +51,10 @@ export async function resolveWebSocketCredentials(
   subprotocols?: readonly string[],
   provider?: WebSocketCredentialsProvider,
   signal?: AbortSignal,
-): Promise<{ url: string | URL; subprotocols?: readonly string[] | undefined }> {
+): Promise<{
+  url: string | URL;
+  subprotocols?: readonly string[] | undefined;
+}> {
   if (signal?.aborted) throw signal.reason;
   const value = await provider?.({ url: new URL(url), subprotocols }, signal);
   if (signal?.aborted) throw signal.reason;
@@ -668,10 +671,12 @@ function defaultWebSocketFactory(
 ): WebSocketSocket {
   const constructor = (
     globalThis as unknown as {
-      readonly WebSocket?: (new (
-        url: string | URL,
-        protocols?: readonly string[],
-      ) => WebSocketSocket) | undefined;
+      readonly WebSocket?:
+        | (new (
+            url: string | URL,
+            protocols?: readonly string[],
+          ) => WebSocketSocket)
+        | undefined;
     }
   ).WebSocket;
   if (constructor === undefined) {
