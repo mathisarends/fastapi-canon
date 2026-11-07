@@ -690,7 +690,7 @@ def _typescript_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
                     'baseUrl: this.runtime.websocketUrl("").replace(/\\/$/, ""), '
                 )
             factories.append(
-                f"{json.dumps(source.name)}: {{ create: () => {source.name}Client.connect({{lazy: true, {defaults}...options.bindings?.{source.name}?.connect}}), client: options.bindings?.{source.name}?.client, owned: options.bindings?.{source.name}?.owned ?? !options.bindings?.{source.name}?.client }},"
+                f"{json.dumps(source.name)}: {{ create: () => {source.name}Client.connect({{lazy: true, {defaults}...options.bindings?.{source.name}?.connect, signal: this.runtime.bindingSignal(options.bindings?.{source.name}?.connect?.signal)}}), client: options.bindings?.{source.name}?.client, owned: options.bindings?.{source.name}?.owned ?? !options.bindings?.{source.name}?.client }},"
             )
         else:
             imports.append(

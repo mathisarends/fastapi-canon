@@ -260,6 +260,12 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Fixed
 
+- Closing a common TypeScript SDK cancels owned pending RPC binding initialization,
+  including stalled eager WebSocket handshakes. Individual call cancellation and
+  timeouts still leave shared initialization available to other calls. Regenerate
+  TypeScript SDKs to receive the fix; RPC `connect()` also accepts an optional
+  signal for eager connection establishment.
+
 - SSE terminal problems and exported stream contracts include errors inherited
   from enclosing routers and router policies, including composition's application
   router. Reused child routers keep each inclusion's error contract independent.
@@ -312,6 +318,12 @@ The next release containing the breaking changes below must be 0.16.0.
   `fastapi_canon.integrations.websockets`, where it is defined.
 
 ### Breaking changes
+
+- Generated TypeScript RPC `connect()` options now include an optional `signal`
+  for eager initialization. Regenerate common and RPC SDK outputs together so
+  the facade can cancel pending handshakes; connection-option wrappers must
+  preserve the signal. Rename an OpenRPC server URL variable named `signal` to
+  avoid the new option's reserved name. Existing calls without a signal remain valid.
 
 - RPC now preserves plain Pydantic models' declared aliases, validation settings
   and extra-field policy instead of cloning them with camel-case aliases and

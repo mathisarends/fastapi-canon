@@ -29,6 +29,24 @@ def test_identifier_styles_handle_acronyms_stably() -> None:
     assert pascal_case("browser-nav") == "BrowserNav"
 
 
+def test_typescript_connection_signal_cannot_collide_with_a_url_variable(
+    document: dict[str, Any],
+) -> None:
+    deployed = deepcopy(document)
+    deployed["servers"] = [
+        {
+            "name": "primary",
+            "url": "wss://example.test/{signal}",
+            "variables": {"signal": {"default": "project"}},
+            "x-rpckit-transport": {"type": "websocket", "messageEncoding": "json"},
+        }
+    ]
+    with pytest.raises(UnsupportedSchemaError, match="connect options"):
+        render_typescript_client(
+            deployed, TypeScriptClientOptions(with_transport="websocket")
+        )
+
+
 def test_typescript_resolves_wire_server_names_and_preserves_public_helpers(
     document: dict[str, Any],
     tmp_path: Path,

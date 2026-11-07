@@ -105,6 +105,8 @@ export class AutomationClient {
       readonly host?: string | undefined;
       readonly servers?: EndpointOverrides | undefined;
       readonly lazy?: boolean | undefined;
+      /** Cancels eager connection establishment. */
+      readonly signal?: AbortSignal | undefined;
       readonly requestTimeoutMs?: number | null | undefined;
       readonly heartbeatIntervalMs?: number | null | undefined;
       readonly heartbeatTimeoutMs?: number | undefined;
@@ -137,6 +139,7 @@ export class AutomationClient {
       readonly retryAttemptTimeoutMs?: number | undefined;
     } = {},
   ): Promise<AutomationClient> {
+    options.signal?.throwIfAborted();
     const variables: Record<string, string | undefined> = {
       host: options.host,
     };
@@ -174,7 +177,22 @@ export class AutomationClient {
           signal,
         }),
     });
-    if (!options.lazy) await pool.openAll();
+    if (!options.lazy) {
+      const abort = () => {
+        void pool.close();
+      };
+      options.signal?.addEventListener("abort", abort, { once: true });
+      try {
+        options.signal?.throwIfAborted();
+        await pool.openAll();
+        options.signal?.throwIfAborted();
+      } catch (error) {
+        await pool.close();
+        throw options.signal?.aborted ? options.signal.reason : error;
+      } finally {
+        options.signal?.removeEventListener("abort", abort);
+      }
+    }
     return new AutomationClient(pool, {
       middleware: options.middleware,
       retryAttempts: options.retryAttempts,

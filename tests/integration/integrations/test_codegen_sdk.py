@@ -278,6 +278,126 @@ void compileOnly;
         assert process.returncode == 0, stdout.decode() + stderr.decode()
 
 
+@pytest.mark.parametrize("stop", ["close", "timeout", "abort", "connect_abort"])
+async def test_typescript_sdk_close_cancels_owned_pending_handshake(
+    tmp_path: Path, sdk_app: FastAPI, stop: str
+) -> None:
+    node = shutil.which("node")
+    compiler = Path(__file__).resolve().parents[3] / "node_modules/typescript/bin/tsc"
+    if node is None or not compiler.is_file():
+        pytest.skip("Run pnpm install --frozen-lockfile --ignore-scripts")
+    _generate_sdk(tmp_path / "sdk", sdk_app, "typescript")
+    (tmp_path / "package.json").write_text('{"type":"module"}', encoding="utf-8")
+    compiled = subprocess.run(
+        [
+            node,
+            str(compiler),
+            "--strict",
+            "--verbatimModuleSyntax",
+            "--exactOptionalPropertyTypes",
+            "--noUnusedLocals",
+            "--noUnusedParameters",
+            "--target",
+            "es2022",
+            "--module",
+            "nodenext",
+            "--moduleResolution",
+            "nodenext",
+            "--lib",
+            "es2022,dom,esnext.disposable",
+            "--outDir",
+            str(tmp_path / "js"),
+            str(tmp_path / "sdk/index.ts"),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert compiled.returncode == 0, compiled.stdout + compiled.stderr
+    runner = tmp_path / "runner.mjs"
+    runner.write_text(
+        """import assert from "node:assert/strict";
+import net from "node:net";
+import {once} from "node:events";
+import {createClient, TransportError} from "./js/index.js";
+
+async function deadline(operation) {
+  let timer;
+  try {
+    return await Promise.race([operation, new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error("Lifecycle deadline exceeded")), 1_000);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+const sockets = new Set();
+let resolveOpened, resolveDisconnected;
+const opened = new Promise(resolve => {resolveOpened = resolve;});
+const disconnected = new Promise(resolve => {resolveDisconnected = resolve;});
+const server = net.createServer(socket => {
+  sockets.add(socket);
+  socket.on("data", () => resolveOpened());
+  socket.on("end", () => socket.end());
+  socket.on("close", () => {sockets.delete(socket); resolveDisconnected();});
+});
+server.listen(0, "127.0.0.1");
+await once(server, "listening");
+const connectionController = new AbortController();
+const client = createClient({
+  baseUrl: `http://127.0.0.1:${server.address().port}`,
+  bindings: {control: {connect: {
+    lazy: false, requestTimeoutMs: null, signal: connectionController.signal,
+  }}},
+});
+try {
+  const stop = process.argv[2];
+  const controller = new AbortController();
+  const reason = new DOMException("Cancelled by caller", "AbortError");
+  const options = stop === "timeout" ? {timeoutMs: 100} : {signal: controller.signal};
+  const first = client.projects.rpc(options).catch(error => error);
+  const sibling = client.projects.rpc().catch(error => error);
+  await deadline(opened);
+  if (stop === "abort") controller.abort(reason);
+  if (stop === "connect_abort") connectionController.abort(reason);
+  if (stop !== "close") {
+    const error = await deadline(first);
+    assert.equal(error.name, stop === "timeout" ? "TimeoutError" : "AbortError");
+    if (stop !== "timeout") assert.equal(error, reason);
+    if (stop !== "connect_abort") {
+      assert.equal(sockets.size, 1, "One call must not close shared initialization");
+    }
+  }
+  await deadline(client.close());
+  assert.ok(await deadline(first) instanceof Error);
+  assert.ok(await deadline(sibling) instanceof Error);
+  await deadline(disconnected);
+  assert.equal(sockets.size, 0, "SDK close must release the pending handshake");
+  await assert.rejects(() => client.projects.rpc(), TransportError);
+} finally {
+  for (const socket of sockets) socket.destroy();
+  await deadline(client.close());
+  await deadline(new Promise(resolve => server.close(resolve)));
+}
+""",
+        encoding="utf-8",
+    )
+    async with asyncio.timeout(20):
+        process = await asyncio.create_subprocess_exec(
+            node,
+            str(runner),
+            stop,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await process.communicate()
+        finally:
+            if process.returncode is None:
+                process.kill()
+                await process.wait()
+    assert process.returncode == 0, stdout.decode() + stderr.decode()
+
+
 @pytest.mark.parametrize("tags", [[], ["admin"], ["Admin Panel"]])
 async def test_sdk_operation_names_are_independent_of_documentation_tags(
     tmp_path: Path, tags: list[str | Enum]
