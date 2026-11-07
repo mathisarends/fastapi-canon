@@ -11,12 +11,12 @@ from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 from starlette.responses import Response
+from starlette.types import ExceptionHandler
 
 from fastapi_canon import (
     CanonResponse,
     Composition,
     ErrorOptions,
-    ExceptionHandlerSpec,
     Feature,
 )
 from fastapi_canon.error import Error, ErrorRegistry
@@ -654,7 +654,7 @@ def test_feature_exception_handler_is_installed() -> None:
             Feature(
                 name="teapot",
                 routers=[router],
-                exception_handlers=[ExceptionHandlerSpec(TeapotError, handler)],
+                exception_handlers={TeapotError: handler},
             ),
         ),
     ).build(FastAPI())
@@ -664,3 +664,44 @@ def test_feature_exception_handler_is_installed() -> None:
 
     assert response.status_code == 418
     assert response.json() == {"handled": True}
+
+
+@pytest.mark.parametrize(
+    ("handlers", "message"),
+    [
+        ([object()], "must be a mapping"),
+        ({"Teapot": print}, "keys must be Exception subclasses"),
+        ({ValueError: "handler"}, "ValueError must be callable"),
+    ],
+)
+def test_feature_rejects_invalid_exception_handlers(
+    handlers: object, message: str
+) -> None:
+    with pytest.raises(FeatureConfigurationError, match=message):
+        Feature(name="teapot", exception_handlers=handlers)  # type: ignore[arg-type]  # Invalid input is the subject.
+
+
+def test_feature_exception_handlers_are_read_only() -> None:
+    async def handler(request: Request, exception: Exception) -> Response:
+        del request, exception
+        return Response(status_code=400)
+
+    handlers: dict[type[Exception], ExceptionHandler] = {ValueError: handler}
+    feature = Feature(name="teapot", exception_handlers=handlers)
+    handlers.clear()
+
+    assert dict(feature.exception_handlers) == {ValueError: handler}
+    with pytest.raises(TypeError):
+        feature.exception_handlers[KeyError] = handler  # type: ignore[index]  # Mutation is the subject.
+
+
+def test_feature_with_exception_handlers_stays_hashable() -> None:
+    async def handler(request: Request, exception: Exception) -> Response:
+        del request, exception
+        return Response(status_code=400)
+
+    first = Feature(name="teapot", exception_handlers={ValueError: handler})
+    second = Feature(name="teapot", exception_handlers={ValueError: handler})
+
+    assert first == second
+    assert hash(first) == hash(second)

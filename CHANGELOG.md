@@ -30,6 +30,10 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- `Error` infers `extensions_model` from an `extensions` renderer annotated to
+  return a Pydantic model, such as `def fields(error) -> RetryFields`. Callable
+  extensions without such an annotation still require `extensions_model=`, and
+  an explicit `extensions_model=` keeps precedence.
 - `APIRouter.sse()`, `include_channel()` and `webrtc()` declare their forwarded
   options as typed keyword arguments (`StreamOptions`, `ChannelOptions` and
   `SessionOptions` in `fastapi_canon.api_router`). Editors complete them and type
@@ -292,6 +296,22 @@ The next release containing the breaking changes below must be 0.16.0.
   declaring it. `ErrorRegistry(...)` declarations no longer contribute mappings,
   and the `CAN002` message names the application catalog instead of the router
   registry.
+- Static `Error(headers={...})` values are now documented in OpenAPI as
+  constant string headers without `openapi_headers=`, and `Error.openapi_headers`
+  reports these effective definitions. An `openapi_headers=` entry still replaces
+  the generated definition for the same header name, compared case-insensitively.
+  Two errors with the same status and different static values for one header now
+  fail OpenAPI generation as conflicting headers; give them distinct statuses or
+  one shared `openapi_headers=` definition. Remove `openapi_headers=` entries that
+  only repeated `{"schema": {"type": "string"}}` for a static header.
+- `ExceptionHandlerSpec` is removed from `fastapi_canon`. `Feature` takes
+  `exception_handlers=` as a mapping from exception class to handler, like
+  FastAPI's `exception_handlers=`, and `Feature.exception_handlers` is a
+  read-only mapping. Migrate
+  `exception_handlers=[ExceptionHandlerSpec(DomainError, handler)]` to
+  `exception_handlers={DomainError: handler}`, and iterate
+  `feature.exception_handlers.items()` instead of reading `spec.exception` and
+  `spec.handler`.
 - Supported nested route factories now report contract gaps instead of blanket
   CAN003, and their operation names become `module.factory.<locals>.endpoint`.
   Before adopting 0.16.0, update report-name filters and map/declare newly exposed

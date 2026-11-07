@@ -7,7 +7,6 @@ from .error import Error
 from .feature import (
     Composition,
     ErrorOptions,
-    ExceptionHandlerSpec,
     Feature,
     inspect_app,
 )
@@ -22,7 +21,6 @@ __all__ = [
     "Composition",
     "Error",
     "ErrorOptions",
-    "ExceptionHandlerSpec",
     "Feature",
     "Inject",
     "ResponseHeaders",

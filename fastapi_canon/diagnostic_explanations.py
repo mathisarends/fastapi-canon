@@ -81,7 +81,7 @@ _EXPLANATIONS = {
     ),
     "canon.handlers.E001": _Explanation(
         "Features contribute conflicting exception handlers for the same exception type.",
-        "Two features each register ExceptionHandlerSpec(Missing, handler), using different handlers.",
+        "Two features each register exception_handlers={Missing: handler}, using different handlers.",
         "Choose one handler owner or share the same handler instance for that exception; inspect all named feature contributions.",
         _CHECKS,
     ),

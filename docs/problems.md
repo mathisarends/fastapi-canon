@@ -26,9 +26,35 @@ project_missing = Error(
 ```
 
 The exception stays framework-free. Its exception text is private by default;
-only the declared detail and extension renderers produce public data. Use
-`extensions_model=` for typed dynamic extension fields. Explicit null extension
-values are preserved.
+only the declared detail and extension renderers produce public data. For typed
+dynamic extension fields, annotate the renderer's return type with a Pydantic
+model; Canon uses it as `extensions_model`:
+
+```python
+class RetryFields(BaseModel):
+    retry_after: int
+
+
+def retry_fields(error: RateLimited) -> RetryFields:
+    return RetryFields(retry_after=error.seconds)
+
+
+rate_limited = Error(
+    RateLimited,
+    status=429,
+    code="rate_limited",
+    title="Too many requests",
+    extensions=retry_fields,
+)
+```
+
+Pass `extensions_model=` explicitly for a lambda or to document a wider model
+than the renderer returns. Explicit null extension values are preserved.
+
+Static `headers=` document themselves in OpenAPI as constant strings, so
+`headers={"WWW-Authenticate": "Bearer"}` needs no second declaration. Use
+`openapi_headers=` to refine a header's description or schema, matched by
+case-insensitive name, and to document headers rendered by a `headers` callable.
 
 [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457.html) makes `type` the primary
 problem identity. Canon's emission profile requires `type`, `title`, and its

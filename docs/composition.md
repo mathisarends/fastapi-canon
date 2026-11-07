@@ -101,7 +101,7 @@ feature = Feature(
     providers=[provider],
     instrumentation=instrument(ProjectRepository),
     errors=[rate_limited],
-    exception_handlers=[handler_spec],
+    exception_handlers={DomainError: domain_error_handler},
     lifespan=feature_lifespan,
 )
 ```
@@ -445,16 +445,18 @@ When all local registries already share a `type_base`, it is inferred. The
 `include_http_exceptions`, and `include_unhandled_error` are passed to
 the integrated error engine and default to `True`.
 
-Use `ExceptionHandlerSpec` for a deliberately custom Starlette/FastAPI handler:
+Map an exception class to a deliberately custom Starlette/FastAPI handler, as
+with FastAPI's own `exception_handlers=`:
 
 ```python
-from fastapi_canon import ExceptionHandlerSpec
-
 feature = Feature(
     name="projects",
-    exception_handlers=[ExceptionHandlerSpec(DomainError, domain_error_handler)],
+    exception_handlers={DomainError: domain_error_handler},
 )
 ```
+
+Keys must be exception classes. Two features cannot handle the same class, and a
+feature cannot replace a handler the application already defines.
 
 `Error.type` (or its registry-resolved URI) is the primary client identity;
 `Error.code` is a stable convenience extension. Dynamic `detail`, extensions, and

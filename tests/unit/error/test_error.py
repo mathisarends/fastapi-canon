@@ -84,6 +84,50 @@ def test_error_requires_model_for_callable_extensions() -> None:
         make_error(extensions=lambda _exception: {"session_id": 1})
 
 
+def test_error_infers_extensions_model_from_renderer_annotation() -> None:
+    def session_fields(exception: SessionNotFound) -> SessionFields:
+        del exception
+        return SessionFields(session_id=1)
+
+    error = make_error(extensions=session_fields)
+
+    assert error.extensions_model is SessionFields
+
+
+def test_error_infers_extensions_model_from_callable_object() -> None:
+    class Renderer:
+        def __call__(self, exception: SessionNotFound) -> SessionFields:
+            del exception
+            return SessionFields(session_id=1)
+
+    assert make_error(extensions=Renderer()).extensions_model is SessionFields
+
+
+def test_error_keeps_an_explicit_extensions_model() -> None:
+    class WideFields(SessionFields):
+        reason: str | None = None
+
+    def session_fields(exception: SessionNotFound) -> SessionFields:
+        del exception
+        return SessionFields(session_id=1)
+
+    error = make_error(extensions_model=WideFields, extensions=session_fields)
+
+    assert error.extensions_model is WideFields
+
+
+def test_error_rejects_inferred_model_with_reserved_members() -> None:
+    class InvalidFields(BaseModel):
+        value: str = Field(serialization_alias="detail")
+
+    def invalid(exception: SessionNotFound) -> InvalidFields:
+        del exception
+        return InvalidFields(value="unsafe")
+
+    with pytest.raises(ErrorConfigurationError, match="reserved members"):
+        make_error(extensions=invalid)
+
+
 def test_error_rejects_invalid_extensions_model() -> None:
     with pytest.raises(ErrorConfigurationError):
         make_error(extensions_model=str, extensions={"session_id": 1})
@@ -180,6 +224,31 @@ def test_error_freezes_static_headers_and_openapi_headers() -> None:
             "description": "Retry delay",
         }
     }
+
+
+def test_error_documents_static_headers() -> None:
+    error = make_error(headers={"WWW-Authenticate": "Bearer"})
+
+    assert error.openapi_headers == {
+        "WWW-Authenticate": {"schema": {"type": "string", "const": "Bearer"}}
+    }
+
+
+def test_openapi_headers_refine_static_headers_case_insensitively() -> None:
+    error = make_error(
+        headers={"Retry-After": "10", "WWW-Authenticate": "Bearer"},
+        openapi_headers={"retry-after": {"schema": {"type": "integer"}}},
+    )
+
+    assert error.openapi_headers == {
+        "WWW-Authenticate": {"schema": {"type": "string", "const": "Bearer"}},
+        "retry-after": {"schema": {"type": "integer"}},
+    }
+
+
+def test_error_without_headers_documents_none() -> None:
+    assert make_error().openapi_headers is None
+    assert make_error(headers=lambda _exception: {"X-Id": "1"}).openapi_headers is None
 
 
 def test_error_rejects_non_mapping_openapi_header_definition() -> None:
