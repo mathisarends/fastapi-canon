@@ -26,16 +26,16 @@ export class {{ client_name }} {
       | RpcTransportSource,
 {% else %}    transport: RpcTransport | RpcTransportSource,
 {% endif %}    options?: {
-      readonly closeTransport?: boolean;
+      readonly closeTransport?: boolean | undefined;
 
-      readonly middleware?: readonly RpcClientMiddleware[];
-      readonly retryAttempts?: number;
-      readonly retryAttemptTimeoutMs?: number;
-      readonly notificationQueueSize?: number;
-      readonly onOverflow?: RpcNotificationOverflowHandler;
-{% if binary_streams %}      readonly streamOpener?: BinaryStreamOpener;
-{% endif %}{% if sockets %}      readonly socketOpener?: SocketOpener;
-{% endif %}{% if binary_streams or sockets %}      readonly variables?: Readonly<Record<string, string>>;
+      readonly middleware?: readonly RpcClientMiddleware[] | undefined;
+      readonly retryAttempts?: number | undefined;
+      readonly retryAttemptTimeoutMs?: number | undefined;
+      readonly notificationQueueSize?: number | undefined;
+      readonly onOverflow?: RpcNotificationOverflowHandler | undefined;
+{% if binary_streams %}      readonly streamOpener?: BinaryStreamOpener | undefined;
+{% endif %}{% if sockets %}      readonly socketOpener?: SocketOpener | undefined;
+{% endif %}{% if binary_streams or sockets %}      readonly variables?: Readonly<Record<string, string>> | undefined;
 {% endif %}    },
   ) {
     this.#rpc = new RpcClientCore(transport, {
@@ -50,16 +50,16 @@ export class {{ client_name }} {
 {% if servers %}    transports: RpcTransport | Readonly<Record<ServerName, RpcTransport>>,
 {% else %}    transports: RpcTransport,
 {% endif %}    options?: {
-      readonly closeTransport?: boolean;
+      readonly closeTransport?: boolean | undefined;
 
-      readonly middleware?: readonly RpcClientMiddleware[];
-      readonly retryAttempts?: number;
-      readonly retryAttemptTimeoutMs?: number;
-      readonly notificationQueueSize?: number;
-      readonly onOverflow?: RpcNotificationOverflowHandler;
-{% if binary_streams %}      readonly streamOpener?: BinaryStreamOpener;
-{% endif %}{% if sockets %}      readonly socketOpener?: SocketOpener;
-{% endif %}{% if binary_streams or sockets %}      readonly variables?: Readonly<Record<string, string>>;
+      readonly middleware?: readonly RpcClientMiddleware[] | undefined;
+      readonly retryAttempts?: number | undefined;
+      readonly retryAttemptTimeoutMs?: number | undefined;
+      readonly notificationQueueSize?: number | undefined;
+      readonly onOverflow?: RpcNotificationOverflowHandler | undefined;
+{% if binary_streams %}      readonly streamOpener?: BinaryStreamOpener | undefined;
+{% endif %}{% if sockets %}      readonly socketOpener?: SocketOpener | undefined;
+{% endif %}{% if binary_streams or sockets %}      readonly variables?: Readonly<Record<string, string>> | undefined;
 {% endif %}    },
   ): {{ client_name }} {
     return new {{ client_name }}(transports, options);
@@ -68,38 +68,40 @@ export class {{ client_name }} {
   /** Connect to every declared server, opening each socket on first use. */
   static async connect(
     options: {
-{% for variable in variables %}      readonly {{ variable.name | property }}?: {{ variable | server_variable_type }};
-{% endfor %}{% if servers | length == 1 %}      readonly url?: string | URL;
-{% endif %}      readonly servers?: EndpointOverrides;
-      readonly lazy?: boolean;
-      readonly requestTimeoutMs?: number | null;
-      readonly heartbeatIntervalMs?: number | null;
-      readonly heartbeatTimeoutMs?: number;
-      readonly consecutiveTimeoutLimit?: number;
-      readonly notificationQueueSize?: number;
-      readonly notificationOverflow?: "drop_oldest" | "close";
-      readonly onOverflow?: RpcNotificationOverflowHandler;
-      readonly socketFactory?: WebSocketFactory;
-      readonly credentials?: WebSocketCredentialsProvider;
-      readonly reconnect?: boolean;
-      readonly reconnectInitialDelayMs?: number;
-      readonly reconnectMaxDelayMs?: number;
-      readonly reconnectMaxAttempts?: number | null;
-      readonly reconnectShouldRetry?: (error: unknown) => boolean;
-      readonly reconnectRandom?: () => number;
-      readonly onStateChange?: (
-        server: ServerName,
-        state: RpcConnectionState,
-        error?: unknown,
-      ) => void;
-{% if binary_streams %}      readonly streamSocketFactory?: BinaryWebSocketFactory;
-      readonly streamQueueSize?: number;
-{% endif %}{% if sockets %}      readonly socketConnectionFactory?: SocketConnectionFactory;
-      readonly socketQueueSize?: number;
+{% for variable in variables %}      readonly {{ variable.name | property }}?: {{ variable | server_variable_type }} | undefined;
+{% endfor %}{% if servers | length == 1 %}      readonly url?: string | URL | undefined;
+{% endif %}      readonly servers?: EndpointOverrides | undefined;
+      readonly lazy?: boolean | undefined;
+      readonly requestTimeoutMs?: number | null | undefined;
+      readonly heartbeatIntervalMs?: number | null | undefined;
+      readonly heartbeatTimeoutMs?: number | undefined;
+      readonly consecutiveTimeoutLimit?: number | undefined;
+      readonly notificationQueueSize?: number | undefined;
+      readonly notificationOverflow?: "drop_oldest" | "close" | undefined;
+      readonly onOverflow?: RpcNotificationOverflowHandler | undefined;
+      readonly socketFactory?: WebSocketFactory | undefined;
+      readonly credentials?: WebSocketCredentialsProvider | undefined;
+      readonly reconnect?: boolean | undefined;
+      readonly reconnectInitialDelayMs?: number | undefined;
+      readonly reconnectMaxDelayMs?: number | undefined;
+      readonly reconnectMaxAttempts?: number | null | undefined;
+      readonly reconnectShouldRetry?: ((error: unknown) => boolean) | undefined;
+      readonly reconnectRandom?: (() => number) | undefined;
+      readonly onStateChange?:
+        | ((
+            server: ServerName,
+            state: RpcConnectionState,
+            error?: unknown,
+          ) => void)
+        | undefined;
+{% if binary_streams %}      readonly streamSocketFactory?: BinaryWebSocketFactory | undefined;
+      readonly streamQueueSize?: number | undefined;
+{% endif %}{% if sockets %}      readonly socketConnectionFactory?: SocketConnectionFactory | undefined;
+      readonly socketQueueSize?: number | undefined;
 {% endif %}
-      readonly middleware?: readonly RpcClientMiddleware[];
-      readonly retryAttempts?: number;
-      readonly retryAttemptTimeoutMs?: number;
+      readonly middleware?: readonly RpcClientMiddleware[] | undefined;
+      readonly retryAttempts?: number | undefined;
+      readonly retryAttemptTimeoutMs?: number | undefined;
     } = {},
   ): Promise<{{ client_name }}> {
 {% if variables %}    const variables: Record<string, string | undefined> = {

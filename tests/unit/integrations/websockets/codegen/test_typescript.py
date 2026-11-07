@@ -219,9 +219,12 @@ def test_single_server_websocket_clients_accept_compact_url_overrides(
 
     files = render_typescript_client(deployed, configured)
 
-    assert "readonly url?: string | URL;" in files["client.ts"]
+    assert "readonly url?: string | URL | undefined;" in files["client.ts"]
     assert 'overrides["greeting-api"] ??= options.url;' in files["client.ts"]
-    assert "readonly subprotocols?: readonly string[];" in files["endpoints.ts"]
+    assert (
+        "readonly subprotocols?: readonly string[] | undefined;"
+        in files["endpoints.ts"]
+    )
     assert (
         "subprotocols: override.subprotocols ?? declared.subprotocols,"
         in files["endpoints.ts"]

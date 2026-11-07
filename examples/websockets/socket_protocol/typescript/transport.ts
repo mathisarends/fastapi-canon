@@ -22,10 +22,10 @@ export type RpcTransport = {
     options?: RpcRequestOptions,
   ): Promise<unknown>;
   notifications(signal?: AbortSignal): AsyncIterable<unknown>;
-  readonly droppedNotifications?: number;
+  readonly droppedNotifications?: number | undefined;
   startNotifications?(): void;
   close(): Promise<void>;
-  readonly closed?: Promise<RpcClientError | undefined>;
+  readonly closed?: Promise<RpcClientError | undefined> | undefined;
 };
 
 export type WebSocketFactory = (
@@ -34,14 +34,14 @@ export type WebSocketFactory = (
 ) => WebSocketSocket;
 
 export type WebSocketCredentials = {
-  readonly url?: string | URL;
-  readonly subprotocols?: readonly string[];
+  readonly url?: string | URL | undefined;
+  readonly subprotocols?: readonly string[] | undefined;
 };
 
 export type WebSocketCredentialsProvider = (
   endpoint: {
     readonly url: string | URL;
-    readonly subprotocols?: readonly string[];
+    readonly subprotocols?: readonly string[] | undefined;
   },
   signal?: AbortSignal,
 ) => WebSocketCredentials | Promise<WebSocketCredentials>;
@@ -51,7 +51,10 @@ export async function resolveWebSocketCredentials(
   subprotocols?: readonly string[],
   provider?: WebSocketCredentialsProvider,
   signal?: AbortSignal,
-): Promise<{ url: string | URL; subprotocols?: readonly string[] }> {
+): Promise<{
+  url: string | URL;
+  subprotocols?: readonly string[] | undefined;
+}> {
   if (signal?.aborted) throw signal.reason;
   const value = await provider?.({ url: new URL(url), subprotocols }, signal);
   if (signal?.aborted) throw signal.reason;
@@ -62,17 +65,17 @@ export async function resolveWebSocketCredentials(
 }
 
 export type WebSocketOptions = {
-  readonly subprotocols?: readonly string[];
-  readonly requestTimeoutMs?: number | null;
-  readonly notificationQueueSize?: number;
-  readonly notificationOverflow?: "drop_oldest" | "close";
-  readonly socketFactory?: WebSocketFactory;
-  readonly signal?: AbortSignal;
-  readonly onOverflow?: RpcNotificationOverflowHandler;
-  readonly credentials?: WebSocketCredentialsProvider;
-  readonly heartbeatIntervalMs?: number | null;
-  readonly heartbeatTimeoutMs?: number;
-  readonly consecutiveTimeoutLimit?: number;
+  readonly subprotocols?: readonly string[] | undefined;
+  readonly requestTimeoutMs?: number | null | undefined;
+  readonly notificationQueueSize?: number | undefined;
+  readonly notificationOverflow?: "drop_oldest" | "close" | undefined;
+  readonly socketFactory?: WebSocketFactory | undefined;
+  readonly signal?: AbortSignal | undefined;
+  readonly onOverflow?: RpcNotificationOverflowHandler | undefined;
+  readonly credentials?: WebSocketCredentialsProvider | undefined;
+  readonly heartbeatIntervalMs?: number | null | undefined;
+  readonly heartbeatTimeoutMs?: number | undefined;
+  readonly consecutiveTimeoutLimit?: number | undefined;
 };
 
 type WebSocketSocket = {
@@ -97,7 +100,7 @@ type PendingRequest = {
   readonly method: string;
   readonly resolve: (value: unknown) => void;
   readonly reject: (error: unknown) => void;
-  readonly timeout?: ReturnType<typeof setTimeout>;
+  readonly timeout?: ReturnType<typeof setTimeout> | undefined;
   readonly removeAbortListener: () => void;
   sent: boolean;
   sendComplete: boolean;
@@ -108,7 +111,7 @@ type JsonObject = Record<string, unknown>;
 
 export class WebSocketTransport implements RpcTransport {
   readonly #socket: WebSocketSocket;
-  readonly #requestTimeoutMs?: number;
+  readonly #requestTimeoutMs?: number | undefined;
   readonly #notifications: AsyncQueue<JsonObject>;
   readonly #pending = new Map<number, PendingRequest>();
   #nextRequestId = 1;
@@ -116,14 +119,14 @@ export class WebSocketTransport implements RpcTransport {
   #failed = false;
   readonly closed: Promise<RpcClientError | undefined>;
   readonly #resolveClosed: (error: RpcClientError | undefined) => void;
-  #failure?: RpcClientError;
-  #heartbeatIntervalMs?: number;
+  #failure?: RpcClientError | undefined;
+  #heartbeatIntervalMs?: number | undefined;
   readonly #heartbeatTimeoutMs: number;
   readonly #consecutiveTimeoutLimit: number;
   #consecutiveTimeouts = 0;
   #lastInbound = Date.now();
-  #heartbeatId?: number;
-  #heartbeatTimer?: ReturnType<typeof setTimeout>;
+  #heartbeatId?: number | undefined;
+  #heartbeatTimer?: ReturnType<typeof setTimeout> | undefined;
 
   private constructor(socket: WebSocketSocket, options: WebSocketOptions) {
     this.#socket = socket;
@@ -543,7 +546,7 @@ class AsyncQueue<Value> implements AsyncIterableIterator<Value> {
   #listening = false;
   #overflowWarned = false;
   readonly #overflow: "drop_oldest" | "close";
-  readonly #onOverflow?: RpcNotificationOverflowHandler;
+  readonly #onOverflow?: RpcNotificationOverflowHandler | undefined;
   dropped = 0;
   #callbackFailed = false;
 
@@ -668,10 +671,12 @@ function defaultWebSocketFactory(
 ): WebSocketSocket {
   const constructor = (
     globalThis as unknown as {
-      readonly WebSocket?: new (
-        url: string | URL,
-        protocols?: readonly string[],
-      ) => WebSocketSocket;
+      readonly WebSocket?:
+        | (new (
+            url: string | URL,
+            protocols?: readonly string[],
+          ) => WebSocketSocket)
+        | undefined;
     }
   ).WebSocket;
   if (constructor === undefined) {

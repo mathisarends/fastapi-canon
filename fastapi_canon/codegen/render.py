@@ -4,8 +4,12 @@ import ast
 import json
 import posixpath
 import re
+import subprocess
+import sys
 from dataclasses import fields, is_dataclass, replace
 from importlib.resources import files
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from textwrap import indent
 from typing import Any
 from urllib.parse import urlsplit
@@ -28,7 +32,12 @@ def render(
     diagnostics: list[_GenerationWarning] | None = None,
 ) -> dict[str, str]:
     from fastapi_canon.integrations.sse.codegen.enums import with_enums
-    from fastapi_canon.integrations.sse.codegen.ir import Contract, Declaration, _Types
+    from fastapi_canon.integrations.sse.codegen.ir import (
+        Contract,
+        Declaration,
+        StringEnum,
+        _Types,
+    )
     from fastapi_canon.integrations.sse.codegen.python import _Models
     from fastapi_canon.integrations.sse.codegen.python import (
         runtime_source as sse_runtime,
@@ -91,6 +100,11 @@ def render(
             "An operation type name collides with a model; rename the model or operation"
         )
     contract = with_enums(Contract((), tuple(declarations), ()))
+    canonical_values = {
+        declaration.name
+        for declaration in contract.declarations
+        if isinstance(declaration.type, StringEnum)
+    }
     python = target.language == "python"
     models = (
         _Models(contract.declarations, field_name=model_field).render()
@@ -231,7 +245,7 @@ def render(
                 )
             else:
                 content = _typescript_backend(
-                    content, path, prefix, canonical, problem_errors
+                    content, path, prefix, canonical, problem_errors, canonical_values
                 )
             if path in {
                 "problem.py",
@@ -259,7 +273,47 @@ def render(
     if python:
         runtime = runtime.replace("from .problem import", "from ..errors import")
     output["internal/runtime.py" if python else "internal/runtime.ts"] = runtime
+    if python:
+        output = _python_sources(output)
     return output
+
+
+def _python_sources(output: dict[str, str]) -> dict[str, str]:
+    # Format the package in two processes, independent of its module count.
+    with TemporaryDirectory(prefix="canon-python-") as directory:
+        root = Path(directory)
+        paths = [path for path in output if path.endswith(".py")]
+        for path in paths:
+            module = root / path
+            module.parent.mkdir(parents=True, exist_ok=True)
+            module.write_text(output[path], encoding="utf-8")
+        for arguments in (
+            ["check", "--select", "F401,I", "--fix"],
+            ["format"],
+        ):
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "ruff",
+                    *arguments,
+                    "--isolated",
+                    "--target-version",
+                    "py312",
+                    directory,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+            if result.returncode:
+                raise GenerationError(
+                    "Cannot format generated Python SDK; install fastapi-canon[codegen]"
+                )
+        return output | {
+            path: (root / path).read_text(encoding="utf-8") for path in paths
+        }
 
 
 def _errors(plan: Plan, target: TargetConfig) -> str:
@@ -276,10 +330,11 @@ def _errors(plan: Plan, target: TargetConfig) -> str:
             f"  {json.dumps(model.problem_type)}: {_error_name(model.name)}"
             for model in problems
         )
+        model_import = 'import type * as Models from "./models.js";' if problems else ""
         return (
             runtime
             + f"""
-import type * as Models from "./models.js";
+{model_import}
 
 export class HttpError<T = unknown> extends TransportError {{
   override readonly name = "HttpError";
@@ -469,6 +524,7 @@ def _typescript_backend(
     prefix: str,
     canonical: set[str],
     problem_errors: dict[str, str],
+    canonical_values: set[str],
 ) -> str:
     if prefix.endswith("_sse") and path == "transport/errors.ts":
         content = re.sub(
@@ -526,29 +582,50 @@ def _typescript_backend(
                 "models.js", posixpath.dirname(prefix + "/" + path)
             )
             if found:
+                import_kind = "" if name in canonical_values else "type "
                 content = (
-                    f'import {{ {name} }} from "{relative}";\nexport {{ {name} }};\n'
+                    f'import {import_kind}{{ {name} }} from "{relative}";\nexport {import_kind}{{ {name} }};\n'
                     + content
                 )
+    if path == "errors.ts" and prefix.endswith("_jsonrpc"):
+        content = _typescript_type_imports(content)
     return content
 
 
+def _typescript_type_imports(content: str) -> str:
+    pattern = r"import type \{([^}]+)\} from ([^;]+);"
+    body = re.sub(pattern, "", content)
+
+    def used(match: re.Match[str]) -> str:
+        names = [name.strip() for name in match.group(1).split(",") if name.strip()]
+        names = [name for name in names if re.search(rf"\b{re.escape(name)}\b", body)]
+        return (
+            f"import type {{ {', '.join(names)} }} from {match.group(2)};"
+            if names
+            else ""
+        )
+
+    return re.sub(pattern, used, content)
+
+
 def _typescript_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
+    runtime_imports = ["Runtime", "type ClientOptions"]
+    if any(operation.interaction == "call" for operation in plan.operations):
+        runtime_imports.append("operation")
+    if any(operation.binding.protocol == "http" for operation in plan.operations):
+        runtime_imports.append("type HttpOptions")
+    if any(operation.binding.protocol == "sse" for operation in plan.operations):
+        runtime_imports.append("type StreamOptions")
+    if any(
+        operation.binding.protocol in {"jsonrpc", "websocket"}
+        and operation.interaction != "session"
+        for operation in plan.operations
+    ):
+        runtime_imports.append("type CallOptions")
     imports = [
         'import type * as Models from "./models.js";',
-        'import { Runtime, operation, type ClientOptions, type CallOptions, type HttpOptions, type StreamOptions } from "./internal/runtime.js";',
+        "import { " + ", ".join(runtime_imports) + ' } from "./internal/runtime.js";',
     ]
-    documented_errors = sorted(
-        {
-            _error_name(problem)
-            for operation in plan.operations
-            for problem in operation.problems
-        }
-    )
-    if documented_errors:
-        imports.append(
-            "import type { " + ", ".join(documented_errors) + ' } from "./errors.js";'
-        )
     factories = []
     options = []
     for source in plan.sources:
@@ -662,7 +739,11 @@ def _typescript_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
                 args = [
                     "{ "
                     + ", ".join(
-                        f"{json.dumps(binding.metadata['typescript_arguments'][param.name])}: params.{camel(param.name)}"
+                        _typescript_argument(
+                            binding.metadata["typescript_arguments"][param.name],
+                            param.name,
+                            param.required,
+                        )
                         for param in operation.parameters
                     )
                     + " }",
@@ -691,7 +772,9 @@ def _typescript_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
                 args = [
                     "{ "
                     + ", ".join(
-                        f"{json.dumps(param.wire_name)}: params.{camel(param.name)}"
+                        _typescript_argument(
+                            param.wire_name, param.name, param.required
+                        )
                         for param in operation.parameters
                     )
                     + " }"
@@ -765,6 +848,12 @@ def _typescript_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
         )
         + 'export type { CallOptions, HttpOptions, StreamOptions, OperationResult } from "./internal/runtime.js";\n',
     }
+
+
+def _typescript_argument(wire: str, name: str, required: bool) -> str:
+    value = "params." + camel(name)
+    field = f"{json.dumps(wire)}: {value}"
+    return field if required else f"...({value} === undefined ? {{}} : {{ {field} }})"
 
 
 def _public_model_names(plan: Plan) -> set[str]:
@@ -858,16 +947,8 @@ def _public_type(schema: dict[str, Any], fallback: str, language: str) -> str:
         and "const" not in schema
     ):
         return primitives[kind]
-    if kind == "array":
-        item = _public_type(schema.get("items", {}), "Models.JsonValue", language)
-        return f"list[{item}]" if language == "python" else f"Array<{item}>"
-    branches = schema.get("anyOf", schema.get("oneOf", []))
-    if branches:
-        return " | ".join(
-            dict.fromkeys(
-                _public_type(branch, fallback, language) for branch in branches
-            )
-        )
+    # Complex types are already represented by complete canonical declarations.
+    # Projecting them a second time can lose maps, literal values or constraints.
     return fallback
 
 
@@ -876,7 +957,7 @@ def _typescript_doc(operation: Operation) -> str:
     if operation.deprecated:
         lines.append("@deprecated This operation is deprecated by the server contract.")
     lines.extend(
-        f"@throws {{{_error_name(name)}}} Declared public problem."
+        f'@throws {{import("./errors.js").{_error_name(name)}}} Declared public problem.'
         for name in operation.problems
     )
     text = "\n\n".join(line for line in lines if line)
@@ -987,14 +1068,14 @@ def _python_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
     classes = []
     for group in sorted(groups, key=lambda path: (-len(path), path)):
         lines = [
-            f"class {''.join(pascal(part) for part in group)}Api:",
+            f"class {_group_class(group)}:",
             "    def __init__(self, runtime: Runtime) -> None:",
             "        self._runtime = runtime",
         ]
         for child in sorted(groups):
             if len(child) == len(group) + 1 and child[:-1] == group:
                 lines.append(
-                    f"        self.{snake(child[-1])} = {''.join(pascal(part) for part in child)}Api(runtime)"
+                    f"        self.{snake(child[-1])} = {_group_class(child)}(runtime)"
                 )
         for operation in plan.operations:
             if operation.name[:-1] == group:
@@ -1034,6 +1115,10 @@ def _python_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
             if model.problem_type
         ),
     }
+
+
+def _group_class(path: tuple[str, ...]) -> str:
+    return "_".join(pascal(part) for part in path) + "Api"
 
 
 def _python_method(operation: Operation) -> list[str]:

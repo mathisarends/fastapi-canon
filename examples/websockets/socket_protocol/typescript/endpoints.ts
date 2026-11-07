@@ -6,27 +6,27 @@ export type RpcTransportDescriptor =
   | {
       readonly type: "websocket";
       readonly messageEncoding: "json";
-      readonly subprotocols?: readonly string[];
+      readonly subprotocols?: readonly string[] | undefined;
     }
   | {
       readonly type: string;
-      readonly subprotocols?: readonly string[];
+      readonly subprotocols?: readonly string[] | undefined;
       readonly [option: string]: unknown;
     };
 
 type RpcServerVariable = {
   readonly default: string;
-  readonly description?: string;
-  readonly enum?: readonly string[];
+  readonly description?: string | undefined;
+  readonly enum?: readonly string[] | undefined;
 };
 
 type RpcServerInfo = {
   readonly name: string;
   readonly url: string;
-  readonly summary?: string;
-  readonly description?: string;
-  readonly variables?: Readonly<Record<string, RpcServerVariable>>;
-  readonly transport?: RpcTransportDescriptor;
+  readonly summary?: string | undefined;
+  readonly description?: string | undefined;
+  readonly variables?: Readonly<Record<string, RpcServerVariable>> | undefined;
+  readonly transport?: RpcTransportDescriptor | undefined;
 };
 
 export type ServerName = "rpc";
@@ -34,7 +34,7 @@ export type ServerName = "rpc";
 export type Endpoint = {
   readonly server: ServerName;
   readonly url: string | URL;
-  readonly subprotocols?: readonly string[];
+  readonly subprotocols?: readonly string[] | undefined;
 };
 
 export type ServerVariables = Readonly<Record<string, string | undefined>>;
@@ -64,7 +64,7 @@ export const servers = {
 
 function rpc(
   variables: {
-    host?: string;
+    host?: string | undefined;
   } = {},
 ): Endpoint {
   return endpoint("rpc", variables);

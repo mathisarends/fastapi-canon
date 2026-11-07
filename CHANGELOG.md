@@ -30,6 +30,15 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- Common Python SDKs are formatted with Ruff, including cleaned and sorted
+  imports. The codegen extra now supplies Ruff. Common TypeScript SDKs support
+  `verbatimModuleSyntax`, `exactOptionalPropertyTypes`, `noUnusedLocals` and
+  `noUnusedParameters` together with strict Node ESM compilation.
+- Common SDK collection signatures retain their complete canonical types,
+  including typed maps and string enums nested inside arrays. Public namespace
+  spelling is normalized before grouping, so `projects.get` and `Projects.list`
+  share one group without losing either method.
+
 - Generated common SDKs expose one public typed error class per canonical
   problem across HTTP, SSE and RPC, plus a public `HttpError`. TypeScript calls
   provide `.safe()` with separate declared and unknown-problem results;

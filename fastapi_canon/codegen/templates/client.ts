@@ -3,27 +3,27 @@ import { HttpError, ProblemError, ProtocolError, TransportError, parseProblem, p
 
 export interface ClientOptions {
   baseUrl: string;
-  headers?: HeadersInit;
-  fetch?: typeof globalThis.fetch;
-  credentials?: RequestCredentials;
+  headers?: HeadersInit | undefined;
+  fetch?: typeof globalThis.fetch | undefined;
+  credentials?: RequestCredentials | undefined;
 }
 export interface CallOptions {
-  signal?: AbortSignal;
+  signal?: AbortSignal | undefined;
   /** Total deadline, including connection establishment. */
-  timeoutMs?: number;
-  metadata?: Readonly<Record<string, string>>;
+  timeoutMs?: number | undefined;
+  metadata?: Readonly<Record<string, string>> | undefined;
 }
 export interface HttpOptions extends Omit<CallOptions, "metadata"> {
-  headers?: HeadersInit;
+  headers?: HeadersInit | undefined;
 }
 export interface StreamOptions {
-  signal?: AbortSignal;
-  headers?: HeadersInit;
+  signal?: AbortSignal | undefined;
+  headers?: HeadersInit | undefined;
   /** Maximum time until response headers arrive. */
-  openTimeoutMs?: number;
+  openTimeoutMs?: number | undefined;
   /** Maximum wait for the next business event, excluding consumer processing. */
-  idleTimeoutMs?: number;
-  unknownEvents?: "forward" | "ignore";
+  idleTimeoutMs?: number | undefined;
+  unknownEvents?: "forward" | "ignore" | undefined;
 }
 export type OperationResult<T, P extends Problem> =
   | { readonly ok: true; readonly data: T }
@@ -47,7 +47,7 @@ interface Binding {
   client?: unknown;
   owned: boolean;
 }
-interface Closable { close?: () => unknown; }
+interface Closable { close?: (() => unknown) | undefined; }
 interface RequestSpec {
   path: string;
   method: string;
@@ -58,7 +58,7 @@ interface RequestSpec {
 
 export class Runtime {
   private closed = false;
-  private closing?: Promise<void>;
+  private closing?: Promise<void> | undefined;
   private readonly lifetime = new AbortController();
   private readonly bindings: Record<string, Binding> = {};
   private readonly pending = new Map<string, Promise<unknown>>();
@@ -177,7 +177,11 @@ export class Runtime {
     const timeout = options.timeoutMs === undefined ? undefined : setTimeout(() => controller.abort(new DOMException("Request timed out", "TimeoutError")), options.timeoutMs);
     let response: Response | undefined;
     try {
-      response = await this.fetch(url, { method: spec.method, headers, body, signal: controller.signal, credentials: this.options.credentials });
+      response = await this.fetch(url, {
+        method: spec.method, headers, signal: controller.signal,
+        ...(body === undefined ? {} : { body }),
+        ...(this.options.credentials === undefined ? {} : { credentials: this.options.credentials }),
+      });
       if (response.status >= 400) {
         if (response.headers.get("content-type")?.split(";")[0]?.trim() === "application/problem+json") {
           let value: unknown;

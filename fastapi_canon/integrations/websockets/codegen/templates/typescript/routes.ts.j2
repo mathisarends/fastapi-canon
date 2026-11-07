@@ -1,4 +1,4 @@
-import { defineNotification, defineRoute } from "./core";
+import { {% if notifications %}defineNotification{% if routes %}, {% endif %}{% endif %}{% if routes %}defineRoute{% endif %} } from "./core";
 {% if notifications | selectattr("errors") | list %}import { errorFromResponse } from "./errors";
 {% endif %}{% if model_import %}{{ model_import }}
 {% endif %}
