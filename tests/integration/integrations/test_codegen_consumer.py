@@ -5,12 +5,14 @@ import importlib
 import shutil
 import subprocess
 import sys
+import typing
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 import pytest
+from fastapi import FastAPI
 from pydantic import BaseModel
 
 from fastapi_canon.codegen.config import SourceConfig, TargetConfig
@@ -21,6 +23,197 @@ from fastapi_canon.codegen.render import render
 class InvoiceLine(BaseModel):
     quantity: Decimal
     unit_price: Decimal | None
+
+
+async def test_python_groups_keep_all_operations_after_name_normalization(
+    tmp_path: Path,
+) -> None:
+    names = ("projects.get", "Projects.list", "a_bc.leaf.get", "a.bc_leaf.list")
+    document = {
+        "openapi": "3.1.0",
+        "paths": {
+            f"/{index}": {
+                "get": {
+                    "operationId": name,
+                    "responses": {
+                        "200": {
+                            "description": "OK",
+                            "content": {
+                                "application/json": {"schema": {"type": "integer"}}
+                            },
+                        }
+                    },
+                }
+            }
+            for index, name in enumerate(names)
+        },
+    }
+    files = render(
+        build_plan(((SourceConfig("api", "openapi"), document),)),
+        TargetConfig("python", "python", ("api",), tmp_path, package="groups_sdk"),
+    )
+    for name, content in files.items():
+        path = tmp_path / "groups_sdk" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    app = FastAPI()
+
+    @app.get("/{index}")
+    async def result(index: int) -> int:
+        return index
+
+    sys.path.insert(0, str(tmp_path))
+    try:
+        sdk = importlib.import_module("groups_sdk")
+        async with (
+            asyncio.timeout(10),
+            httpx.AsyncClient(transport=httpx.ASGITransport(app)) as http,
+            sdk.ApiClient("https://test", http_client=http) as client,
+        ):
+            assert await client.projects.get() == 0
+            assert await client.projects.list() == 1
+            assert await client.a_bc.leaf.get() == 2
+            assert await client.a.bc_leaf.list() == 3
+    finally:
+        sys.path.remove(str(tmp_path))
+        for name in tuple(sys.modules):
+            if name == "groups_sdk" or name.startswith("groups_sdk."):
+                del sys.modules[name]
+
+
+@pytest.mark.parametrize(
+    "schema,payload,invalid",
+    [
+        (
+            {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": {"type": "integer"},
+                },
+            },
+            [{"count": 3}],
+            [{"count": "broken"}],
+        ),
+        (
+            {"type": "array", "items": {"type": "string", "enum": ["ready", "done"]}},
+            ["ready", "done"],
+            ["invalid"],
+        ),
+    ],
+)
+async def test_generated_collection_contracts_keep_their_complete_types(
+    tmp_path: Path, schema: dict[str, Any], payload: Any, invalid: Any
+) -> None:
+    document = {
+        "openapi": "3.1.0",
+        "paths": {
+            "/records": {
+                "get": {
+                    "operationId": "records.get",
+                    "responses": {
+                        "200": {
+                            "description": "OK",
+                            "content": {"application/json": {"schema": schema}},
+                        }
+                    },
+                }
+            }
+        },
+    }
+    plan = build_plan(((SourceConfig("api", "openapi"), document),))
+    languages: tuple[Literal["python", "typescript"], ...] = ("python", "typescript")
+    for language in languages:
+        target = TargetConfig(
+            language, language, ("api",), tmp_path, package="collection_sdk"
+        )
+        for name, content in render(plan, target).items():
+            path = (
+                tmp_path / ("collection_sdk" if language == "python" else "ts") / name
+            )
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+    app = FastAPI()
+    response = payload
+
+    @app.get("/records")
+    async def records() -> Any:
+        return response
+
+    sys.path.insert(0, str(tmp_path))
+    try:
+        sdk: Any = importlib.import_module("collection_sdk")
+        async with (
+            asyncio.timeout(10),
+            httpx.AsyncClient(transport=httpx.ASGITransport(app)) as http,
+            sdk.ApiClient("https://test", http_client=http) as client,
+        ):
+            assert typing.get_type_hints(client.records.get)["return"] is not Any
+            assert await client.records.get() == payload
+            response = invalid
+            with pytest.raises(sdk.ProtocolError):
+                await client.records.get()
+    finally:
+        sys.path.remove(str(tmp_path))
+        for name in tuple(sys.modules):
+            if name == "collection_sdk" or name.startswith("collection_sdk."):
+                del sys.modules[name]
+    node = shutil.which("node")
+    compiler = Path(__file__).resolve().parents[3] / "node_modules/typescript/bin/tsc"
+    if node is None or not compiler.is_file():
+        pytest.skip("Run pnpm install --frozen-lockfile --ignore-scripts")
+    (tmp_path / "package.json").write_text('{"type":"module"}', encoding="utf-8")
+    expected = (
+        "Array<Record<string, number>>"
+        if isinstance(payload[0], dict)
+        else 'Array<"ready" | "done">'
+    )
+    (tmp_path / "usage.ts").write_text(
+        f'import {{createClient}} from "./ts/index.js";\nconst client = createClient({{baseUrl:"https://test"}});\nexport const result: Promise<{expected}> = client.records.get();\n',
+        encoding="utf-8",
+    )
+    compiled = subprocess.run(
+        [
+            node,
+            str(compiler),
+            "--strict",
+            "--verbatimModuleSyntax",
+            "--exactOptionalPropertyTypes",
+            "--noUnusedLocals",
+            "--noUnusedParameters",
+            "--module",
+            "nodenext",
+            "--target",
+            "es2022",
+            "--lib",
+            "es2022,dom,esnext.disposable",
+            "--noEmit",
+            str(tmp_path / "usage.ts"),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert compiled.returncode == 0, compiled.stdout + compiled.stderr
+    for arguments in (["check", "--select", "F,I"], ["format", "--check"]):
+        checked = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "ruff",
+                *arguments,
+                "--isolated",
+                "--target-version",
+                "py312",
+                str(tmp_path / "collection_sdk"),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        assert checked.returncode == 0, checked.stdout + checked.stderr
 
 
 @pytest.mark.asyncio

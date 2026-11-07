@@ -425,6 +425,17 @@ timeout; injected clients keep their own timeout unless explicitly overridden.
 
 TypeScript output supports browser bundlers and Node ESM (`NodeNext` resolution),
 using explicit `.js` module paths. Import the generated `index.js` entry point.
+Generated TypeScript also supports `verbatimModuleSyntax`,
+`exactOptionalPropertyTypes`, `noUnusedLocals` and `noUnusedParameters`.
+Transport options accept explicit `undefined`; omitted optional operation
+arguments stay omitted on the wire. Type-only re-exports do not create runtime
+imports. Python output is formatted and its imports are cleaned with the Ruff
+version installed by `fastapi-canon[codegen]`.
+
+Operation namespaces are normalized once before grouping. For example,
+`projects.get` and `Projects.list` become `client.projects.get()` and
+`client.projects.list()` in both languages. Collection signatures retain the
+canonical schema type rather than approximating nested maps or enums as JSON.
 Human-readable output summarizes validation constraint limitations; use
 `--format json` to inspect each source-located diagnostic.
 

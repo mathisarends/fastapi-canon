@@ -2,27 +2,27 @@ export type RpcTransportDescriptor =
   | {
       readonly type: "websocket";
       readonly messageEncoding: "json";
-      readonly subprotocols?: readonly string[];
+      readonly subprotocols?: readonly string[] | undefined;
     }
   | {
       readonly type: string;
-      readonly subprotocols?: readonly string[];
+      readonly subprotocols?: readonly string[] | undefined;
       readonly [option: string]: unknown;
     };
 
 type RpcServerVariable = {
   readonly default: string;
-  readonly description?: string;
-  readonly enum?: readonly string[];
+  readonly description?: string | undefined;
+  readonly enum?: readonly string[] | undefined;
 };
 
 type RpcServerInfo = {
   readonly name: string;
   readonly url: string;
-  readonly summary?: string;
-  readonly description?: string;
-  readonly variables?: Readonly<Record<string, RpcServerVariable>>;
-  readonly transport?: RpcTransportDescriptor;
+  readonly summary?: string | undefined;
+  readonly description?: string | undefined;
+  readonly variables?: Readonly<Record<string, RpcServerVariable>> | undefined;
+  readonly transport?: RpcTransportDescriptor | undefined;
 };
 
 export type ServerName = {% for server in servers %}{{ " | " if not loop.first else "" }}{{ server.name | literal }}{% endfor %};
@@ -30,7 +30,7 @@ export type ServerName = {% for server in servers %}{{ " | " if not loop.first e
 export type Endpoint = {
   readonly server: ServerName;
   readonly url: string | URL;
-  readonly subprotocols?: readonly string[];
+  readonly subprotocols?: readonly string[] | undefined;
 };
 
 export type ServerVariables = Readonly<Record<string, string | undefined>>;
@@ -69,7 +69,7 @@ export const servers = {
 
 {% for server in servers %}function {{ server.name | identifier }}({% if server.variables %}
   variables: {
-{% for variable in server.variables %}    {{ variable.name | property }}?: {{ variable | server_variable_type }};
+{% for variable in server.variables %}    {{ variable.name | property }}?: {{ variable | server_variable_type }} | undefined;
 {% endfor %}  } = {},
 {% endif %}): Endpoint {
   return endpoint({{ server.name | literal }}{% if server.variables %}, variables{% endif %});

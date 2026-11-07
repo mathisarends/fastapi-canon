@@ -60,16 +60,16 @@ export class AutomationClient {
       | Readonly<Record<ServerName, RpcTransport>>
       | RpcTransportSource,
     options?: {
-      readonly closeTransport?: boolean;
+      readonly closeTransport?: boolean | undefined;
 
-      readonly middleware?: readonly RpcClientMiddleware[];
-      readonly retryAttempts?: number;
-      readonly retryAttemptTimeoutMs?: number;
-      readonly notificationQueueSize?: number;
-      readonly onOverflow?: RpcNotificationOverflowHandler;
-      readonly streamOpener?: BinaryStreamOpener;
-      readonly socketOpener?: SocketOpener;
-      readonly variables?: Readonly<Record<string, string>>;
+      readonly middleware?: readonly RpcClientMiddleware[] | undefined;
+      readonly retryAttempts?: number | undefined;
+      readonly retryAttemptTimeoutMs?: number | undefined;
+      readonly notificationQueueSize?: number | undefined;
+      readonly onOverflow?: RpcNotificationOverflowHandler | undefined;
+      readonly streamOpener?: BinaryStreamOpener | undefined;
+      readonly socketOpener?: SocketOpener | undefined;
+      readonly variables?: Readonly<Record<string, string>> | undefined;
     },
   ) {
     this.#rpc = new RpcClientCore(transport, {
@@ -84,16 +84,16 @@ export class AutomationClient {
   static withTransports(
     transports: RpcTransport | Readonly<Record<ServerName, RpcTransport>>,
     options?: {
-      readonly closeTransport?: boolean;
+      readonly closeTransport?: boolean | undefined;
 
-      readonly middleware?: readonly RpcClientMiddleware[];
-      readonly retryAttempts?: number;
-      readonly retryAttemptTimeoutMs?: number;
-      readonly notificationQueueSize?: number;
-      readonly onOverflow?: RpcNotificationOverflowHandler;
-      readonly streamOpener?: BinaryStreamOpener;
-      readonly socketOpener?: SocketOpener;
-      readonly variables?: Readonly<Record<string, string>>;
+      readonly middleware?: readonly RpcClientMiddleware[] | undefined;
+      readonly retryAttempts?: number | undefined;
+      readonly retryAttemptTimeoutMs?: number | undefined;
+      readonly notificationQueueSize?: number | undefined;
+      readonly onOverflow?: RpcNotificationOverflowHandler | undefined;
+      readonly streamOpener?: BinaryStreamOpener | undefined;
+      readonly socketOpener?: SocketOpener | undefined;
+      readonly variables?: Readonly<Record<string, string>> | undefined;
     },
   ): AutomationClient {
     return new AutomationClient(transports, options);
@@ -102,37 +102,37 @@ export class AutomationClient {
   /** Connect to every declared server, opening each socket on first use. */
   static async connect(
     options: {
-      readonly host?: string;
-      readonly servers?: EndpointOverrides;
-      readonly lazy?: boolean;
-      readonly requestTimeoutMs?: number | null;
-      readonly heartbeatIntervalMs?: number | null;
-      readonly heartbeatTimeoutMs?: number;
-      readonly consecutiveTimeoutLimit?: number;
-      readonly notificationQueueSize?: number;
-      readonly notificationOverflow?: "drop_oldest" | "close";
-      readonly onOverflow?: RpcNotificationOverflowHandler;
-      readonly socketFactory?: WebSocketFactory;
-      readonly credentials?: WebSocketCredentialsProvider;
-      readonly reconnect?: boolean;
-      readonly reconnectInitialDelayMs?: number;
-      readonly reconnectMaxDelayMs?: number;
-      readonly reconnectMaxAttempts?: number | null;
-      readonly reconnectShouldRetry?: (error: unknown) => boolean;
-      readonly reconnectRandom?: () => number;
-      readonly onStateChange?: (
+      readonly host?: string | undefined;
+      readonly servers?: EndpointOverrides | undefined;
+      readonly lazy?: boolean | undefined;
+      readonly requestTimeoutMs?: number | null | undefined;
+      readonly heartbeatIntervalMs?: number | null | undefined;
+      readonly heartbeatTimeoutMs?: number | undefined;
+      readonly consecutiveTimeoutLimit?: number | undefined;
+      readonly notificationQueueSize?: number | undefined;
+      readonly notificationOverflow?: "drop_oldest" | "close" | undefined;
+      readonly onOverflow?: RpcNotificationOverflowHandler | undefined;
+      readonly socketFactory?: WebSocketFactory | undefined;
+      readonly credentials?: WebSocketCredentialsProvider | undefined;
+      readonly reconnect?: boolean | undefined;
+      readonly reconnectInitialDelayMs?: number | undefined;
+      readonly reconnectMaxDelayMs?: number | undefined;
+      readonly reconnectMaxAttempts?: number | null | undefined;
+      readonly reconnectShouldRetry?: ((error: unknown) => boolean) | undefined;
+      readonly reconnectRandom?: (() => number) | undefined;
+      readonly onStateChange?: ((
         server: ServerName,
         state: RpcConnectionState,
         error?: unknown,
-      ) => void;
-      readonly streamSocketFactory?: BinaryWebSocketFactory;
-      readonly streamQueueSize?: number;
-      readonly socketConnectionFactory?: SocketConnectionFactory;
-      readonly socketQueueSize?: number;
+      ) => void) | undefined;
+      readonly streamSocketFactory?: BinaryWebSocketFactory | undefined;
+      readonly streamQueueSize?: number | undefined;
+      readonly socketConnectionFactory?: SocketConnectionFactory | undefined;
+      readonly socketQueueSize?: number | undefined;
 
-      readonly middleware?: readonly RpcClientMiddleware[];
-      readonly retryAttempts?: number;
-      readonly retryAttemptTimeoutMs?: number;
+      readonly middleware?: readonly RpcClientMiddleware[] | undefined;
+      readonly retryAttempts?: number | undefined;
+      readonly retryAttemptTimeoutMs?: number | undefined;
     } = {},
   ): Promise<AutomationClient> {
     const variables: Record<string, string | undefined> = {

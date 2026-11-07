@@ -16,9 +16,9 @@ export type BinaryStreamEndpoint = {
   readonly name: BinaryStreamName;
   readonly url: string | URL;
   readonly direction: BinaryStreamDirection;
-  readonly contentType?: string;
-  readonly inputContentType?: string;
-  readonly subprotocols?: readonly string[];
+  readonly contentType?: string | undefined;
+  readonly inputContentType?: string | undefined;
+  readonly subprotocols?: readonly string[] | undefined;
 };
 
 export type BinaryFrame = ArrayBuffer | ArrayBufferView;
@@ -179,18 +179,20 @@ export type BinaryStreamInfo = {
   readonly name: BinaryStreamName;
   readonly url: string;
   readonly direction: BinaryStreamDirection;
-  readonly contentType?: string;
-  readonly inputContentType?: string;
-  readonly subprotocols?: readonly string[];
-  readonly variables?: Readonly<
-    Record<
-      string,
-      {
-        readonly default: string;
-        readonly enum?: readonly string[];
-      }
-    >
-  >;
+  readonly contentType?: string | undefined;
+  readonly inputContentType?: string | undefined;
+  readonly subprotocols?: readonly string[] | undefined;
+  readonly variables?:
+    | Readonly<
+        Record<
+          string,
+          {
+            readonly default: string;
+            readonly enum?: readonly string[] | undefined;
+          }
+        >
+      >
+    | undefined;
 };
 
 export const binaryStreams = {
@@ -271,11 +273,14 @@ export type BinaryWebSocketFactory = (
 ) => BinaryWebSocket;
 
 export type BinaryWebSocketOptions = {
-  readonly incomingQueueSize?: number;
-  readonly socketFactory?: BinaryWebSocketFactory;
+  readonly incomingQueueSize?: number | undefined;
+  readonly socketFactory?: BinaryWebSocketFactory | undefined;
 };
 
-type BinaryCloseEvent = { readonly code?: number; readonly reason?: string };
+type BinaryCloseEvent = {
+  readonly code?: number | undefined;
+  readonly reason?: string;
+};
 
 type BinaryWebSocket = {
   binaryType: string;
@@ -433,10 +438,12 @@ function defaultBinaryWebSocketFactory(
 ): BinaryWebSocket {
   const constructor = (
     globalThis as unknown as {
-      readonly WebSocket?: new (
-        url: string | URL,
-        protocols?: readonly string[],
-      ) => BinaryWebSocket;
+      readonly WebSocket?:
+        | (new (
+            url: string | URL,
+            protocols?: readonly string[],
+          ) => BinaryWebSocket)
+        | undefined;
     }
   ).WebSocket;
   if (constructor === undefined) {

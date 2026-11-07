@@ -796,6 +796,7 @@ codegen = [
     { name = "jinja2" },
     { name = "jsonschema" },
     { name = "pydantic" },
+    { name = "ruff" },
     { name = "typing-extensions" },
 ]
 database = [
@@ -914,6 +915,7 @@ requires-dist = [
     { name = "pydantic", marker = "extra == 'sse'", specifier = ">=2.11.2,<3" },
     { name = "pydantic", marker = "extra == 'websockets'", specifier = ">=2.11,<3" },
     { name = "pydantic-core", marker = "extra == 'websockets'", specifier = ">=2.33" },
+    { name = "ruff", marker = "extra == 'codegen'", specifier = ">=0.15,<1" },
     { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'database'", specifier = ">=2.0.38,<3" },
     { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'otel-sqlalchemy'", specifier = ">=2.0,<3" },
     { name = "sqlmodel", marker = "extra == 'sqlmodel'", specifier = ">=0.0.22,<0.1" },

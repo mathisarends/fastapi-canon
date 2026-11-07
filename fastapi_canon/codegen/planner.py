@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from fastapi_canon.codegen.config import SourceConfig
@@ -40,4 +41,9 @@ def build_plan(inputs: tuple[tuple[SourceConfig, dict[str, Any]], ...]) -> Plan:
                     operation=operation.binding.operation,
                 )
             names[name] = owner
+    # One spelling for each public path before either language emitter groups it.
+    operations = tuple(
+        replace(operation, name=tuple(snake(part) for part in operation.name))
+        for operation in operations
+    )
     return Plan(sources, operations, registry.models)

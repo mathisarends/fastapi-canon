@@ -71,8 +71,8 @@ export class RpcStream<Payload>
 }
 
 export type RpcRequestOptions = {
-  readonly signal?: AbortSignal;
-  readonly metadata?: Readonly<Record<string, string>>;
+  readonly signal?: AbortSignal | undefined;
+  readonly metadata?: Readonly<Record<string, string>> | undefined;
 };
 
 export type RpcConnectionState =
@@ -106,17 +106,19 @@ export type RpcRouteInfo<
   Result = unknown,
 > = {
   readonly method: string;
-  readonly idempotent?: boolean;
-  readonly validateResult?: (result: unknown) => unknown;
-  readonly server?: string;
-  readonly errorMapper?: (
-    rpcCode: number,
-    code: string,
-    message: string,
-    details?: unknown,
-    problem?: unknown,
-  ) => RpcRemoteError | ProblemError;
-  readonly [routeTypes]?: readonly [Params, Result];
+  readonly idempotent?: boolean | undefined;
+  readonly validateResult?: ((result: unknown) => unknown) | undefined;
+  readonly server?: string | undefined;
+  readonly errorMapper?:
+    | ((
+        rpcCode: number,
+        code: string,
+        message: string,
+        details?: unknown,
+        problem?: unknown,
+      ) => RpcRemoteError | ProblemError)
+    | undefined;
+  readonly [routeTypes]?: readonly [Params, Result] | undefined;
 };
 
 export type RpcNotificationInfo<Payload = unknown> = RpcRouteInfo<
@@ -148,14 +150,14 @@ export type RpcClientCallOutcome =
 
 export type RpcClientCall = {
   readonly route: RpcRouteInfo;
-  params?: object;
+  params?: object | undefined;
   readonly metadata: Record<string, string>;
-  readonly server?: string;
+  readonly server?: string | undefined;
   readonly attempt: number;
   readonly callId: string;
-  transport?: RpcTransport;
-  outcome?: RpcClientCallOutcome;
-  readonly duration?: number;
+  transport?: RpcTransport | undefined;
+  outcome?: RpcClientCallOutcome | undefined;
+  readonly duration?: number | undefined;
 };
 
 export type RpcClientMiddleware = {
@@ -207,7 +209,7 @@ type JsonRpcNotification = {
 
 type Subscriber = {
   readonly method: string;
-  streamId?: string;
+  streamId?: string | undefined;
   readonly queue: AsyncQueue<JsonRpcNotification>;
 };
 
@@ -220,17 +222,17 @@ type Subscriber = {
 type NotificationHub = {
   readonly subscribers: Set<Subscriber>;
   pumping: boolean;
-  ended?: { readonly error?: unknown };
-  task?: Promise<void>;
+  ended?: { readonly error?: unknown } | undefined;
+  task?: Promise<void> | undefined;
 };
 
 /** Where the client gets the transport of one server from. */
 export type RpcTransportSource = {
   retryDelay?(retry: number): number;
-  readonly requestTimeoutMs?: number;
-  readonly closed?: Promise<unknown>;
-  readonly state?: RpcConnectionState;
-  readonly states?: ReadonlyMap<string, RpcConnectionState>;
+  readonly requestTimeoutMs?: number | undefined;
+  readonly closed?: Promise<unknown> | undefined;
+  readonly state?: RpcConnectionState | undefined;
+  readonly states?: ReadonlyMap<string, RpcConnectionState> | undefined;
   get(server?: string): Promise<RpcTransport>;
   close(): Promise<void>;
 };
@@ -238,7 +240,7 @@ export type RpcTransportSource = {
 type PoolEndpoint = {
   readonly server: string;
   readonly url: string | URL;
-  readonly subprotocols?: readonly string[];
+  readonly subprotocols?: readonly string[] | undefined;
 };
 
 /**
@@ -261,17 +263,15 @@ export class RpcTransportPool implements RpcTransportSource {
   readonly #states = new Map<string, RpcConnectionState>();
   readonly #failures = new Map<string, unknown>();
   readonly reconnect: boolean;
-  readonly requestTimeoutMs?: number;
+  readonly requestTimeoutMs?: number | undefined;
   readonly #initialDelayMs: number;
   readonly #maxDelayMs: number;
-  readonly #maxAttempts?: number;
-  readonly #shouldRetry?: (error: unknown) => boolean;
+  readonly #maxAttempts?: number | undefined;
+  readonly #shouldRetry?: ((error: unknown) => boolean) | undefined;
   readonly #random: () => number;
-  readonly #onStateChange?: (
-    server: string,
-    state: RpcConnectionState,
-    error?: unknown,
-  ) => void;
+  readonly #onStateChange?:
+    | ((server: string, state: RpcConnectionState, error?: unknown) => void)
+    | undefined;
   readonly closed: Promise<unknown>;
   readonly #resolveClosed: (error?: unknown) => void;
   #closed = false;
@@ -296,18 +296,16 @@ export class RpcTransportPool implements RpcTransportSource {
       endpoint: PoolEndpoint,
       signal: AbortSignal,
     ) => Promise<RpcTransport>;
-    readonly reconnect?: boolean;
-    readonly reconnectInitialDelayMs?: number;
-    readonly reconnectMaxDelayMs?: number;
-    readonly reconnectMaxAttempts?: number | null;
-    readonly reconnectShouldRetry?: (error: unknown) => boolean;
-    readonly reconnectRandom?: () => number;
-    readonly onStateChange?: (
-      server: string,
-      state: RpcConnectionState,
-      error?: unknown,
-    ) => void;
-    readonly requestTimeoutMs?: number | null;
+    readonly reconnect?: boolean | undefined;
+    readonly reconnectInitialDelayMs?: number | undefined;
+    readonly reconnectMaxDelayMs?: number | undefined;
+    readonly reconnectMaxAttempts?: number | null | undefined;
+    readonly reconnectShouldRetry?: ((error: unknown) => boolean) | undefined;
+    readonly reconnectRandom?: (() => number) | undefined;
+    readonly onStateChange?:
+      | ((server: string, state: RpcConnectionState, error?: unknown) => void)
+      | undefined;
+    readonly requestTimeoutMs?: number | null | undefined;
   }) {
     this.#endpoints = new Map(
       options.endpoints.map((endpoint) => [endpoint.server, endpoint]),
@@ -599,8 +597,8 @@ export class RpcTransportPool implements RpcTransportSource {
 }
 
 class StaticTransports implements RpcTransportSource {
-  readonly #single?: RpcTransport;
-  readonly #transports?: Readonly<Record<string, RpcTransport>>;
+  readonly #single?: RpcTransport | undefined;
+  readonly #transports?: Readonly<Record<string, RpcTransport>> | undefined;
 
   constructor(
     transport: RpcTransport | Readonly<Record<string, RpcTransport>>,
@@ -736,7 +734,10 @@ function errorObject(error: unknown): Record<string, unknown> {
     : {};
 }
 
-function closeInfo(error: unknown): { code?: number; reason: string } {
+function closeInfo(error: unknown): {
+  code?: number | undefined;
+  reason: string;
+} {
   const source = errorObject(error);
   const received = errorObject(source.rcvd);
   const code =
@@ -793,11 +794,11 @@ export class RpcClientCore {
   readonly #middleware: readonly RpcClientMiddleware[];
   readonly #supportsMetadata: boolean;
   readonly #retryAttempts: number;
-  readonly #retryAttemptTimeoutMs?: number;
+  readonly #retryAttemptTimeoutMs?: number | undefined;
   readonly #source: RpcTransportSource;
   readonly #closeTransport: boolean;
-  readonly streamOpener?: BinaryStreamOpener;
-  readonly socketOpener?: SocketOpener;
+  readonly streamOpener?: BinaryStreamOpener | undefined;
+  readonly socketOpener?: SocketOpener | undefined;
   readonly variables: Readonly<Record<string, string>>;
 
   readonly #hubs = new WeakMap<RpcTransport, NotificationHub>();
@@ -805,7 +806,7 @@ export class RpcClientCore {
   readonly #messageStreams = new Set<RpcStream<unknown>>();
   readonly #closing = new AbortController();
   readonly #notificationQueueSize: number;
-  readonly #onOverflow?: RpcNotificationOverflowHandler;
+  readonly #onOverflow?: RpcNotificationOverflowHandler | undefined;
   #droppedNotifications = 0;
   #overflowCallbackFailed = false;
   #closed = false;
@@ -834,16 +835,16 @@ export class RpcClientCore {
       | Readonly<Record<string, RpcTransport>>
       | RpcTransportSource,
     options?: {
-      readonly closeTransport?: boolean;
-      readonly middleware?: readonly RpcClientMiddleware[];
-      readonly supportsMetadata?: boolean;
-      readonly retryAttempts?: number;
-      readonly retryAttemptTimeoutMs?: number;
-      readonly notificationQueueSize?: number;
-      readonly onOverflow?: RpcNotificationOverflowHandler;
-      readonly streamOpener?: BinaryStreamOpener;
-      readonly socketOpener?: SocketOpener;
-      readonly variables?: Readonly<Record<string, string>>;
+      readonly closeTransport?: boolean | undefined;
+      readonly middleware?: readonly RpcClientMiddleware[] | undefined;
+      readonly supportsMetadata?: boolean | undefined;
+      readonly retryAttempts?: number | undefined;
+      readonly retryAttemptTimeoutMs?: number | undefined;
+      readonly notificationQueueSize?: number | undefined;
+      readonly onOverflow?: RpcNotificationOverflowHandler | undefined;
+      readonly streamOpener?: BinaryStreamOpener | undefined;
+      readonly socketOpener?: SocketOpener | undefined;
+      readonly variables?: Readonly<Record<string, string>> | undefined;
     },
   ) {
     this.#source = isTransportSource(transport)
@@ -1666,7 +1667,7 @@ class AsyncQueue<Value> implements AsyncIterableIterator<Value> {
   #ended = false;
   #failed = false;
   #failure?: unknown;
-  readonly #onOverflow?: () => void;
+  readonly #onOverflow?: (() => void) | undefined;
   #overflowWarned = false;
 
   constructor(capacity: number, onOverflow?: () => void) {

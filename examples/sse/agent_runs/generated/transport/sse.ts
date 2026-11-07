@@ -4,23 +4,23 @@ import { ProblemError, ProtocolError, parseProblem } from "./problem.js";
 
 export interface ClientOptions {
   baseUrl: string;
-  headers?: HeadersInit;
-  fetch?: typeof globalThis.fetch;
-  credentials?: RequestCredentials;
+  headers?: HeadersInit | undefined;
+  fetch?: typeof globalThis.fetch | undefined;
+  credentials?: RequestCredentials | undefined;
 }
 
 export interface RequestOptions {
-  headers?: HeadersInit;
-  signal?: AbortSignal;
+  headers?: HeadersInit | undefined;
+  signal?: AbortSignal | undefined;
   /** Maximum time until response headers arrive. */
-  openTimeoutMs?: number;
+  openTimeoutMs?: number | undefined;
   /** Maximum wait for the next business event; heartbeats do not reset it. */
-  idleTimeoutMs?: number;
+  idleTimeoutMs?: number | undefined;
   /**
    * "forward" (default) yields every decoded event. "ignore" skips JSON objects
    * whose discriminator is a string tag the generated union does not declare.
    */
-  unknownEvents?: "forward" | "ignore";
+  unknownEvents?: "forward" | "ignore" | undefined;
 }
 
 export interface EventPolicy {
@@ -31,11 +31,11 @@ export interface EventPolicy {
 export interface StreamRequest {
   path: string;
   method: string;
-  query?: URLSearchParams;
-  headers?: HeadersInit;
-  body?: string;
-  events?: EventPolicy;
-  canonStream?: boolean;
+  query?: URLSearchParams | undefined;
+  headers?: HeadersInit | undefined;
+  body?: string | undefined;
+  events?: EventPolicy | undefined;
+  canonStream?: boolean | undefined;
 }
 
 export function encodePath(value: string | number | boolean | null): string {

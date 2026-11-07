@@ -222,6 +222,7 @@ function compileOnly() {
   // @ts-expect-error Stream timeouts distinguish opening from business-event idle time.
   client.projects.events({projectId:1}, {timeoutMs:1});
 }
+void compileOnly;
 """,
         encoding="utf-8",
     )
@@ -230,6 +231,10 @@ function compileOnly() {
             node,
             str(compiler),
             "--strict",
+            "--verbatimModuleSyntax",
+            "--exactOptionalPropertyTypes",
+            "--noUnusedLocals",
+            "--noUnusedParameters",
             "--target",
             "es2022",
             "--module",
