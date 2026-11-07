@@ -76,7 +76,7 @@ class StreamOptions(TypedDict, total=False):
 
 
 class ChannelOptions(TypedDict, total=False):
-    """Connection options accepted by ``APIRouter.include_channel()``."""
+    """Connection options for ``include_channel``, ``include_stream`` and ``include_socket``."""
 
     version: int
     context: Callable[..., Awaitable[Any]] | None
@@ -107,7 +107,7 @@ class SessionOptions(TypedDict, total=False):
 
 
 class APIRouter(CanonRouter):
-    """Compose HTTP, SSE, JSON-RPC channels and WebRTC sessions by feature.
+    """Compose HTTP, SSE, WebSocket channels, streams, sockets and WebRTC by feature.
 
     HTTP and SSE endpoints resolve ``Inject[T]`` and ``FromDishka[T]`` parameters
     without ``route_class=DishkaRoute`` or ``@inject``. An explicit
@@ -193,7 +193,7 @@ class APIRouter(CanonRouter):
         if protocol.streams or protocol.sockets:
             raise ConfigurationError(
                 "include_channel accepts JSON-RPC methods, events and message streams; "
-                "binary streams and raw sockets require their own WebSocket endpoints"
+                "mount binary streams with include_stream and sockets with include_socket"
             )
         adapter = CanonWebSocketRouter(prefix=self.prefix, **options)
         adapter.socket(
@@ -204,21 +204,64 @@ class APIRouter(CanonRouter):
             subprotocol=subprotocol,
             summary=summary,
         )
-        adapter.freeze()
-        # Keep the full prefix in RPC metadata while registering the native route
-        # once on this router. Including the prefixed adapter would double it.
-        route = adapter.routes[0]
-        if not isinstance(route, APIWebSocketRoute):
-            raise ConfigurationError("The channel adapter did not produce a WebSocket")
-        self.add_api_websocket_route(
+        self._include_websocket_adapter(adapter, path, dependencies)
+
+    def include_stream(
+        self,
+        stream: Callable[..., Any],
+        *,
+        path: str,
+        name: str | None = None,
+        dependencies: Sequence[Depends] = (),
+        subprotocol: str | None = None,
+        summary: str | None = None,
+        **options: Unpack[ChannelOptions],
+    ) -> None:
+        """Mount a ``@channel.stream`` binary stream at its own WebSocket endpoint.
+
+        The stream keeps its channel operation name. Connection options match
+        ``include_channel``; endpoint names default to the complete local path.
+        """
+        from fastapi_canon.integrations.websockets import CanonWebSocketRouter
+
+        adapter = CanonWebSocketRouter(prefix=self.prefix, **options)
+        adapter.stream(
             path,
-            route.endpoint,
-            name=route.name,
-            dependencies=[*dependencies, *route.dependencies],
+            stream,
+            name=name if name is not None else _channel_name(self.prefix + path),
+            subprotocol=subprotocol,
+            summary=summary,
         )
-        self._included_error_registries.extend(
-            getattr(adapter, "_canon_error_registries", ())
+        self._include_websocket_adapter(adapter, path, dependencies)
+
+    def include_socket(
+        self,
+        handler: Callable[..., Any],
+        *,
+        path: str,
+        name: str | None = None,
+        dependencies: Sequence[Depends] = (),
+        subprotocol: str | None = None,
+        summary: str | None = None,
+        **options: Unpack[ChannelOptions],
+    ) -> None:
+        """Mount a ``@channel.socket`` handler at its own WebSocket endpoint.
+
+        Typed handlers validate JSON messages from their annotations; handlers
+        injecting bare ``RpcSocket`` forward text and binary frames unchanged.
+        Connection options match ``include_channel``.
+        """
+        from fastapi_canon.integrations.websockets import CanonWebSocketRouter
+
+        adapter = CanonWebSocketRouter(prefix=self.prefix, **options)
+        adapter.socket(
+            path,
+            handler,
+            name=name if name is not None else _channel_name(self.prefix + path),
+            subprotocol=subprotocol,
+            summary=summary,
         )
+        self._include_websocket_adapter(adapter, path, dependencies)
 
     def sse[Endpoint: Callable[..., Any]](
         self, path: str, **options: Unpack[StreamOptions]
@@ -277,6 +320,25 @@ class APIRouter(CanonRouter):
             return factory
 
         return decorate
+
+    def _include_websocket_adapter(
+        self, adapter: Any, path: str, dependencies: Sequence[Depends]
+    ) -> None:
+        adapter.freeze()
+        # Keep the full prefix in RPC metadata while registering the native route
+        # once on this router. Including the prefixed adapter would double it.
+        route = adapter.routes[0]
+        if not isinstance(route, APIWebSocketRoute):
+            raise ConfigurationError("The channel adapter did not produce a WebSocket")
+        self.add_api_websocket_route(
+            path,
+            route.endpoint,
+            name=route.name,
+            dependencies=[*dependencies, *route.dependencies],
+        )
+        self._included_error_registries.extend(
+            getattr(adapter, "_canon_error_registries", ())
+        )
 
 
 def _websocket_path(path: str) -> str:

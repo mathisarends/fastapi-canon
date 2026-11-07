@@ -87,8 +87,10 @@ endpoints. Handshake authentication uses `context=`/`hooks=` and
 Export the composed app with `fastapi-canon contracts export --app
 backend.app:create_app --output-dir contracts` so effective paths and problem
 types match runtime. JSON-RPC problem data lives inside its protocol envelope.
-Binary streams and raw sockets are not JSON-RPC channels; they keep their own
-endpoints, framing and close rules. See
+Binary streams and sockets are not JSON-RPC channels; they keep their own
+endpoints, framing and close rules. Mount them with
+`router.include_stream(stream, path=...)` and
+`router.include_socket(handler, path=...)`. See
 [integrations/websockets/services.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/integrations/websockets/services.md) and
 [problems.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/problems.md).
 

@@ -599,6 +599,58 @@ def test_webrtc_uses_real_engine_and_closes_factory_dependencies() -> None:
     assert lifecycle == ["open 42", "close 42"]
 
 
+def test_binary_streams_and_typed_sockets_mount_on_the_shared_router() -> None:
+    media = RpcChannel("media")
+
+    @media.stream(content_type="application/octet-stream")
+    async def preview(project_id: int, store: Inject[Store]) -> AsyncIterator[bytes]:
+        yield f"{project_id}:{store.identifier}".encode()
+
+    @media.socket("rename")
+    async def rename(message: Rename, store: Inject[Store]) -> Rename:
+        return Rename(title=f"{message.title} ({store.identifier})")
+
+    class Stores(Provider):
+        @provide(scope=Scope.REQUEST)
+        def store(self) -> Store:
+            return Store(3)
+
+    router = APIRouter(prefix="/projects")
+    router.include_stream(preview, path="/{project_id}/preview")
+    router.include_socket(rename, path="/{project_id}/rename")
+    app = Composition(
+        features=[Feature(name="media", routers=[router], providers=[Stores()])]
+    ).build(FastAPI())
+
+    with TestClient(app) as client:
+        with client.websocket_connect("/projects/7/preview") as socket:
+            assert socket.receive_bytes() == b"7:3"
+        with client.websocket_connect("/projects/7/rename") as socket:
+            socket.send_json({"title": "Draft"})
+            assert socket.receive_json() == {"title": "Draft (3)"}
+    document = export_contracts(app, kinds=("openrpc",)).documents["openrpc"]
+    assert [
+        (stream["name"], stream["url"])
+        for stream in document["x-rpckit-binary-streams"]
+    ] == [("media.preview", "{baseUrl}/projects/{project_id}/preview")]
+    assert [
+        (socket["name"], socket["url"]) for socket in document["x-rpckit-sockets"]
+    ] == [("media.rename", "{baseUrl}/projects/{project_id}/rename")]
+
+
+def test_channels_with_streams_or_sockets_point_to_their_own_mounts() -> None:
+    channel = RpcChannel("media")
+
+    @channel.stream(content_type="application/octet-stream")
+    async def preview() -> AsyncIterator[bytes]:
+        yield b""
+
+    router = APIRouter()
+    with pytest.raises(ConfigurationError, match="include_stream"):
+        router.include_channel(channel, path="/media")
+    assert router.routes == []
+
+
 def test_duplicate_websocket_paths_fail_before_mutating_routes() -> None:
     router = APIRouter(prefix="/projects")
 

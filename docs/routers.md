@@ -8,6 +8,8 @@ can contribute HTTP calls, typed SSE, JSON-RPC channels and WebRTC sessions:
 | `@router.get(...)`, `post(...)`, etc. | HTTP with Canon error/success contracts |
 | `@router.sse(...)` | Typed HTTP event stream, terminal problems and completion |
 | `router.include_channel(channel, path=...)` | JSON-RPC methods and message streams over one WebSocket |
+| `router.include_stream(stream, path=...)` | One `@channel.stream` binary stream on its own WebSocket |
+| `router.include_socket(handler, path=...)` | One typed or raw `@channel.socket` handler on its own WebSocket |
 | `@router.websocket(...)` | Native FastAPI WebSocket handler and application protocol |
 | `@router.webrtc(...)` | WebRTC session factory, signaling, admission and cleanup |
 
@@ -286,8 +288,17 @@ controls are `projects.events.open` and `projects.events.cancel`, using `streamI
 Normal completion and failures retain the existing terminal notifications.
 Cancelling one stream leaves other streams and methods usable; disconnect cleans
 up all connection-owned work. This adds no new wire protocol and requires no SDK
-runtime changes. Binary transfers and raw socket protocols use their own endpoints;
-they are not silently multiplexed into a JSON-RPC channel mount.
+runtime changes. Binary transfers and socket protocols use their own endpoints;
+they are not silently multiplexed into a JSON-RPC channel mount. Mount them on the
+same router with `include_stream()` and `include_socket()`:
+
+```python
+router.include_stream(preview, path="/{project_id}/preview")
+router.include_socket(terminal, path="/{project_id}/terminal")
+```
+
+`include_channel()` rejects a channel that contains binary streams or sockets and
+names these methods.
 
 See [WebSocket streams](integrations/websockets/README.md) for controls, limits,
 error mappings, dependency lifetimes and generated resource APIs. Operation names

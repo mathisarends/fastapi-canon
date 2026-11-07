@@ -24,12 +24,19 @@ The next release containing the breaking changes below must be 0.16.0.
   `@router.sse(...)` and WebRTC sessions with `@router.webrtc(...)`; the SSE and
   WebRTC routers are internal. Engine, ICE, origin and limit options move to each
   declaration, and `SessionCapacity` shares a session budget across declarations.
+- Binary streams and sockets mount on `APIRouter` too:
+  `router.include_stream(...)` and `router.include_socket(...)`.
 - Dishka owns resources. Canon closes the admission REQUEST scope before
   acceptance. Return independently usable context data and put resources needed
   until disconnect in SESSION-scoped providers.
 
 ### Added
 
+- `APIRouter.include_stream(stream, path=...)` and
+  `APIRouter.include_socket(handler, path=...)` mount `@channel.stream` binary
+  streams and typed or raw `@channel.socket` handlers on the shared router. They
+  accept the connection options of `include_channel` and export the same
+  contracts as `CanonWebSocketRouter.stream()`/`.socket()`.
 - HTTP decorators, router construction and router inclusion expose typed
   forwarded options. `Feature.errors` reflects current router declarations,
   including operations added after the feature was constructed. Composition

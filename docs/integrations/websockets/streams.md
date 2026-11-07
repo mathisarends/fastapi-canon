@@ -18,11 +18,8 @@ The handler's signature determines the stream's direction:
 ```python
 from collections.abc import AsyncIterator
 
-from fastapi_canon.integrations.websockets import (
-    Inject,
-    RpcChannel,
-    CanonWebSocketRouter,
-)
+from fastapi_canon import APIRouter
+from fastapi_canon.integrations.websockets import Inject, RpcChannel
 
 
 class FrameSource:
@@ -39,9 +36,13 @@ async def preview(source: Inject[FrameSource]) -> AsyncIterator[bytes]:
         yield frame
 
 
-app = CanonWebSocketRouter()
-app.stream("/projects/{project_id}/preview", preview)
+router = APIRouter(prefix="/projects")
+router.include_stream(preview, path="/{project_id}/preview")
 ```
+
+`include_stream` accepts the connection options of `include_channel` (`context=`,
+`hooks=`, `rejects=`, `limits=`, `middleware=` and so on). The specialized
+`CanonWebSocketRouter().stream(path, preview)` remains supported.
 
 A generator stream must be annotated as `AsyncIterator[bytes]` or
 `AsyncGenerator[bytes, ...]`. Each decorated stream can be mounted once.
