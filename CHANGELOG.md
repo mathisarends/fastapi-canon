@@ -30,6 +30,16 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- Generated common SDKs expose one public typed error class per canonical
+  problem across HTTP, SSE and RPC, plus a public `HttpError`. TypeScript calls
+  provide `.safe()` with separate declared and unknown-problem results;
+  transport/protocol failures and cancellation still throw. `await using`
+  closes TypeScript clients, operation descriptions/deprecation/errors appear
+  in JSDoc, signatures use direct model/scalar types, and root model exports
+  exclude protocol envelopes. Public error payloads are unchanged; HTTP body
+  and response diagnostics stay out of exception messages and TypeScript JSON
+  serialization. TypeScript RPC output uses Node-ESM-compatible `.js` imports.
+
 - `Error` infers `extensions_model` from an `extensions` renderer annotated to
   return a Pydantic model, such as `def fields(error) -> RetryFields`. Callable
   extensions without such an annotation still require `extensions_model=`, and
@@ -253,6 +263,23 @@ The next release containing the breaking changes below must be 0.16.0.
   Python 3.13.
 
 ### Breaking changes
+
+- Regenerate common SDKs. TypeScript `RequestOptions` becomes protocol-specific
+  `CallOptions`, `HttpOptions` and `StreamOptions`; replace SSE `timeoutMs` with
+  `openTimeoutMs` and/or `idleTimeoutMs`. RPC `timeoutMs` now enforces the total
+  deadline. Python's omitted timeout now inherits the injected HTTP client;
+  pass `RequestOptions(timeout=None)` to disable it explicitly. HTTP, SSE and
+  RPC now throw the same public canonical error subclass. Replace imports of
+  binding-private error classes with SDK-root imports.
+  Parameterless TypeScript methods now take options as their first argument;
+  remove the former empty parameter object. HTTP/RPC/SSE deadlines consistently
+  raise native `TimeoutError` DOMExceptions, distinct from caller cancellation.
+- OpenAPI tags no longer determine common SDK names. Use router `namespace=`,
+  dotted `operation_id`, `x-canon-operation`, or source `operations` mappings to
+  preserve existing groups; unqualified IDs now produce root methods. The
+  canonical-errors example uses `projects.get` and `projects.events` wire IDs.
+  TypeScript root exports now contain reachable domain/problem models; remove
+  consumer dependencies on protocol envelopes and implementation aliases.
 
 - `Composition(router_policy=...)` is removed. A Canon router's `raises`,
   `http_statuses` and `policy` now extend every HTTP operation it includes with

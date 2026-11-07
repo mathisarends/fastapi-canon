@@ -58,6 +58,9 @@ class Operation:
     parameters: tuple[Parameter, ...] = ()
     result: dict[str, Any] = field(default_factory=dict)
     summary: str = ""
+    description: str = ""
+    deprecated: bool = False
+    problems: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

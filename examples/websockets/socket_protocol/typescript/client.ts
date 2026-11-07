@@ -10,24 +10,24 @@ import {
   type RpcNotificationOverflowHandler,
   type RpcTransport,
   type RpcTransportSource,
-} from "./core";
+} from "./core.js";
 import {
   SocketConnectionStream,
   type SocketOpener,
   type SocketConnectionFactory,
-} from "./sockets";
+} from "./sockets.js";
 import {
   resolveEndpoints,
   type EndpointOverrides,
   type ServerName,
-} from "./endpoints";
+} from "./endpoints.js";
 import {
   WebSocketTransport,
   type WebSocketFactory,
   type WebSocketCredentialsProvider,
   resolveWebSocketCredentials,
-} from "./transport";
-import { Calculator } from "./namespaces";
+} from "./transport.js";
+import { Calculator } from "./namespaces/index.js";
 
 export class CalculatorClient {
   readonly calculator: Calculator;

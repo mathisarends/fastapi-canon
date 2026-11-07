@@ -105,10 +105,13 @@ const params = operation === "optional" ? {tag: null, xNote: null}
   : operation === "required" ? {tag: null} : {};
 (async () => {
   try {
-    const value = await client.records[operation](params, {
+    const options = {
       headers: {"X-Wire-Mode": mode},
       ...(operation === "delayed" ? {timeoutMs: 30} : {}),
-    });
+    };
+    const value = await (operation === "optional" || operation === "required"
+      ? client.records[operation](params, options)
+      : client.records[operation](options));
     console.log(JSON.stringify({value: value === undefined ? "void" : value}));
   } catch (error) {
     console.log(JSON.stringify({error: error.name,
@@ -240,7 +243,7 @@ def test_generated_typescript_http_serializes_and_selects_supported_contracts(
         ("problemBroken", "normal", "TransportError", True, False, False),
         ("required", "normal", "TypeError", False, False, False),
         ("problem", "normal", "ProblemError", False, False, True),
-        ("delayed", "normal", "AbortError", False, False, False),
+        ("delayed", "normal", "TimeoutError", False, False, False),
     ],
 )
 def test_generated_typescript_http_preserves_error_and_cancellation_contracts(

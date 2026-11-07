@@ -367,7 +367,7 @@
   "paths": {
     "/projects/{project_id}": {
       "get": {
-        "operationId": "get",
+        "operationId": "projects.get",
         "parameters": [
           {
             "in": "path",
@@ -421,7 +421,7 @@
             "description": "Internal Server Error"
           }
         },
-        "summary": "Get Project",
+        "summary": "Get",
         "tags": [
           "projects"
         ]
@@ -429,7 +429,7 @@
     },
     "/projects/{project_id}/events": {
       "get": {
-        "operationId": "events",
+        "operationId": "projects.events",
         "parameters": [
           {
             "in": "path",

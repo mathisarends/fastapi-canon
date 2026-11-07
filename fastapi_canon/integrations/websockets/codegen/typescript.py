@@ -1,4 +1,5 @@
 import json
+import posixpath
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
@@ -94,7 +95,22 @@ def render_files(ir: ClientIr, options: TypeScriptClientOptions) -> dict[str, st
         files["namespaces/index.ts"] = renderer.namespaces_index()
         for node in view.nodes:
             files[_api_file(node)] = renderer.api(node)
-    return files
+    return {path: _esm_imports(content, path, files) for path, content in files.items()}
+
+
+def _esm_imports(content: str, path: str, files: Mapping[str, str]) -> str:
+    def module(match: re.Match[str]) -> str:
+        value = match.group(2)
+        if not value.startswith(".") or value.endswith(".js"):
+            return match.group(0)
+        resolved = posixpath.normpath(posixpath.join(posixpath.dirname(path), value))
+        if resolved + ".ts" in files:
+            value += ".js"
+        elif resolved + "/index.ts" in files:
+            value += "/index.js"
+        return match.group(1) + json.dumps(value) + match.group(3)
+
+    return re.sub(r'(\bfrom\s+)["\']([^"\']+)["\'](;?)', module, content)
 
 
 class _Renderer:
@@ -306,7 +322,7 @@ class _Renderer:
         event: NotificationDecl,
         root: bool,
     ) -> bool:
-        receiver = "this.#rpc" if root else "this.rpc"
+        receiver = "this.#rpc"
         call = (
             f"    return {receiver}.notifications(notifications.{_route_key(event)});"
         )
@@ -547,7 +563,7 @@ class _Renderer:
         )
 
     def _message_stream_call(self, event: NotificationDecl, root: bool) -> str:
-        receiver = "this.#rpc" if root else "this.rpc"
+        receiver = "this.#rpc"
         arguments = [
             f"notifications.{_route_key(event)}",
             "params" if event.params_model is not None else "undefined",
@@ -579,7 +595,7 @@ class _Renderer:
         return f"{name}(\n" + "".join(f"    {p},\n" for p in parameters) + f"  {suffix}"
 
     def _operation_call(self, route: RouteDecl, root: bool) -> str:
-        rpc = "this.#rpc" if root else "this.rpc"
+        rpc = "this.#rpc"
         prefix = "await" if _is_null(route.result) else "return"
         arguments = [
             f"routes.{_route_key(route)}",

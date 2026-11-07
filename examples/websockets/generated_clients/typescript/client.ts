@@ -10,29 +10,29 @@ import {
   type RpcNotificationOverflowHandler,
   type RpcTransport,
   type RpcTransportSource,
-} from "./core";
+} from "./core.js";
 import {
   BinaryWebSocketStream,
   type BinaryStreamOpener,
   type BinaryWebSocketFactory,
-} from "./streams";
+} from "./streams.js";
 import {
   SocketConnectionStream,
   type SocketOpener,
   type SocketConnectionFactory,
-} from "./sockets";
+} from "./sockets.js";
 import {
   resolveEndpoints,
   type EndpointOverrides,
   type ServerName,
-} from "./endpoints";
+} from "./endpoints.js";
 import {
   WebSocketTransport,
   type WebSocketFactory,
   type WebSocketCredentialsProvider,
   resolveWebSocketCredentials,
-} from "./transport";
-import { Tasks, Browser } from "./namespaces";
+} from "./transport.js";
+import { Tasks, Browser } from "./namespaces/index.js";
 
 export class AutomationClient {
   readonly tasks: Tasks;

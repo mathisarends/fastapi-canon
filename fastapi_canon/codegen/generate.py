@@ -28,8 +28,20 @@ def generate(
     check: bool = False,
     diff: bool = False,
 ) -> tuple[bool, str]:
-    result = _generate(config, targets=targets, offline=offline, check=check, diff=diff)
-    return result.changed, result.report
+    result = _generate(
+        config,
+        targets=targets,
+        offline=offline,
+        check=check,
+        diff=diff,
+        collect_diagnostics=True,
+    )
+    summary = (
+        f"{len(result.diagnostics)} validation constraint limitations; use --format json for details."
+        if result.diagnostics
+        else ""
+    )
+    return result.changed, "\n".join(part for part in (summary, result.report) if part)
 
 
 @dataclass(frozen=True)

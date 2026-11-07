@@ -345,7 +345,9 @@ def test_model_and_operation_conflicts_require_explicit_resolution() -> None:
                 (SourceConfig("two", "openapi", identities=identities), duplicate),
             )
         )
-    config = SourceConfig("api", "openapi", operations={"get": "projects.read"})
+    config = SourceConfig(
+        "api", "openapi", operations={"projects.get": "projects.read"}
+    )
     assert any(
         operation.name == ("projects", "read")
         for operation in build_plan(((config, api),)).operations
@@ -556,7 +558,7 @@ def test_canonical_names_wire_aliases_and_primitive_results(tmp_path: Path) -> N
         return value
 
     get_record.__annotations__["return"] = APIRecord
-    http_router.get("/record", operation_id="get", tags=["models"])(get_record)
+    http_router.get("/record", operation_id="models.get", tags=["models"])(get_record)
 
     async def watch() -> Any:
         yield value

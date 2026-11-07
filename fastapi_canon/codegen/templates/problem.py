@@ -33,6 +33,18 @@ class ProtocolError(TransportError):
     pass
 
 
+class HttpError(TransportError):
+    def __init__(self, response: Any, details: Any = None) -> None:
+        self.status = response.status_code
+        self.response = response
+        self.details = details
+        super().__init__(f"HTTP {self.status}")
+
+
+def problem_error(value: Any, *, embedded: bool = False) -> ProblemError[Problem]:
+    return ProblemError(parse_problem(value, embedded=embedded))
+
+
 def parse_problem(value: Any, *, embedded: bool = False) -> Problem:
     problem = Problem.model_validate(value)
     if isinstance(value, dict) and any(

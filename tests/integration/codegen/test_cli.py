@@ -36,7 +36,7 @@ def test_json_generation_and_clean_check_report_source_warnings(project: Path) -
     assert warnings
     assert warnings[0]["severity"] == "warning"
     assert warnings[0]["locations"][0]["source"] == "api"
-    assert warnings[0]["locations"][0]["operation"] == "events"
+    assert warnings[0]["locations"][0]["operation"] == "projects.events"
     assert warnings[0]["locations"][0]["target"] == "browser"
     assert warnings[0]["locations"][0]["schema_pointer"].startswith("/components/")
     assert any(d["code"] == "canon.codegen.I001" for d in report["diagnostics"])

@@ -188,7 +188,9 @@ and their stable URI with `x-canon-problem-type`.
 
 The generated SDKs export `ProblemError`, `TransportError`, and `ProtocolError`.
 `ProblemError.problem` carries public problem data and preserves unknown
-extensions. Known RPC problem types also have generated error subclasses.
+extensions. Common SDKs expose public generated error subclasses for known
+canonical problems, such as `ProjectMissingError`, shared by HTTP, SSE and RPC.
+These classes improve consumer typing without adding public payload fields.
 Python RPC dispatch tables in `errors.py` are private implementation details,
 not extension points. Declare errors in the service contract and regenerate the
 SDK; catch the exported error classes instead of modifying generated registries.

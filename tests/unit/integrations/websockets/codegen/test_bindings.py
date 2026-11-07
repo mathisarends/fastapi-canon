@@ -591,7 +591,7 @@ def test_bound_typescript_sockets_return_the_binding_session(
     )
     assert formatting.returncode == 0, formatting.stdout + formatting.stderr
     namespace = (output / "namespaces" / "echo.ts").read_text("utf-8")
-    assert 'import * as socketBinding_echo from "../bindings/echo";' in namespace
+    assert 'import * as socketBinding_echo from "../bindings/echo.js";' in namespace
     assert "session(): Promise<socketBinding_echo.EchoSession>" in namespace
 
     runner = tmp_path / "bound.test.ts"

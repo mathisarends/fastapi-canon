@@ -5,7 +5,11 @@ import type { RpcTransport as BaseRpcTransport } from {{ transport_module }};
   BinaryStreamEndpoint,
   BinaryStreamOpener,
 } from "./streams";
-{% endif %}{% if sockets %}import type { SocketEndpoint, SocketOpener, SocketTransport } from "./sockets";
+{% endif %}{% if sockets %}import type {
+  SocketEndpoint,
+  SocketOpener,
+  SocketTransport,
+} from "./sockets";
 {% endif %}
 
 const streamOpened = Symbol("stream opened");

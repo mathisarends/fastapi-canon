@@ -38,7 +38,7 @@ project_missing = Error(
     extensions_model=MissingFields,
     extensions={"replacement": None},
 )
-router = APIRouter()
+router = APIRouter(namespace="projects")
 projects = RpcChannel("projects")
 
 
@@ -49,18 +49,16 @@ def require_project(project_id: int) -> None:
 
 @router.get(
     "/projects/{project_id}",
-    operation_id="get",
     tags=["projects"],
     raises=[project_missing],
 )
-async def get_project(project_id: int) -> Project:
+async def get(project_id: int) -> Project:
     require_project(project_id)
     return Project(id=project_id)
 
 
 @router.sse(
     "/projects/{project_id}/events",
-    operation_id="events",
     tags=["projects"],
     raises=[project_missing],
     dependencies=[Depends(require_project)],
