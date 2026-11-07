@@ -90,7 +90,7 @@ class _Source:
     nested: list[_Definition] = field(default_factory=list)
     touched: set[str] = field(default_factory=set)
     inherited_contracts: list[tuple[str, int]] = field(default_factory=list)
-    # raises= and errors= arguments; Composition maps the errors they name.
+    # raises=/errors= arguments and raises(...) calls; Composition maps their errors.
     error_declarations: list[tuple[str, ast.expr]] = field(default_factory=list)
     roots: list[Path] = field(default_factory=list)
     _externals: dict[str, bool] = field(default_factory=dict)
@@ -141,6 +141,23 @@ class _Source:
                                 for item in node.keywords
                                 if item.arg in {"raises", "errors"}
                             )
+                            if node.args and (
+                                (
+                                    isinstance(node.func, ast.Name)
+                                    and node.func.id == "raises"
+                                )
+                                or (
+                                    isinstance(node.func, ast.Attribute)
+                                    and node.func.attr == "raises"
+                                )
+                            ):
+                                # Dependency raises(...) decorators name errors too.
+                                source.error_declarations.append(
+                                    (
+                                        module,
+                                        ast.Tuple(elts=list(node.args), ctx=ast.Load()),
+                                    )
+                                )
                         if isinstance(node, ast.Call) and (
                             (
                                 isinstance(node.func, ast.Attribute)

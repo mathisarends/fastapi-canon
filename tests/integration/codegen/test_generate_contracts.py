@@ -213,3 +213,78 @@ asyncio.run(exercise())
         timeout=60,
     )
     assert checked.returncode == 0, checked.stdout + checked.stderr
+
+
+def test_application_shorthand_exports_present_contract_kinds(tmp_path: Path) -> None:
+    (tmp_path / "shorthand_application.py").write_text(
+        "from fastapi import FastAPI\n"
+        "from fastapi_canon import APIRouter, Composition, Feature\n"
+        "from fastapi_canon.integrations.websockets import CanonWebSocketRouter, RpcChannel\n"
+        "def create_app():\n"
+        "    channel = RpcChannel('control')\n"
+        "    @channel.method()\n"
+        "    async def ping() -> str: return 'pong'\n"
+        "    app = FastAPI()\n"
+        "    app.include_router(CanonWebSocketRouter('/rpc', channels=[channel]))\n"
+        "    http = APIRouter(namespace='system')\n"
+        "    @http.get('/status')\n"
+        "    def status() -> str: return 'ok'\n"
+        "    return Composition(features=[Feature(name='system', routers=[http])]).build(app)\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "fastapi-canon.toml").write_text(
+        "[codegen]\nversion = 1\n"
+        'app = "shorthand_application:create_app"\ncontracts = "api"\n'
+        '[codegen.targets.python]\nlanguage = "python"\n'
+        'output = "sdk"\npackage = "sdk"\n'
+        '[codegen.targets.browser]\nlanguage = "typescript"\noutput = "browser"\n',
+        encoding="utf-8",
+    )
+    stale = tmp_path / "api/webrtc.json"
+    stale.parent.mkdir()
+    stale.write_text("{}\n", encoding="utf-8")
+    command = [sys.executable, "-m", "fastapi_canon", "generate"]
+
+    generated = subprocess.run(
+        command, cwd=tmp_path, text=True, capture_output=True, timeout=60
+    )
+
+    assert generated.returncode == 0, generated.stdout + generated.stderr
+    assert sorted(path.name for path in (tmp_path / "api").iterdir()) == [
+        "openapi.json",
+        "openrpc.json",
+    ]
+    manifest = json.loads(
+        (tmp_path / "sdk/.canon-codegen.json").read_text(encoding="utf-8")
+    )
+    assert sorted(manifest["sources"]) == ["http", "rpc"]
+    checked = subprocess.run(
+        [*command, "--offline", "--check"],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        timeout=60,
+    )
+    assert checked.returncode == 0, checked.stdout + checked.stderr
+
+
+def test_application_shorthand_rejects_colliding_source_names(tmp_path: Path) -> None:
+    (tmp_path / "fastapi-canon.toml").write_text(
+        "[codegen]\nversion = 1\n"
+        'app = "application:app"\n'
+        '[codegen.sources.http]\nkind = "openapi"\ninput = "openapi.json"\n'
+        '[codegen.targets.python]\nlanguage = "python"\n'
+        'output = "sdk"\npackage = "sdk"\n',
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-m", "fastapi_canon", "generate"],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        timeout=45,
+    )
+
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "collides with a source derived from codegen.app" in result.stderr

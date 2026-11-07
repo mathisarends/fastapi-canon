@@ -124,6 +124,47 @@ Application domain errors use the shared `Error` definitions above; there is no
 second domain-to-RPC mapping to maintain. `RpcError` is only for contracts that
 exist solely in the JSON-RPC protocol.
 
+### Dependencies declare their own errors
+
+A dependency that can fail declares its errors once with `fastapi_canon.raises`.
+Every operation that uses it, as a parameter, through `dependencies=`, a router,
+a `RouterPolicy`, `include_router(..., dependencies=...)` or another dependency,
+documents and registers those errors as if it declared them in `raises=`:
+
+```python
+from typing import Annotated
+
+from fastapi import Depends, Header
+
+from fastapi_canon import APIRouter, raises
+
+
+@raises(authentication_required)
+async def current_user(authorization: str | None = Header(default=None)) -> str:
+    if authorization is None:
+        raise AuthenticationFailed()
+    return authorization
+
+
+CurrentUser = Annotated[str, Depends(current_user)]
+router = APIRouter(namespace="projects")
+
+
+@router.get("/projects/{project_id}", raises=[project_missing])
+async def get_project(project_id: int, user: CurrentUser) -> dict[str, int]:
+    require_project(project_id)
+    return {"id": project_id}
+```
+
+`GET /projects/{project_id}` documents 401 and 404; the operation lists only the
+error its own body raises. Typed SSE and WebRTC sessions treat dependency errors
+as admission failures. `inspect_app()` reports them with the origin
+`dependency`, unless a router or operation also declares them explicitly.
+`fastapi-canon check errors` accepts the decorator as the declaration for every
+operation that reaches the dependency. The decorator declares contracts; it does
+not change what the dependency does. RPC methods do not use FastAPI dependencies
+and keep declaring errors with `raises=`.
+
 ## Compose the application and export its contracts
 
 ```python

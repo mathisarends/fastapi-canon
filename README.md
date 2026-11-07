@@ -156,8 +156,8 @@ app = Composition(
 ```
 
 With a [codegen configuration](docs/quickstart.md#generate-and-use-the-sdk)
-pointing at your app, generate both clients. For this SSE-only example, keep
-only the OpenAPI source and use `sources = ["api"]` for both targets:
+pointing at your app, generate both clients. The SSE-only app exports only its
+OpenAPI contract:
 
 ```console
 uv run fastapi-canon generate
