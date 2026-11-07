@@ -1,26 +1,33 @@
 # Developer experience tickets
 
-Remaining tickets and decision records. Completed implementation tickets are
-documented in their merged PRs.
+Open work remaining after review against `origin/main` at `452a4b0`
+(2026-11-07). Completed work and decisions are documented in the guides and
+their PRs.
 
 | Ticket | Kind | Status |
 | --- | --- | --- |
-| [DX-017](DX-017-combined-sdk-example.md) | Documentation and fixture | Open |
 | [DX-018](DX-018-multipart-support-boundary.md) | Decision | Open |
-| [DX-019](DX-019-getting-started-path.md) | Documentation | Open |
-| [DX-020](DX-020-mcp-activation-policy.md) | Decision | Done ([#99](https://github.com/mathisarends/fastapi-canon/pull/99)) |
-| [DX-021](DX-021-composition-prefix-policy.md) | Decision | Done ([#99](https://github.com/mathisarends/fastapi-canon/pull/99)) |
-| [DX-022](DX-022-feature-metadata-defaults.md) | Decision | Done ([#99](https://github.com/mathisarends/fastapi-canon/pull/99)) |
-| [DX-023](DX-023-public-export-organization.md) | Decision | Done ([#102](https://github.com/mathisarends/fastapi-canon/pull/102)) |
-| [DX-024](DX-024-generation-command-policy.md) | Decision and documentation | Done ([#99](https://github.com/mathisarends/fastapi-canon/pull/99)) |
-| [DX-025](DX-025-single-app-codegen-config.md) | Decision | Open |
-| [DX-026](DX-026-mcp-problem-contracts.md) | Decision | Done ([#99](https://github.com/mathisarends/fastapi-canon/pull/99)) |
-| [DX-027](DX-027-context-terminology.md) | Decision | Done ([#99](https://github.com/mathisarends/fastapi-canon/pull/99)) |
 | [DX-028](DX-028-dependency-version-overview.md) | Documentation | Open |
 | [DX-029](DX-029-transport-diagnostic-profile.md) | Decision | Open |
-| [DX-030](DX-030-root-facade-reduction.md) | Feature (breaking) | In progress ([#105](https://github.com/mathisarends/fastapi-canon/pull/105)) |
 | [DX-031](DX-031-websocket-facade-reduction.md) | Feature (breaking) | Open |
-| [DX-032](DX-032-transport-router-adapters.md) | Feature (breaking) | Open |
+
+The removed tickets no longer require active tracking:
+
+- DX-017 and DX-019 are superseded by the [quickstart](../docs/quickstart.md)
+  and [runnable example](../examples/canonical_errors/README.md). DX-017's
+  remaining proposal to commit a combined generated SDK is dropped; generation
+  and consumer examples remain available without that additional artifact.
+- DX-020 through DX-024, DX-026 and DX-027 record completed decisions from
+  [#99](https://github.com/mathisarends/fastapi-canon/pull/99) and
+  [#102](https://github.com/mathisarends/fastapi-canon/pull/102). The still-open
+  WebSocket facade proposal is retained in DX-031.
+- DX-025 is implemented by [#124](https://github.com/mathisarends/fastapi-canon/pull/124);
+  see [single-app generation](../docs/unified-canon-concept.md#configuration).
+- DX-030 and DX-032 are implemented by
+  [#105](https://github.com/mathisarends/fastapi-canon/pull/105) and
+  [#115](https://github.com/mathisarends/fastapi-canon/pull/115);
+  see [public namespaces](../docs/canon.md#public-namespaces) and the
+  [0.16.0 migration](../docs/package-migration.md#upgrade-to-0160).
 
 ## Shared acceptance and verification rules
 
@@ -38,7 +45,7 @@ Every implementation must also satisfy these rules:
 - Apply the [release policy](../AGENTS.md#release-preparation). Stricter accepted
   configurations/validation, changed defaults, public signatures and generated
   client incompatibilities require the next minor release before 1.0. At this
-  baseline the published version is 0.15.0 and the next minor is 0.16.0; recheck
+  review the published version is 0.16.0 and the next minor is 0.17.0; recheck
   current release state when implementing. Include Breaking changes migration
   notes when required; never classify work solely by its line count.
 - Generate client changes through generators/templates, then verify exact drift.
