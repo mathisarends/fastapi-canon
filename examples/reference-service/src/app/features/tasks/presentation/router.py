@@ -5,7 +5,6 @@ from fastapi import Query, status
 from fastapi_canon import APIRouter, Inject
 
 from app.authentication.presentation import AuthenticatedUserId
-from app.authentication.presentation.errors import authentication_required
 from app.features.tasks.application import TaskService
 from app.features.tasks.presentation.errors import task_not_found
 from app.features.tasks.presentation.mapper import to_list_response, to_response
@@ -18,7 +17,6 @@ from app.features.tasks.presentation.schemas import (
 router = APIRouter(
     prefix="/tasks",
     tags=["tasks"],
-    raises=[authentication_required],
 )
 
 

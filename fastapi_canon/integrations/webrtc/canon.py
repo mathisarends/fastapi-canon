@@ -22,6 +22,7 @@ from fastapi_canon.integrations.webrtc.engine import Engine
 from fastapi_canon.integrations.webrtc.events import EventHook
 from fastapi_canon.integrations.webrtc.ice import IceServerSource
 from fastapi_canon.integrations.webrtc.router import WebRtcRouter
+from fastapi_canon.policy import dependency_errors as _dependency_errors
 from fastapi_canon.policy import normalize_raises as _normalize_raises
 from fastapi_canon.router import CanonRouter, RouterOptions, _distinct
 
@@ -86,6 +87,7 @@ class CanonWebRtcRouter(CanonRouter, WebRtcRouter):
             (
                 *self.raises,
                 *_normalize_raises(raises, parameter="raises"),
+                *_dependency_errors(dependencies or ()),
             )
         )
         self._register_errors(declared)
@@ -119,7 +121,7 @@ class CanonWebRtcRouter(CanonRouter, WebRtcRouter):
                 )
             return result
 
-        return super().session(
+        register = super().session(
             path,
             name=name,
             role=role,
@@ -131,3 +133,12 @@ class CanonWebRtcRouter(CanonRouter, WebRtcRouter):
             dependencies=dependencies,
             admission_errors=contracts,
         )
+
+        def decorate(factory: Factory) -> Factory:
+            nonlocal declared
+            # Factory parameters may use dependencies that declare admission errors.
+            declared = _distinct((*declared, *_dependency_errors(call=factory)))
+            self._register_errors(declared)
+            return register(factory)
+
+        return decorate

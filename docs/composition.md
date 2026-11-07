@@ -195,6 +195,9 @@ async def get_project(project_id: int) -> ProjectResponse: ...
 ```
 
 The application supplies the authentication dependency and error definitions.
+When the dependency itself declares its errors with
+[`@raises(...)`](problems.md#dependencies-declare-their-own-errors), a policy or
+router needs only `dependencies=`; Canon adds the dependency's errors to `raises`.
 Dependencies execute through FastAPI; `raises` documents HTTP failures and does
 not itself enforce authentication. Policies copy their input sequences to tuples.
 Policy, router and operation `raises` automatically register their errors; no
