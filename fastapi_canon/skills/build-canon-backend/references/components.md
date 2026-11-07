@@ -79,7 +79,7 @@ uv run fastapi-canon contracts export --app backend.app:create_app --output-dir 
 
 These commands import/build the app without entering lifespan. Use
 `composition.check(app)` before installation for structured diagnostics and
-`composition.inspect(app)` afterwards for installed HTTP ownership and provenance.
+`inspect_app(app)` afterwards for installed HTTP ownership and provenance.
 Do not assume they validate every transport's runtime behavior.
 
 Read [transports and SDKs](transports-and-sdk.md) only when exposing another

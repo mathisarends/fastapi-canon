@@ -14,6 +14,7 @@ from fastapi_canon import (
     Composition,
     Feature,
     Inject,
+    inspect_app,
 )
 from fastapi_canon.exceptions import FeatureConfigurationError
 
@@ -614,7 +615,7 @@ def test_injected_services_are_not_reported_as_prerequisites() -> None:
     )
     app = composition.build(FastAPI())
 
-    [operation] = composition.inspect(app).operations
+    [operation] = inspect_app(app).operations
     assert [dependency.name for dependency in operation.dependencies] == [
         f"{authenticated_user.__module__}.{authenticated_user.__qualname__}"
     ]

@@ -4,7 +4,13 @@ from ._version import __version__
 from .api_router import APIRouter
 from .contracts import export_contracts
 from .error import Error
-from .feature import Composition, ErrorOptions, ExceptionHandlerSpec, Feature
+from .feature import (
+    Composition,
+    ErrorOptions,
+    ExceptionHandlerSpec,
+    Feature,
+    inspect_app,
+)
 from .injection import Inject
 from .policy import RouterPolicy
 from .response import CanonResponse, ResponseHeaders
@@ -25,4 +31,5 @@ __all__ = [
     "ServiceScope",
     "__version__",
     "export_contracts",
+    "inspect_app",
 ]
