@@ -226,6 +226,31 @@ def test_error_freezes_static_headers_and_openapi_headers() -> None:
     }
 
 
+def test_error_documents_static_headers() -> None:
+    error = make_error(headers={"WWW-Authenticate": "Bearer"})
+
+    assert error.openapi_headers == {
+        "WWW-Authenticate": {"schema": {"type": "string", "const": "Bearer"}}
+    }
+
+
+def test_openapi_headers_refine_static_headers_case_insensitively() -> None:
+    error = make_error(
+        headers={"Retry-After": "10", "WWW-Authenticate": "Bearer"},
+        openapi_headers={"retry-after": {"schema": {"type": "integer"}}},
+    )
+
+    assert error.openapi_headers == {
+        "WWW-Authenticate": {"schema": {"type": "string", "const": "Bearer"}},
+        "retry-after": {"schema": {"type": "integer"}},
+    }
+
+
+def test_error_without_headers_documents_none() -> None:
+    assert make_error().openapi_headers is None
+    assert make_error(headers=lambda _exception: {"X-Id": "1"}).openapi_headers is None
+
+
 def test_error_rejects_non_mapping_openapi_header_definition() -> None:
     with pytest.raises(ErrorConfigurationError):
         make_error(openapi_headers={"Retry-After": "invalid"})

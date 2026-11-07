@@ -296,6 +296,14 @@ The next release containing the breaking changes below must be 0.16.0.
   declaring it. `ErrorRegistry(...)` declarations no longer contribute mappings,
   and the `CAN002` message names the application catalog instead of the router
   registry.
+- Static `Error(headers={...})` values are now documented in OpenAPI as
+  constant string headers without `openapi_headers=`, and `Error.openapi_headers`
+  reports these effective definitions. An `openapi_headers=` entry still replaces
+  the generated definition for the same header name, compared case-insensitively.
+  Two errors with the same status and different static values for one header now
+  fail OpenAPI generation as conflicting headers; give them distinct statuses or
+  one shared `openapi_headers=` definition. Remove `openapi_headers=` entries that
+  only repeated `{"schema": {"type": "string"}}` for a static header.
 - `ExceptionHandlerSpec` is removed from `fastapi_canon`. `Feature` takes
   `exception_handlers=` as a mapping from exception class to handler, like
   FastAPI's `exception_handlers=`, and `Feature.exception_handlers` is a

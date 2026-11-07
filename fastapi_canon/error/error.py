@@ -181,23 +181,36 @@ class Error[ExceptionT: Exception]:
         ):
             msg = "headers must be a mapping, callable, or None"
             raise ErrorConfigurationError(msg)
+        definitions: dict[str, OpenAPIHeader] = {}
         if isinstance(headers, Mapping):
             frozen_headers = freeze_headers(headers, path="headers")
             object.__setattr__(self, "headers", frozen_headers)
+            # Static headers document themselves; openapi_headers= refines them.
+            for name, value in frozen_headers.items():
+                definitions[name] = _freeze_json_mapping(
+                    {"schema": {"type": "string", "const": value}},
+                    path=f"headers.{name}",
+                )
 
         if openapi_headers is not None:
             if not isinstance(openapi_headers, Mapping):
                 msg = "openapi_headers must be a mapping or None"
                 raise ErrorConfigurationError(msg)
-            definitions: dict[str, OpenAPIHeader] = {}
             for name, definition in openapi_headers.items():
                 header_name = _validate_header_name(name, path="openapi_headers")
                 if not isinstance(definition, Mapping):
                     msg = f"openapi_headers.{header_name} must be a mapping"
                     raise ErrorConfigurationError(msg)
+                for documented in [
+                    known
+                    for known in definitions
+                    if known.lower() == header_name.lower()
+                ]:
+                    del definitions[documented]
                 definitions[header_name] = _freeze_json_mapping(
                     definition, path=f"openapi_headers.{header_name}"
                 )
+        if definitions:
             object.__setattr__(self, "openapi_headers", MappingProxyType(definitions))
 
     def _validate_documentation(self) -> None:
