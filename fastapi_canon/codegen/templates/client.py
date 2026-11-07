@@ -372,7 +372,11 @@ class Runtime:
         for task in active:
             task.cancel()
         await asyncio.gather(*active, return_exceptions=True)
-        await asyncio.gather(*self.pending.values(), return_exceptions=True)
+        pending = tuple(self.pending.values())
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        self.pending.clear()
         errors = []
         for stream in tuple(self.streams):
             try:

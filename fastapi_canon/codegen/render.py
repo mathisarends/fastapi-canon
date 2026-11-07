@@ -50,9 +50,11 @@ def render(
         raise GenerationError(
             "WebRTC sessions require a TypeScript target; no Python media engine is generated"
         )
-    if target.client_name in {model.name for model in plan.models} | {
-        source.name + "Client" for source in plan.sources
-    }:
+    if target.client_name in (
+        {model.name for model in plan.models}
+        | {source.name + "Client" for source in plan.sources}
+        | {"Bindings", "Clients"}
+    ):
         raise GenerationError("client-name collides with a model or binding name")
     schemas = {model.name: model.schema for model in plan.models}
     types = _Types({"components": {"schemas": schemas}})
@@ -499,6 +501,8 @@ def _python_backend(
     for start, end, replacement in sorted(edits, reverse=True):
         lines[start - 1 : end] = [replacement]
     content = "".join(lines)
+    if prefix.endswith("_jsonrpc") and path == "client.py":
+        content = _python_connect_options(content)
     if prefix.endswith("_sse") and path == "runtime.py":
         content = content.replace(
             "raise ProblemError(problem)", "raise problem_error(problem)"
@@ -516,6 +520,32 @@ def _python_backend(
         "from " + "." * (len(parent.split(".")) - len(package.split(".")) + 1),
         content,
     )
+
+
+def _python_connect_options(content: str) -> str:
+    """Derive option types from the binding's actual connection signature."""
+    for node in ast.walk(ast.parse(content)):
+        if isinstance(node, ast.FunctionDef) and node.name == "connect":
+            fields = [
+                f"    {argument.arg}: {ast.unparse(argument.annotation)}"
+                for argument in node.args.kwonlyargs
+                if argument.annotation is not None
+            ]
+            if "from __future__ import annotations" in content:
+                content = content.replace(
+                    "from __future__ import annotations",
+                    "from __future__ import annotations\nfrom typing import TypedDict",
+                    1,
+                )
+            else:
+                content = "from typing import TypedDict\n" + content
+            return (
+                content
+                + "\n\nclass _ConnectOptions(TypedDict, total=False):\n"
+                + "\n".join(fields)
+                + "\n"
+            )
+    raise GenerationError("The RPC binding is missing its connect signature")
 
 
 def _typescript_backend(
@@ -1005,11 +1035,15 @@ def _python_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
         "from __future__ import annotations",
         "from collections.abc import AsyncIterator",
         "from contextlib import AbstractAsyncContextManager",
-        "from typing import Any, Self",
+        "from typing import Any, Self, TypedDict",
+        f"import {target.http_client} as Http",
         "from . import models as Models",
         "from .internal.runtime import Runtime, RequestOptions, UNSET, UnsetType",
     ]
     registrations = []
+    binding_fields = []
+    client_fields = []
+    binding_exports = []
     for source in plan.sources:
         if source.kind == "openapi":
             if any(
@@ -1025,6 +1059,13 @@ def _python_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
             imports.append(
                 f"from .internal.{source.name}_jsonrpc.client import BindingClient as {source.name}Client"
             )
+            option_type = pascal(source.name) + "ConnectionOptions"
+            imports.append(
+                f"from .internal.{source.name}_jsonrpc.client import _ConnectOptions as {option_type}"
+            )
+            binding_fields.append(f"    {source.name}: {option_type}")
+            client_fields.append(f"    {source.name}: {source.name}Client")
+            binding_exports.append(option_type)
             if any(
                 operation.binding.metadata.get("backend_type") == "socket"
                 for operation in source.operations
@@ -1065,7 +1106,12 @@ def _python_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
         for operation in plan.operations
         for index in range(1, len(operation.name))
     }
-    classes = []
+    classes = [
+        "class Bindings(TypedDict, total=False):\n"
+        + ("\n".join(binding_fields) or "    pass"),
+        "class Clients(TypedDict, total=False):\n"
+        + ("\n".join(client_fields) or "    pass"),
+    ]
     for group in sorted(groups, key=lambda path: (-len(path), path)):
         lines = [
             f"class {_group_class(group)}:",
@@ -1083,7 +1129,7 @@ def _python_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
         classes.append("\n".join(lines))
     lines = [
         f"class {target.client_name}:",
-        "    def __init__(self, base_url: str, *, headers: dict[str, str] | None = None, http_client: Any = None, bindings: dict[str, dict[str, Any]] | None = None, clients: dict[str, Any] | None = None) -> None:",
+        "    def __init__(self, base_url: str, *, headers: dict[str, str] | None = None, http_client: Http.AsyncClient | None = None, bindings: Bindings | None = None, clients: Clients | None = None) -> None:",
         "        self._runtime = Runtime(base_url, headers=headers, http_client=http_client)",
     ]
     lines.extend("        " + registration for registration in registrations)
@@ -1108,7 +1154,9 @@ def _python_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
     classes.append("\n".join(lines))
     return {
         "client.py": "\n".join(imports) + "\n\n" + "\n\n".join(classes) + "\n",
-        "__init__.py": f"from .client import {target.client_name} as {target.client_name}\nfrom .errors import Problem as Problem, ProblemError as ProblemError, TransportError as TransportError, ProtocolError as ProtocolError, HttpError as HttpError\nfrom .internal.runtime import RequestOptions as RequestOptions\n"
+        "__init__.py": f"from .client import {target.client_name} as {target.client_name}, Bindings as Bindings, Clients as Clients\n"
+        + "".join(f"from .client import {name} as {name}\n" for name in binding_exports)
+        + "from .errors import Problem as Problem, ProblemError as ProblemError, TransportError as TransportError, ProtocolError as ProtocolError, HttpError as HttpError\nfrom .internal.runtime import RequestOptions as RequestOptions\n"
         + "".join(
             f"from .errors import {_error_name(model.name)} as {_error_name(model.name)}\n"
             for model in plan.models

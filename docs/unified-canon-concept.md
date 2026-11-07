@@ -420,6 +420,24 @@ Python exports the same canonical error classes and `HttpError`. An omitted
 explicit `None` disables its timeout. An explicit RPC timeout includes lazy
 binding initialization. Generated package imports remain valid when the package
 is renamed or embedded inside another package.
+Closing a Python client cancels its owned pending binding initialization,
+including stalled eager WebSocket handshakes. Cancellation of one call still
+leaves shared binding initialization available to other calls.
+The Python constructor accepts the selected HTTP library's `AsyncClient` and
+generated `Bindings`/`Clients` dictionaries. Each RPC source exposes a typed
+connection-options class, derived from that binding's real `connect()` signature:
+
+```python
+from api_client import ApiClient, ControlConnectionOptions
+
+connection: ControlConnectionOptions = {"reconnect": True, "retry_attempts": 2}
+async with ApiClient(base_url, bindings={"control": connection}) as client:
+    await client.projects.cancel(project_id=1)
+```
+
+Update broadly typed wrapper dictionaries to the generated option types when
+migrating. Option/source misspellings are now static errors; supported runtime
+options and ownership rules retain their behavior.
 Streams using a facade-owned Python HTTP client retain their unlimited read
 timeout; injected clients keep their own timeout unless explicitly overridden.
 

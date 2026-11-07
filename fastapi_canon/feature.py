@@ -76,12 +76,10 @@ class Feature:
     providers: tuple[Provider | Callable[[], Provider], ...]
     instrumentation: tuple[Instrumentation, ...]
     mcp: tuple[McpMount, ...]
-    errors: tuple[AnyError, ...]
-    """Errors this feature contributes: ``errors=`` plus declared ``raises``."""
     exception_handlers: Mapping[type[Exception], ExceptionHandler]
     lifespan: FeatureLifespan | None
     checks: tuple[FeatureCheck, ...]
-    _registry: ErrorRegistry | None = field(repr=False, compare=False)
+    _listed_errors: tuple[AnyError, ...] = field(repr=False)
 
     def __init__(
         self,
@@ -146,7 +144,7 @@ class Feature:
         router_errors = _collect_router_errors(
             normalized_routers, feature_name=normalized_name
         )
-        resolved_errors = _merge_errors(
+        _merge_errors(
             tuple(
                 (normalized_name, registry)
                 for registry in (
@@ -163,12 +161,33 @@ class Feature:
         object.__setattr__(self, "routers", normalized_routers)
         object.__setattr__(self, "providers", normalized_providers)
         object.__setattr__(self, "instrumentation", normalized_instrumentation)
-        object.__setattr__(
-            self, "errors", resolved_errors.errors if resolved_errors else ()
-        )
-        object.__setattr__(self, "_registry", resolved_errors)
+        object.__setattr__(self, "_listed_errors", listed)
         object.__setattr__(self, "exception_handlers", normalized_handlers)
         object.__setattr__(self, "lifespan", lifespan)
+
+    @property
+    def errors(self) -> tuple[AnyError, ...]:
+        """Explicit contributions plus errors declared on the current routers."""
+        registry = self._registry
+        return registry.errors if registry is not None else ()
+
+    @property
+    def _registry(self) -> ErrorRegistry | None:
+        router_errors = _collect_router_errors(self.routers, feature_name=self.name)
+        return _merge_errors(
+            tuple(
+                (self.name, registry)
+                for registry in (
+                    ErrorRegistry(errors=self._listed_errors)
+                    if self._listed_errors
+                    else None,
+                    router_errors,
+                )
+                if registry is not None
+            ),
+            name=self.name,
+            type_base=None,
+        )
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -762,9 +781,9 @@ def _prepare_registry(
     app: FastAPI, composition: Composition, routers: tuple[APIRouter, ...] | None
 ) -> ErrorRegistry:
     registries = tuple(
-        (feature.name, feature._registry)
+        (feature.name, feature_registry)
         for feature in composition.features
-        if feature._registry is not None
+        if (feature_registry := feature._registry) is not None
     )
     if composition.router_factory is not None and routers:
         # The application router's own raises and policy extend every feature.

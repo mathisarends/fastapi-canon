@@ -13,6 +13,12 @@ from fastapi_canon.exceptions import ConfigurationError
 from fastapi_canon.integrations.sse.canon import CanonStreamRouter
 from fastapi_canon.integrations.webrtc.canon import CanonWebRtcRouter
 from fastapi_canon.integrations.websockets import CanonWebSocketRouter
+from fastapi_canon.router import (
+    APIRouteOptions,
+    FastAPIRouterOptions,
+    IncludeRouterOptions,
+    RouteOptions,
+)
 
 
 def test_core_router_import_keeps_optional_transports_lazy() -> None:
@@ -62,6 +68,23 @@ def test_stream_options_are_route_options() -> None:
     )
 
     assert set(StreamOptions.__annotations__) <= accepted
+
+
+@pytest.mark.parametrize(
+    "options,function",
+    [
+        (FastAPIRouterOptions, FastAPIRouter.__init__),
+        (IncludeRouterOptions, FastAPIRouter.include_router),
+        (RouteOptions, FastAPIRouter.get),
+        (APIRouteOptions, FastAPIRouter.api_route),
+    ],
+)
+def test_http_options_match_fastapi(
+    options: type, function: Callable[..., Any]
+) -> None:
+    # The keyword surface is intentionally explicit; additions in a supported
+    # FastAPI version must be reviewed rather than silently accepted as Any.
+    assert set(options.__annotations__) == _keywords(function) - {"path", "router"}
 
 
 def _keywords(function: Callable[..., Any]) -> set[str]:

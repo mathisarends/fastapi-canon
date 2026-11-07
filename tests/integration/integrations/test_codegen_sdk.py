@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 from collections.abc import AsyncIterator
+from enum import Enum
 from pathlib import Path
 from typing import Any, Literal
 
@@ -271,7 +272,7 @@ void compileOnly;
 
 @pytest.mark.parametrize("tags", [[], ["admin"], ["Admin Panel"]])
 async def test_sdk_operation_names_are_independent_of_documentation_tags(
-    tmp_path: Path, tags: list[str]
+    tmp_path: Path, tags: list[str | Enum]
 ) -> None:
     router = APIRouter()
 
@@ -305,6 +306,104 @@ async def test_sdk_operation_names_are_independent_of_documentation_tags(
         for name in tuple(sys.modules):
             if name == "tagged_sdk" or name.startswith("tagged_sdk."):
                 del sys.modules[name]
+
+
+async def test_python_sdk_close_cancels_owned_pending_handshake(
+    tmp_path: Path, sdk_app: FastAPI
+) -> None:
+    _generate_sdk(tmp_path / "generated_sdk", sdk_app, "python")
+    opened, disconnected = asyncio.Event(), asyncio.Event()
+    peers: set[asyncio.StreamWriter] = set()
+
+    async def stall(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        peers.add(writer)
+        try:
+            await reader.readuntil(b"\r\n\r\n")
+            opened.set()
+            await reader.read()
+        finally:
+            writer.close()
+            await writer.wait_closed()
+            peers.discard(writer)
+            disconnected.set()
+
+    sys.path.insert(0, str(tmp_path))
+    try:
+        sdk: Any = importlib.import_module("generated_sdk")
+        async with (
+            asyncio.timeout(5),
+            await asyncio.start_server(stall, "127.0.0.1", 0) as server,
+        ):
+            port = server.sockets[0].getsockname()[1]
+            client = sdk.ApiClient(
+                f"http://127.0.0.1:{port}", bindings={"control": {"lazy": False}}
+            )
+            try:
+                request = asyncio.create_task(
+                    client.projects.cancel(
+                        project_id=1, options=sdk.RequestOptions(timeout=0.1)
+                    )
+                )
+                await opened.wait()
+                with pytest.raises(sdk.TransportError, match="timed out"):
+                    await request
+                await asyncio.wait_for(client.aclose(), timeout=1)
+                await disconnected.wait()
+            finally:
+                for writer in tuple(peers):
+                    writer.close()
+                await client.aclose()
+    finally:
+        sys.path.remove(str(tmp_path))
+        for name in tuple(sys.modules):
+            if name == "generated_sdk" or name.startswith("generated_sdk."):
+                del sys.modules[name]
+
+
+def test_python_public_api_checks_forwarded_keywords_and_binding_options(
+    tmp_path: Path, sdk_app: FastAPI
+) -> None:
+    _generate_sdk(tmp_path / "generated_sdk", sdk_app, "python")
+    usage = tmp_path / "usage.py"
+    usage.write_text(
+        """from httpx import AsyncClient
+from fastapi_canon import APIRouter
+from generated_sdk import ApiClient, ControlConnectionOptions
+
+router = APIRouter(namespace="projects", prefix="/v1", redirect_slashes=False)
+router.get("/projects", response_model=list[str], status_code=201)
+router.api_route("/projects", methods=["GET"], deprecated=True)
+router.include_router(APIRouter(), prefix="/nested")
+options: ControlConnectionOptions = {"lazy": False, "reconnect": True, "retry_attempts": 2}
+ApiClient("https://test", http_client=AsyncClient(), bindings={"control": options})
+
+APIRouter(prefx="/v1")  # type: ignore[call-arg]
+router.get("/projects", status_code="201")  # type: ignore[arg-type]
+router.get("/projects", summery="Projects")  # type: ignore[call-arg]
+router.include_router(APIRouter(), prefex="/nested")  # type: ignore[call-arg]
+ApiClient("https://test", http_client=object())  # type: ignore[arg-type]
+ApiClient("https://test", bindings={"control": {"reconect": True}})  # type: ignore[arg-type]
+ApiClient("https://test", clients={"typo": None})  # type: ignore[arg-type]
+""",
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "mypy",
+            "--strict",
+            "--follow-imports=silent",
+            "--warn-unused-ignores",
+            "--no-incremental",
+            str(usage),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def _generate_sdk(
