@@ -90,7 +90,7 @@ def test_selected_http_operations_and_recursive_model_closure(
     files = render(plan, TargetConfig("test", language, ("api",), tmp_path))
     assert files
     assert document == original
-    with pytest.raises(GenerationError, match="only JSON"):
+    with pytest.raises(GenerationError, match="multipart requires a flat object"):
         build_plan(((SourceConfig("api", "openapi"), document),))
 
 

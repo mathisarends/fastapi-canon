@@ -4,10 +4,11 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import secrets
 from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from contextlib import aclosing, asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, BinaryIO, Literal
 from urllib.parse import quote, urlsplit, urlunsplit
 
 import httpx
@@ -27,6 +28,15 @@ class UnsetType:
 
 
 UNSET = UnsetType()
+
+
+@dataclass(frozen=True)
+class Upload:
+    """A multipart file. File handles are borrowed and remain open after the call."""
+
+    filename: str
+    content: bytes | BinaryIO
+    content_type: str = "application/octet-stream"
 
 
 @dataclass(frozen=True)
@@ -191,7 +201,7 @@ class Runtime:
         values: dict[str, Any],
         parameter_types: dict[str, Any],
         options: RequestOptions,
-    ) -> tuple[str, list[tuple[str, str]], dict[str, str], bytes | None]:
+    ) -> tuple[str, list[tuple[str, str]], dict[str, str], dict[str, Any]]:
         path = spec["path"]
         query: list[tuple[str, str]] = []
         headers = {name.lower(): value for name, value in self.headers.items()}
@@ -200,6 +210,7 @@ class Runtime:
         )
         body: Any = None
         has_body = False
+        parts: list[tuple[str, Any]] = []
         for parameter in spec["parameters"]:
             name = parameter["wire"]
             value = values[name]
@@ -207,8 +218,34 @@ class Runtime:
                 if parameter["required"]:
                     raise ValueError(f"Missing required HTTP parameter {name!r}")
                 continue
-            value = TypeAdapter(parameter_types[name]).validate_python(value)
             location = parameter["location"]
+            if location in {"file", "form"}:
+                if value is None and not parameter["required"]:
+                    continue
+                if parameter["array"] and not isinstance(value, list):
+                    raise ValueError(f"Multipart part {name!r} requires a list")
+                if location == "form":
+                    value = TypeAdapter(parameter_types[name]).validate_python(value)
+                for item in value if parameter["array"] else [value]:
+                    if location == "file":
+                        if not isinstance(item, Upload):
+                            raise TypeError(f"Multipart file {name!r} requires Upload")
+                        parts.append(
+                            (name, (item.filename, item.content, item.content_type))
+                        )
+                    else:
+                        parts.append((name, (None, _scalar(item))))
+                continue
+            if (
+                location == "body"
+                and spec.get("request_media") == "application/octet-stream"
+            ):
+                if not isinstance(value, bytes):
+                    raise TypeError("Binary request bodies require bytes")
+                body = value
+                has_body = True
+                continue
+            value = TypeAdapter(parameter_types[name]).validate_python(value)
             if value is None and location != "body" and parameter["required"]:
                 raise ValueError(f"Required HTTP parameter {name!r} cannot be null")
             if location == "body":
@@ -229,6 +266,16 @@ class Runtime:
                     )
                 else:
                     headers[name.lower()] = _scalar(value)
+        if spec.get("request_media") == "multipart/form-data":
+            headers.pop("content-type", None)
+            if parts:
+                return path, query, headers, {"files": parts}
+            boundary = secrets.token_hex(16)
+            headers["content-type"] = f"multipart/form-data; boundary={boundary}"
+            return path, query, headers, {"content": f"--{boundary}--\r\n".encode()}
+        if spec.get("request_media") == "application/octet-stream" and has_body:
+            headers["content-type"] = "application/octet-stream"
+            return path, query, headers, {"content": body}
         content = (
             json.dumps(body, ensure_ascii=False, allow_nan=False).encode("utf-8")
             if has_body
@@ -236,7 +283,7 @@ class Runtime:
         )
         if has_body:
             headers["content-type"] = "application/json"
-        return path, query, headers, content
+        return path, query, headers, {"content": content}
 
     async def open_stream(
         self,
@@ -250,7 +297,7 @@ class Runtime:
     ) -> Any:
         transport = await self.binding(source)
         options = options or RequestOptions()
-        path, query, headers, body = self.prepare(
+        path, query, headers, payload = self.prepare(
             spec, values, parameter_types, options
         )
         stream_kwargs: dict[str, Any] = {}
@@ -268,7 +315,7 @@ class Runtime:
             problem_adapters={},
             query=query,
             headers=headers,
-            body=body,
+            body=payload.get("content"),
             options=request_options(
                 unknown_events=options.unknown_events,
                 **stream_kwargs,
@@ -298,7 +345,7 @@ class Runtime:
     ) -> Any:
         self.ensure_open()
         options = options or RequestOptions()
-        path, query, headers, content = self.prepare(
+        path, query, headers, payload = self.prepare(
             spec, values, parameter_types, options
         )
         task = asyncio.current_task()
@@ -315,7 +362,7 @@ class Runtime:
                     params=tuple(query),
                     headers=headers,
                     **request_kwargs,
-                    content=content,
+                    **payload,
                 )
             except httpx.HTTPError as exc:
                 raise TransportError("HTTP request failed") from exc
@@ -352,6 +399,8 @@ class Runtime:
                 if response.content:
                     raise ProtocolError("Unexpected body for bodyless HTTP response")
                 return None
+            if status in spec.get("binary", []):
+                return response.content
             try:
                 return TypeAdapter(response_types[status]).validate_json(
                     response.content

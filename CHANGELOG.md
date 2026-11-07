@@ -2,6 +2,23 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
+## Unreleased
+
+### Added
+
+- Common application-derived Python and TypeScript SDKs support flat multipart
+  uploads with scalar form fields, repeated fields and multiple files. Python
+  exposes `Upload(filename, content, content_type=...)`, borrowing binary file
+  handles; TypeScript accepts native `File` and `Blob` values. Both bindings let
+  their HTTP library generate the multipart boundary and preserve canonical
+  problem errors, deadlines and cancellation.
+- Common HTTP methods accept raw `application/octet-stream` bodies and return
+  declared binary responses as Python `bytes` or TypeScript `Blob`. Downloads
+  are buffered. Both OpenAPI `format: binary` and FastAPI's unencoded
+  `contentMediaType: application/octet-stream` declarations are recognized.
+- The codegen guide documents file ownership, repeated parts and unsupported
+  multipart encodings. The earlier multipart deferral decision is removed.
+
 ## 0.16.0 - 2026-11-07
 
 Upgrade servers and regenerated

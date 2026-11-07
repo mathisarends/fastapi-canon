@@ -18,6 +18,7 @@ from fastapi_canon.codegen.config import TargetConfig
 from fastapi_canon.codegen.ir import (
     GenerationError,
     Operation,
+    Parameter,
     Plan,
     _GenerationWarning,
 )
@@ -54,6 +55,16 @@ def render(
         {model.name for model in plan.models}
         | {source.name + "Client" for source in plan.sources}
         | {"Bindings", "Clients"}
+        | (
+            {"Upload"}
+            if target.language == "python"
+            and any(
+                param.location == "file"
+                for operation in plan.operations
+                for param in operation.parameters
+            )
+            else set()
+        )
     ):
         raise GenerationError("client-name collides with a model or binding name")
     schemas = {model.name: model.schema for model in plan.models}
@@ -87,7 +98,9 @@ def render(
             declarations.append(
                 Declaration(_alias(operation, "Result"), types.parse(result_schema))
             )
-            if target.language == "python" and operation.binding.protocol == "http":
+            if operation.binding.protocol == "http" and (
+                target.language == "python" or operation.binding.metadata.get("binary")
+            ):
                 metadata = operation.binding.metadata
                 declarations.extend(
                     Declaration(
@@ -706,7 +719,7 @@ def _typescript_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
     for operation in plan.operations:
         name = tuple(camel(part) for part in operation.name)
         fields = "\n".join(
-            f"  {camel(param.name)}{'' if param.required else '?'}: {_public_type(param.schema, 'Models.' + _alias(operation, param.name), 'typescript')};"
+            f"  {camel(param.name)}{'' if param.required else '?'}: {_parameter_type(operation, param, 'typescript')};"
             for param in operation.parameters
         )
         params = f"params: {{\n{fields}\n}}" + (
@@ -720,7 +733,7 @@ def _typescript_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
         if binding.protocol == "http":
             bodyless = binding.metadata["bodyless"]
             responses = [
-                schema
+                (status, schema)
                 for status, schema in binding.metadata["responses"].items()
                 if status not in bodyless
             ]
@@ -729,10 +742,16 @@ def _typescript_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
                     dict.fromkeys(
                         _public_type(
                             schema,
-                            "Models." + _alias(operation, "Result"),
+                            "Models."
+                            + _alias(
+                                operation,
+                                "Response" + status
+                                if binding.metadata.get("binary")
+                                else "Result",
+                            ),
                             "typescript",
                         )
-                        for schema in responses
+                        for status, schema in responses
                     )
                 )
             if len(bodyless) == len(binding.metadata["responses"]):
@@ -747,12 +766,15 @@ def _typescript_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
                 "method": binding.method,
                 "statuses": list(binding.metadata["responses"]),
                 "bodyless": bodyless,
+                "binary": binding.metadata.get("binary", []),
+                "requestMedia": binding.metadata.get("request_media", ""),
                 "parameters": [
                     {
                         "name": camel(param.name),
                         "wire": param.wire_name,
                         "location": param.location,
                         "required": param.required,
+                        "array": param.schema.get("type") == "array",
                     }
                     for param in operation.parameters
                 ],
@@ -949,6 +971,13 @@ def _access(path: list[str]) -> str:
 
 
 def _public_type(schema: dict[str, Any], fallback: str, language: str) -> str:
+    if schema.get("x-canon-binary"):
+        return "bytes" if language == "python" else "globalThis.Blob"
+    branches = schema.get("anyOf", [])
+    if any(branch.get("x-canon-binary") for branch in branches):
+        return " | ".join(
+            _public_type(branch, fallback, language) for branch in branches
+        )
     reference = schema.get("$ref", "")
     if isinstance(reference, str) and reference.startswith("#/components/schemas/"):
         return "Models." + reference.rsplit("/", 1)[-1]
@@ -980,6 +1009,20 @@ def _public_type(schema: dict[str, Any], fallback: str, language: str) -> str:
     # Complex types are already represented by complete canonical declarations.
     # Projecting them a second time can lose maps, literal values or constraints.
     return fallback
+
+
+def _parameter_type(operation: Operation, parameter: Parameter, language: str) -> str:
+    if parameter.location == "file":
+        value = "Upload" if language == "python" else "globalThis.Blob"
+        if parameter.schema.get("type") == "array":
+            value = f"list[{value}]" if language == "python" else f"{value}[]"
+    else:
+        value = _public_type(
+            parameter.schema, "Models." + _alias(operation, parameter.name), language
+        )
+    if parameter.location in {"file", "form"} and not parameter.required:
+        value += " | None" if language == "python" else " | null"
+    return value
 
 
 def _typescript_doc(operation: Operation) -> str:
@@ -1040,6 +1083,13 @@ def _python_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
         "from . import models as Models",
         "from .internal.runtime import Runtime, RequestOptions, UNSET, UnsetType",
     ]
+    uploads = any(
+        param.location == "file"
+        for operation in plan.operations
+        for param in operation.parameters
+    )
+    if uploads:
+        imports.append("from .internal.runtime import Upload")
     registrations = []
     binding_fields = []
     client_fields = []
@@ -1157,6 +1207,7 @@ def _python_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
         "__init__.py": f"from .client import {target.client_name} as {target.client_name}, Bindings as Bindings, Clients as Clients\n"
         + "".join(f"from .client import {name} as {name}\n" for name in binding_exports)
         + "from .errors import Problem as Problem, ProblemError as ProblemError, TransportError as TransportError, ProtocolError as ProtocolError, HttpError as HttpError\nfrom .internal.runtime import RequestOptions as RequestOptions\n"
+        + ("from .internal.runtime import Upload as Upload\n" if uploads else "")
         + "".join(
             f"from .errors import {_error_name(model.name)} as {_error_name(model.name)}\n"
             for model in plan.models
@@ -1187,7 +1238,7 @@ def _python_method(operation: Operation) -> list[str]:
 def _python_method_body(operation: Operation) -> list[str]:
     binding = operation.binding
     args = ", ".join(
-        f"{snake(param.name)}: {_public_type(param.schema, 'Models.' + _alias(operation, param.name), 'python')}"
+        f"{snake(param.name)}: {_parameter_type(operation, param, 'python')}"
         + (" | UnsetType = UNSET" if not param.required else "")
         for param in operation.parameters
     )
@@ -1208,16 +1259,30 @@ def _python_method_body(operation: Operation) -> list[str]:
         + "}"
     )
     if binding.protocol == "http":
+        if binding.metadata.get("binary"):
+            result = " | ".join(
+                dict.fromkeys(
+                    _public_type(
+                        schema,
+                        "Models." + _alias(operation, "Response" + status),
+                        "python",
+                    )
+                    for status, schema in binding.metadata["responses"].items()
+                )
+            )
         spec = {
             "path": binding.path,
             "method": binding.method,
             "statuses": list(binding.metadata["responses"]),
             "bodyless": binding.metadata["bodyless"],
+            "binary": binding.metadata.get("binary", []),
+            "request_media": binding.metadata.get("request_media", ""),
             "parameters": [
                 {
                     "wire": param.wire_name,
                     "location": param.location,
                     "required": param.required,
+                    "array": param.schema.get("type") == "array",
                 }
                 for param in operation.parameters
             ],

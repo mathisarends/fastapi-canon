@@ -6,13 +6,13 @@ their PRs.
 
 | Ticket | Kind | Status |
 | --- | --- | --- |
-| [DX-018](DX-018-multipart-support-boundary.md) | Decision | Open |
 | [DX-028](DX-028-dependency-version-overview.md) | Documentation | Open |
 | [DX-029](DX-029-transport-diagnostic-profile.md) | Decision | Open |
 | [DX-031](DX-031-websocket-facade-reduction.md) | Feature (breaking) | Open |
 
 The removed tickets no longer require active tracking:
 
+- DX-018 is implemented by common SDK [multipart uploads and binary transfers](../docs/unified-canon-concept.md#multipart-uploads-and-binary-transfers).
 - DX-017 and DX-019 are superseded by the [quickstart](../docs/quickstart.md)
   and [runnable example](../examples/canonical_errors/README.md). DX-017's
   remaining proposal to commit a combined generated SDK is dropped; generation

@@ -135,7 +135,7 @@ without editing the exported contract or importing/deploying the application:
 [codegen.sources.api]
 kind = "openapi"
 input = "contracts/openapi.json"
-exclude-operations = ["upload_attachment", "download_report"]
+exclude-operations = ["legacy_admin_operation"]
 
 [codegen.sources.control]
 kind = "openrpc"
@@ -157,7 +157,7 @@ the original input hashes plus the selection settings. Selection changes are
 covered by `--check`/`--diff`, ownership and stale-file cleanup.
 
 Unsupported operations still fail generation unless explicitly excluded. For
-example, leave file transfer on an existing adapter while adopting generated
+example, leave a legacy operation on an existing adapter while adopting generated
 JSON/SSE/RPC calls, then remove those exclusions when support is available.
 
 ## Commands and ownership
@@ -224,7 +224,7 @@ report their type and a corrective hint without their raw contents.
 | `canon.codegen.W001` | warning | Check/diff found artifact drift. |
 | `canon.codegen.W002` | warning | A specialized SSE binding reports a validation constraint limitation. |
 | `canon.codegen.E001` | error | Configuration, target loading, contract/planning or artifact ownership failed. |
-| `canon.codegen.E002` | error | An operation requests an unsupported binding feature, such as multipart input. |
+| `canon.codegen.E002` | error | An operation requests an unsupported binding feature, such as nested multipart encoding. |
 
 `fastapi-canon explain canon.codegen.E002` provides an example and repair for a
 generation code; see [diagnostic explanations](diagnostics.md) for text/JSON lookup.
@@ -501,8 +501,9 @@ Human-readable output summarizes validation constraint limitations; use
 `--format json` to inspect each source-located diagnostic.
 
 Unified HTTP generation supports JSON bodies/responses, scalar path/header
-parameters and exploded scalar-array query parameters. Multipart/files, cookies,
-other parameter styles and unsupported schema constructs fail preflight.
+parameters, exploded scalar-array query parameters, flat multipart uploads and
+binary transfers described below. Cookies, other parameter styles and unsupported
+schema constructs fail preflight.
 Specialized generators remain available for their additional binding options
 and use separate output ownership. WebRTC targets TypeScript; requesting Python
 fails before writing.
@@ -535,3 +536,63 @@ Python also rejects empty JSON and unexpected bodies for bodyless contracts.
 HTTP connection failures, including interrupted response bodies and problem
 responses, raise `TransportError`. TypeScript retains native abort errors for
 explicit cancellation and request timeouts.
+
+### Multipart uploads and binary transfers
+
+Generate file operations from the same application as JSON, SSE and RPC methods.
+FastAPI `UploadFile`/`File` inputs and `Form` fields produce the contract; no
+separate HTTP binding is needed for the supported cases. The common reader
+recognizes OpenAPI `format: binary` and FastAPI's unencoded
+`contentMediaType: application/octet-stream` string schemas.
+
+Multipart request bodies must be flat objects with named parts. Parts
+may be files, strings, numbers, integers or booleans, including arrays of each.
+Arrays become repeated parts with the same wire name, preserving order. Optional
+parts can be omitted; `None`/`null` also omits an optional part. Empty arrays emit
+no parts, so a server requiring at least one value can reject an empty list.
+An entirely optional form can be omitted. Nested objects/arrays, encoded content,
+conditional required parts in an optional body, custom per-part headers and non-default serialization fail
+before contract or SDK files are written. Explicit encoding may use `style =
+"form"`, `explode = true`, and `text/plain` for scalars or
+`application/octet-stream` for files. File values supply their actual MIME type.
+
+For an operation with a `document` file, repeated `attachments` files and a
+`title` form field, the generated consumer API is:
+
+```python
+from api_client import ApiClient, Upload
+
+async with ApiClient(base_url) as client:
+    with open("report.pdf", "rb") as report:
+        result = await client.files.upload(
+            document=Upload("report.pdf", report, "application/pdf"),
+            attachments=[Upload("notes.txt", b"Notes", "text/plain")],
+            title="Quarterly report",
+        )
+```
+
+```typescript
+const result = await client.files.upload({
+  document: reportFile, // Native File, preserving its name and MIME type.
+  attachments: [new File(["Notes"], "notes.txt", { type: "text/plain" })],
+  title: "Quarterly report",
+});
+```
+
+Python `Upload.content` accepts bytes or a binary file handle. The HTTP library
+streams handles through its multipart encoder and may rewind seekable handles;
+the caller keeps them open until the await completes and closes them afterwards.
+Success, canonical errors, cancellation and SDK shutdown never close borrowed
+handles. TypeScript accepts `File` or `Blob`; use `File` to specify a filename,
+since plain `Blob` uses the platform's default filename. The HTTP library/fetch
+constructs the multipart boundary and overrides any configured `Content-Type`.
+
+Raw `application/octet-stream` request bodies accept Python `bytes` or TypeScript
+`Blob`. Successful responses with one media type and an explicit binary schema
+return `bytes` or `Blob`, including empty files. A TypeScript result retains its
+response MIME type. Downloads are buffered in memory; this API does not expose
+a download stream or upload progress. Multipart Python file handles avoid
+buffering the whole upload in the SDK. `RequestOptions`/`HttpOptions`, declared
+canonical errors and TypeScript `.safe()` work as for JSON HTTP methods.
+Cancellation and client shutdown abort active HTTP work; interrupted binary
+response bodies raise `TransportError`.
