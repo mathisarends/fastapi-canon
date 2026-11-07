@@ -89,7 +89,7 @@ backend.app:create_app --output-dir contracts` so effective paths and problem
 types match runtime. JSON-RPC problem data lives inside its protocol envelope.
 Binary streams and sockets are not JSON-RPC channels; they keep their own
 endpoints, framing and close rules. Mount them with
-`@router.binary_stream(path, ...)` and `@router.socket(path, ...)`. Declare a
+`@router.binary_socket(path, ...)` and `@router.socket(path, ...)`. Declare a
 single JSON-RPC endpoint with `session = router.channel(path)`. See
 [integrations/websockets/services.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/integrations/websockets/services.md) and
 [problems.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/problems.md).

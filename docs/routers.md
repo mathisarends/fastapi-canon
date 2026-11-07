@@ -10,10 +10,16 @@ can contribute HTTP calls, typed SSE, JSON-RPC channels and WebRTC sessions:
 | `@router.sse(...)` | Typed HTTP event stream, terminal problems and completion |
 | `router.include_channel(channel, path=...)` | JSON-RPC methods and message streams over one WebSocket |
 | `session = router.channel(path)` | A JSON-RPC WebSocket; register methods, events and message streams on `session` |
-| `@router.binary_stream(path)` | A binary stream on its own WebSocket; the signature sets the direction |
+| `@router.binary_socket(path)` | A binary stream on its own WebSocket; the signature sets the direction |
 | `@router.socket(path)` | A typed or raw message socket on its own WebSocket |
 | `@router.websocket(...)` | Native FastAPI WebSocket handler and application protocol |
 | `@router.webrtc(...)` | WebRTC session factory, signaling, admission and cleanup |
+
+Names show the transport: `sse` is the HTTP stream; `channel`, `socket` and
+`binary_socket` are WebSockets. `@session.stream()` sends messages inside the
+channel's connection, next to its methods and events. `@router.binary_socket`
+sends raw bytes on its own connection, so large transfers neither need base64
+nor delay the session's responses, and they get their own path and limits.
 
 These additions are available in this checkout. Select the `sse`, `websockets`
 or `webrtc` extra for the transports you use. `aiortc` selects the reference
@@ -313,7 +319,7 @@ they are not silently multiplexed into a JSON-RPC channel mount. Declare them on
 the same router:
 
 ```python
-@router.binary_stream("/{project_id}/preview", content_type="image/jpeg")
+@router.binary_socket("/{project_id}/preview", content_type="image/jpeg")
 async def preview(project_id: int) -> AsyncIterator[bytes]: ...
 
 

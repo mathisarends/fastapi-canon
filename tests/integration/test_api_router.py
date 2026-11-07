@@ -612,7 +612,7 @@ def test_binary_streams_and_typed_sockets_are_declared_on_the_router() -> None:
 
     router = APIRouter(prefix="/projects", namespace="projects")
 
-    @router.binary_stream("/{project_id}/preview", content_type="image/jpeg")
+    @router.binary_socket("/{project_id}/preview", content_type="image/jpeg")
     async def preview(project_id: int, store: Inject[Store]) -> AsyncIterator[bytes]:
         yield f"{project_id}:{store.identifier}".encode()
 
@@ -673,7 +673,7 @@ def test_channels_with_streams_or_sockets_point_to_router_declarations() -> None
         yield b""
 
     router = APIRouter()
-    with pytest.raises(ConfigurationError, match=r"@router.binary_stream"):
+    with pytest.raises(ConfigurationError, match=r"@router.binary_socket"):
         router.include_channel(channel, path="/media")
     assert router.routes == []
 

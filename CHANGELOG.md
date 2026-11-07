@@ -27,8 +27,9 @@ The next release containing the breaking changes below must be 0.16.0.
 - Generate the SDK from one application with `[codegen] app = "module:app"`;
   per-kind source tables and target `sources` lists are optional.
 - Every WebSocket endpoint is declared on `APIRouter` with its path:
-  `session = router.channel(path)` for JSON-RPC, `@router.binary_stream(path)`
-  and `@router.socket(path)`.
+  `session = router.channel(path)` for JSON-RPC, `@router.binary_socket(path)`
+  and `@router.socket(path)`. Router names show the transport: `sse` is HTTP;
+  `channel`, `socket` and `binary_socket` are WebSockets.
 - Dishka owns resources. Canon closes the admission REQUEST scope before
   acceptance. Return independently usable context data and put resources needed
   until disconnect in SESSION-scoped providers.
@@ -45,8 +46,9 @@ The next release containing the breaking changes below must be 0.16.0.
 - `router.channel(path, ...)` declares a JSON-RPC WebSocket and returns its
   channel. Operation names use the router's namespace; the channel is mounted when
   the router's routes are first read and frozen afterwards.
-- `@router.binary_stream(path, ...)` and `@router.socket(path, ...)` declare
-  binary streams and typed or raw message sockets on their own WebSocket. The
+- `@router.binary_socket(path, ...)` and `@router.socket(path, ...)` declare
+  binary streams and typed or raw message sockets on their own WebSocket, unlike
+  `@session.stream()` messages, which share the channel's connection. The
   signature sets a stream's direction and a socket's message types. Operation
   names use the router's namespace. They accept the connection options of
   `include_channel` and export the same contracts as

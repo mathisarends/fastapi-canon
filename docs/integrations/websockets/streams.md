@@ -2,7 +2,10 @@
 
 Binary streams carry raw bytes on a dedicated socket. They are a good fit for
 audio, video frames, uploads, screenshots, or other data that should not be
-base64-encoded inside JSON-RPC messages.
+base64-encoded inside JSON-RPC messages. Declare them with
+`@router.binary_socket(path)`; the name says that each stream has its own
+WebSocket, unlike a message stream declared with `@session.stream()` inside a
+JSON-RPC channel.
 
 The handler's signature determines the stream's direction:
 
@@ -30,7 +33,7 @@ class FrameSource:
 router = APIRouter(prefix="/projects", namespace="media")
 
 
-@router.binary_stream(
+@router.binary_socket(
     "/{project_id}/preview", content_type="image/jpeg", summary="Live preview frames."
 )
 async def preview(source: Inject[FrameSource]) -> AsyncIterator[bytes]:
@@ -38,7 +41,7 @@ async def preview(source: Inject[FrameSource]) -> AsyncIterator[bytes]:
         yield frame
 ```
 
-`@router.binary_stream` accepts the connection options of `include_channel`
+`@router.binary_socket` accepts the connection options of `include_channel`
 (`context=`, `hooks=`, `rejects=`, `limits=`, `middleware=` and so on). The
 operation name is the router's namespace plus the function name. Streams declared
 on an `RpcChannel` with `@channel.stream(...)` still mount with

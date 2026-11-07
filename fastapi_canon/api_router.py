@@ -212,7 +212,7 @@ class APIRouter(CanonRouter):
         if protocol.streams or protocol.sockets:
             raise ConfigurationError(
                 "include_channel accepts JSON-RPC methods, events and message streams; "
-                "declare binary streams with @router.binary_stream and sockets with @router.socket"
+                "declare binary streams with @router.binary_socket and sockets with @router.socket"
             )
         adapter = CanonWebSocketRouter(prefix=self.prefix, **options)
         adapter.socket(
@@ -263,7 +263,7 @@ class APIRouter(CanonRouter):
         self._pending_channels.append((channel, settings))
         return channel
 
-    def binary_stream[Stream: Callable[..., Any]](
+    def binary_socket[Stream: Callable[..., Any]](
         self,
         path: str,
         *,
