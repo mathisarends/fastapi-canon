@@ -23,7 +23,7 @@ from fastapi_canon import (
     RouterPolicy,
 )
 from fastapi_canon.exceptions import FeatureConfigurationError
-from fastapi_canon.integrations.sse import CanonStreamRouter
+from fastapi_canon.integrations.sse.canon import CanonStreamRouter
 from fastapi_canon.router import CanonRouter
 
 

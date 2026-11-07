@@ -13,11 +13,50 @@ class RunEventType(StrEnum):
     RUN_STARTED = 'run.started'
     TOKEN_DELTA = 'token.delta'
 
-class HTTPValidationError(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-    detail: list[ValidationError] | None = None
+class InternalServerProblem(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    code: Literal['internal_server_error']
+    detail: str | None = None
+    instance: str | None = None
+    status: Literal[500]
+    title: Literal['Internal Server Error']
+    type: Literal['urn:fastapi-canon:problem/internal_server_error']
+    __pydantic_extra__: dict[str, JsonValue] = Field(init=False)  # pyright: ignore[reportIncompatibleVariableOverride]
 
-    @field_validator('detail', mode='before')
+    @field_validator('detail', 'instance', mode='before')
+    @classmethod
+    def _reject_explicit_null(cls, value: object) -> object:
+        if value is None:
+            raise ValueError('Field may be omitted but cannot be null')
+        return value
+
+class RequestValidationProblem(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    code: Literal['request_validation_error']
+    detail: str | None = None
+    errors: list[RequestValidationProblemErrorsItem]
+    instance: str | None = None
+    status: Literal[422]
+    title: Literal['Request validation failed']
+    type: Literal['urn:fastapi-canon:problem/request_validation_error']
+    __pydantic_extra__: dict[str, JsonValue] = Field(init=False)  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    @field_validator('detail', 'instance', mode='before')
+    @classmethod
+    def _reject_explicit_null(cls, value: object) -> object:
+        if value is None:
+            raise ValueError('Field may be omitted but cannot be null')
+        return value
+
+class RequestValidationProblemErrorsItem(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    code: str
+    detail: str
+    in_: (Literal['path'] | Literal['query'] | Literal['header'] | Literal['cookie']) | None = Field(default=None, alias='in')
+    parameter: str | None = None
+    pointer: str | None = None
+
+    @field_validator('in_', 'parameter', 'pointer', mode='before')
     @classmethod
     def _reject_explicit_null(cls, value: object) -> object:
         if value is None:
@@ -45,13 +84,13 @@ class RunStarted(BaseModel):
     run_id: str
     type: Literal[RunEventType.RUN_STARTED]
 
-type StreamPromptError = HTTPValidationError
+type StreamPromptError = (RequestValidationProblem | InternalServerProblem)
 
 type StreamPromptErrorBody = StreamPromptError
 
 type StreamRunEventsDelay = Annotated[float, Field(le=1, ge=0)]
 
-type StreamRunEventsError = HTTPValidationError
+type StreamRunEventsError = (RequestValidationProblem | InternalServerProblem)
 
 type StreamRunEventsErrorBody = StreamRunEventsError
 
@@ -60,24 +99,11 @@ class TokenDelta(BaseModel):
     text: str
     type: Literal[RunEventType.TOKEN_DELTA]
 
-class ValidationError(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-    ctx: ValidationErrorCtx | None = None
-    input: JsonValue = None
-    loc: list[(str | int)]
-    msg: str
-    type: str
+InternalServerProblem.model_rebuild()
 
-    @field_validator('ctx', mode='before')
-    @classmethod
-    def _reject_explicit_null(cls, value: object) -> object:
-        if value is None:
-            raise ValueError('Field may be omitted but cannot be null')
-        return value
+RequestValidationProblem.model_rebuild()
 
-type ValidationErrorCtx = dict[str, JsonValue]
-
-HTTPValidationError.model_rebuild()
+RequestValidationProblemErrorsItem.model_rebuild()
 
 RunCompleted.model_rebuild()
 
@@ -88,5 +114,3 @@ RunRequest.model_rebuild()
 RunStarted.model_rebuild()
 
 TokenDelta.model_rebuild()
-
-ValidationError.model_rebuild()

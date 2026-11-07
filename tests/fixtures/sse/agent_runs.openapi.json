@@ -1,6 +1,40 @@
 {
   "components": {
     "schemas": {
+      "CanonInternalServerErrorEmbedded": {
+        "additionalProperties": true,
+        "description": "RFC 9457 Problem Details with a stable application code.",
+        "properties": {
+          "code": {
+            "const": "internal_server_error",
+            "pattern": "^[a-z][a-z0-9_]{2,}$",
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "format": "uri-reference",
+            "type": "string"
+          },
+          "title": {
+            "const": "Internal Server Error",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:fastapi-canon:problem/internal_server_error",
+            "format": "uri-reference",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "code"
+        ],
+        "title": "Problem",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -12,6 +46,154 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "InternalServerProblem": {
+        "additionalProperties": true,
+        "description": "RFC 9457 Problem Details with a stable application code.",
+        "properties": {
+          "code": {
+            "const": "internal_server_error",
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "format": "uri-reference",
+            "type": "string"
+          },
+          "status": {
+            "const": 500,
+            "type": "integer"
+          },
+          "title": {
+            "const": "Internal Server Error",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:fastapi-canon:problem/internal_server_error",
+            "format": "uri-reference",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "title": "InternalServerProblem",
+        "type": "object"
+      },
+      "Problem": {
+        "additionalProperties": true,
+        "description": "RFC 9457 Problem Details with a stable application code.",
+        "properties": {
+          "code": {
+            "pattern": "^[a-z][a-z0-9_]{2,}$",
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "format": "uri-reference",
+            "type": "string"
+          },
+          "status": {
+            "maximum": 599,
+            "minimum": 100,
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "format": "uri-reference",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "title": "Problem",
+        "type": "object"
+      },
+      "RequestValidationProblem": {
+        "additionalProperties": true,
+        "description": "RFC 9457 Problem Details with a stable application code.",
+        "properties": {
+          "code": {
+            "const": "request_validation_error",
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "errors": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "detail": {
+                  "type": "string"
+                },
+                "in": {
+                  "enum": [
+                    "path",
+                    "query",
+                    "header",
+                    "cookie"
+                  ],
+                  "type": "string"
+                },
+                "parameter": {
+                  "type": "string"
+                },
+                "pointer": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "code",
+                "detail"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "instance": {
+            "format": "uri-reference",
+            "type": "string"
+          },
+          "status": {
+            "const": 422,
+            "type": "integer"
+          },
+          "title": {
+            "const": "Request validation failed",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:fastapi-canon:problem/request_validation_error",
+            "format": "uri-reference",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code",
+          "errors"
+        ],
+        "title": "RequestValidationProblem",
         "type": "object"
       },
       "RunCompleted": {
@@ -186,7 +368,7 @@
   "paths": {
     "/health": {
       "get": {
-        "operationId": "health_health_get",
+        "operationId": "health",
         "responses": {
           "200": {
             "content": {
@@ -195,12 +377,22 @@
                   "additionalProperties": {
                     "type": "string"
                   },
-                  "title": "Response Health Health Get",
+                  "title": "Response Health",
                   "type": "object"
                 }
               }
             },
             "description": "Successful Response"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalServerProblem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
         },
         "summary": "Health",
@@ -240,29 +432,81 @@
             "content": {
               "text/event-stream": {
                 "itemSchema": {
-                  "properties": {
-                    "data": {
-                      "contentMediaType": "application/json",
-                      "contentSchema": {
-                        "$ref": "#/components/schemas/RunEvent"
+                  "oneOf": [
+                    {
+                      "properties": {
+                        "data": {
+                          "contentMediaType": "application/json",
+                          "contentSchema": {
+                            "$ref": "#/components/schemas/RunEvent"
+                          },
+                          "type": "string"
+                        },
+                        "event": {
+                          "not": {
+                            "pattern": "^canon\\."
+                          },
+                          "type": "string"
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "retry": {
+                          "minimum": 0,
+                          "type": "integer"
+                        }
                       },
-                      "type": "string"
+                      "required": [
+                        "data"
+                      ],
+                      "type": "object"
                     },
-                    "event": {
-                      "type": "string"
+                    {
+                      "properties": {
+                        "data": {
+                          "contentMediaType": "application/json",
+                          "contentSchema": {
+                            "anyOf": [
+                              {
+                                "$ref": "#/components/schemas/CanonInternalServerErrorEmbedded"
+                              }
+                            ]
+                          },
+                          "type": "string"
+                        },
+                        "event": {
+                          "const": "canon.problem",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "event",
+                        "data"
+                      ],
+                      "type": "object"
                     },
-                    "id": {
-                      "type": "string"
-                    },
-                    "retry": {
-                      "minimum": 0,
-                      "type": "integer"
+                    {
+                      "properties": {
+                        "data": {
+                          "contentMediaType": "application/json",
+                          "contentSchema": {
+                            "maxProperties": 0,
+                            "type": "object"
+                          },
+                          "type": "string"
+                        },
+                        "event": {
+                          "const": "canon.complete",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "event",
+                        "data"
+                      ],
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "data"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
@@ -270,19 +514,60 @@
           },
           "422": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationProblem"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Request validation failed"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalServerProblem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
         },
         "summary": "Stream Run Events",
         "tags": [
           "agentRuns"
-        ]
+        ],
+        "x-canon-stream": {
+          "businessItemSchema": {
+            "properties": {
+              "data": {
+                "contentMediaType": "application/json",
+                "contentSchema": {
+                  "$ref": "#/components/schemas/RunEvent"
+                },
+                "type": "string"
+              },
+              "event": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "retry": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "data"
+            ],
+            "type": "object"
+          },
+          "completeEvent": "canon.complete",
+          "problemEvent": "canon.problem",
+          "problems": [],
+          "version": 1
+        }
       },
       "post": {
         "operationId": "stream_prompt",
@@ -312,29 +597,81 @@
             "content": {
               "text/event-stream": {
                 "itemSchema": {
-                  "properties": {
-                    "data": {
-                      "contentMediaType": "application/json",
-                      "contentSchema": {
-                        "$ref": "#/components/schemas/RunEvent"
+                  "oneOf": [
+                    {
+                      "properties": {
+                        "data": {
+                          "contentMediaType": "application/json",
+                          "contentSchema": {
+                            "$ref": "#/components/schemas/RunEvent"
+                          },
+                          "type": "string"
+                        },
+                        "event": {
+                          "not": {
+                            "pattern": "^canon\\."
+                          },
+                          "type": "string"
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "retry": {
+                          "minimum": 0,
+                          "type": "integer"
+                        }
                       },
-                      "type": "string"
+                      "required": [
+                        "data"
+                      ],
+                      "type": "object"
                     },
-                    "event": {
-                      "type": "string"
+                    {
+                      "properties": {
+                        "data": {
+                          "contentMediaType": "application/json",
+                          "contentSchema": {
+                            "anyOf": [
+                              {
+                                "$ref": "#/components/schemas/CanonInternalServerErrorEmbedded"
+                              }
+                            ]
+                          },
+                          "type": "string"
+                        },
+                        "event": {
+                          "const": "canon.problem",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "event",
+                        "data"
+                      ],
+                      "type": "object"
                     },
-                    "id": {
-                      "type": "string"
-                    },
-                    "retry": {
-                      "minimum": 0,
-                      "type": "integer"
+                    {
+                      "properties": {
+                        "data": {
+                          "contentMediaType": "application/json",
+                          "contentSchema": {
+                            "maxProperties": 0,
+                            "type": "object"
+                          },
+                          "type": "string"
+                        },
+                        "event": {
+                          "const": "canon.complete",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "event",
+                        "data"
+                      ],
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "data"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
@@ -342,13 +679,23 @@
           },
           "422": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationProblem"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Request validation failed"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalServerProblem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
         },
         "security": [
@@ -359,7 +706,38 @@
         "summary": "Stream Prompt",
         "tags": [
           "agentRuns"
-        ]
+        ],
+        "x-canon-stream": {
+          "businessItemSchema": {
+            "properties": {
+              "data": {
+                "contentMediaType": "application/json",
+                "contentSchema": {
+                  "$ref": "#/components/schemas/RunEvent"
+                },
+                "type": "string"
+              },
+              "event": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "retry": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "data"
+            ],
+            "type": "object"
+          },
+          "completeEvent": "canon.complete",
+          "problemEvent": "canon.problem",
+          "problems": [],
+          "version": 1
+        }
       }
     }
   }

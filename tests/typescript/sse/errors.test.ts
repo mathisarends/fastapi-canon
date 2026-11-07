@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createClient, HttpError, isHttpError, TransportError } from "../../../examples/sse/agent_runs/generated/index.js";
+import { createClient, HttpError, isHttpError, ProblemError, TransportError } from "../../../examples/sse/agent_runs/generated/index.js";
 import { consumeWithErrors, decodeValidationError } from "../../../examples/sse/agent_runs/errors.js";
 
 type MissingProblem = {
@@ -56,29 +56,39 @@ test("body guards leave status and operation checks to callers", () => {
   assert.equal(error.status, 502);
 });
 
-test("consumer example handles validated HTTP errors and rethrows unexpected bodies", async t => {
+const validation = {
+  type: "urn:fastapi-canon:problem/request_validation_error",
+  title: "Request validation failed",
+  code: "request_validation_error",
+  status: 422,
+  errors: [{ code: "greater_than_equal", detail: "Input should be >= 0", in: "query", parameter: "delay" }],
+};
+
+test("consumer example handles validation problems and rethrows other failures", async t => {
   t.mock.method(console, "error", () => {});
-  const makeClient = (body: unknown) => createClient({
+  const makeClient = (body: unknown, contentType: string) => createClient({
     baseUrl: "http://example.test",
-    fetch: async () => new Response(JSON.stringify(body), { status: 422 }),
+    fetch: async () => new Response(JSON.stringify(body), { status: 422, headers: { "Content-Type": contentType } }),
   });
-  await consumeWithErrors(makeClient({ detail: [{ loc: ["run_id"], msg: "Invalid", type: "value_error" }] }), "demo");
-  for (const unexpected of [[], "<html>Bad gateway</html>", null, { detail: "invalid" }, { detail: [{}] }]) {
-    await assert.rejects(() => consumeWithErrors(makeClient(unexpected), "demo"), HttpError);
+  await consumeWithErrors(makeClient(validation, "application/problem+json"), "demo");
+  const other = { ...validation, code: "other_problem", errors: undefined };
+  await assert.rejects(() => consumeWithErrors(makeClient(other, "application/problem+json"), "demo"), ProblemError);
+  for (const unexpected of [[], "<html>Bad gateway</html>", null, validation]) {
+    await assert.rejects(() => consumeWithErrors(makeClient(unexpected, "application/json"), "demo"), HttpError);
   }
 });
 
-test("consumer decoder retains generic failures and checks the actual status", () => {
-  const body = { detail: [{ loc: ["run_id", 0], msg: "Invalid", type: "value_error" }] };
-  const response = new Response(null, { status: 422 });
-  const expected = new HttpError(422, body, response);
-  assert.equal(decodeValidationError(expected), body);
-  for (const details of ["Bad gateway", undefined, null, [], { detail: [{}] }]) {
-    const error = new HttpError(422, details, response);
-    assert.equal(decodeValidationError(error), undefined);
-    assert.equal(error.details, details);
-    assert.equal(error.response, response);
+test("consumer decoder accepts only well-formed validation problems", () => {
+  assert.equal(decodeValidationError(new ProblemError(validation)), validation);
+  for (const problem of [
+    { ...validation, code: "other_problem" },
+    { ...validation, status: 400 },
+    { ...validation, errors: [{}] },
+    { ...validation, errors: "invalid" },
+  ]) {
+    assert.equal(decodeValidationError(new ProblemError(problem)), undefined);
   }
-  assert.equal(decodeValidationError(new HttpError(502, body, response)), undefined);
+  const response = new Response(null, { status: 422 });
+  assert.equal(decodeValidationError(new HttpError(422, validation, response)), undefined);
   assert.equal(decodeValidationError(new TransportError("offline")), undefined);
 });

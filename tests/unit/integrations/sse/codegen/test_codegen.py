@@ -164,7 +164,8 @@ def test_writer_rejects_unsafe_new_paths(tmp_path, unsafe):
 def test_generator_rejects_untyped_streams_and_name_collisions():
     document = export_schema(app)
     operation = document["paths"]["/v1/runs/{run_id}/events"]["get"]
-    operation["responses"]["200"]["content"]["text/event-stream"]["itemSchema"] = {}
+    # Canon streams generate business events from the profile's item schema.
+    operation["x-canon-stream"]["businessItemSchema"] = {}
     with pytest.raises(ContractError, match="contentSchema"):
         build_ir(document)
     document = export_schema(app)

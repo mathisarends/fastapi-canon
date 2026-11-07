@@ -49,6 +49,7 @@ export const clockDescriptor: SessionDescriptor = {
       required: false,
     },
   ],
+  admissionErrors: [],
 };
 
 /** Data channels of the `practice` session, from the client's point of view. */
@@ -97,6 +98,7 @@ export const practiceDescriptor: SessionDescriptor = {
       required: false,
     },
   ],
+  admissionErrors: [],
 };
 
 /** Typed WebRTC sessions of the application. */

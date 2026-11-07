@@ -6,8 +6,9 @@ from typing import Any
 
 import pytest
 from fastapi import FastAPI
-from fastapi_canon.integrations.webrtc import Session, WebRtcRouter
+from fastapi_canon.integrations.webrtc import Session
 from fastapi_canon.integrations.webrtc.contract import build_contract, dumps
+from fastapi_canon.integrations.webrtc.router import WebRtcRouter
 from tests.unit.integrations.webrtc import contract_app
 from tests.unit.integrations.webrtc.fake_engine import FakeEngine
 

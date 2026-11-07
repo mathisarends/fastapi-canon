@@ -6,7 +6,8 @@ and generated TypeScript/Python clients. Follow the repository rules in the root
 
 ## Layout
 
-- `fastapi_canon/integrations/sse/router.py`: `StreamRouter` and endpoint validation.
+- `fastapi_canon/integrations/sse/router.py`: the internal `StreamRouter` and endpoint
+  validation. Applications declare streams with `APIRouter.sse()` (`canon.py`).
 - `fastapi_canon/integrations/sse/codegen/`: export (`openapi.py`), shared HTTP IR (`ir.py`),
   emitters (`python.py`, `typescript.py`), CLI (`cli.py`) and diagnostics.
 - `fastapi_canon/integrations/sse/codegen/templates/`: generated runtimes. `python/runtime.py`

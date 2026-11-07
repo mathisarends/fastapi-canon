@@ -1,17 +1,18 @@
+import json
 from collections.abc import AsyncIterator
 from typing import Literal
 
 import httpx
 import pytest
 from examples.sse.agent_runs.errors import consume_with_errors
-from examples.sse.agent_runs.generated_python import Client, HttpError
+from examples.sse.agent_runs.generated_python import Client, HttpError, ProblemError
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
-from fastapi_canon.integrations.sse import StreamRouter
 from fastapi_canon.integrations.sse.codegen.ir import build_ir
 from fastapi_canon.integrations.sse.codegen.openapi import ContractError, export_schema
 from fastapi_canon.integrations.sse.codegen.python import generate_python
 from fastapi_canon.integrations.sse.codegen.typescript import generate_typescript
+from fastapi_canon.integrations.sse.router import StreamRouter
 from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
 from tests.unit.integrations.sse.codegen.helpers import event_document, load_package
 
@@ -28,31 +29,44 @@ class MissingProblem(BaseModel):
     type: Literal["urn:example:missing"]
 
 
+VALIDATION = {
+    "type": "urn:fastapi-canon:problem/request_validation_error",
+    "title": "Request validation failed",
+    "code": "request_validation_error",
+    "status": 422,
+    "errors": [{"code": "too_short", "detail": "Invalid", "in": "path"}],
+}
+
+
 @pytest.mark.parametrize(
-    ("body", "handled"),
+    ("body", "media_type", "expected"),
     [
-        (
-            {"detail": [{"loc": ["run_id"], "msg": "Invalid", "type": "value_error"}]},
-            True,
-        ),
-        ("<html>Bad gateway</html>", False),
-        ([], False),
-        ({"detail": [{}]}, False),
+        (VALIDATION, "application/problem+json", None),
+        ({**VALIDATION, "errors": [{}]}, "application/problem+json", ProblemError),
+        ({**VALIDATION, "code": "other"}, "application/problem+json", ProblemError),
+        (VALIDATION, "application/json", HttpError),
+        ("<html>Bad gateway</html>", "text/html", HttpError),
+        ([], "application/json", HttpError),
     ],
 )
-async def test_python_consumer_example_checks_bodies_and_keeps_http_fallback(
-    body, handled
+async def test_python_consumer_example_handles_validation_problems_only(
+    body, media_type, expected
 ):
+    content = body.encode() if isinstance(body, str) else json.dumps(body).encode()
+
+    def respond(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            422, content=content, headers={"Content-Type": media_type}
+        )
+
     async with (
-        httpx.AsyncClient(
-            transport=httpx.MockTransport(lambda _: httpx.Response(422, json=body))
-        ) as http,
+        httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http,
         Client("http://example.test", http_client=http) as client,
     ):
-        if handled:
+        if expected is None:
             await consume_with_errors(client, "demo")
         else:
-            with pytest.raises(HttpError):
+            with pytest.raises(expected):
                 await consume_with_errors(client, "demo")
 
 

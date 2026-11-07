@@ -42,7 +42,8 @@
             "$ref": "#/definitions/Tick"
           }
         }
-      ]
+      ],
+      "admission_errors": []
     },
     {
       "name": "practice",
@@ -98,7 +99,8 @@
             "$ref": "#/definitions/Feedback"
           }
         }
-      ]
+      ],
+      "admission_errors": []
     }
   ],
   "definitions": {

@@ -1,0 +1,36 @@
+{
+  "allow": [
+    {
+      "id": "unsupported-constraint:0afd736d7a2c4937a62c",
+      "reason": "The Python SDK keeps the server-generated RequestValidationProblem instance URI reference as a string; the server produces it and the SDK does not validate URI syntax."
+    },
+    {
+      "id": "unsupported-constraint:12acf83e547a4efb9834",
+      "reason": "The Python SDK keeps the server-generated InternalServerProblem instance URI reference as a string; the server produces it and the SDK does not validate URI syntax."
+    },
+    {
+      "id": "unsupported-constraint:1eea73e1f18daff618b8",
+      "reason": "The Python SDK keeps the server-generated RequestValidationProblem type URI reference as a string; the server produces it and the SDK does not validate URI syntax."
+    },
+    {
+      "id": "unsupported-constraint:7798f2f2d3b53640161c",
+      "reason": "The Python SDK keeps the server-generated RequestValidationProblem instance URI reference as a string; the server produces it and the SDK does not validate URI syntax."
+    },
+    {
+      "id": "unsupported-constraint:8b61c66ad68f59ebe077",
+      "reason": "The Python SDK keeps the server-generated InternalServerProblem instance URI reference as a string; the server produces it and the SDK does not validate URI syntax."
+    },
+    {
+      "id": "unsupported-constraint:9dcfdfb8aaa74611006d",
+      "reason": "The Python SDK keeps the server-generated InternalServerProblem type URI reference as a string; the server produces it and the SDK does not validate URI syntax."
+    },
+    {
+      "id": "unsupported-constraint:b0a99797a44c49a59f23",
+      "reason": "The Python SDK keeps the server-generated RequestValidationProblem type URI reference as a string; the server produces it and the SDK does not validate URI syntax."
+    },
+    {
+      "id": "unsupported-constraint:f7d55898c3f6cbd500b0",
+      "reason": "The Python SDK keeps the server-generated InternalServerProblem type URI reference as a string; the server produces it and the SDK does not validate URI syntax."
+    }
+  ]
+}

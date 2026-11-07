@@ -1,20 +1,52 @@
 {
   "allow": [
     {
-      "id": "unsupported-constraint:7fa96a938b14db4266a4",
-      "reason": "The TypeScript SDK intentionally provides static request shapes; the server enforces prompt maxLength."
-    },
-    {
-      "id": "unsupported-constraint:cb8edb5ee90fd2018aec",
-      "reason": "The TypeScript SDK intentionally provides static request shapes; the server enforces prompt minLength."
+      "id": "unsupported-constraint:20cd41f783c1557824b8",
+      "reason": "The TypeScript SDK keeps the server-generated RequestValidationProblem instance URI reference as a string; the server produces it and the SDK does not validate URI syntax."
     },
     {
       "id": "unsupported-constraint:3b63af523ebbe9e12079",
       "reason": "The TypeScript SDK intentionally provides static parameter types; the server enforces delay maximum."
     },
     {
+      "id": "unsupported-constraint:4f3163f30b6300d16a1e",
+      "reason": "The TypeScript SDK keeps the server-generated RequestValidationProblem instance URI reference as a string; the server produces it and the SDK does not validate URI syntax."
+    },
+    {
+      "id": "unsupported-constraint:61487a18347562464be6",
+      "reason": "The TypeScript SDK keeps the server-generated InternalServerProblem type URI reference as a string; the server produces it and the SDK does not validate URI syntax."
+    },
+    {
+      "id": "unsupported-constraint:678ae307dae5ac6233c3",
+      "reason": "The TypeScript SDK keeps the server-generated InternalServerProblem instance URI reference as a string; the server produces it and the SDK does not validate URI syntax."
+    },
+    {
+      "id": "unsupported-constraint:68713ef783a9cae3be69",
+      "reason": "The TypeScript SDK keeps the server-generated InternalServerProblem instance URI reference as a string; the server produces it and the SDK does not validate URI syntax."
+    },
+    {
+      "id": "unsupported-constraint:7fa96a938b14db4266a4",
+      "reason": "The TypeScript SDK intentionally provides static request shapes; the server enforces prompt maxLength."
+    },
+    {
+      "id": "unsupported-constraint:8c07c254a878006bf6fa",
+      "reason": "The TypeScript SDK keeps the server-generated InternalServerProblem type URI reference as a string; the server produces it and the SDK does not validate URI syntax."
+    },
+    {
+      "id": "unsupported-constraint:93410f7a0f032b6616c5",
+      "reason": "The TypeScript SDK keeps the server-generated RequestValidationProblem type URI reference as a string; the server produces it and the SDK does not validate URI syntax."
+    },
+    {
+      "id": "unsupported-constraint:9b3166589d4f71fa8344",
+      "reason": "The TypeScript SDK keeps the server-generated RequestValidationProblem type URI reference as a string; the server produces it and the SDK does not validate URI syntax."
+    },
+    {
       "id": "unsupported-constraint:ae38575a49205085fceb",
       "reason": "The TypeScript SDK intentionally provides static parameter types; the server enforces delay minimum."
+    },
+    {
+      "id": "unsupported-constraint:cb8edb5ee90fd2018aec",
+      "reason": "The TypeScript SDK intentionally provides static request shapes; the server enforces prompt minLength."
     }
   ]
 }

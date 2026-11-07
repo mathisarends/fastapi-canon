@@ -43,7 +43,7 @@ class AgentRunsApi:
 
         HTTP failures raise HttpError; reading or decoding failures raise TransportError or StreamParseError. Application error events remain events.
 
-        Declared HTTP response bodies: StreamPromptErrorBody (422 application/json). HttpError.details may also contain undeclared JSON, text, or no body; validate it before accessing application fields.
+        Declared HTTP response bodies: StreamPromptErrorBody (422 application/problem+json; 500 application/problem+json). HttpError.details may also contain undeclared JSON, text, or no body; validate it before accessing application fields.
 
         Path, query and header parameters and JSON bodies are validated with Pydantic at the method call, before serialization or HTTP I/O. Optional None parameters are omitted. Pydantic's normal type coercion applies; invalid arguments raise ValidationError.
 
@@ -65,7 +65,7 @@ class AgentRunsApi:
             'POST',
             self._stream_prompt_event_adapter,
             operation_id='stream_prompt',
-            canon_stream=False,
+            canon_stream=True,
             problem_adapters=self._stream_prompt_problem_adapters,
             query=query,
             headers=headers,
@@ -91,7 +91,7 @@ class AgentRunsApi:
 
         HTTP failures raise HttpError; reading or decoding failures raise TransportError or StreamParseError. Application error events remain events.
 
-        Declared HTTP response bodies: StreamRunEventsErrorBody (422 application/json). HttpError.details may also contain undeclared JSON, text, or no body; validate it before accessing application fields.
+        Declared HTTP response bodies: StreamRunEventsErrorBody (422 application/problem+json; 500 application/problem+json). HttpError.details may also contain undeclared JSON, text, or no body; validate it before accessing application fields.
 
         Path, query and header parameters and JSON bodies are validated with Pydantic at the method call, before serialization or HTTP I/O. Optional None parameters are omitted. Pydantic's normal type coercion applies; invalid arguments raise ValidationError.
 
@@ -114,7 +114,7 @@ class AgentRunsApi:
             'GET',
             self._stream_run_events_event_adapter,
             operation_id='stream_run_events',
-            canon_stream=False,
+            canon_stream=True,
             problem_adapters=self._stream_run_events_problem_adapters,
             query=query,
             headers=headers,

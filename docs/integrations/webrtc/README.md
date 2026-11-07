@@ -199,7 +199,9 @@ your application. Two WebSocket properties need attention:
 `SessionLimits` bounds negotiation time, pending candidates, signaling and
 message sizes, inbound queues and send buffers. It also sets grace periods for
 transport and signaling loss. Every limit has a categorized error.
-`TurnRestCredentials` issues time-limited TURN REST credentials per user. It can
+`max_sessions=` bounds one declaration. A `SessionCapacity` passed as
+`capacity=` to several declarations shares one budget across them; it counts
+sessions in the current process only. `TurnRestCredentials` issues time-limited TURN REST credentials per user. It can
 give the server-side engine internal relay URLs.
 
 ## Documentation

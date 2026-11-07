@@ -4,15 +4,15 @@ from unittest.mock import Mock
 
 import pytest
 from aiortc import AudioStreamTrack, RTCPeerConnection, VideoStreamTrack
-from fastapi_canon.integrations.webrtc import (
+from fastapi_canon.integrations.webrtc import MediaKind
+from fastapi_canon.integrations.webrtc.engine import ChannelParameters
+from fastapi_canon.integrations.webrtc.engines import (
     ChannelState,
     ConnectionState,
     DescriptionType,
-    MediaKind,
     SignalingState,
     TransceiverDirection,
 )
-from fastapi_canon.integrations.webrtc.engine import ChannelParameters
 from fastapi_canon.integrations.webrtc.engines.aiortc import (
     AiortcEngine,
     AiortcPeer,

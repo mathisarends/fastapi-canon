@@ -22,13 +22,14 @@ if TYPE_CHECKING:
     from fastapi_canon.error.contracts import AnyError
     from fastapi_canon.integrations.webrtc import (
         DataChannelSpec,
-        Engine,
         EventHook,
         IceServerSource,
         MediaPolicy,
         Role,
+        SessionCapacity,
         SessionLimits,
     )
+    from fastapi_canon.integrations.webrtc.engines import Engine
     from fastapi_canon.integrations.websockets import (
         RpcBeforeAccept,
         RpcChannel,
@@ -96,6 +97,7 @@ class SessionOptions(TypedDict, total=False):
     data_channels: Sequence[DataChannelSpec]
     limits: SessionLimits | None
     max_sessions: int | None
+    capacity: SessionCapacity | None
     dependencies: Sequence[Depends] | None
     raises: Sequence[AnyError]
 
@@ -216,7 +218,7 @@ class APIRouter(CanonRouter):
         self, path: str, **options: Unpack[StreamOptions]
     ) -> Callable[[Endpoint], Endpoint]:
         """Declare typed SSE with serialization and terminal completion/problems."""
-        from fastapi_canon.integrations.sse import CanonStreamRouter
+        from fastapi_canon.integrations.sse.canon import CanonStreamRouter
 
         adapter = CanonStreamRouter(
             namespace=self.namespace,
@@ -252,7 +254,7 @@ class APIRouter(CanonRouter):
 
         A factory may also supply its session's engine.
         """
-        from fastapi_canon.integrations.webrtc import CanonWebRtcRouter
+        from fastapi_canon.integrations.webrtc.canon import CanonWebRtcRouter
 
         adapter = CanonWebRtcRouter(
             raises=self.raises,

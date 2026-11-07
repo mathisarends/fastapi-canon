@@ -1,15 +1,13 @@
 """Typed WebRTC sessions for FastAPI.
 
-Declare sessions on a :class:`WebRtcRouter`; the router provides WebSocket
-signaling, admission through FastAPI dependencies, limits and cleanup, while an
-engine adapter (see :mod:`fastapi_canon.integrations.webrtc.engines`) owns the
-peer connection.
+Declare sessions with ``APIRouter.webrtc()``; Canon provides WebSocket signaling,
+admission through FastAPI dependencies, limits and cleanup, while an engine
+adapter (see :mod:`fastapi_canon.integrations.webrtc.engines`) owns the peer
+connection.
 """
 
-from fastapi_canon._version import __version__
-from fastapi_canon.integrations.webrtc.canon import CanonWebRtcRouter
+from fastapi_canon.integrations.webrtc.capacity import SessionCapacity
 from fastapi_canon.integrations.webrtc.declarations import (
-    AdmissionErrors,
     DataChannelSpec,
     Direction,
     MediaPolicy,
@@ -17,22 +15,9 @@ from fastapi_canon.integrations.webrtc.declarations import (
     Role,
     Session,
     SessionContext,
-    SessionDeclaration,
     SessionLimits,
 )
-from fastapi_canon.integrations.webrtc.engine import (
-    CandidatePairStats,
-    ChannelState,
-    ConnectionState,
-    ConnectionStats,
-    DescriptionType,
-    Engine,
-    EngineCapabilities,
-    MediaKind,
-    MediaStats,
-    SignalingState,
-    TransceiverDirection,
-)
+from fastapi_canon.integrations.webrtc.engine import MediaKind
 from fastapi_canon.integrations.webrtc.errors import (
     ErrorCode,
     SessionClosedError,
@@ -56,23 +41,13 @@ from fastapi_canon.integrations.webrtc.peer import (
     Peer,
 )
 from fastapi_canon.integrations.webrtc.protocol import PROTOCOL_VERSION, SUBPROTOCOL
-from fastapi_canon.integrations.webrtc.router import WebRtcRouter
 
 __all__ = [
     "PROTOCOL_VERSION",
     "SUBPROTOCOL",
-    "AdmissionErrors",
-    "CandidatePairStats",
-    "CanonWebRtcRouter",
     "Channel",
-    "ChannelState",
-    "ConnectionState",
-    "ConnectionStats",
     "DataChannelSpec",
-    "DescriptionType",
     "Direction",
-    "Engine",
-    "EngineCapabilities",
     "ErrorCode",
     "EventHook",
     "IceServer",
@@ -81,22 +56,17 @@ __all__ = [
     "IncomingTrack",
     "MediaKind",
     "MediaPolicy",
-    "MediaStats",
     "MessageFormat",
     "OutgoingTrack",
     "Peer",
     "Role",
     "Session",
+    "SessionCapacity",
     "SessionClosedError",
     "SessionContext",
-    "SessionDeclaration",
     "SessionEvent",
     "SessionEventKind",
     "SessionLimits",
-    "SignalingState",
-    "TransceiverDirection",
     "TurnRestCredentials",
     "WebRtcError",
-    "WebRtcRouter",
-    "__version__",
 ]

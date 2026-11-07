@@ -263,7 +263,7 @@ test("generated GET/POST methods serialize input and merge headers", async () =>
   const calls: { url: string; init: RequestInit }[] = [];
   const fetch: typeof globalThis.fetch = async (url, init) => {
     calls.push({ url: String(url), init: init! });
-    return response('data: {"type":"run.completed","run_id":"abc"}\n\n');
+    return response('data: {"type":"run.completed","run_id":"abc"}\n\nevent: canon.complete\ndata: {}\n\n');
   };
   const client = createClient({ baseUrl: "http://example.test/api/", headers: { Authorization: "Bearer default", "X-Client": "sdk" }, fetch });
   await collect(client.agentRuns.streamRunEvents({ runId: "a/b ?", delay: 0 }, { headers: { Authorization: "Bearer override" } }));
@@ -362,7 +362,7 @@ test("unknownEvents ignore requires a discriminated union before any request", a
 });
 
 test("generated operations declare their known event tags", async () => {
-  const body = 'data: {"type":"run.paused"}\n\ndata: {"type":"run.completed","run_id":"run_abc"}\n\n';
+  const body = 'data: {"type":"run.paused"}\n\ndata: {"type":"run.completed","run_id":"run_abc"}\n\nevent: canon.complete\ndata: {}\n\n';
   const fetch = async () => response(body);
   const client = createClient({ baseUrl: "http://example.test", fetch });
   const events = await collect(client.agentRuns.streamRunEvents({ runId: "run_abc" }, { unknownEvents: "ignore" }));

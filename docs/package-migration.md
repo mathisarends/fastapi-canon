@@ -215,15 +215,16 @@ does not download another skill version.
 | `fastapi_streams` | `fastapi_canon.integrations.sse` |
 | `fastapi_rpckit` | `fastapi_canon.integrations.websockets` |
 | `fastapi_webrtc` | `fastapi_canon.integrations.webrtc` |
-| `fastapi_canon.integrations.streams` | `fastapi_canon.integrations.sse` (`CanonStreamRouter`) |
+| `fastapi_canon.integrations.streams` | `APIRouter.sse()` |
 
-Public classes such as `StreamRouter`, `RpcSocket`, `WebRtcRouter`,
-`CanonStreamRouter` and `CanonWebRtcRouter` live inside the integration namespaces.
+Declare SSE streams with `APIRouter.sse()` and WebRTC sessions with
+`APIRouter.webrtc()`; the stream and session routers are internal since 0.16.0.
+WebRTC value types such as `Session` and `SessionCapacity` remain in
+`fastapi_canon.integrations.webrtc`, and engine adapter types live in
+`fastapi_canon.integrations.webrtc.engines`.
 In 0.13.0, use `CanonWebSocketRouter` instead of the earlier service and adapter
 factories; follow the [WebSocket migration guide](integrations/websockets/migration.md).
-Feature `__version__` exports refer to the single
-Canon version. The published `fastapi_canon.integrations.webrtc` admission-router
-import remains available and now contains the complete WebRTC integration.
+Use `fastapi_canon.__version__` for the single Canon version.
 
 WebSocket framework adapters live under
 `fastapi_canon.integrations.websockets.adapters`, for example `.adapters.dishka`.

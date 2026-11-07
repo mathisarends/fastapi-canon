@@ -19,7 +19,10 @@ def test_native_contract_is_valid_and_preserves_rest():
     assert operation["operationId"] == "stream_run_events"
     content = operation["responses"]["200"]["content"]
     assert set(content) == {"text/event-stream"}
-    envelope = content["text/event-stream"]["itemSchema"]
+    frames = content["text/event-stream"]["itemSchema"]["oneOf"]
+    terminal = {frame["properties"]["event"].get("const") for frame in frames}
+    assert terminal == {None, "canon.problem", "canon.complete"}
+    envelope = operation["x-canon-stream"]["businessItemSchema"]
     assert envelope["required"] == ["data"]
     data = envelope["properties"]["data"]
     assert data["contentMediaType"] == "application/json"

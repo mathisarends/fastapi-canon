@@ -8,7 +8,7 @@ export interface StreamPromptParams {
   body: Types.RunRequest;
 }
 /** Declared HTTP response bodies; caught errors still require validation. */
-export type StreamPromptErrorBody = Types.HTTPValidationError;
+export type StreamPromptErrorBody = Types.InternalServerProblem | Types.RequestValidationProblem;
 /** @deprecated Use StreamPromptErrorBody for response bodies. */
 export type StreamPromptError = StreamPromptErrorBody;
 
@@ -17,7 +17,7 @@ export interface StreamRunEventsParams {
   delay?: number;
 }
 /** Declared HTTP response bodies; caught errors still require validation. */
-export type StreamRunEventsErrorBody = Types.HTTPValidationError;
+export type StreamRunEventsErrorBody = Types.InternalServerProblem | Types.RequestValidationProblem;
 /** @deprecated Use StreamRunEventsErrorBody for response bodies. */
 export type StreamRunEventsError = StreamRunEventsErrorBody;
 
@@ -34,7 +34,7 @@ export function createAgentRunsApi(client: ClientOptions) {
      *
      * HTTP failures raise HttpError; reading or decoding failures raise TransportError or StreamParseError. Application error events remain events.
      *
-     * Declared HTTP response bodies: StreamPromptErrorBody (422 application/json). HttpError.details may also contain undeclared JSON, text, or no body; validate it before accessing application fields.
+     * Declared HTTP response bodies: StreamPromptErrorBody (422 application/problem+json; 500 application/problem+json). HttpError.details may also contain undeclared JSON, text, or no body; validate it before accessing application fields.
      *
      * Breaking iteration closes the reader and aborts the request. Caller cancellation propagates the AbortSignal reason.
      *
@@ -49,7 +49,7 @@ export function createAgentRunsApi(client: ClientOptions) {
       return stream<Types.RunEvent>(client, {
         path: "/v1/runs/" + encodePath(input.runId) + "/events",
         method: "POST",
-      canonStream: false,
+      canonStream: true,
         query,
         headers,
         ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }),
@@ -67,7 +67,7 @@ export function createAgentRunsApi(client: ClientOptions) {
      *
      * HTTP failures raise HttpError; reading or decoding failures raise TransportError or StreamParseError. Application error events remain events.
      *
-     * Declared HTTP response bodies: StreamRunEventsErrorBody (422 application/json). HttpError.details may also contain undeclared JSON, text, or no body; validate it before accessing application fields.
+     * Declared HTTP response bodies: StreamRunEventsErrorBody (422 application/problem+json; 500 application/problem+json). HttpError.details may also contain undeclared JSON, text, or no body; validate it before accessing application fields.
      *
      * Breaking iteration closes the reader and aborts the request. Caller cancellation propagates the AbortSignal reason.
      *
@@ -83,7 +83,7 @@ export function createAgentRunsApi(client: ClientOptions) {
       return stream<Types.RunEvent>(client, {
         path: "/v1/runs/" + encodePath(input.runId) + "/events",
         method: "GET",
-      canonStream: false,
+      canonStream: true,
         query,
         headers,
         events: {"discriminator": "type", "known": ["run.completed", "run.failed", "run.started", "token.delta"]},

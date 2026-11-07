@@ -39,7 +39,7 @@ def test_empty_catalog_keeps_its_configured_internal_problem_identity() -> None:
     from fastapi import FastAPI
 
     from examples.canonical_errors.app import ProjectEvent
-    from fastapi_canon.integrations.sse import CanonStreamRouter
+    from fastapi_canon.integrations.sse.canon import CanonStreamRouter
 
     router = CanonStreamRouter()
 
@@ -105,7 +105,7 @@ def test_sse_raises_registers_shared_and_local_processing_errors(
     from fastapi import FastAPI
 
     from examples.canonical_errors.app import ProjectMissing
-    from fastapi_canon.integrations.sse import CanonStreamRouter
+    from fastapi_canon.integrations.sse.canon import CanonStreamRouter
 
     router = CanonStreamRouter(raises=[project_missing] if shared else [])
 
@@ -410,7 +410,7 @@ def test_stream_shared_declarations_and_safe_renderer_failures() -> None:
 
     from examples.canonical_errors.app import ProjectEvent, ProjectMissing
     from fastapi_canon import Error
-    from fastapi_canon.integrations.sse import CanonStreamRouter
+    from fastapi_canon.integrations.sse.canon import CanonStreamRouter
 
     def bad_detail(_: ProjectMissing) -> str:
         raise ValueError("private renderer failure")
@@ -450,7 +450,7 @@ async def test_cancelled_server_stream_runs_cleanup_without_terminal_problem() -
     from fastapi import FastAPI
 
     from examples.canonical_errors.app import ProjectEvent
-    from fastapi_canon.integrations.sse import CanonStreamRouter
+    from fastapi_canon.integrations.sse.canon import CanonStreamRouter
 
     router = CanonStreamRouter()
     closed = []

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createClient, HttpError } from "../../../examples/sse/agent_runs/generated/index.js";
+import { createClient, ProblemError } from "../../../examples/sse/agent_runs/generated/index.js";
 import type { RunEvent } from "../../../examples/sse/agent_runs/generated/types.js";
 
 const client = createClient({ baseUrl: process.argv[2]!, headers: { Authorization: "Bearer demo-token" } });
@@ -20,7 +20,8 @@ try {
   }
   assert.fail("Expected authentication to fail");
 } catch (error) {
-  assert.ok(error instanceof HttpError);
-  assert.ok(error.status === 401 || error.status === 403);
+  // Canon streams report HTTP failures as problem details.
+  assert.ok(error instanceof ProblemError);
+  assert.ok(error.problem.status === 401 || error.problem.status === 403);
 }
 console.log("Pydantic -> FastAPI -> OpenAPI -> generated Fetch client: passed");

@@ -10,6 +10,7 @@ from fastapi_canon.error import ErrorConfigurationError
 from fastapi_canon.error.catalog import problem_schema
 from fastapi_canon.error.contracts import INSTALLED_REGISTRY_STATE_KEY
 from fastapi_canon.error.registry import AnyError, ErrorRegistry
+from fastapi_canon.integrations.webrtc.capacity import SessionCapacity
 from fastapi_canon.integrations.webrtc.declarations import (
     AdmissionErrors,
     DataChannelSpec,
@@ -46,6 +47,7 @@ class CanonWebRtcRouter(CanonRouter, WebRtcRouter):
         data_channels: Sequence[DataChannelSpec] = (),
         limits: SessionLimits | None = None,
         max_sessions: int | None = None,
+        capacity: SessionCapacity | None = None,
         dependencies: Sequence[DependsParam] | None = None,
         admission_errors: AdmissionErrors | None = None,
         raises: Sequence[AnyError] = (),
@@ -98,6 +100,7 @@ class CanonWebRtcRouter(CanonRouter, WebRtcRouter):
             data_channels=data_channels,
             limits=limits,
             max_sessions=max_sessions,
+            capacity=capacity,
             dependencies=dependencies,
             admission_errors=contracts,
         )

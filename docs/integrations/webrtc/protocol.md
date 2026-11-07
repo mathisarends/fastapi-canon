@@ -12,8 +12,8 @@ The session factory and its dependencies run before the WebSocket is accepted.
 An `HTTPException` refuses the handshake with its HTTP status (for example, 403).
 This requires Starlette >=0.41, which the package declares explicitly. Browsers
 expose a refused handshake as `connection_failed`, without the HTTP status.
-No engine resources exist at that point. The router and session `max_sessions`
-limits are checked next. Exceeding them closes the socket with
+No engine resources exist at that point. The declaration's `max_sessions` and
+any shared `SessionCapacity` are checked next. Exceeding them closes the socket with
 `session_limit`. Generator dependencies stay open until the session has ended.
 
 ## Server messages

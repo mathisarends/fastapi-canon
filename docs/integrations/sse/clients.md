@@ -123,6 +123,12 @@ Pydantic; TypeScript provides static types and JSON decoding, with no runtime
 schema validator. Cancellation propagates normally; application error events
 remain ordinary members of the user-defined union.
 
+Clients generated from `APIRouter.sse()` contracts also export `ProblemError`.
+`application/problem+json` responses and `canon.problem` terminal frames raise
+it with the parsed problem in `.problem`; a stream that ends without
+`canon.complete` raises `TransportError`. `HttpError` remains for responses that
+are not problem details, for example from a proxy.
+
 ## HTTP error contracts
 
 Keep schema validation at transport boundaries. Python prepares and validates
@@ -228,8 +234,9 @@ generically or rethrow it. Its status, response and JSON/text details remain
 available, including unexpected proxy responses. Validators run only for SDK
 HTTP errors; `isHttpError` leaves network/stream failures alone. Status checks
 remain explicit because a matching body does not establish an HTTP status.
-The [TypeScript example](../../../examples/sse/agent_runs/errors.ts) includes a complete
-guard and reusable decoder with this fallback behavior.
+The agent runs example is a Canon stream, so its
+[TypeScript example](../../../examples/sse/agent_runs/errors.ts) applies the same
+guard to `ProblemError.problem` and checks the problem code and status instead.
 
 In Python, construct and reuse an adapter rather than rebuilding it for each
 exception:
@@ -258,7 +265,7 @@ or sentinel. Neither recipe changes SDK defaults or automatically validates all
 HTTP failures. Diagnostic reports correctly retain `consumer_controlled` for
 HTTP-error body validation.
 
-The checked consumer examples show HTTP validation errors, fallback handling,
+The checked consumer examples show request validation problems, fallback handling,
 stream parsing/transport errors, and ordinary application error events:
 
 - [TypeScript error handling](../../../examples/sse/agent_runs/errors.ts), compiled with the

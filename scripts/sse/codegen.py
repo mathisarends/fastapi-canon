@@ -29,12 +29,12 @@ def _run() -> int:
             ("python", "generated_python"),
         ):
             policy = ["--strict"]
-            if language == "typescript" and app == "examples.sse.agent_runs:app":
+            if app == "examples.sse.agent_runs:app":
                 policy += [
                     "--allow-diagnostics",
                     str(
                         _ROOT
-                        / "tests/fixtures/sse/agent_runs.typescript.diagnostics.json"
+                        / f"tests/fixtures/sse/agent_runs.{language}.diagnostics.json"
                     ),
                 ]
             result |= main(

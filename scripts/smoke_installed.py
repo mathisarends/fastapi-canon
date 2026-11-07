@@ -91,16 +91,11 @@ def _main() -> None:
         _database_check(selected)
         _mcp_check(selected)
     if "sse" in selected:
-        from fastapi_canon.integrations.sse import StreamRouter
+        from fastapi_canon import APIRouter
 
-        if "fastapi-canon" in selected:
-            from fastapi_canon.integrations.sse import CanonStreamRouter
+        streams = APIRouter()
 
-            streams = CanonStreamRouter()
-        else:
-            streams = StreamRouter()
-
-        @streams.stream("/events", operation_id="events")
+        @streams.sse("/events", operation_id="events")
         async def events() -> AsyncIterator[Event]:
             yield Event()
 
@@ -155,7 +150,7 @@ def _main() -> None:
         _cli("websockets")
     if "webrtc" in selected:
         engine = _RecordingEngine()
-        routers.append(_webrtc_router(engine, canon="fastapi-canon" in selected))
+        routers.append(_webrtc_router(engine))
         _cli("webrtc")
     if "fastapi-canon" in selected:
         from fastapi_canon import Composition, ErrorOptions, Feature
@@ -196,7 +191,7 @@ def _main() -> None:
             with client.websocket_connect("/custom") as websocket:
                 assert websocket.receive_text() == "ready"
         if "webrtc" in selected:
-            _webrtc_sessions(client, engine, canon="fastapi-canon" in selected)
+            _webrtc_sessions(client, engine)
     assert app.openapi()["openapi"]
     if "fastapi-canon" in selected:
         _router_policies()
@@ -696,7 +691,7 @@ class _RecordingEngine:
     """Counts peers; admission must reject sessions before reaching it."""
 
     def __init__(self) -> None:
-        from fastapi_canon.integrations.webrtc import EngineCapabilities
+        from fastapi_canon.integrations.webrtc.engines import EngineCapabilities
 
         self.capabilities = EngineCapabilities(
             trickle_ice=True, ice_restart=False, renegotiation=False
@@ -711,46 +706,38 @@ class _RecordingEngine:
         raise RuntimeError("The smoke engine allocates no peers")
 
 
-def _webrtc_router(engine, *, canon=False):
-    from fastapi import HTTPException, Query
-    from fastapi_canon.integrations.webrtc import DataChannelSpec, Session, WebRtcRouter
+def _webrtc_router(engine):
+    from fastapi import Query
+    from fastapi_canon import APIRouter, Error
+    from fastapi_canon.integrations.webrtc import DataChannelSpec, Session
 
     class AdmissionDenied(Exception):
         pass
 
-    declarations = {}
-    if canon:
-        from fastapi_canon import Error
-        from fastapi_canon.integrations.webrtc import CanonWebRtcRouter
+    denied = Error(
+        AdmissionDenied,
+        status=403,
+        code="admission_denied",
+        title="Denied",
+        type="https://example.test/problems/admission_denied",
+    )
+    rtc = APIRouter(prefix="/rtc")
 
-        denied = Error(
-            AdmissionDenied,
-            status=403,
-            code="admission_denied",
-            title="Denied",
-            type="https://example.test/problems/admission_denied",
-        )
-        rtc = CanonWebRtcRouter(engine=engine, prefix="/rtc")
-        declarations["raises"] = [denied]
-    else:
-        rtc = WebRtcRouter(engine=engine, prefix="/rtc")
-
-    @rtc.session(
+    @rtc.webrtc(
         "/rooms/{room}",
+        engine=engine,
         data_channels=(DataChannelSpec(name="events", send_model=SocketOutput),),
-        **declarations,
+        raises=[denied],
     )
     def room(room: str, token: str = Query()) -> Session:
         if token != "ok":
-            if canon:
-                raise AdmissionDenied()
-            raise HTTPException(status_code=403)
+            raise AdmissionDenied()
         return Session()
 
     return rtc
 
 
-def _webrtc_sessions(client, engine, *, canon=False) -> None:
+def _webrtc_sessions(client, engine) -> None:
     from fastapi_canon.integrations.webrtc import SUBPROTOCOL
     from starlette.testclient import WebSocketDenialResponse
 
@@ -759,8 +746,7 @@ def _webrtc_sessions(client, engine, *, canon=False) -> None:
             raise AssertionError("A denied session was accepted")
     except WebSocketDenialResponse as error:
         assert error.status_code == 403
-        if canon:
-            assert error.json()["code"] == "admission_denied"
+        assert error.json()["code"] == "admission_denied"
     assert engine.created == 0
     with client.websocket_connect("/rtc/rooms/a?token=ok", [SUBPROTOCOL]) as socket:
         try:

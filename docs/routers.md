@@ -100,7 +100,7 @@ async def events(project_id: int) -> AsyncIterator[int]:
 
 These operations export as `projects.get` and `projects.events`, producing
 `client.projects.get(...)` and `client.projects.events(...)` in the common SDK.
-The same rule applies to the standalone `CanonStreamRouter`.
+The same rule applies to WebSocket channels declared on the router.
 
 - An explicit `operation_id=` always wins and is never prefixed.
 - Otherwise the ID is `<namespace>.<function_name>`, or just `<function_name>`
@@ -292,10 +292,30 @@ both pre-response failures and terminal stream failures with `raises=`. Errors
 are registered automatically; no separate registry entry is required.
 Perform admission checks in dependencies, before generator execution starts.
 
-`webrtc()` accepts the existing session options, typed as `SessionOptions`: `role`,
-`media`, `data_channels`, `limits`, `max_sessions`, `dependencies` and `raises`. Engine, ICE-server, event-hook
-and origin options are also accepted on the decorator; the factory may supply an
-engine through its returned `Session`. Each declaration owns its endpoint limits
+`webrtc()` accepts the session options, typed as `SessionOptions`: `name`, `role`,
+`media`, `data_channels`, `limits`, `max_sessions`, `capacity`, `dependencies` and
+`raises`. Engine, ICE-server, event-hook and origin options are also accepted on
+the decorator; the factory may supply an engine through its returned `Session`.
+`max_sessions` bounds one declaration. Pass one `SessionCapacity` to several
+declarations, also on different routers, to share a process-wide budget:
+
+```python
+from fastapi_canon.integrations.webrtc import SessionCapacity
+
+MEDIA = SessionCapacity(max_sessions=50)
+
+
+@voice.webrtc("/calls/{call_id}", engine=ENGINE, capacity=MEDIA)
+def call(call_id: str) -> Session:
+    return Session()
+
+
+@video.webrtc("/rooms/{room_id}", engine=ENGINE, capacity=MEDIA)
+def room(room_id: str) -> Session:
+    return Session()
+```
+
+`MEDIA.active` reports the sessions currently holding a slot. Each declaration owns its endpoint limits
 and cleanup. Yield dependencies remain open through session cleanup. Composition
 includes the WebRTC shutdown lifespan with the application's dependency lifetime.
 

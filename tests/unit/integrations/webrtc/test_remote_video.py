@@ -6,15 +6,13 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import pytest
-from examples.webrtc.remote_video.app import create_app, create_router
+from examples.webrtc.remote_video.app import create_app
 from examples.webrtc.remote_video.engine import RemoteVideoEngine, VideoLease
 from fastapi_canon.integrations.webrtc import (
-    DescriptionType,
     ErrorCode,
     Session,
     SessionLimits,
     WebRtcError,
-    WebRtcRouter,
 )
 from fastapi_canon.integrations.webrtc.engine import (
     ConnectionState,
@@ -24,6 +22,8 @@ from fastapi_canon.integrations.webrtc.engine import (
     SessionDescription,
     SignalingState,
 )
+from fastapi_canon.integrations.webrtc.engines import DescriptionType
+from fastapi_canon.integrations.webrtc.router import WebRtcRouter
 
 from tests.unit.integrations.webrtc.fake_engine import FakeEngine, NativeTrack, sdp
 from tests.unit.integrations.webrtc.server import serve
@@ -106,14 +106,15 @@ async def test_rejected_second_viewer_releases_only_its_own_lease() -> None:
 @pytest.mark.parametrize("shutdown", [False, True])
 async def test_cancel_before_offer_releases_the_lease(shutdown: bool) -> None:
     service = Service(block=True)
-    router = create_router(service)
-    app = application(router)
+    app = create_app(service)
     async with serve(app) as base:
         signal = await Signal.start(f"{base}/browser/a/video")
         lease = service.leases[0]
         await asyncio.wait_for(lease.started.wait(), 1)
         if shutdown:
-            await router.aclose()
+            # Run the application's shutdown hooks while the connection stays open.
+            async with app.router.lifespan_context(app):
+                pass
             assert await signal.closed() == (1001, "shutdown")
         else:
             await signal.close()

@@ -22,8 +22,8 @@ def test_subcommand_help_uses_the_fastapi_canon_command(
 
 
 def test_version_is_shared_by_all_features() -> None:
-    from fastapi_canon.integrations.sse import __version__ as sse_version
-    from fastapi_canon.integrations.webrtc import __version__ as webrtc_version
+    from fastapi_canon import __version__ as sse_version
+    from fastapi_canon import __version__ as webrtc_version
     from fastapi_canon.integrations.websockets import __version__ as websockets_version
 
     assert sse_version == webrtc_version == websockets_version == __version__

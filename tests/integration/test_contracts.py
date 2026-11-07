@@ -13,8 +13,9 @@ from fastapi_canon import (
     Feature,
     export_contracts,
 )
-from fastapi_canon.integrations.sse import CanonStreamRouter
-from fastapi_canon.integrations.webrtc import Session, WebRtcRouter
+from fastapi_canon.integrations.sse.canon import CanonStreamRouter
+from fastapi_canon.integrations.webrtc import Session
+from fastapi_canon.integrations.webrtc.router import WebRtcRouter
 from fastapi_canon.integrations.websockets import (
     CanonWebSocketRouter,
     Inject,

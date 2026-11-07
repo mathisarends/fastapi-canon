@@ -10,8 +10,8 @@ from fastapi import APIRouter as FastAPIRouter
 from fastapi_canon import APIRouter
 from fastapi_canon.api_router import ChannelOptions, SessionOptions, StreamOptions
 from fastapi_canon.exceptions import ConfigurationError
-from fastapi_canon.integrations.sse import CanonStreamRouter
-from fastapi_canon.integrations.webrtc import CanonWebRtcRouter
+from fastapi_canon.integrations.sse.canon import CanonStreamRouter
+from fastapi_canon.integrations.webrtc.canon import CanonWebRtcRouter
 from fastapi_canon.integrations.websockets import CanonWebSocketRouter
 
 

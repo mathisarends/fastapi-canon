@@ -9,8 +9,8 @@ from fastapi_canon.integrations.webrtc import (
     MediaPolicy,
     Role,
     Session,
-    WebRtcRouter,
 )
+from fastapi_canon.integrations.webrtc.router import WebRtcRouter
 from pydantic import BaseModel, Field
 
 from tests.unit.integrations.webrtc.fake_engine import FakeEngine
