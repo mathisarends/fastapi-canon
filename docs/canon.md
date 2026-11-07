@@ -69,8 +69,8 @@ represent another PyPI distribution.
 | Short service scopes | `fastapi_canon.Scoped`, `ServiceScope` | [Databases](database.md) |
 | HTTP routes and contracts | `fastapi_canon.APIRouter`, `RouterPolicy`, `raises`, `Error`, `ErrorOptions`, `CanonResponse`; `Problem`; `fastapi_canon.error.ErrorRegistry` for manual assembly without `Composition` | [HTTP contracts](composition.md#error-contracts) |
 | Typed SSE | `APIRouter.sse()` | [SSE contracts](streams.md) |
-| WebSocket JSON-RPC | `APIRouter.include_channel()` with `fastapi_canon.integrations.websockets.RpcChannel` | [WebSockets](integrations/websockets/README.md) |
-| Raw WebSocket messages and binary streams | `fastapi_canon.integrations.websockets.CanonWebSocketRouter`, `RpcSocket` | [Sockets](integrations/websockets/sockets.md) |
+| WebSocket JSON-RPC | `APIRouter.channel()`; `APIRouter.include_channel()` with `fastapi_canon.integrations.websockets.RpcChannel` for shared channels | [WebSockets](integrations/websockets/README.md) |
+| Typed or raw WebSocket messages and binary streams | `@APIRouter.socket()`, `@APIRouter.binary_stream()`; `RpcSocket` | [Sockets](integrations/websockets/sockets.md), [binary streams](integrations/websockets/streams.md) |
 | WebRTC with Canon admission errors | `APIRouter.webrtc()`, `fastapi_canon.integrations.webrtc.Session`, `SessionCapacity`; engine adapters in `.webrtc.engines` | [WebRTC admission](webrtc.md) |
 | Contract export | `fastapi_canon.export_contracts`, `fastapi_canon.contracts.Contracts`, `fastapi-canon contracts export` | [Application export](contracts.md) |
 | OpenAPI contracts without `Composition` | `fastapi_canon.openapi.install_openapi_contracts`, `validate_openapi_contracts` | [Composition](composition.md) |

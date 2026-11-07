@@ -26,6 +26,9 @@ The next release containing the breaking changes below must be 0.16.0.
   declaration, and `SessionCapacity` shares a session budget across declarations.
 - Generate the SDK from one application with `[codegen] app = "module:app"`;
   per-kind source tables and target `sources` lists are optional.
+- Every WebSocket endpoint is declared on `APIRouter` with its path:
+  `session = router.channel(path)` for JSON-RPC, `@router.binary_stream(path)`
+  and `@router.socket(path)`.
 - Failing dependencies declare their errors once with `@raises(error)`; every
   operation, stream and WebRTC session using them inherits the contract.
 - Dishka owns resources. Canon closes the admission REQUEST scope before
@@ -41,6 +44,15 @@ The next release containing the breaking changes below must be 0.16.0.
   without `sources` use every configured source their language supports.
   Explicit `[codegen.sources]` remain for saved inputs, mappings and selection;
   their names cannot reuse a derived source name.
+- `router.channel(path, ...)` declares a JSON-RPC WebSocket and returns its
+  channel. Operation names use the router's namespace; the channel is mounted when
+  the router's routes are first read and frozen afterwards.
+- `@router.binary_stream(path, ...)` and `@router.socket(path, ...)` declare
+  binary streams and typed or raw message sockets on their own WebSocket. The
+  signature sets a stream's direction and a socket's message types. Operation
+  names use the router's namespace. They accept the connection options of
+  `include_channel` and export the same contracts as
+  `CanonWebSocketRouter.stream()`/`.socket()`.
 - Dependencies declare their own errors with `@raises(error, ...)` from
   `fastapi_canon`. Every HTTP operation, typed SSE stream and WebRTC session that
   uses the dependency, as a parameter, through `dependencies=`, a router, a

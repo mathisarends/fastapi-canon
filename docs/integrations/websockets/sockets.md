@@ -26,7 +26,7 @@ message, in order:
 ```python
 from pydantic import BaseModel, ConfigDict
 
-from fastapi_canon.integrations.websockets import RpcChannel, CanonWebSocketRouter
+from fastapi_canon import APIRouter
 
 
 class Ping(BaseModel):
@@ -38,17 +38,19 @@ class Pong(BaseModel):
     value: int
 
 
-channel = RpcChannel("messages")
+router = APIRouter(prefix="/messages", namespace="messages")
 
 
-@channel.socket("ping")
+@router.socket("/ping")
 async def ping(message: Ping) -> Pong:
     return Pong(value=message.value + 1)
-
-
-service = CanonWebSocketRouter()
-service.socket("/messages/ping", ping)
 ```
+
+`@router.socket` declares typed and untyped socket handlers with the connection
+options of `include_channel`, plus `protocol=`, `messages=` and `closes=`. The
+operation name is the router's namespace plus the function name (`messages.ping`).
+Handlers declared on an `RpcChannel` with `@channel.socket(...)` still mount with
+`CanonWebSocketRouter().socket(path, ping)`.
 
 The first parameter without `Inject[...]` is the incoming message; its name is
 not significant. Further non-injected parameters are path variables. Message
@@ -351,12 +353,16 @@ close with `socket.close()` also cancels the handler at its next `await`.
 
 ## FastAPI and dependencies
 
-Socket endpoints register directly on `CanonWebSocketRouter`. The route's context function, `rejects=`, rejections,
-middleware, and a Dishka resolver apply unchanged:
+Socket endpoints take the same connection options as JSON-RPC channels. The
+context function, `rejects=`, rejections, middleware, and a Dishka resolver
+apply unchanged:
 
 ```python
-router = CanonWebSocketRouter(context=open_session, resolver=Dishka())
-router.socket("/browser/cdp", cdp)
+router = APIRouter(prefix="/browser", namespace="browser")
+
+
+@router.socket("/cdp", context=open_session)
+async def cdp(socket: Inject[RpcSocket]) -> None: ...
 ```
 
 Connection middleware sees sockets as connections. Every
