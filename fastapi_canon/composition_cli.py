@@ -11,7 +11,7 @@ from fastapi import FastAPI
 
 from fastapi_canon.application_loading import _load_application, _load_reference
 from fastapi_canon.diagnostics import CheckReport, CompositionInfo
-from fastapi_canon.feature import Composition, _installed_description
+from fastapi_canon.feature import Composition, inspect_app
 
 
 def _main(arguments: Sequence[str], *, inspect: bool = False) -> int:
@@ -73,7 +73,7 @@ def _main(arguments: Sequence[str], *, inspect: bool = False) -> int:
     try:
         if inspect:
             target = _load_application(args.target, root=Path.cwd())
-            result: CompositionInfo | CheckReport = _installed_description(target)
+            result: CompositionInfo | CheckReport = inspect_app(target)
         else:
             target = _load_reference(args.target, root=Path.cwd())
             if not isinstance(target, Composition):

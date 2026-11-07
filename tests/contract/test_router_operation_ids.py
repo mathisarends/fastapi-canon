@@ -6,7 +6,7 @@ from fastapi import APIRouter as FastAPIRouter
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
-from fastapi_canon import APIRouter, Composition, Feature
+from fastapi_canon import APIRouter, Composition, Feature, inspect_app
 from fastapi_canon.exceptions import FeatureConfigurationError
 from fastapi_canon.integrations.sse.canon import CanonStreamRouter
 from tests.fixtures.injected_endpoints import EndpointStore, reader
@@ -41,7 +41,7 @@ def test_callable_endpoint_names_retain_the_existing_namespace_policy(
     )
     app = composition.build(FastAPI())
 
-    operation = composition.inspect(app).operation(endpoint)
+    operation = inspect_app(app).operation(endpoint)
     assert operation.operation_id == f"api.{expected}"
     assert app.openapi()["paths"]["/read"]["get"]["operationId"] == f"api.{expected}"
 

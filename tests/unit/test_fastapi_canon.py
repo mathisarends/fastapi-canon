@@ -20,6 +20,7 @@ APPLICATION_NAMES = {
     "ServiceScope",
     "__version__",
     "export_contracts",
+    "inspect_app",
 }
 
 

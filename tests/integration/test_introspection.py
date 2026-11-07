@@ -21,6 +21,7 @@ from fastapi_canon import (
     Feature,
     Inject,
     RouterPolicy,
+    inspect_app,
 )
 from fastapi_canon.exceptions import FeatureConfigurationError
 from fastapi_canon.integrations.sse.canon import CanonStreamRouter
@@ -77,7 +78,7 @@ def test_snapshot_records_effective_paths_dependencies_and_error_origins() -> No
     )
     app = composition.build(FastAPI())
 
-    snapshot = composition.inspect(app)
+    snapshot = inspect_app(app)
     operation = snapshot.operation_by_id("projects.get")
 
     assert operation.feature_name == "projects"
@@ -140,7 +141,7 @@ def test_nested_router_prefixes_and_hidden_routes_are_described() -> None:
     )
     app = composition.build(FastAPI())
 
-    info = composition.inspect(app)
+    info = inspect_app(app)
     operation = info.operation_by_id("projects.list")
     hidden = info.operation_by_id("projects.internal")
 
@@ -152,24 +153,24 @@ def test_nested_router_prefixes_and_hidden_routes_are_described() -> None:
     assert info.features[0].name == "projects"
 
 
-def test_inspect_requires_the_matching_installation_and_keeps_a_snapshot() -> None:
+def test_inspect_requires_an_installation_and_keeps_a_snapshot() -> None:
     router = CanonRouter()
     router.get("/first", operation_id="first")(lambda: "first")
     composition = Composition(features=(Feature(name="projects", routers=[router]),))
     app = FastAPI()
-    with pytest.raises(FeatureConfigurationError, match="must be applied"):
-        composition.inspect(app)
+    with pytest.raises(FeatureConfigurationError, match="Apply a Composition"):
+        inspect_app(app)
     composition.build(app)
-    snapshot = composition.inspect(app)
+    snapshot = inspect_app(app)
     router.get("/later", operation_id="later")(lambda: "later")
-    assert composition.inspect(app) == snapshot
+    assert inspect_app(app) == snapshot
     assert tuple(operation.operation_id for operation in snapshot.operations) == (
         "first",
     )
     with pytest.raises(LookupError, match="found 0"):
         snapshot.operation_by_id("later")
-    with pytest.raises(FeatureConfigurationError, match="must be applied"):
-        Composition().inspect(app)
+    with pytest.raises(FeatureConfigurationError, match="FastAPI instance"):
+        inspect_app(router)  # type: ignore[arg-type]  # Rejects a non-application argument.
 
 
 def test_application_and_factory_dependencies_keep_their_origins() -> None:
@@ -183,7 +184,7 @@ def test_application_and_factory_dependencies_keep_their_origins() -> None:
         ),
     )
     composition.build(app)
-    operation = composition.inspect(app).operation_by_id("projects.list")
+    operation = inspect_app(app).operation_by_id("projects.list")
     assert operation.path == "/api/projects"
     assert [
         (dep.name.rsplit(".", 1)[-1], dep.origin) for dep in operation.dependencies
@@ -212,7 +213,7 @@ def test_path_converters_share_openapi_paths_and_inherited_contracts() -> None:
         router_factory=lambda: CanonRouter(raises=[failure]),
     )
     app = composition.build(FastAPI())
-    operation = composition.inspect(app).operation_by_id("files.get")
+    operation = inspect_app(app).operation_by_id("files.get")
     assert operation.path == "/files/{path}"
     assert operation.errors[0].code == "authentication_required"
     assert "401" in app.openapi()["paths"][operation.path]["get"]["responses"]
@@ -226,7 +227,7 @@ def test_mounted_applications_keep_their_own_ownership_boundary() -> None:
     router.mount("/mounted", external)
     composition = Composition(features=(Feature(name="projects", routers=[router]),))
     app = composition.build(FastAPI())
-    description = composition.inspect(app)
+    description = inspect_app(app)
     assert tuple(op.operation_id for op in description.operations) == ("projects.list",)
     assert composition.check(app).complete
 
@@ -250,7 +251,7 @@ def test_endpoint_lookup_uses_the_registered_symbol_and_keeps_exports_data_only(
     parent.include_router(child)
     composition = Composition(features=(Feature(name="projects", routers=[parent]),))
     app = composition.build(FastAPI())
-    description = composition.inspect(app)
+    description = inspect_app(app)
 
     operation = description.operation(wrapped_project)
     assert operation.path == "/v1/projects/current"
@@ -274,7 +275,7 @@ def test_endpoint_lookup_reports_every_ambiguous_registration() -> None:
     router.get("/projects", operation_id="projects.get")(get_project)
     router.get("/archive", operation_id="archive.get")(get_project)
     composition = Composition(features=(Feature(name="projects", routers=[router]),))
-    description = composition.inspect(composition.build(FastAPI()))
+    description = inspect_app(composition.build(FastAPI()))
 
     with pytest.raises(LookupError, match="found 2: GET /projects, GET /archive"):
         description.operation(get_project)
@@ -294,7 +295,7 @@ def test_endpoint_lookup_keeps_the_declared_symbol_with_dishka_routes() -> None:
         features=(Feature(name="projects", routers=[router], providers=[provider]),)
     )
     app = composition.build(FastAPI())
-    operation = composition.inspect(app).operation(get_project)
+    operation = inspect_app(app).operation(get_project)
     assert operation.operation_id == "projects.get"
     assert operation.path == "/projects"
     with TestClient(app) as client:
@@ -351,7 +352,7 @@ def test_sse_lookup_keeps_declarations_across_inclusion_and_injection(
         router_factory=lambda: ApplicationRouter(prefix="/api"),
     )
     app = composition.build(FastAPI())
-    description = composition.inspect(app)
+    description = inspect_app(app)
     operation = description.operation(events)
 
     assert operation.feature_name == "streams"
@@ -372,7 +373,7 @@ def test_sse_lookup_keeps_declarations_across_inclusion_and_injection(
         yield "later"
 
     assert description.operations == (operation,)
-    assert composition.inspect(app).operations == (operation,)
+    assert inspect_app(app).operations == (operation,)
     with pytest.raises(LookupError, match="found 0"):
         description.operation(later)
 
@@ -409,7 +410,7 @@ def test_sse_lookup_keeps_an_explicit_user_decorator() -> None:
     router = ApplicationRouter()
     router.sse("/events", operation_id="events")(decorated)
     composition = Composition(features=[Feature(name="streams", routers=[router])])
-    description = composition.inspect(composition.build(FastAPI()))
+    description = inspect_app(composition.build(FastAPI()))
 
     assert description.operation(decorated).path == "/events"
     with pytest.raises(LookupError, match="found 0"):
@@ -429,7 +430,7 @@ def test_sse_lookup_rejects_ambiguous_declarations() -> None:
     router.sse("/first", operation_id="first.events")(events)
     router.sse("/second", operation_id="second.events")(events)
     composition = Composition(features=[Feature(name="streams", routers=[router])])
-    description = composition.inspect(composition.build(FastAPI()))
+    description = inspect_app(composition.build(FastAPI()))
 
     with pytest.raises(LookupError, match="found 2: GET /first, GET /second"):
         description.operation(events)
@@ -457,7 +458,7 @@ def test_specialized_sse_lookup_preserves_explicit_dishka_declarations() -> None
     composition = Composition(
         features=[Feature(name="streams", routers=[router], providers=[Services()])]
     )
-    description = composition.inspect(composition.build(FastAPI()))
+    description = inspect_app(composition.build(FastAPI()))
 
     operation = description.operation(events)
     assert operation.operation_id == "legacy.events"

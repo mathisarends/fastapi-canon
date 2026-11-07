@@ -1,8 +1,10 @@
 # Composition checks and introspection
 
 Use `Composition.check(app)` before installation to inspect configuration problems,
-and `Composition.inspect(app)` after installation to explain the effective HTTP
-composition. Both use immutable values exported from `fastapi_canon`.
+and `fastapi_canon.inspect_app(app)` after installation to explain the effective
+HTTP composition. `check` needs the declaration because nothing is installed yet;
+`inspect_app` reads the snapshot that `build` recorded on the application. Both
+return immutable values from `fastapi_canon.diagnostics`.
 For HTTP/SSE, RPC and WebRTC schema documents, use the complementary
 [application contract export](contracts.md); introspection describes ownership
 and declaration provenance.
@@ -213,7 +215,9 @@ HTTP snapshot profile. This is not a claim of complete transport/runtime validat
 ## Explain the installed HTTP composition
 
 ```python
-description = composition.inspect(app)
+from fastapi_canon import inspect_app
+
+description = inspect_app(app)
 operation = description.operation(get_project)
 
 assert operation.feature_name == "projects"

@@ -339,10 +339,16 @@ class Composition:
             return _check_installed(app, installed.description, self.features)
         return _prepare_composition(app, self).report
 
-    def inspect(self, app: FastAPI) -> CompositionInfo:
-        """Return the detached HTTP snapshot recorded at installation time."""
-        _validate_applied_composition(app, self)
-        return _installed_description(app)
+
+def inspect_app(app: FastAPI) -> CompositionInfo:
+    """Return the HTTP snapshot recorded when a Composition was built into *app*.
+
+    The snapshot is detached: routes added after the build are not included.
+    """
+    raw_app: object = app
+    if not isinstance(raw_app, FastAPI):
+        raise FeatureConfigurationError("app must be a FastAPI instance")
+    return _installed_description(app)
 
 
 @dataclass(frozen=True, slots=True)

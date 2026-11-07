@@ -7,7 +7,7 @@ from dishka import Provider, Scope, provide
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from fastapi_canon import APIRouter, Composition, Feature
+from fastapi_canon import APIRouter, Composition, Feature, inspect_app
 from tests.fixtures.injected_endpoints import AsyncEcho, EndpointStore, SyncEcho, reader
 
 
@@ -56,7 +56,7 @@ def test_callable_forms_resolve_both_markers_and_close_request_resources(
     composition.build(app)
     assert opened == closed == []
     assert getattr(endpoint, "__dict__", {}) == attributes
-    assert composition.inspect(app).operation(endpoint).path == "/read"
+    assert inspect_app(app).operation(endpoint).path == "/read"
     operation = app.openapi()["paths"]["/read"]["get"]
     assert [item["name"] for item in operation.get("parameters", [])] == (
         ["prefix"] if kind.startswith("keyword") else []
@@ -101,7 +101,7 @@ def test_non_injected_callable_objects_keep_future_annotated_public_models(
     assert operation["requestBody"]["content"]["application/json"]["schema"][
         "$ref"
     ].endswith("/PublicPayload")
-    assert composition.inspect(app).operation(endpoint).path == "/echo"
+    assert inspect_app(app).operation(endpoint).path == "/echo"
 
     async def scenario() -> None:
         async with (
