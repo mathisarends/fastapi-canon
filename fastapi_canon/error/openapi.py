@@ -338,6 +338,11 @@ def _compile_document(
                     "Canon streams require an installed error registry"
                 )
             identities = stream.pop("errorIds", [])
+            if inherited is not None and path in inherited:
+                shared, _ = inherited[path]
+                identities = list(
+                    dict.fromkeys((*identities, *(str(id(error)) for error in shared)))
+                )
             lookup = (
                 {str(id(error)): error for error in registry.errors}
                 if registry is not None

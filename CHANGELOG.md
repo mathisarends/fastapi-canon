@@ -260,6 +260,10 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Fixed
 
+- SSE terminal problems and exported stream contracts include errors inherited
+  from enclosing routers and router policies, including composition's application
+  router. Reused child routers keep each inclusion's error contract independent.
+
 - Concurrent Python SDK calls preserve the RPC connection error when shared
   binding initialization fails, and subsequent calls can retry. Regenerate
   Python SDKs to receive the runtime fix.
