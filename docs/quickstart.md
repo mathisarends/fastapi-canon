@@ -55,12 +55,11 @@ def require_project(project_id: int) -> None:
 @router.get(
     "/projects/{project_id}",
     operation_id="projects.get",
-    response_model=Project,
     raises=[project_missing],
 )
-async def get_project(project_id: int) -> dict[str, int]:
+async def get_project(project_id: int) -> Project:
     require_project(project_id)
-    return {"id": project_id}
+    return Project(id=project_id)
 
 
 feature = Feature(name="projects", routers=[router])
@@ -77,8 +76,8 @@ confirms the installed app compiles to valid OpenAPI.
 `application/problem+json` response with the stable type
 `https://api.example.com/problems/project_missing` and code `project_missing`.
 The same problem is documented in OpenAPI. An explicit `operation_id` gives
-codegen the public SDK name `projects.get`; `response_model=Project` supplies its
-typed result and validates the server's returned data.
+codegen the public SDK name `projects.get`; the `Project` return annotation
+supplies its typed result and validates the server's returned data.
 
 A feature can also contribute Dishka `providers=`, a `lifespan=` and optional
 `instrumentation=`. Composition owns installation and cleanup. Shared
