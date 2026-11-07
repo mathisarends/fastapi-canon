@@ -159,9 +159,11 @@ async def get(
 ```
 
 `raises=` registers runtime exception mappings and declares the operation's
-public failures. Keep arbitrary exception text out of public details. For shared
-auth use `RouterPolicy` with real dependencies; declarations do not authorize
-requests. For empty/binary success use `CanonResponse.empty()` /
+public failures. Keep arbitrary exception text out of public details. Decorate
+failing dependencies such as authentication with `@raises(error)` from
+`fastapi_canon`; every operation using them then declares those errors
+automatically. For shared auth use `RouterPolicy` with real dependencies;
+declarations do not authorize requests. For empty/binary success use `CanonResponse.empty()` /
 `CanonResponse.binary(...)` and return the matching response. Details:
 [problems.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/problems.md) and [composition.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/composition.md).
 
