@@ -47,6 +47,9 @@ The current published release is **0.15.0**. See the
 [tested compatibility](docs/compatibility.md). Upgrade servers and regenerated
 clients together.
 
+This checkout prepares **0.16.0**, which is not yet published. Main-branch examples
+target its APIs; see the [0.16.0 upgrade guide](docs/package-migration.md#upgrade-to-0160).
+
 ## Shared error handling
 
 Keep domain exceptions in ordinary Python. Define their public representation

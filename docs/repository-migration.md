@@ -1,5 +1,15 @@
 # Repository migration
 
+## Repository rename
+
+The current GitHub home is
+[`mathisarends/fastapi-canon`](https://github.com/mathisarends/fastapi-canon).
+The former `mathisarends/fastapi_canon` URL redirects there. Release configuration
+must match the current `GITHUB_REPOSITORY` value, and the PyPI Trusted Publisher
+must use repository `fastapi-canon` before the next publication. The package name
+and Python imports are unchanged. Historical records below preserve the names
+and URLs used for the original migration and publications.
+
 ## Scope
 
 The unified Canon source returns from `mathisarends/canon` to

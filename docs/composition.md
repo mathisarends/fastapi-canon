@@ -497,13 +497,12 @@ FastAPI's internal route tree. The standard `get`, `put`, `post`, `delete`,
 `options`, `head`, `patch`, and `trace` decorators support `raises=` and
 `response=`; `api_route()` supports them for custom method sets.
 
-An explicit error registry is optional. `raises=` contributes definitions to the
-application catalog automatically. The same error declared at both levels is
-included only once; explicit registry entries add mappings without declaring
-them on every operation.
-Router-level `raises=` applies to operations declared on that router, not to
-separately included child routers; use a [composition policy](#router-policies)
-for contracts across routers.
+`raises=` contributes definitions to the application catalog automatically. The
+same error declared at both levels is included only once. `Feature(errors=[...])`
+adds mappings without declaring them on every operation.
+Router-level `raises=` also applies to included child operations, including SSE
+admission and terminal problems. Use the application router's
+[policy](#router-policies) for contracts across feature routers.
 
 `response=` uses its own status as the route's `status_code` when none is given.
 Canon rejects mismatched status codes, bodyless responses with an explicit

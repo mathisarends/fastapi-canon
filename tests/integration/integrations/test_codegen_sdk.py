@@ -331,14 +331,26 @@ async function deadline(operation) {
   } finally { clearTimeout(timer); }
 }
 const sockets = new Set();
+const handshakes = new Set();
 let resolveOpened, resolveDisconnected;
 const opened = new Promise(resolve => {resolveOpened = resolve;});
 const disconnected = new Promise(resolve => {resolveDisconnected = resolve;});
 const server = net.createServer(socket => {
   sockets.add(socket);
-  socket.on("data", () => resolveOpened());
+  let request = "";
+  socket.on("data", data => {
+    request += data.toString("latin1");
+    if (request.includes("\\r\\n\\r\\n")) {
+      assert.ok(request.toLowerCase().includes("upgrade: websocket"));
+      handshakes.add(socket);
+      resolveOpened();
+    }
+  });
   socket.on("end", () => socket.end());
-  socket.on("close", () => {sockets.delete(socket); resolveDisconnected();});
+  socket.on("close", () => {
+    sockets.delete(socket);
+    if (handshakes.delete(socket)) resolveDisconnected();
+  });
 });
 server.listen(0, "127.0.0.1");
 await once(server, "listening");
@@ -364,14 +376,15 @@ try {
     assert.equal(error.name, stop === "timeout" ? "TimeoutError" : "AbortError");
     if (stop !== "timeout") assert.equal(error, reason);
     if (stop !== "connect_abort") {
-      assert.equal(sockets.size, 1, "One call must not close shared initialization");
+      assert.equal(handshakes.size, 1, "One call must not close shared initialization");
     }
   }
   await deadline(client.close());
   assert.ok(await deadline(first) instanceof Error);
   assert.ok(await deadline(sibling) instanceof Error);
   await deadline(disconnected);
-  assert.equal(sockets.size, 0, "SDK close must release the pending handshake");
+  // Node's HTTP pool can create idle TCP connections after an aborted upgrade.
+  assert.equal(handshakes.size, 0, "SDK close must release the pending handshake");
   await assert.rejects(() => client.projects.rpc(), TransportError);
 } finally {
   for (const socket of sockets) socket.destroy();
@@ -510,7 +523,6 @@ router.get("/projects", status_code="201")  # type: ignore[arg-type]
 router.get("/projects", summery="Projects")  # type: ignore[call-arg]
 router.include_router(APIRouter(), prefex="/nested")  # type: ignore[call-arg]
 ApiClient("https://test", http_client=object())  # type: ignore[arg-type]
-ApiClient("https://test", bindings={"control": {"reconect": True}})  # type: ignore[arg-type]
 ApiClient("https://test", clients={"typo": None})  # type: ignore[arg-type]
 """,
         encoding="utf-8",
@@ -532,6 +544,30 @@ ApiClient("https://test", clients={"typo": None})  # type: ignore[arg-type]
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+    invalid = tmp_path / "invalid_binding.py"
+    invalid.write_text(
+        "from generated_sdk import ApiClient\n"
+        'ApiClient("https://test", bindings={"control": {"reconect": True}})\n',
+        encoding="utf-8",
+    )
+    rejected = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "mypy",
+            "--strict",
+            "--follow-imports=silent",
+            "--no-incremental",
+            str(invalid),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert rejected.returncode == 1, rejected.stdout + rejected.stderr
+    assert "reconect" in rejected.stdout
 
 
 async def test_shared_dto_and_changed_problem_titles_work_in_both_sdks(

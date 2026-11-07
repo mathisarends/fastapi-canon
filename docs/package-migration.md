@@ -6,12 +6,20 @@ Earlier independent distributions remain available at their existing published
 versions.
 
 Development and future releases now use
-[`mathisarends/fastapi_canon`](https://github.com/mathisarends/fastapi_canon).
+[`mathisarends/fastapi-canon`](https://github.com/mathisarends/fastapi-canon).
 The [repository migration](repository-migration.md) records the
 source history and publishing setup. The repository move does not rename the
 PyPI project or add further Python import changes.
 
-## Upcoming 0.16.0: building applications
+## Upgrade to 0.16.0
+
+Version 0.16.0 is prepared in source and has not yet been published. It contains
+breaking server APIs, generated-client interfaces and stricter preflight/static
+checks. Upgrade servers and regenerated Python/TypeScript SDKs together. The
+[complete breaking-change notes](../CHANGELOG.md#0160---2026-11-07) include the
+individual signatures and diagnostic coverage boundaries.
+
+### Composition and public imports
 
 `Composition.build(app)` replaces `apply(app)` and `validate(app)`:
 
@@ -27,9 +35,30 @@ app = composition.build(FastAPI())
 Register plain FastAPI routes before `build`, or call `build` again after adding
 them; rebuilding the same composition only repeats validation.
 
-## Upcoming 0.16.0: error declarations
+Move a shared `Composition(router_policy=policy)` to the application router:
 
-This source change is unreleased. Replace SSE `stream_raises=` with `raises=`.
+```python
+composition = Composition(
+    features=[projects],
+    router_factory=lambda: APIRouter(prefix="/api", policy=policy),
+)
+```
+
+Parent router contracts now extend included HTTP/SSE operations. Move errors
+that should stay local onto individual routes or a sibling router. Use unique
+effective HTTP method/path combinations, WebSocket paths and operation IDs;
+composition rejects ambiguous registrations before installation.
+
+Import `APIRouter`, `Error`, `RouterPolicy` and `Inject` from `fastapi_canon`.
+Integration-specific declarations such as `RpcChannel` come from their
+`fastapi_canon.integrations.*` facade; see [public imports](canon.md).
+Replace `ExceptionHandlerSpec` sequences with
+`Feature(exception_handlers={DomainError: handler})` and iterate the mapping's
+`.items()` when inspecting handlers.
+
+### Error declarations
+
+Replace SSE `stream_raises=` with `raises=`.
 When both arguments were present, combine their definitions in one sequence:
 
 ```python
@@ -51,6 +80,78 @@ responses and terminal `canon.problem` frames. Dependencies run admission checks
 before response start; generator code, even before its first `yield`, runs after
 the response begins. Regenerate SDKs to include both representations of the
 combined error contract. Existing explicit `Error.type` URIs remain authoritative.
+
+`Feature.errors` is now a tuple of `Error` instances: replace
+`feature.errors.errors` with `feature.errors`, and `.contains(error)` with
+`error in feature.errors`. Dependencies use explicit router/policy/operation
+contracts; there is no `@raises` dependency decorator.
+
+### Routes, transports and dependency lifetimes
+
+Replace facade imports of `CanonStreamRouter`/`StreamRouter` with `APIRouter` and
+`@router.sse(...)`. Replace `CanonWebRtcRouter`/`WebRtcRouter` with
+`@router.webrtc(...)`; move engine, ICE, origin and limit settings to each
+declaration. Use a shared `SessionCapacity` for a budget spanning declarations.
+Engine adapter types are exported from `fastapi_canon.integrations.webrtc.engines`.
+
+HTTP/SSE operation IDs now default to the function name, optionally prefixed by
+the router's `namespace`. Preserve an existing SDK name with an explicit
+`operation_id`, or retain FastAPI's old policy through
+`generate_unique_id_function=fastapi.utils.generate_unique_id`. OpenAPI tags no
+longer determine common SDK groups. See [operation naming](routers.md#automatic-http-and-sse-operation-names).
+
+`APIRouter` resolves endpoint `Inject[T]` and `FromDishka[T]` automatically;
+ordinary dependency functions support `Inject[T]` without `@inject`. Keep
+`@inject` for dependency functions using `FromDishka[T]`. Register missing
+bindings reported by composition preflight before adopting the release.
+HTTP REQUEST resources close before response transmission. SSE bodies need APP
+services or independent short `ServiceScope` calls; WebSocket/WebRTC resources
+retained through disconnect belong to SESSION providers. Admission hooks return
+independently usable context values. See [dependency coverage](system-checks.md).
+
+### RPC models and generated SDKs
+
+RPC now preserves plain Pydantic models' own aliases, validation and extra-field
+policy. Inherit from `RpcModel`, or explicitly configure the previous camel-case
+and `extra="forbid"` policy, when retaining the old RPC convention. Regenerate
+clients for the declared wire shape. Shared DTOs need compatible schemas and one
+semantic identity; see [shared models](unified-canon-concept.md).
+
+Regenerate both SDK languages through `fastapi-canon generate`. Existing source
+tables stay supported; `[codegen] app = "module:app"` can now export the app's
+contracts and select the supported sources for each target automatically.
+
+- Import canonical error classes from the SDK root. Common HTTP, SSE and RPC
+  calls share those classes; replace binding-private error imports. Problem
+  `title` is public text rather than a literal discriminator: branch on error
+  class or problem `type`.
+- Replace TypeScript `RequestOptions` with `CallOptions`, `HttpOptions` or
+  `StreamOptions`. SSE deadlines use `openTimeoutMs`/`idleTimeoutMs`. Methods
+  without parameters take options directly, without an initial `{}`. Deadlines
+  raise native `TimeoutError` DOMExceptions; cancellation preserves its reason.
+- An omitted Python `RequestOptions.timeout` inherits the injected HTTP client's
+  configuration. Pass `timeout=None` to disable it. Use the generated `Bindings`,
+  `Clients` and per-source connection option types for wrapper dictionaries.
+- Remove consumer imports of protocol envelopes and implementation aliases from
+  the common TypeScript root. Use its reachable domain/problem models. Node ESM
+  imports use `.js`; explicit resource management requires `ESNext.Disposable`
+  types. See [SDK scope](unified-canon-concept.md#connections-and-supported-scope).
+- Preserve the optional initialization `signal` in TypeScript RPC connection
+  wrappers. Rename a server URL variable named `signal` before generation.
+  Closing a common SDK cancels pending eager handshakes while individual call
+  cancellation leaves shared initialization available to sibling calls.
+
+### Static checks and CLI integrations
+
+Run source checks before enabling strict CI on the upgraded application. Newly
+followed provider implementations, local router factories, context managers,
+loops and comprehensions can expose existing CAN001/CAN002 gaps. Declare/map
+those errors explicitly; CAN003 still reports incomplete analysis.
+
+Use synchronous, inspectable zero-argument application factories. CLI import and
+factory failures omit arbitrary exception text; automation should consume the
+documented JSON diagnostic codes and location fields. Review unsupported callable
+forms and the per-check coverage report before enforcing `--require-complete`.
 
 ## Upgrade to 0.15.0
 

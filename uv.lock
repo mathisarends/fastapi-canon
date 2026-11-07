@@ -780,7 +780,7 @@ wheels = [
 
 [[package]]
 name = "fastapi-canon"
-version = "0.15.0"
+version = "0.16.0"
 source = { editable = "." }
 dependencies = [
     { name = "dishka" },
@@ -983,8 +983,8 @@ requires-dist = [
     { name = "aiosqlite", specifier = ">=0.21" },
     { name = "dishka", specifier = ">=1.6" },
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "fastapi-canon", specifier = ">=0.15,<0.16" },
-    { name = "fastapi-canon", extras = ["otel-httpx", "otel-sqlalchemy"], marker = "extra == 'otel'", specifier = ">=0.15,<0.16" },
+    { name = "fastapi-canon", specifier = ">=0.16,<0.17" },
+    { name = "fastapi-canon", extras = ["otel-httpx", "otel-sqlalchemy"], marker = "extra == 'otel'", specifier = ">=0.16,<0.17" },
     { name = "httpx2", marker = "extra == 'otel'", specifier = ">=2.12,<3" },
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'otel'", specifier = ">=1.40,<2" },
     { name = "opentelemetry-instrumentation-httpx", marker = "extra == 'otel'", specifier = ">=0.65b0,<1" },
@@ -1000,7 +1000,7 @@ provides-extras = ["otel"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "fastapi-canon", extras = ["otel-httpx", "otel-sqlalchemy"], specifier = ">=0.15,<0.16" },
+    { name = "fastapi-canon", extras = ["otel-httpx", "otel-sqlalchemy"], specifier = ">=0.16,<0.17" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "httpx2", specifier = ">=2.12,<3" },
     { name = "mypy", specifier = ">=1.15" },

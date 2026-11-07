@@ -11,8 +11,8 @@ filenames such as `pnpm-lock.yaml` and skill metadata `agents/openai.yaml`.
 Smelt 0.5.0 does not check YAML filename extensions.
 
 ```console
-git clone https://github.com/mathisarends/fastapi_canon.git
-cd fastapi_canon
+git clone https://github.com/mathisarends/fastapi-canon.git
+cd fastapi-canon
 uv sync --frozen --all-groups
 pnpm install --frozen-lockfile --ignore-scripts
 uv run --locked python scripts/check.py all

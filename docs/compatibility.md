@@ -1,5 +1,21 @@
 # Compatibility
 
+## Prepared 0.16.0 (unpublished)
+
+Local release preparation on Windows verifies the 0.16.0 wheel/sdist in eighteen
+fresh environments with current compatible dependencies on Python 3.14, and
+eighteen with minimum direct dependencies on Python 3.12. Each installation uses
+the built artifact without source overrides. Installed SSE CLI checks cover no
+HTTP backend, HTTPX and HTTPX2; the installed WebRTC CLI generates a client that
+compiles. Four real Chromium/WebRTC scenarios pass. The native telemetry bridge
+passes against FastAPI 0.143.0 and 0.162.0 on Python 3.12.
+
+These are preparation checks, not a publication record or exhaustive dependency
+coverage. The final source still needs exact-commit CI and the release dry run on
+`main`. The owner confirmed the updated PyPI Trusted Publisher configuration. See
+[release preparation](releases.md#prepared-0160-unpublished). Historical published
+release evidence below remains unchanged.
+
 ## Upstream internals
 
 Canon relies on some upstream behavior that is not documented as public API.
