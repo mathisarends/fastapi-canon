@@ -11,7 +11,7 @@ from .feature import (
     inspect_app,
 )
 from .injection import Inject
-from .policy import RouterPolicy
+from .policy import RouterPolicy, raises
 from .response import CanonResponse, ResponseHeaders
 from .scopes import Scoped, ServiceScope
 
@@ -30,4 +30,5 @@ __all__ = [
     "__version__",
     "export_contracts",
     "inspect_app",
+    "raises",
 ]

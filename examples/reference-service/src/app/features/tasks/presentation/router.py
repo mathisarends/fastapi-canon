@@ -5,7 +5,6 @@ from fastapi import Query, status
 from fastapi_canon import APIRouter, Inject
 
 from app.authentication.presentation import AuthenticatedUserId
-from app.authentication.presentation.errors import authentication_required
 from app.features.tasks.application import TaskService
 from app.features.tasks.presentation.errors import task_not_found
 from app.features.tasks.presentation.mapper import to_list_response, to_response
@@ -17,18 +16,17 @@ from app.features.tasks.presentation.schemas import (
 
 router = APIRouter(
     prefix="/tasks",
+    namespace="tasks",
     tags=["tasks"],
-    raises=[authentication_required],
 )
 
 
 @router.post(
     "",
-    operation_id="create_task",
     response_model=TaskResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def create_task(
+async def create(
     body: CreateTaskRequest,
     authenticated_user_id: AuthenticatedUserId,
     task_service: Inject[TaskService],
@@ -42,11 +40,10 @@ async def create_task(
 
 @router.get(
     "",
-    operation_id="list_tasks",
     response_model=TaskListResponse,
     status_code=status.HTTP_200_OK,
 )
-async def list_tasks(
+async def list_recent(
     authenticated_user_id: AuthenticatedUserId,
     task_service: Inject[TaskService],
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
@@ -60,12 +57,11 @@ async def list_tasks(
 
 @router.post(
     "/{task_id}/completion",
-    operation_id="complete_task",
     response_model=TaskResponse,
     status_code=status.HTTP_200_OK,
     raises=[task_not_found],
 )
-async def complete_task(
+async def complete(
     task_id: UUID,
     authenticated_user_id: AuthenticatedUserId,
     task_service: Inject[TaskService],

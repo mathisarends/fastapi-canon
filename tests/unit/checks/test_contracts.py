@@ -209,3 +209,76 @@ def items(values: list[int]) -> None:
 
     assert findings(report) == [("http", "CAN001", "raises")]
     assert report["operations"][0]["complete"]
+
+
+@pytest.mark.parametrize(
+    ("decorator", "expected"),
+    [("", [("http", "CAN001", "raises")] * 3), ("@raises(missing)", [])],
+)
+def test_dependency_raises_declare_errors_for_every_using_operation(
+    analyze: Callable[..., dict[str, Any]],
+    decorator: str,
+    expected: list[tuple[str, str, str]],
+) -> None:
+    report = analyze(
+        f"""
+from typing import Annotated
+from fastapi_canon import raises
+
+{decorator}
+def authenticate() -> str:
+    raise Missing()
+
+def account(user: Annotated[str, Depends(authenticate)]) -> str:
+    return user
+
+guarded = APIRouter(dependencies=[Depends(authenticate)])
+
+@router.get('/direct')
+def direct(user: Annotated[str, Depends(authenticate)]) -> str:
+    return user
+
+@router.get('/nested')
+def nested(user: Annotated[str, Depends(account)]) -> str:
+    return user
+
+@guarded.get('/guarded')
+def guarded_route() -> None:
+    return None
+""",
+    )
+
+    assert findings(report) == expected
+    assert all(operation["complete"] for operation in report["operations"])
+
+
+def test_dependency_raises_add_errors_to_the_catalog(
+    analyze: Callable[..., dict[str, Any]],
+) -> None:
+    report = analyze(
+        """
+from fastapi_canon import raises
+
+class Denied(Exception):
+    pass
+
+denied = Error(Denied, status=403, code="denied", title="Denied")
+
+@raises(denied)
+def authorize() -> None:
+    raise Denied()
+
+def unguarded() -> None:
+    raise Denied()
+
+@router.get('/declared', dependencies=[Depends(authorize)])
+def declared() -> None:
+    return None
+
+@router.get('/undeclared', dependencies=[Depends(unguarded)])
+def undeclared() -> None:
+    return None
+""",
+    )
+
+    assert findings(report) == [("http", "CAN001", "raises")]

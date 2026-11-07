@@ -3,9 +3,10 @@ from uuid import UUID
 
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from fastapi_canon import Inject
+from fastapi_canon import Inject, raises
 
 from app.authentication.application import AuthenticationFailed, TokenVerifier
+from app.authentication.presentation.errors import authentication_required
 
 bearer = HTTPBearer(
     auto_error=False,
@@ -14,6 +15,7 @@ bearer = HTTPBearer(
 )
 
 
+@raises(authentication_required)
 async def authenticated_user_id(
     credentials: Annotated[
         HTTPAuthorizationCredentials | None,

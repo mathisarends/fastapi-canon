@@ -57,10 +57,10 @@ async def test_task_http_flow(client: AsyncClient) -> None:
         for operation in path.values()
     }
     assert operation_ids == {
-        "complete_task",
-        "create_task",
-        "get_health",
-        "list_tasks",
+        "system.health",
+        "tasks.complete",
+        "tasks.create",
+        "tasks.list_recent",
     }
 
 

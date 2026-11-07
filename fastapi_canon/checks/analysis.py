@@ -108,7 +108,10 @@ class _Analyzer:
                 "builtins.staticmethod",
                 "builtins.classmethod",
                 "builtins.property",
-            } and not _operation_decorator(decorator):
+            } and not (
+                _operation_decorator(decorator)
+                or _dependency_declaration(decorator, function.module, self.source)
+            ):
                 flow.unknowns.append(
                     _Unknown("unresolved decorator", function.name, decorator.lineno)
                 )
@@ -953,6 +956,13 @@ _ROUTE_METHODS = frozenset(
 )
 _TRANSPORT_METHODS = frozenset({"sse", "webrtc"})
 _RPC_METHOD = "method"
+
+
+def _dependency_declaration(decorator: ast.expr, module: str, source: _Source) -> bool:
+    # raises(...) only records errors; the dependency body runs unchanged.
+    return isinstance(decorator, ast.Call) and source.resolve(
+        decorator.func, module
+    ) in {"fastapi_canon.raises", "fastapi_canon.policy.raises"}
 
 
 def _operation_decorator(decorator: ast.expr) -> bool:

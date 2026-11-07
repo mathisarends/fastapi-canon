@@ -26,6 +26,8 @@ The next release containing the breaking changes below must be 0.16.0.
   declaration, and `SessionCapacity` shares a session budget across declarations.
 - Generate the SDK from one application with `[codegen] app = "module:app"`;
   per-kind source tables and target `sources` lists are optional.
+- Failing dependencies declare their errors once with `@raises(error)`; every
+  operation, stream and WebRTC session using them inherits the contract.
 - Dishka owns resources. Canon closes the admission REQUEST scope before
   acceptance. Return independently usable context data and put resources needed
   until disconnect in SESSION-scoped providers.
@@ -39,6 +41,15 @@ The next release containing the breaking changes below must be 0.16.0.
   without `sources` use every configured source their language supports.
   Explicit `[codegen.sources]` remain for saved inputs, mappings and selection;
   their names cannot reuse a derived source name.
+- Dependencies declare their own errors with `@raises(error, ...)` from
+  `fastapi_canon`. Every HTTP operation, typed SSE stream and WebRTC session that
+  uses the dependency, as a parameter, through `dependencies=`, a router, a
+  `RouterPolicy`, `include_router(..., dependencies=...)` or a nested dependency,
+  documents and registers these errors as if it listed them in `raises=`.
+  `inspect_app()` reports them with the origin `dependency`, and
+  `fastapi-canon check errors` treats the decorator as the declaration instead
+  of an unresolved decorator. Explicit `raises=` declarations keep working.
+
 - HTTP decorators, router construction and router inclusion expose typed
   forwarded options. `Feature.errors` reflects current router declarations,
   including operations added after the feature was constructed. Composition
@@ -289,6 +300,11 @@ The next release containing the breaking changes below must be 0.16.0.
   checks run when their inputs change. Pushes to `main`, manual runs and the
   `full-ci` label run the complete matrix. The weekly upstream canary adds
   Python 3.13.
+- The reference service names its operations through router `namespace=`
+  (`tasks.create`, `tasks.list_recent`, `tasks.complete`, `system.health`)
+  instead of flat explicit operation IDs, so its generated SDK groups task
+  methods under `client.tasks`. The router guide imports `RpcChannel` from
+  `fastapi_canon.integrations.websockets`, where it is defined.
 
 ### Breaking changes
 
