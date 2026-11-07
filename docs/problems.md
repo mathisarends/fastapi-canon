@@ -239,6 +239,23 @@ separate runtime/class identities.
 
 ## Migration
 
+### Titles are public text
+
+**TL;DR:** `title` remains a required public string. Generated schemas no longer
+constrain it to one literal, for domain, validation, generic HTTP and internal
+problems. `Error(title=...)` still supplies the server's public default text.
+
+**Rationale:** A wording correction or localized title should not turn a known
+problem into a client protocol failure. Problem identity belongs to its resolved
+`type` URI. The `code`, HTTP status and declared extension constraints remain
+unchanged. This change adds no exception messages, internal causes or diagnostic
+fields to the public error payload.
+
+Regenerate and distribute clients before changing server titles: older Python
+clients still enforce their generated title literal. Replace comparisons or
+discriminators based on title text with the generated error class or problem
+type. Explicit examples may use a different valid title from `Error.title`.
+
 Regenerate Python and TypeScript clients after upgrading. Catch `ProblemError`
 for HTTP problem responses instead of inspecting `HttpError.details`;
 `HttpError` remains the fallback for other HTTP error bodies. Update manual SSE

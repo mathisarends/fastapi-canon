@@ -305,23 +305,34 @@ Project = "urn:example:project-output:v1"
 ProjectView = "urn:example:project-output:v1"
 ```
 
-A shared Pydantic DTO should declare its wire aliases and extra-field policy
-explicitly so HTTP and RPC export the same shape, for example:
+**TL;DR:** HTTP, SSE and RPC preserve the declared Pydantic model. Give a shared
+DTO a semantic identity once; no transport-specific alias or extra-field
+workaround is needed:
 
 ```python
 class Project(BaseModel):
     model_config = ConfigDict(
-        extra="forbid",
-        alias_generator=to_camel,
-        populate_by_name=True,
         json_schema_extra={"x-canon-model-id": "urn:example:project-output:v1"},
     )
     project_id: int
 ```
 
-Import `ConfigDict`/`BaseModel` from Pydantic and `to_camel` from
-`pydantic.alias_generators`. A semantic ID does not erase differences between
-wire schemas; use separate identities for intentionally different views.
+Import `ConfigDict` and `BaseModel` from Pydantic. This DTO uses `project_id` on
+every wire. Pydantic's declared aliases, nested models, validators and `extra`
+policy apply unchanged. To choose camel case or reject unknown fields, configure
+that on the model; `RpcModel` remains an explicit camel-case, strict convenience
+base. TypeScript operation arguments still use camel case (`projectId`), while
+DTO properties follow their wire schemas.
+
+**Rationale:** A model defines its contract; a transport adapter should not
+silently replace it. A semantic ID identifies a shared model and does not erase
+differences between wire schemas. Use separate identities for intentionally
+different views, including distinct validation and serialization shapes.
+
+**Migration:** Plain `BaseModel` classes previously received automatic camel-case
+aliases and `extra="forbid"` in RPC. Regenerate clients for the declared shape.
+To retain the previous wire convention, inherit from `RpcModel` or declare the
+equivalent Pydantic configuration explicitly before upgrading the server.
 
 Identical identities require compatible schemas. Different identities with the
 same public name require `names = { Project = "ArchivedProject" }` on the relevant

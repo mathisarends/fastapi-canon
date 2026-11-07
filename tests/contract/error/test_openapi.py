@@ -326,15 +326,32 @@ def test_invalid_example_constant_fails_during_openapi_compilation() -> None:
         example={
             "type": "https://example.test/problems/resource_missing",
             "title": "Wrong title",
-            "status": 404,
+            "status": 403,
             "code": "resource_missing",
         }
     )
     app, registry = installed_app(missing)
     registry.install(app)
 
-    with pytest.raises(ErrorConfigurationError, match="invalid 'title'"):
+    with pytest.raises(ErrorConfigurationError, match="invalid 'status'"):
         app.openapi()
+
+
+def test_problem_title_is_public_text_and_may_vary_in_examples() -> None:
+    missing = make_error(
+        example={
+            "type": "https://example.test/problems/resource_missing",
+            "title": "Resource unavailable",
+            "status": 404,
+            "code": "resource_missing",
+        }
+    )
+    app, registry = installed_app(missing)
+    registry.install(app)
+    document = app.openapi()
+    schema = document["components"]["schemas"]["ResourceMissingProblem"]
+    assert schema["properties"]["title"] == {"type": "string"}
+    assert "title" in schema["required"]
 
 
 def test_invalid_static_extension_example_fails_compilation() -> None:

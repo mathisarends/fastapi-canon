@@ -18,7 +18,6 @@
             "type": "string"
           },
           "title": {
-            "const": "Internal Server Error",
             "type": "string"
           },
           "type": {
@@ -68,7 +67,6 @@
             "type": "integer"
           },
           "title": {
-            "const": "Internal Server Error",
             "type": "string"
           },
           "type": {
@@ -177,7 +175,6 @@
             "type": "integer"
           },
           "title": {
-            "const": "Request validation failed",
             "type": "string"
           },
           "type": {

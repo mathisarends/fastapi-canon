@@ -54,7 +54,7 @@ def test_generic_http_responses_match_the_runtime_handler() -> None:
             "format": "uri-reference",
             "const": "about:blank",
         },
-        "title": {"type": "string", "const": "Unauthorized"},
+        "title": {"type": "string"},
         "status": {"type": "integer", "const": 401},
         "code": {"type": "string", "const": "http_401"},
         "detail": {"type": "string"},

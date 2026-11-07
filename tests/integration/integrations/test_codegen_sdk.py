@@ -14,7 +14,7 @@ import httpx
 import pytest
 from fastapi import Depends, FastAPI
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from fastapi_canon import APIRouter, Composition, Error, Feature, export_contracts
 from fastapi_canon.codegen.config import SourceConfig, TargetConfig
@@ -35,6 +35,14 @@ class CancelProject(BaseModel):
 
 class ProjectMissing(Exception):
     pass
+
+
+class SharedProject(BaseModel):
+    model_config = ConfigDict(
+        extra="allow", json_schema_extra={"x-canon-model-id": "urn:test:shared-project"}
+    )
+    project_name: str
+    counts: dict[str, int]
 
 
 @pytest.fixture
@@ -404,6 +412,154 @@ ApiClient("https://test", clients={"typo": None})  # type: ignore[arg-type]
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+async def test_shared_dto_and_changed_problem_titles_work_in_both_sdks(
+    tmp_path: Path,
+) -> None:
+    baseline = _shared_application("Original public title")
+    _generate_sdk(tmp_path / "generated_sdk", baseline, "python")
+    _generate_sdk(tmp_path / "ts", baseline, "typescript")
+    sys.path.insert(0, str(tmp_path))
+    try:
+        sdk: Any = importlib.import_module("generated_sdk")
+        models = importlib.import_module("generated_sdk.models")
+        rpc_models = importlib.import_module(
+            "generated_sdk.internal.control_jsonrpc.models"
+        )
+        assert models.SharedProject is rpc_models.SharedProject
+        updated = _shared_application("Revised public title")
+        async with asyncio.timeout(30), serve(updated) as address:
+            base_url = address.replace("ws://", "http://")
+            async with sdk.ApiClient(base_url) as client:
+                project = await client.projects.get(project_name="canon")
+                echoed = await client.projects.echo(
+                    project_name="canon", counts={"items": 1}
+                )
+                assert type(project) is type(echoed) is models.SharedProject
+                assert project.project_name == echoed.project_name == "canon"
+                assert project.model_dump()["future"] is True
+                streamed = [
+                    item async for item in client.projects.events(project_name="canon")
+                ]
+                assert type(streamed[0]) is models.SharedProject
+                with pytest.raises(sdk.ProjectMissingError) as http_error:
+                    await client.projects.get(project_name="missing")
+                with pytest.raises(sdk.ProjectMissingError) as rpc_error:
+                    await client.projects.echo(project_name="missing", counts={})
+                with pytest.raises(sdk.ProjectMissingError) as stream_error:
+                    async for _ in client.projects.events(project_name="missing"):
+                        pass
+                assert (
+                    http_error.value.problem.title
+                    == rpc_error.value.problem.title
+                    == stream_error.value.problem.title
+                    == "Revised public title"
+                )
+                assert "Private" not in str(http_error.value)
+            node = shutil.which("node")
+            compiler = (
+                Path(__file__).resolve().parents[3] / "node_modules/typescript/bin/tsc"
+            )
+            if node is None or not compiler.is_file():
+                pytest.skip("Run pnpm install --frozen-lockfile --ignore-scripts")
+            (tmp_path / "package.json").write_text(
+                '{"type":"module"}', encoding="utf-8"
+            )
+            usage = tmp_path / "usage.ts"
+            usage.write_text(
+                """import {createClient, ProjectMissingError, type SharedProject} from "./ts/index.js";
+declare const process: {argv: string[]};
+const client = createClient({baseUrl: process.argv[2]});
+const check = (value: boolean) => {if (!value) throw new Error("Contract mismatch");};
+try {
+  const project: SharedProject = await client.projects.get({projectName:"canon"});
+  check(project.project_name === "canon" && project.future === true);
+  const echoed: SharedProject = await client.projects.echo({projectName:"canon", counts:{items:1}});
+  check(echoed.project_name === "canon");
+  for await (const item of client.projects.events({projectName:"canon"})) check(item.project_name === "canon");
+  const result = await client.projects.get.safe({projectName:"missing"});
+  check(!result.ok && result.kind === "declared" && result.problem.title === "Revised public title");
+  try {
+    await client.projects.echo({projectName:"missing",counts:{}});
+    throw new Error("Expected a problem");
+  } catch(error) {
+    check(error instanceof ProjectMissingError && error.problem.title === "Revised public title");
+  }
+} finally {await client.close();}
+""",
+                encoding="utf-8",
+            )
+            compiled = subprocess.run(
+                [
+                    node,
+                    str(compiler),
+                    "--strict",
+                    "--verbatimModuleSyntax",
+                    "--exactOptionalPropertyTypes",
+                    "--noUnusedLocals",
+                    "--noUnusedParameters",
+                    "--module",
+                    "nodenext",
+                    "--target",
+                    "es2022",
+                    "--lib",
+                    "es2022,dom,esnext.disposable",
+                    "--outDir",
+                    str(tmp_path / "js"),
+                    str(usage),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=False,
+            )
+            assert compiled.returncode == 0, compiled.stdout + compiled.stderr
+            process = await asyncio.create_subprocess_exec(
+                node,
+                str(tmp_path / "js/usage.js"),
+                base_url,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await process.communicate()
+            assert process.returncode == 0, stdout.decode() + stderr.decode()
+    finally:
+        sys.path.remove(str(tmp_path))
+        for name in tuple(sys.modules):
+            if name == "generated_sdk" or name.startswith("generated_sdk."):
+                del sys.modules[name]
+
+
+def _shared_application(title: str) -> FastAPI:
+    missing = Error(ProjectMissing, status=404, code="project_missing", title=title)
+    router = APIRouter(namespace="projects")
+    channel = RpcChannel("projects")
+
+    @router.get("/projects/{project_name}", raises=[missing])
+    async def get(project_name: str) -> SharedProject:
+        if project_name == "missing":
+            raise ProjectMissing("Private database details")
+        return SharedProject.model_validate(
+            {"project_name": project_name, "counts": {"items": 1}, "future": True}
+        )
+
+    @router.sse("/projects/{project_name}/events", raises=[missing])
+    async def events(project_name: str) -> AsyncIterator[SharedProject]:
+        yield SharedProject(project_name=project_name, counts={"items": 1})
+        if project_name == "missing":
+            raise ProjectMissing("Private stream details")
+
+    @channel.method(raises=[missing])
+    async def echo(params: SharedProject) -> SharedProject:
+        if params.project_name == "missing":
+            raise ProjectMissing("Private RPC details")
+        return params
+
+    router.include_channel(channel, path="/rpc")
+    return Composition(features=[Feature(name="projects", routers=[router])]).build(
+        FastAPI()
+    )
 
 
 def _generate_sdk(

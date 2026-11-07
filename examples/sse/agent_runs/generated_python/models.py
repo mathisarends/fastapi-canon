@@ -19,7 +19,7 @@ class InternalServerProblem(BaseModel):
     detail: str | None = None
     instance: str | None = None
     status: Literal[500]
-    title: Literal['Internal Server Error']
+    title: str
     type: Literal['urn:fastapi-canon:problem/internal_server_error']
     __pydantic_extra__: dict[str, JsonValue] = Field(init=False)  # pyright: ignore[reportIncompatibleVariableOverride]
 
@@ -37,7 +37,7 @@ class RequestValidationProblem(BaseModel):
     errors: list[RequestValidationProblemErrorsItem]
     instance: str | None = None
     status: Literal[422]
-    title: Literal['Request validation failed']
+    title: str
     type: Literal['urn:fastapi-canon:problem/request_validation_error']
     __pydantic_extra__: dict[str, JsonValue] = Field(init=False)  # pyright: ignore[reportIncompatibleVariableOverride]
 

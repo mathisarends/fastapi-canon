@@ -222,7 +222,7 @@ def compile_problem_schema(
     properties.update(
         {
             "type": {"type": "string", "format": "uri-reference", "const": type_uri},
-            "title": {"type": "string", "const": error.title},
+            "title": {"type": "string"},
             "status": {"type": "integer", "const": error.status},
             "code": {"type": "string", "const": error.code},
         }
@@ -589,7 +589,7 @@ def _http_problem_schema(status: int) -> dict[str, Any]:
                 "format": "uri-reference",
                 "const": "about:blank",
             },
-            "title": {"type": "string", "const": http_problem_title(status)},
+            "title": {"type": "string"},
             "status": {"type": "integer", "const": status},
             "code": {"type": "string", "const": f"http_{status}"},
         }
@@ -667,7 +667,7 @@ def _request_validation_schema(registry: ErrorCatalog) -> dict[str, Any]:
                 "format": "uri-reference",
                 "const": f"{registry.type_base}/request_validation_error",
             },
-            "title": {"type": "string", "const": "Request validation failed"},
+            "title": {"type": "string"},
             "status": {"type": "integer", "const": 422},
             "code": {"type": "string", "const": "request_validation_error"},
             "errors": {
@@ -744,7 +744,6 @@ def _json_type(value: object) -> str:
 def _validate_example(error: AnyError, type_uri: str, example: dict[str, Any]) -> None:
     expected = {
         "type": type_uri,
-        "title": error.title,
         "status": error.status,
         "code": error.code,
     }
@@ -798,7 +797,6 @@ def _compile_stream_contract(
     internal["properties"].pop("status")
     internal["required"].remove("status")
     internal["properties"]["type"]["const"] = internal_type
-    internal["properties"]["title"]["const"] = "Internal Server Error"
     internal["properties"]["code"]["const"] = "internal_server_error"
     name = "CanonInternalServerErrorEmbedded"
     _add_component(components, name, internal)
@@ -900,7 +898,7 @@ def _internal_error_schema(registry: ErrorCatalog) -> dict[str, Any]:
                 "format": "uri-reference",
                 "const": f"{registry.type_base}/internal_server_error",
             },
-            "title": {"type": "string", "const": "Internal Server Error"},
+            "title": {"type": "string"},
             "status": {"type": "integer", "const": 500},
             "code": {"type": "string", "const": "internal_server_error"},
         }

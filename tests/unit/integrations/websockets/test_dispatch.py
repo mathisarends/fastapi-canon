@@ -109,7 +109,7 @@ def test_params_sent_to_a_method_without_params_are_rejected(
     assert error.value.code == "invalid_params"
 
 
-def test_foreign_model_params_keep_declared_class_and_wire_aliases() -> None:
+def test_foreign_model_params_keep_declared_class_and_field_names() -> None:
     class ForeignParams(BaseModel):
         user_id: int
 
@@ -119,7 +119,7 @@ def test_foreign_model_params_keep_declared_class_and_wire_aliases() -> None:
     async def accept(params: ForeignParams) -> None: ...
 
     invocation = RpcDispatcher(channel.protocol).parse_request(
-        _request("foreign.accept", {"userId": 7})
+        _request("foreign.accept", {"user_id": 7})
     )
     assert type(invocation.params) is ForeignParams
     assert invocation.params.user_id == 7

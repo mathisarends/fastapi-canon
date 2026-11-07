@@ -7,9 +7,9 @@ export type InternalServerProblem = {
   detail?: string;
   instance?: string;
   status: 500;
-  title: "Internal Server Error";
+  title: string;
   type: "urn:fastapi-canon:problem/internal_server_error";
-  [key: string]: "Internal Server Error" | "internal_server_error" | "urn:fastapi-canon:problem/internal_server_error" | 500 | JsonValue | string | undefined;
+  [key: string]: "internal_server_error" | "urn:fastapi-canon:problem/internal_server_error" | 500 | JsonValue | string | undefined;
 };
 export type RequestValidationProblem = {
   code: "request_validation_error";
@@ -23,9 +23,9 @@ export type RequestValidationProblem = {
 }>;
   instance?: string;
   status: 422;
-  title: "Request validation failed";
+  title: string;
   type: "urn:fastapi-canon:problem/request_validation_error";
-  [key: string]: "Request validation failed" | "request_validation_error" | "urn:fastapi-canon:problem/request_validation_error" | 422 | Array<{
+  [key: string]: "request_validation_error" | "urn:fastapi-canon:problem/request_validation_error" | 422 | Array<{
   code: string;
   detail: string;
   in?: "path" | "query" | "header" | "cookie";
