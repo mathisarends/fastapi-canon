@@ -13,7 +13,7 @@ PyPI project or add further Python import changes.
 
 ## Upgrade to 0.16.0
 
-Version 0.16.0 is prepared in source and has not yet been published. It contains
+Version 0.16.0 was published on 2026-11-07. It contains
 breaking server APIs, generated-client interfaces and stricter preflight/static
 checks. Upgrade servers and regenerated Python/TypeScript SDKs together. The
 [complete breaking-change notes](../CHANGELOG.md#0160---2026-11-07) include the
