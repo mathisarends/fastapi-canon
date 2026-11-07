@@ -1,20 +1,23 @@
 # Compatibility
 
-## Prepared 0.16.0 (unpublished)
+## Canon 0.16.0
 
-Local release preparation on Windows verifies the 0.16.0 wheel/sdist in eighteen
-fresh environments with current compatible dependencies on Python 3.14, and
-eighteen with minimum direct dependencies on Python 3.12. Each installation uses
-the built artifact without source overrides. Installed SSE CLI checks cover no
-HTTP backend, HTTPX and HTTPX2; the installed WebRTC CLI generates a client that
-compiles. Four real Chromium/WebRTC scenarios pass. The native telemetry bridge
-passes against FastAPI 0.143.0 and 0.162.0 on Python 3.12.
+The published source passed exact-commit CI on Linux/Python 3.12?3.14 and
+Windows/Python 3.14, including the minimum-dependency Python suite and live
+PostgreSQL contracts. Both eighteen-combination installed-wheel matrices passed
+from the original upload artifacts: current dependencies on Python 3.14 and
+minimum direct dependencies on Python 3.12. Installed SSE CLI checks cover no HTTP
+backend, HTTPX and HTTPX2; the installed WebRTC CLI generates a client that compiles.
+Real Chromium/WebRTC scenarios passed, and the native telemetry bridge was also
+checked locally with FastAPI 0.143.0 and 0.162.0 on Python 3.12.
 
-These are preparation checks, not a publication record or exhaustive dependency
-coverage. The final source still needs exact-commit CI and the release dry run on
-`main`. The owner confirmed the updated PyPI Trusted Publisher configuration. See
-[release preparation](releases.md#prepared-0160-unpublished). Historical published
-release evidence below remains unchanged.
+All thirteen public-index installation combinations passed. A separate fresh
+Windows/Python 3.12 installation passed the combined transport, telemetry and MCP
+smoke with FastAPI 0.162.1. PyPI hashes, downloaded GitHub assets, release notes,
+the tag and the original dry-run/publication manifests agree. These bounded
+checks do not establish support for every dependency combination. See the
+[publication record](releases.md#current-versions); historical evidence below
+remains unchanged.
 
 ## Upstream internals
 
@@ -101,10 +104,14 @@ integration implementations, which share Canon's version.
 
 | Package | Published |
 | --- | --- |
-| `fastapi-canon` | 0.15.0 |
+| `fastapi-canon` | 0.16.0 |
 | `fastapi-streams` | 0.5.0 |
 | `fastapi-rpckit` | 0.4.1 |
 | `fastapi-webrtc` | 0.3.0 |
+
+**Canon 0.16.0** was published on 2026-11-07. Upgrade the server and regenerated
+SDKs together using the [0.16.0 guide](package-migration.md#upgrade-to-0160). The
+[publication record](releases.md#current-versions) links the verified artifacts and runs.
 
 **Canon 0.15.0** was published on 2026-11-04. The unified WebSocket stream API
 requires coordinated server/client upgrades and regenerated SDKs; the optional

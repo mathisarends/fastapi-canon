@@ -42,13 +42,10 @@ uv add --dev "fastapi-canon[codegen]"
 For HTTP-only applications, use `uv add fastapi-canon`. The base includes
 FastAPI, Pydantic and Dishka. Python 3.12–3.14 is supported.
 
-The current published release is **0.15.0**. See the
-[upgrade guide](docs/package-migration.md#upgrade-to-0150) and
+The current published release is **0.16.0**. See the
+[upgrade guide](docs/package-migration.md#upgrade-to-0160) and
 [tested compatibility](docs/compatibility.md). Upgrade servers and regenerated
 clients together.
-
-This checkout prepares **0.16.0**, which is not yet published. Main-branch examples
-target its APIs; see the [0.16.0 upgrade guide](docs/package-migration.md#upgrade-to-0160).
 
 ## Shared error handling
 
