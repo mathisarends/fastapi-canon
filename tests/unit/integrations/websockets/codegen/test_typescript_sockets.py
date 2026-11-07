@@ -290,5 +290,5 @@ def test_sockets_are_exported_without_binary_streams(
 
     assert "streams.ts" not in files
     assert "export class RpcStreamClosed" in files["core.ts"]
-    assert 'from "./sockets"' in files["index.ts"]
+    assert 'from "./sockets.js"' in files["index.ts"]
     assert "socketConnectionFactory?: SocketConnectionFactory" in files["client.ts"]

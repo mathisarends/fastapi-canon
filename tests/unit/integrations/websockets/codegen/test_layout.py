@@ -54,7 +54,7 @@ def test_nested_apis_share_top_level_namespace_modules(
     assert (
         "this.status = new TasksStatus(rpc);" in typescript_files["namespaces/tasks.ts"]
     )
-    assert 'from "../core"' in typescript_files["namespaces/tasks.ts"]
+    assert 'from "../core.js"' in typescript_files["namespaces/tasks.ts"]
     assert 'from "./status"' not in typescript_files["namespaces/tasks.ts"]
 
 
@@ -137,7 +137,9 @@ def test_generated_typescript_modules_only_import_generated_modules(
             continue
         directory = name.rsplit("/", 1)[0] if "/" in name else ""
         for target in re.findall(r'from "(\.[^"]+)"', content):
-            resolved = posixpath.normpath(posixpath.join(directory, target))
+            resolved = posixpath.normpath(
+                posixpath.join(directory, target)
+            ).removesuffix(".js")
             assert resolved in emitted or f"{resolved}/index" in emitted, (
                 f"{name} imports missing {target}"
             )

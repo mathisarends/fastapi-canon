@@ -104,8 +104,8 @@ def test_api_calls_infer_their_types_from_route_metadata(
 
     assert ".request<SayResult>" not in api
     assert ".notifications<GreetingUpdate>" not in api
-    assert "this.rpc.request(routes.greetingSay, params, options)" in api
-    assert "this.rpc.notifications(notifications.greetingChanged)" in api
+    assert "this.#rpc.request(routes.greetingSay, params, options)" in api
+    assert "this.#rpc.notifications(notifications.greetingChanged)" in api
 
 
 def test_stably_named_remote_errors_get_their_own_module(
@@ -197,7 +197,7 @@ def test_servers_generate_endpoint_metadata(document: dict[str, Any]) -> None:
     assert "greetingApi: {" in files["endpoints.ts"]
     assert "function greetingApi(" in files["endpoints.ts"]
     assert 'type: "websocket"' in files["endpoints.ts"]
-    assert 'from "./endpoints"' in files["index.ts"]
+    assert 'from "./endpoints.js"' in files["index.ts"]
 
 
 def test_single_server_websocket_clients_accept_compact_url_overrides(
@@ -268,7 +268,7 @@ def test_binary_streams_generate_typed_media_clients(document: dict[str, Any]) -
     assert "voice(" in client
     assert client.count("readonly sessionId?: string") == 1
     assert 'contentType: "audio/pcm;rate=24000"' in media
-    assert 'from "./streams"' in files["index.ts"]
+    assert 'from "./streams.js"' in files["index.ts"]
 
 
 def test_the_index_exports_everything_a_caller_needs(
@@ -276,11 +276,11 @@ def test_the_index_exports_everything_a_caller_needs(
 ) -> None:
     index = render_typescript_client(document, options())["index.ts"]
 
-    assert 'export { GreetingClient } from "./client";' in index
-    assert 'export type * from "./models";' in index
-    assert 'export * from "./namespaces";' in index
-    assert 'export * from "./errors";' in index
-    assert 'export { routes, notifications } from "./routes";' in index
+    assert 'export { GreetingClient } from "./client.js";' in index
+    assert 'export type * from "./models.js";' in index
+    assert 'export * from "./namespaces/index.js";' in index
+    assert 'export * from "./errors.js";' in index
+    assert 'export { routes, notifications } from "./routes.js";' in index
     for name in (
         "RpcClientError",
         "RpcConnectError",
