@@ -29,8 +29,6 @@ The next release containing the breaking changes below must be 0.16.0.
 - Every WebSocket endpoint is declared on `APIRouter` with its path:
   `session = router.channel(path)` for JSON-RPC, `@router.binary_stream(path)`
   and `@router.socket(path)`.
-- Failing dependencies declare their errors once with `@raises(error)`; every
-  operation, stream and WebRTC session using them inherits the contract.
 - Dishka owns resources. Canon closes the admission REQUEST scope before
   acceptance. Return independently usable context data and put resources needed
   until disconnect in SESSION-scoped providers.
@@ -53,15 +51,6 @@ The next release containing the breaking changes below must be 0.16.0.
   names use the router's namespace. They accept the connection options of
   `include_channel` and export the same contracts as
   `CanonWebSocketRouter.stream()`/`.socket()`.
-- Dependencies declare their own errors with `@raises(error, ...)` from
-  `fastapi_canon`. Every HTTP operation, typed SSE stream and WebRTC session that
-  uses the dependency, as a parameter, through `dependencies=`, a router, a
-  `RouterPolicy`, `include_router(..., dependencies=...)` or a nested dependency,
-  documents and registers these errors as if it listed them in `raises=`.
-  `inspect_app()` reports them with the origin `dependency`, and
-  `fastapi-canon check errors` treats the decorator as the declaration instead
-  of an unresolved decorator. Explicit `raises=` declarations keep working.
-
 - HTTP decorators, router construction and router inclusion expose typed
   forwarded options. `Feature.errors` reflects current router declarations,
   including operations added after the feature was constructed. Composition

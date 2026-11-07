@@ -1,7 +1,6 @@
-from collections.abc import AsyncIterator
 from copy import deepcopy
 from dataclasses import FrozenInstanceError
-from typing import Annotated, Any
+from typing import Any
 
 import pytest
 from dishka import Provider, Scope, provide
@@ -10,7 +9,6 @@ from fastapi import APIRouter, Depends, FastAPI, Header
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
-from fastapi_canon import APIRouter as CanonAPIRouter
 from fastapi_canon import (
     CanonResponse,
     Composition,
@@ -18,12 +16,9 @@ from fastapi_canon import (
     ErrorOptions,
     Feature,
     RouterPolicy,
-    inspect_app,
-    raises,
 )
 from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
 from fastapi_canon.exceptions import FeatureConfigurationError
-from fastapi_canon.policy import dependency_errors
 from fastapi_canon.router import CanonRouter
 
 
@@ -326,158 +321,3 @@ def test_inherited_422_includes_automatic_validation() -> None:
             },
         },
     }
-
-
-@raises(AUTHENTICATION_REQUIRED)
-async def signed_in_user(authorization: str | None = Header(default=None)) -> str:
-    if authorization != "Bearer test":
-        raise AuthenticationRequired
-    return "user"
-
-
-@raises(FORBIDDEN)
-async def administrator(
-    user: Annotated[str, Depends(signed_in_user)],
-    role: str | None = Header(default=None),
-) -> str:
-    if role != "admin":
-        raise Forbidden
-    return user
-
-
-SignedInUser = Annotated[str, Depends(signed_in_user)]
-
-
-def _responses(app: FastAPI, path: str, method: str = "get") -> set[str]:
-    return set(app.openapi()["paths"][path][method]["responses"])
-
-
-def test_raises_rejects_missing_or_invalid_errors() -> None:
-    with pytest.raises(ErrorConfigurationError, match="at least one Error"):
-        raises()
-    with pytest.raises(ErrorConfigurationError, match="Error instance"):
-        raises("forbidden")  # type: ignore[arg-type]
-    with pytest.raises(ErrorConfigurationError, match="callable dependency"):
-        raises(FORBIDDEN)("not callable")
-
-
-def test_dependency_errors_follow_parameters_classes_and_nested_dependencies() -> None:
-    @raises(MISSING)
-    class Pagination:
-        def __init__(self, user: SignedInUser, limit: int = 10) -> None:
-            self.limit = limit
-
-    async def endpoint(
-        page: Annotated[Pagination, Depends()],
-        admin: str = Depends(administrator),
-    ) -> None:
-        return None
-
-    assert dependency_errors(call=endpoint) == (
-        MISSING,
-        AUTHENTICATION_REQUIRED,
-        FORBIDDEN,
-    )
-    assert dependency_errors([Depends(administrator)]) == (
-        FORBIDDEN,
-        AUTHENTICATION_REQUIRED,
-    )
-
-
-def test_parameter_dependency_errors_are_documented_and_handled() -> None:
-    router = CanonAPIRouter(namespace="projects")
-
-    @router.get("/me")
-    async def me(user: SignedInUser) -> str:
-        return user
-
-    @router.get("/admin")
-    async def admin(user: Annotated[str, Depends(administrator)]) -> str:
-        return user
-
-    app = Composition(
-        features=(Feature(name="projects", routers=[router]),), errors=PROBLEMS
-    ).build(FastAPI())
-
-    assert {"401"} <= _responses(app, "/me") and "403" not in _responses(app, "/me")
-    assert {"401", "403"} <= _responses(app, "/admin")
-    client = TestClient(app)
-    assert client.get("/me").json()["code"] == "authentication_required"
-    denied = client.get("/admin", headers={"Authorization": "Bearer test"})
-    assert (denied.status_code, denied.json()["code"]) == (403, "forbidden")
-    origins = {
-        operation.operation_id: {
-            (error.code, error.origin) for error in operation.errors
-        }
-        for operation in inspect_app(app).operations
-    }
-    assert origins["projects.admin"] == {
-        ("authentication_required", "dependency"),
-        ("forbidden", "dependency"),
-    }
-
-
-def test_router_policy_and_inclusion_dependencies_extend_included_operations() -> None:
-    def child(namespace: str) -> CanonAPIRouter:
-        router = CanonAPIRouter(namespace=namespace)
-
-        @router.get("/items")
-        async def items() -> list[int]:
-            return []
-
-        return router
-
-    guarded = CanonAPIRouter(prefix="/guarded", dependencies=[Depends(administrator)])
-    guarded.include_router(child("guarded"))
-    included = CanonAPIRouter(prefix="/included")
-    included.include_router(child("included"), dependencies=[Depends(signed_in_user)])
-    policy = RouterPolicy(dependencies=[Depends(signed_in_user)])
-    with_policy = CanonAPIRouter(prefix="/policy", policy=policy)
-    with_policy.include_router(child("policy"))
-
-    app = Composition(
-        features=(Feature(name="items", routers=[guarded, included, with_policy]),),
-        errors=PROBLEMS,
-    ).build(FastAPI())
-
-    assert {"401", "403"} <= _responses(app, "/guarded/items")
-    assert "401" in _responses(app, "/included/items")
-    assert "401" in _responses(app, "/policy/items")
-    assert guarded.raises == (FORBIDDEN, AUTHENTICATION_REQUIRED)
-    response = TestClient(app).get("/included/items")
-    assert response.json()["code"] == "authentication_required"
-
-
-def test_explicit_router_raises_keep_their_origin() -> None:
-    router = CanonAPIRouter(
-        raises=[AUTHENTICATION_REQUIRED], dependencies=[Depends(signed_in_user)]
-    )
-
-    @router.get("/me")
-    async def me() -> None:
-        return None
-
-    app = Composition(features=(Feature(name="me", routers=[router]),)).build(FastAPI())
-    (operation,) = inspect_app(app).operations
-    assert [(error.code, error.origin) for error in operation.errors] == [
-        ("authentication_required", "router")
-    ]
-
-
-def test_stream_admission_dependency_errors_are_documented() -> None:
-    router = CanonAPIRouter()
-
-    @router.sse("/events")
-    async def events(user: SignedInUser) -> AsyncIterator[str]:
-        yield user
-
-    app = Composition(features=(Feature(name="events", routers=[router]),)).build(
-        FastAPI()
-    )
-
-    assert "401" in _responses(app, "/events")
-    response = TestClient(app).get("/events")
-    assert (response.status_code, response.json()["code"]) == (
-        401,
-        "authentication_required",
-    )

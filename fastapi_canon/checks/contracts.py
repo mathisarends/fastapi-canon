@@ -29,7 +29,6 @@ _ERROR = "fastapi_canon.Error"
 _ERRORS = frozenset(
     {_ERROR, "fastapi_canon.error.Error", "fastapi_canon.error.error.Error"}
 )
-_DEPENDENCY_RAISES = frozenset({"fastapi_canon.raises", "fastapi_canon.policy.raises"})
 _DEPENDENCIES = {
     "fastapi.Depends",
     "fastapi.params.Depends",
@@ -299,12 +298,8 @@ class _Checker:
         return result
 
     def _dependencies(
-        self,
-        function: _Definition,
-        seen: frozenset[str] = frozenset(),
-        contract: tuple[_Operation, dict[str, str]] | None = None,
+        self, function: _Definition, seen: frozenset[str] = frozenset()
     ) -> _Flow:
-        """Follow dependencies; ``contract`` collects their raises() declarations."""
         flow = _Flow()
         if function.name in seen:
             flow.unknowns.append(
@@ -345,14 +340,8 @@ class _Checker:
                 if dependency and isinstance(
                     dependency.node, ast.FunctionDef | ast.AsyncFunctionDef
                 ):
-                    if contract is not None:
-                        contract[1].update(
-                            self._dependency_raises(dependency, contract[0])
-                        )
                     flow.extend(self._analyzer.function(dependency))
-                    flow.extend(
-                        self._dependencies(dependency, seen | {function.name}, contract)
-                    )
+                    flow.extend(self._dependencies(dependency, seen | {function.name}))
                 elif target is not None and self.source.origin(target, module):
                     # Library dependencies such as HTTPBearer() raise no
                     # application exceptions and declare no application
@@ -366,28 +355,8 @@ class _Checker:
                     )
         return flow
 
-    def _dependency_raises(
-        self, dependency: _Definition, operation: _Operation
-    ) -> dict[str, str]:
-        node = dependency.node
-        assert isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
-        declared: dict[str, str] = {}
-        for decorator in node.decorator_list:
-            if (
-                isinstance(decorator, ast.Call)
-                and self.source.resolve(decorator.func, dependency.module)
-                in _DEPENDENCY_RAISES
-            ):
-                errors = ast.Tuple(elts=list(decorator.args), ctx=ast.Load())
-                declared.update(self._errors(errors, dependency.module, operation))
-        return declared
-
     def _router_dependencies(
-        self,
-        node: ast.Call,
-        module: str,
-        operation: _Operation,
-        declared: dict[str, str],
+        self, node: ast.Call, module: str, operation: _Operation
     ) -> _Flow:
         flow = _Flow()
         for scope, dependency in self._sequence(
@@ -411,8 +380,7 @@ class _Checker:
             function.lineno = operation.line
             flow.extend(
                 self._dependencies(
-                    _Definition(f"{scope}.dependencies", scope, function),
-                    contract=(operation, declared),
+                    _Definition(f"{scope}.dependencies", scope, function)
                 )
             )
         return flow
@@ -469,19 +437,17 @@ class _Checker:
             declared.update(
                 self._errors(_keyword(decorator, "raises"), function.module, operation)
             )
+        catalog.update(declared)
         contracts_known = not operation.diagnostics
         # SSE generator bodies run while the response streams; follow iterated calls.
         flow = self._analyzer.function(function, iterated=operation.transport == "sse")
-        flow.extend(self._dependencies(function, contract=(operation, declared)))
+        flow.extend(self._dependencies(function))
         for scope, layer in layers:
-            flow.extend(self._router_dependencies(layer, scope, operation, declared))
+            flow.extend(self._router_dependencies(layer, scope, operation))
         if decorator is not None:
             flow.extend(
-                self._router_dependencies(
-                    decorator, function.module, operation, declared
-                )
+                self._router_dependencies(decorator, function.module, operation)
             )
-        catalog.update(declared)
         contracts_known = contracts_known and not any(
             self.source.uncertain.get(scope) for scope in self.source.touched
         )

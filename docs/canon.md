@@ -67,7 +67,7 @@ represent another PyPI distribution.
 | Composition checks and installed HTTP descriptions | `Composition.check(app)`, `fastapi_canon.inspect_app(app)`; values `fastapi_canon.diagnostics.CheckReport`, `CheckIssue`, `CheckContext`, `CompositionInfo`, `FeatureInfo`, `OperationInfo` | [System checks](system-checks.md) |
 | Database ownership, migrations and locks | `fastapi_canon.integrations.database.Database`, `AlembicMigrations`, `TransactionLocks` | [Databases](database.md) |
 | Short service scopes | `fastapi_canon.Scoped`, `ServiceScope` | [Databases](database.md) |
-| HTTP routes and contracts | `fastapi_canon.APIRouter`, `RouterPolicy`, `raises`, `Error`, `ErrorOptions`, `CanonResponse`; `Problem`; `fastapi_canon.error.ErrorRegistry` for manual assembly without `Composition` | [HTTP contracts](composition.md#error-contracts) |
+| HTTP routes and contracts | `fastapi_canon.APIRouter`, `RouterPolicy`, `Error`, `ErrorOptions`, `CanonResponse`; `Problem`; `fastapi_canon.error.ErrorRegistry` for manual assembly without `Composition` | [HTTP contracts](composition.md#error-contracts) |
 | Typed SSE | `APIRouter.sse()` | [SSE contracts](streams.md) |
 | WebSocket JSON-RPC | `APIRouter.channel()`; `APIRouter.include_channel()` with `fastapi_canon.integrations.websockets.RpcChannel` for shared channels | [WebSockets](integrations/websockets/README.md) |
 | Typed or raw WebSocket messages and binary streams | `@APIRouter.socket()`, `@APIRouter.binary_stream()`; `RpcSocket` | [Sockets](integrations/websockets/sockets.md), [binary streams](integrations/websockets/streams.md) |
