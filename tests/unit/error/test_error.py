@@ -84,6 +84,50 @@ def test_error_requires_model_for_callable_extensions() -> None:
         make_error(extensions=lambda _exception: {"session_id": 1})
 
 
+def test_error_infers_extensions_model_from_renderer_annotation() -> None:
+    def session_fields(exception: SessionNotFound) -> SessionFields:
+        del exception
+        return SessionFields(session_id=1)
+
+    error = make_error(extensions=session_fields)
+
+    assert error.extensions_model is SessionFields
+
+
+def test_error_infers_extensions_model_from_callable_object() -> None:
+    class Renderer:
+        def __call__(self, exception: SessionNotFound) -> SessionFields:
+            del exception
+            return SessionFields(session_id=1)
+
+    assert make_error(extensions=Renderer()).extensions_model is SessionFields
+
+
+def test_error_keeps_an_explicit_extensions_model() -> None:
+    class WideFields(SessionFields):
+        reason: str | None = None
+
+    def session_fields(exception: SessionNotFound) -> SessionFields:
+        del exception
+        return SessionFields(session_id=1)
+
+    error = make_error(extensions_model=WideFields, extensions=session_fields)
+
+    assert error.extensions_model is WideFields
+
+
+def test_error_rejects_inferred_model_with_reserved_members() -> None:
+    class InvalidFields(BaseModel):
+        value: str = Field(serialization_alias="detail")
+
+    def invalid(exception: SessionNotFound) -> InvalidFields:
+        del exception
+        return InvalidFields(value="unsafe")
+
+    with pytest.raises(ErrorConfigurationError, match="reserved members"):
+        make_error(extensions=invalid)
+
+
 def test_error_rejects_invalid_extensions_model() -> None:
     with pytest.raises(ErrorConfigurationError):
         make_error(extensions_model=str, extensions={"session_id": 1})

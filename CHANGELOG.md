@@ -30,6 +30,10 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- `Error` infers `extensions_model` from an `extensions` renderer annotated to
+  return a Pydantic model, such as `def fields(error) -> RetryFields`. Callable
+  extensions without such an annotation still require `extensions_model=`, and
+  an explicit `extensions_model=` keeps precedence.
 - `APIRouter.sse()`, `include_channel()` and `webrtc()` declare their forwarded
   options as typed keyword arguments (`StreamOptions`, `ChannelOptions` and
   `SessionOptions` in `fastapi_canon.api_router`). Editors complete them and type

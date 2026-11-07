@@ -1,10 +1,11 @@
 import builtins
+import inspect
 import math
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import cast
+from typing import cast, get_type_hints
 
 from pydantic import BaseModel, ValidationError
 
@@ -128,8 +129,15 @@ class Error[ExceptionT: Exception]:
                 msg = "extensions must be a mapping, callable, or None"
                 raise ErrorConfigurationError(msg)
             if model is None:
-                msg = "callable extensions require extensions_model"
-                raise ErrorConfigurationError(msg)
+                inferred = _returned_model(extensions)
+                if inferred is None:
+                    msg = (
+                        "callable extensions require extensions_model or a "
+                        "BaseModel return annotation"
+                    )
+                    raise ErrorConfigurationError(msg)
+                self._validate_extension_model(inferred)
+                object.__setattr__(self, "extensions_model", inferred)
             return
 
         overlap = _RESERVED_MEMBERS.intersection(extensions)
@@ -247,6 +255,18 @@ def _freeze_json(value: object, *, path: str) -> JsonValue:
         return cast(JsonValue, _freeze_json_mapping(value, path=path))
     msg = f"{path} contains a non-JSON value of type {type(value).__name__}"
     raise ErrorConfigurationError(msg)
+
+
+def _returned_model(renderer: Callable[..., object]) -> builtins.type[BaseModel] | None:
+    # A renderer annotated "-> Model" declares its extension schema itself.
+    target = renderer if inspect.isroutine(renderer) else type(renderer).__call__
+    try:
+        returned = get_type_hints(target).get("return")
+    except (NameError, TypeError):
+        return None
+    if isinstance(returned, builtins.type) and issubclass(returned, BaseModel):
+        return returned
+    return None
 
 
 def freeze_headers[KeyT, ValueT](
