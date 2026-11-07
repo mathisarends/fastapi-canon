@@ -73,7 +73,7 @@ def _generate(
     documents: dict[str, dict[str, Any]] = {}
     writes: dict[Path, str] = {}
     deletes: set[Path] = set()
-    loaded_sources: dict[tuple[str, bool], Any] = {}
+    loaded_sources: dict[tuple[str, bool | None], Any] = {}
     diagnostics: list[_GenerationWarning] | None = [] if collect_diagnostics else None
     for source in config.sources:
         if source.name not in needed:
@@ -82,6 +82,9 @@ def _generate(
             if source.input is not None or offline:
                 path = source.input or source.output
                 assert path is not None
+                if source.optional and not path.exists():
+                    # The application had no contract of this kind at export.
+                    continue
                 try:
                     document = json.loads(path.read_text(encoding="utf-8"))
                 except (OSError, ValueError) as exc:
@@ -90,13 +93,19 @@ def _generate(
                     ) from exc
             else:
                 assert source.source is not None and source.output is not None
-                document = _export(
+                exported = _export(
                     source.source,
                     source.kind,
                     source.factory,
                     config.path.parent,
                     loaded_sources,
+                    optional=source.optional,
                 )
+                if exported is None:
+                    # Remove a contract left from an earlier export of this kind.
+                    deletes.add(source.output)
+                    continue
+                document = exported
                 writes[source.output] = _json(document)
             if not isinstance(document, dict):
                 raise GenerationError(f"Source {source.name} must be a JSON object")
@@ -120,8 +129,12 @@ def _generate(
         inputs = tuple(
             (source, documents[source.name])
             for source in config.sources
-            if source.name in target.sources
+            if source.name in target.sources and source.name in documents
         )
+        if not inputs:
+            raise GenerationError(
+                f"Target {target.name} has no exported contracts", target=target.name
+            )
         try:
             files = render(build_plan(inputs), target, diagnostics=diagnostics)
         except GenerationError as error:
@@ -149,6 +162,7 @@ def _generate(
             "sources": {
                 name: hashlib.sha256(_json(documents[name]).encode()).hexdigest()
                 for name in sorted(target.sources)
+                if name in documents
             },
             "files": sorted(files),
         }
@@ -221,15 +235,22 @@ def _generate(
 def _export(
     reference: str,
     kind: str,
-    factory: bool,
+    factory: bool | None,
     root: Path,
-    loaded_sources: dict[tuple[str, bool], Any],
-) -> dict[str, Any]:
+    loaded_sources: dict[tuple[str, bool | None], Any],
+    *,
+    optional: bool = False,
+) -> dict[str, Any] | None:
     with _application_path(root):
         key = (reference, factory)
         if key not in loaded_sources:
             try:
                 value = _load_reference(reference, root=root)
+                if factory is None:
+                    from fastapi import FastAPI
+
+                    # ``codegen.app`` accepts an application or its factory.
+                    factory = not isinstance(value, FastAPI)
                 if factory:
                     value = _resolve_factory(value, reference)
             except (TypeError, ValueError) as error:
@@ -246,6 +267,8 @@ def _export(
                 value, kinds=(cast(ContractKind, kind),)
             ).documents
             if kind not in documents:
+                if optional:
+                    return None
                 raise GenerationError(f"{reference}: no registered {kind} endpoints")
             if kind == "openapi":
                 from fastapi_canon.integrations.sse.codegen.openapi import (

@@ -17,7 +17,8 @@ class SourceConfig:
     input: Path | None = None
     source: str | None = None
     output: Path | None = None
-    factory: bool = False
+    factory: bool | None = False
+    optional: bool = False
     operations: dict[str, str] = field(default_factory=dict)
     identities: dict[str, str] = field(default_factory=dict)
     names: dict[str, str] = field(default_factory=dict)
@@ -60,16 +61,20 @@ def load_config(path: Path) -> Configuration:
         raw = raw.get(section, {})
         if not isinstance(raw, dict):
             raise GenerationError(f"{'.'.join(sections)} must be a table")
-    _keys(raw, {"version", "sources", "targets"}, str(path))
+    _keys(raw, {"version", "app", "contracts", "sources", "targets"}, str(path))
     if type(raw.get("version")) is not int or raw["version"] != 1:
         raise GenerationError(
             "FastAPI Canon codegen configuration requires version = 1"
         )
     root = path.parent
-    sources: list[SourceConfig] = []
+    sources = _application_sources(raw, root)
     for name, values in _table(raw, "sources").items():
         if not name.isidentifier() or name.startswith("_"):
             raise GenerationError(f"Invalid source name {name!r}")
+        if any(source.name == name for source in sources):
+            raise GenerationError(
+                f"Source {name} collides with a source derived from codegen.app"
+            )
         _keys(
             values,
             {
@@ -129,7 +134,9 @@ def load_config(path: Path) -> Configuration:
                 exclude_operations=_operation_list(
                     values.get("exclude-operations", []), name, "exclude"
                 ),
-                **mappings,
+                operations=mappings["operations"],
+                identities=mappings["identities"],
+                names=mappings["names"],
             )
         )
     targets: list[TargetConfig] = []
@@ -145,7 +152,15 @@ def load_config(path: Path) -> Configuration:
             raise GenerationError(
                 f"Target {name} has unsupported language {language!r}"
             )
-        selected = values.get("sources")
+        # Without a list, a target uses every source its language can render.
+        selected = values.get(
+            "sources",
+            [
+                source.name
+                for source in sources
+                if language == "typescript" or source.kind != "webrtc"
+            ],
+        )
         if (
             not isinstance(selected, list)
             or not selected
@@ -217,6 +232,37 @@ def load_config(path: Path) -> Configuration:
     ):
         raise GenerationError("Live contract output paths must be distinct")
     return Configuration(path, tuple(sources), tuple(targets))
+
+
+_APPLICATION_SOURCES: tuple[tuple[str, ContractKind], ...] = (
+    ("http", "openapi"),
+    ("rpc", "openrpc"),
+    ("webrtc", "webrtc"),
+)
+
+
+def _application_sources(raw: dict[str, Any], root: Path) -> list[SourceConfig]:
+    """Expand ``app``/``contracts`` into one optional source per contract kind."""
+    if "app" not in raw:
+        if "contracts" in raw:
+            raise GenerationError("codegen.contracts requires codegen.app")
+        return []
+    reference = raw["app"]
+    if not isinstance(reference, str) or ":" not in reference:
+        raise GenerationError("codegen.app requires a module:attribute reference")
+    directory = _path(root, raw.get("contracts", "contracts"))
+    assert directory is not None
+    return [
+        SourceConfig(
+            name=name,
+            kind=kind,
+            source=reference,
+            output=directory / f"{kind}.json",
+            factory=None,
+            optional=True,
+        )
+        for name, kind in _APPLICATION_SOURCES
+    ]
 
 
 def _keys(value: Any, allowed: set[str], owner: str) -> None:
