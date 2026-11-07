@@ -743,6 +743,7 @@ def _validate(
     if options.with_transport == "websocket":
         client_members.append(("<client.connect>", "connect"))
         connect_options = [
+            ("<connect.signal>", "signal"),
             *((option, option) for option in _CONNECT_OPTIONS),
             *(
                 (variable.name, _identifier(variable.name))

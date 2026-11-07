@@ -385,6 +385,11 @@ Multiple servers, template variables and authentication use typed binding
 accepts `http_client=`, `clients={"control": existing_client}` and
 `bindings={"control": {"url": ...}}`; injected Python clients stay caller-owned.
 Closing the facade prevents new work and closes the resources it created.
+TypeScript `close()` also cancels pending RPC connection initialization, including
+an eager handshake selected with `connect: { lazy: false }`. A single call's
+timeout or cancellation leaves that shared initialization available to other calls.
+The RPC binding's optional `connect.signal` cancels eager connection establishment;
+it is combined with the facade's lifetime signal.
 
 HTTP/SSE request options and JSON-RPC call options retain their binding's
 semantics. Python uses task cancellation and optional timeouts; TypeScript calls

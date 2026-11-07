@@ -80,6 +80,9 @@ export class Runtime {
   httpOptions(): ClientOptions {
     return { ...this.options, fetch: (input, init) => this.fetch(input, init) };
   }
+  bindingSignal(signal?: AbortSignal): AbortSignal {
+    return signal ? AbortSignal.any([this.lifetime.signal, signal]) : this.lifetime.signal;
+  }
   async binding<T>(name: string): Promise<T> {
     this.ensureOpen();
     const binding = this.bindings[name]!;
