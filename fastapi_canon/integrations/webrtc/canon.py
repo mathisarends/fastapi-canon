@@ -1,7 +1,7 @@
 """Canon admission contracts for WebRTC sessions."""
 
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any, TypeVar
+from typing import Any, TypeVar, Unpack
 
 from fastapi import FastAPI
 from fastapi.params import Depends as DependsParam
@@ -18,9 +18,12 @@ from fastapi_canon.integrations.webrtc.declarations import (
     Role,
     SessionLimits,
 )
+from fastapi_canon.integrations.webrtc.engine import Engine
+from fastapi_canon.integrations.webrtc.events import EventHook
+from fastapi_canon.integrations.webrtc.ice import IceServerSource
 from fastapi_canon.integrations.webrtc.router import WebRtcRouter
 from fastapi_canon.policy import normalize_raises as _normalize_raises
-from fastapi_canon.router import CanonRouter, _distinct
+from fastapi_canon.router import CanonRouter, RouterOptions, _distinct
 
 __all__ = [
     "CanonWebRtcRouter",
@@ -36,6 +39,30 @@ class CanonWebRtcRouter(CanonRouter, WebRtcRouter):
     registers and documents failures; it is not an exception allowlist.
     Once accepted, failures use WebRTC's protocol and lifecycle instead of HTTP.
     """
+
+    def __init__(
+        self,
+        *,
+        engine: Engine | None = None,
+        ice_servers: IceServerSource | None = None,
+        limits: SessionLimits | None = None,
+        max_sessions: int | None = None,
+        on_event: EventHook | None = None,
+        allowed_origins: Sequence[str] | None = None,
+        **options: Unpack[RouterOptions],
+    ) -> None:
+        # Cooperative initialization passes WebRTC options through CanonRouter
+        # to WebRtcRouter without adding transport keywords to the HTTP API.
+        forwarded: dict[str, Any] = {
+            **options,
+            "engine": engine,
+            "ice_servers": ice_servers,
+            "limits": limits,
+            "max_sessions": max_sessions,
+            "on_event": on_event,
+            "allowed_origins": allowed_origins,
+        }
+        super().__init__(**forwarded)
 
     def session(
         self,

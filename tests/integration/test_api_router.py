@@ -44,6 +44,59 @@ class Store:
         self.identifier = identifier
 
 
+@pytest.mark.parametrize("feature_first", [False, True])
+@pytest.mark.parametrize("transport", ["http", "sse", "rpc"])
+def test_feature_collects_errors_from_routes_declared_after_it(
+    feature_first: bool, transport: str
+) -> None:
+    missing = Error(MissingProject, status=404, code="project_missing", title="Missing")
+    router = APIRouter()
+    feature = Feature(name="projects", routers=[router]) if feature_first else None
+
+    if transport == "http":
+
+        @router.get("/project", raises=[missing])
+        async def project() -> None:
+            raise MissingProject("Private storage details")
+
+    elif transport == "sse":
+
+        @router.sse("/project", raises=[missing])
+        async def events() -> AsyncIterator[int]:
+            raise MissingProject("Private stream details")
+            yield 1  # pragma: no cover
+
+    else:
+        channel = RpcChannel()
+
+        @channel.method(raises=[missing])
+        async def project() -> None:
+            raise MissingProject("Private RPC details")
+
+        router.include_channel(channel, path="/project")
+
+    if feature is None:
+        feature = Feature(name="projects", routers=[router])
+    assert feature.errors == (missing,)
+    composition = Composition(features=[feature])
+    app = composition.build(FastAPI())
+    with TestClient(app, raise_server_exceptions=False) as client:
+        if transport == "rpc":
+            with client.websocket_connect("/project") as socket:
+                socket.send_json({"jsonrpc": "2.0", "id": 1, "method": "project"})
+                payload = socket.receive_json()["error"]["data"]["problem"]
+        else:
+            response = client.get("/project")
+            if transport == "http":
+                assert response.status_code == 404
+                payload = response.json()
+            else:
+                data = response.text.split("data: ", 1)[1].splitlines()[0]
+                payload = json.loads(data)
+    assert payload["code"] == "project_missing"
+    assert "Private" not in json.dumps(payload)
+
+
 @pytest.mark.parametrize("scope", [Scope.APP, Scope.SESSION, Scope.REQUEST])
 def test_composed_channels_resolve_services_and_close_their_scopes(
     scope: Scope,

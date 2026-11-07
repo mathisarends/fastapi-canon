@@ -30,6 +30,16 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Added
 
+- HTTP decorators, router construction and router inclusion expose typed
+  forwarded options. `Feature.errors` reflects current router declarations,
+  including operations added after the feature was constructed. Composition
+  collects these errors at build time for HTTP, SSE and RPC alike.
+- Common Python SDK constructors type the injected HTTP client, source bindings
+  and borrowed RPC clients. Per-source connection option types are derived from
+  the actual binding signature, including retry, reconnect and authentication
+  callbacks. Closing the SDK cancels owned pending binding initialization, so a
+  timed-out eager WebSocket handshake cannot stall context-manager exit.
+
 - Common Python SDKs are formatted with Ruff, including cleaned and sorted
   imports. The codegen extra now supplies Ruff. Common TypeScript SDKs support
   `verbatimModuleSyntax`, `exactOptionalPropertyTypes`, `noUnusedLocals` and
@@ -272,6 +282,12 @@ The next release containing the breaking changes below must be 0.16.0.
   Python 3.13.
 
 ### Breaking changes
+
+- Regenerate common Python SDKs and type wrapper dictionaries with the generated
+  `Bindings`, `Clients` and per-source connection option types. Misspelled
+  options, wrong HTTP client objects and unknown source names now fail static
+  checks. Router wrapper dictionaries should use the matching option types from
+  `fastapi_canon.api_router`; forwarded HTTP keywords no longer accept `Any`.
 
 - Regenerate common SDKs. TypeScript `RequestOptions` becomes protocol-specific
   `CallOptions`, `HttpOptions` and `StreamOptions`; replace SSE `timeoutMs` with

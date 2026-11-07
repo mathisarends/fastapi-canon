@@ -16,6 +16,33 @@ or `webrtc` extra for the transports you use. `aiortc` selects the reference
 WebRTC engine. Core router imports do not load these optional runtimes or SDK
 generators. Existing specialized routers remain supported.
 
+## Typed HTTP options
+
+**TL;DR:** HTTP decorators, the router constructor and `include_router()` expose
+their forwarded keyword options to editors and type checkers. The option types
+are `RouteOptions`, `APIRouteOptions`, `RouterOptions` and `IncludeRouterOptions`
+in `fastapi_canon.api_router`.
+
+```python
+router = APIRouter(namespace="projects", prefix="/v1", redirect_slashes=False)
+
+
+@router.get("/projects", response_model=list[str], status_code=200)
+async def list_projects() -> list[str]:
+    return ["canon"]
+```
+
+**Rationale:** Forwarding a keyword at runtime should preserve the development
+experience of calling FastAPI directly. Misspellings such as `summery=` and
+incorrect values such as `status_code="200"` are now type errors. Existing
+supported keyword names keep their runtime behavior; update incorrectly typed
+wrapper dictionaries to the matching option type when migrating.
+
+`Feature.errors` reads explicit contributions and the current router declarations.
+Composition collects that catalog at build time, so routes may be registered
+before or after constructing the feature. Finish route registration before
+building the application, just as with FastAPI's router inclusion.
+
 ## Typed callable endpoints
 
 The default router resolves `Inject[T]` and `FromDishka[T]` for ordinary functions,

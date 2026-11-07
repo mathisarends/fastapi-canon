@@ -16,7 +16,11 @@ from starlette.routing import BaseRoute, WebSocketRoute
 from fastapi_canon.contract_routes import iter_contract_routes
 from fastapi_canon.exceptions import ConfigurationError
 from fastapi_canon.injected_route import InjectedRoute, inject_endpoint
+from fastapi_canon.router import APIRouteOptions as APIRouteOptions
 from fastapi_canon.router import CanonRouter
+from fastapi_canon.router import IncludeRouterOptions as IncludeRouterOptions
+from fastapi_canon.router import RouteOptions as RouteOptions
+from fastapi_canon.router import RouterOptions as RouterOptions
 
 if TYPE_CHECKING:
     from fastapi_canon.error.contracts import AnyError
@@ -110,7 +114,7 @@ class APIRouter(CanonRouter):
     ``route_class`` replaces this behavior.
     """
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(self, **kwargs: Unpack[RouterOptions]) -> None:
         kwargs.setdefault("route_class", InjectedRoute)
         super().__init__(**kwargs)
 
@@ -133,7 +137,9 @@ class APIRouter(CanonRouter):
             path, endpoint, name=name, dependencies=dependencies
         )
 
-    def include_router(self, router: FastAPIRouter, **options: Any) -> None:
+    def include_router(
+        self, router: FastAPIRouter, **options: Unpack[IncludeRouterOptions]
+    ) -> None:
         """Include routes, rejecting ambiguous WebSocket paths before mutation."""
         existing = {
             _websocket_path(path)

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any
+from enum import Enum
+from typing import Any, TypedDict, Unpack
 
 from fastapi import APIRouter
 from fastapi.params import Depends
 from fastapi.responses import JSONResponse, Response
 from fastapi.routing import APIRoute
-from starlette.routing import get_name
+from fastapi.types import IncEx
+from starlette.routing import BaseRoute, get_name
+from starlette.types import ASGIApp, Lifespan
 
 from fastapi_canon.error import Error, ErrorConfigurationError, ErrorRegistry
 from fastapi_canon.error.contracts import SUCCESS_EXTENSION, AnyError
@@ -17,6 +20,74 @@ from fastapi_canon.error.validation import unique_instances
 from fastapi_canon.exceptions import ConfigurationError, ResponseConfigurationError
 from fastapi_canon.policy import RouterPolicy, normalize_raises, validate_policy
 from fastapi_canon.response import CanonResponse
+
+
+class OpenAPIOptions(TypedDict, total=False):
+    """Metadata accepted by both HTTP declarations and router inclusion."""
+
+    tags: list[str | Enum] | None
+    dependencies: Sequence[Depends] | None
+    responses: dict[int | str, dict[str, Any]] | None
+    callbacks: list[BaseRoute] | None
+    deprecated: bool | None
+    include_in_schema: bool
+    generate_unique_id_function: Callable[[APIRoute], str]
+
+
+class IncludeRouterOptions(OpenAPIOptions, total=False):
+    """FastAPI options accepted by ``include_router()``."""
+
+    prefix: str
+    default_response_class: type[Response]
+
+
+class FastAPIRouterOptions(IncludeRouterOptions, total=False):
+    """FastAPI constructor options preserved by Canon routers."""
+
+    routes: list[BaseRoute] | None
+    redirect_slashes: bool
+    default: ASGIApp | None
+    dependency_overrides_provider: Any
+    route_class: type[APIRoute]
+    on_startup: Sequence[Callable[[], Any]] | None
+    on_shutdown: Sequence[Callable[[], Any]] | None
+    lifespan: Lifespan[Any] | None
+    strict_content_type: bool
+
+
+class RouterOptions(FastAPIRouterOptions, total=False):
+    """Constructor options accepted by the public ``APIRouter``."""
+
+    namespace: str | None
+    raises: Sequence[AnyError]
+    http_statuses: Sequence[int]
+    policy: RouterPolicy | None
+
+
+class RouteOptions(OpenAPIOptions, total=False):
+    """FastAPI options accepted by HTTP method decorators."""
+
+    response_model: Any
+    status_code: int | None
+    summary: str | None
+    description: str | None
+    response_description: str
+    operation_id: str | None
+    response_model_include: IncEx | None
+    response_model_exclude: IncEx | None
+    response_model_by_alias: bool
+    response_model_exclude_unset: bool
+    response_model_exclude_defaults: bool
+    response_model_exclude_none: bool
+    response_class: type[Response]
+    name: str | None
+    openapi_extra: dict[str, Any] | None
+
+
+class APIRouteOptions(RouteOptions, total=False):
+    """FastAPI options accepted by the general ``api_route()`` decorator."""
+
+    methods: list[str] | None
 
 
 class CanonRouter(APIRouter):
@@ -34,7 +105,7 @@ class CanonRouter(APIRouter):
         raises: Sequence[AnyError] = (),
         http_statuses: Sequence[int] = (),
         policy: RouterPolicy | None = None,
-        **kwargs: Any,
+        **kwargs: Unpack[FastAPIRouterOptions],
     ) -> None:
         if namespace is not None and (
             not isinstance(namespace, str)
@@ -85,7 +156,9 @@ class CanonRouter(APIRouter):
         )
         return tuple({id(registry): registry for registry in registries}.values())
 
-    def include_router(self, router: APIRouter, **kwargs: Any) -> None:
+    def include_router(
+        self, router: APIRouter, **kwargs: Unpack[IncludeRouterOptions]
+    ) -> None:
         """Include routes and preserve ownership of their error definitions."""
         super().include_router(router, **kwargs)
         if isinstance(router, CanonRouter):
@@ -119,7 +192,7 @@ class CanonRouter(APIRouter):
         raises: Sequence[AnyError] = (),
         http_statuses: Sequence[int] = (),
         response: CanonResponse | None = None,
-        **kwargs: Any,
+        **kwargs: Unpack[APIRouteOptions],
     ) -> Callable[[CallableT], CallableT]:
         """Declare a route and compile its inherited and local contracts."""
         local_raises = normalize_raises(raises, parameter="raises")
@@ -166,7 +239,7 @@ class CanonRouter(APIRouter):
             )
 
         def register(endpoint: CallableT) -> CallableT:
-            configured = {
+            configured: APIRouteOptions = {
                 **kwargs,
                 "openapi_extra": _RouteMetadata(
                     kwargs.get("openapi_extra") or {},
@@ -187,7 +260,7 @@ class CanonRouter(APIRouter):
         raises: Sequence[AnyError] = (),
         http_statuses: Sequence[int] = (),
         response: CanonResponse | None = None,
-        **kwargs: Any,
+        **kwargs: Unpack[RouteOptions],
     ) -> Callable[[CallableT], CallableT]:
         return self._method_route("GET", path, raises, http_statuses, response, kwargs)
 
@@ -198,7 +271,7 @@ class CanonRouter(APIRouter):
         raises: Sequence[AnyError] = (),
         http_statuses: Sequence[int] = (),
         response: CanonResponse | None = None,
-        **kwargs: Any,
+        **kwargs: Unpack[RouteOptions],
     ) -> Callable[[CallableT], CallableT]:
         return self._method_route("PUT", path, raises, http_statuses, response, kwargs)
 
@@ -209,7 +282,7 @@ class CanonRouter(APIRouter):
         raises: Sequence[AnyError] = (),
         http_statuses: Sequence[int] = (),
         response: CanonResponse | None = None,
-        **kwargs: Any,
+        **kwargs: Unpack[RouteOptions],
     ) -> Callable[[CallableT], CallableT]:
         return self._method_route("POST", path, raises, http_statuses, response, kwargs)
 
@@ -220,7 +293,7 @@ class CanonRouter(APIRouter):
         raises: Sequence[AnyError] = (),
         http_statuses: Sequence[int] = (),
         response: CanonResponse | None = None,
-        **kwargs: Any,
+        **kwargs: Unpack[RouteOptions],
     ) -> Callable[[CallableT], CallableT]:
         return self._method_route(
             "DELETE", path, raises, http_statuses, response, kwargs
@@ -233,7 +306,7 @@ class CanonRouter(APIRouter):
         raises: Sequence[AnyError] = (),
         http_statuses: Sequence[int] = (),
         response: CanonResponse | None = None,
-        **kwargs: Any,
+        **kwargs: Unpack[RouteOptions],
     ) -> Callable[[CallableT], CallableT]:
         return self._method_route(
             "OPTIONS", path, raises, http_statuses, response, kwargs
@@ -246,7 +319,7 @@ class CanonRouter(APIRouter):
         raises: Sequence[AnyError] = (),
         http_statuses: Sequence[int] = (),
         response: CanonResponse | None = None,
-        **kwargs: Any,
+        **kwargs: Unpack[RouteOptions],
     ) -> Callable[[CallableT], CallableT]:
         return self._method_route("HEAD", path, raises, http_statuses, response, kwargs)
 
@@ -257,7 +330,7 @@ class CanonRouter(APIRouter):
         raises: Sequence[AnyError] = (),
         http_statuses: Sequence[int] = (),
         response: CanonResponse | None = None,
-        **kwargs: Any,
+        **kwargs: Unpack[RouteOptions],
     ) -> Callable[[CallableT], CallableT]:
         return self._method_route(
             "PATCH", path, raises, http_statuses, response, kwargs
@@ -270,7 +343,7 @@ class CanonRouter(APIRouter):
         raises: Sequence[AnyError] = (),
         http_statuses: Sequence[int] = (),
         response: CanonResponse | None = None,
-        **kwargs: Any,
+        **kwargs: Unpack[RouteOptions],
     ) -> Callable[[CallableT], CallableT]:
         return self._method_route(
             "TRACE", path, raises, http_statuses, response, kwargs
@@ -299,7 +372,7 @@ class CanonRouter(APIRouter):
         raises: Sequence[AnyError],
         http_statuses: Sequence[int],
         response: CanonResponse | None,
-        kwargs: dict[str, Any],
+        kwargs: RouteOptions,
     ) -> Callable[[CallableT], CallableT]:
         return self.api_route(
             path,
