@@ -11,7 +11,6 @@ APPLICATION_NAMES = {
     "Composition",
     "Error",
     "ErrorOptions",
-    "ExceptionHandlerSpec",
     "Feature",
     "Inject",
     "ResponseHeaders",

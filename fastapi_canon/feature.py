@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import AsyncIterator, Callable, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field, replace
 from inspect import iscoroutine, iscoroutinefunction
@@ -68,28 +68,6 @@ _DEFAULT_TYPE_BASE = "urn:fastapi-canon:problem"
 
 
 @dataclass(frozen=True, slots=True, init=False)
-class ExceptionHandlerSpec:
-    """Associate an exception class with a Starlette exception handler."""
-
-    exception: type[Exception]
-    handler: ExceptionHandler
-
-    def __init__(self, exception: type[Exception], handler: ExceptionHandler) -> None:
-        raw_exception: object = exception
-        raw_handler: object = handler
-        if not isinstance(raw_exception, type) or not issubclass(
-            raw_exception, Exception
-        ):
-            msg = "exception must be an Exception subclass"
-            raise FeatureConfigurationError(msg)
-        if not callable(raw_handler):
-            msg = "handler must be callable"
-            raise FeatureConfigurationError(msg)
-        object.__setattr__(self, "exception", raw_exception)
-        object.__setattr__(self, "handler", raw_handler)
-
-
-@dataclass(frozen=True, slots=True, init=False)
 class Feature:
     """An immutable declaration of one feature's FastAPI contributions."""
 
@@ -100,7 +78,7 @@ class Feature:
     mcp: tuple[McpMount, ...]
     errors: tuple[AnyError, ...]
     """Errors this feature contributes: ``errors=`` plus declared ``raises``."""
-    exception_handlers: tuple[ExceptionHandlerSpec, ...]
+    exception_handlers: Mapping[type[Exception], ExceptionHandler]
     lifespan: FeatureLifespan | None
     checks: tuple[FeatureCheck, ...]
     _registry: ErrorRegistry | None = field(repr=False, compare=False)
@@ -114,7 +92,7 @@ class Feature:
         instrumentation: Sequence[Instrumentation] = (),
         mcp: Sequence[McpMount] = (),
         errors: Sequence[AnyError] = (),
-        exception_handlers: Sequence[ExceptionHandlerSpec] = (),
+        exception_handlers: Mapping[type[Exception], ExceptionHandler] | None = None,
         lifespan: FeatureLifespan | None = None,
         checks: Sequence[FeatureCheck] = (),
     ) -> None:
@@ -151,10 +129,8 @@ class Feature:
                 Instrumentation,
                 f"feature {normalized_name!r} instrumentation",
             )
-        normalized_handlers = _unique_instances(
-            exception_handlers,
-            ExceptionHandlerSpec,
-            f"feature {normalized_name!r} exception_handlers",
+        normalized_handlers = _exception_handlers(
+            exception_handlers, feature_name=normalized_name
         )
         raw_lifespan: object = lifespan
         try:
@@ -429,7 +405,7 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         raise FeatureConfigurationError("Composition description is unavailable")
     telemetry = composition.telemetry
     mounts = tuple(mount for feature in composition.features for mount in feature.mcp)
-    handler_specs = _flatten_handlers(composition.features)
+    handlers = _flatten_handlers(composition.features)
     lifespans = tuple(
         feature.lifespan
         for feature in composition.features
@@ -450,8 +426,8 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         _install_scopes(app, container)
     for router in installed_routers:
         app.include_router(router)
-    for spec in handler_specs:
-        app.add_exception_handler(spec.exception, spec.handler)
+    for exception, handler in handlers:
+        app.add_exception_handler(exception, handler)
     registry.install(
         app,
         include_validation_error=composition.errors.include_validation_error,
@@ -1463,10 +1439,63 @@ def _flatten_provider_sources(
 
 def _flatten_handlers(
     features: tuple[Feature, ...],
-) -> tuple[ExceptionHandlerSpec, ...]:
+) -> tuple[tuple[type[Exception], ExceptionHandler], ...]:
     return tuple(
-        handler for feature in features for handler in feature.exception_handlers
+        pair for feature in features for pair in feature.exception_handlers.items()
     )
+
+
+def _exception_handlers(
+    handlers: Mapping[type[Exception], ExceptionHandler] | None, *, feature_name: str
+) -> Mapping[type[Exception], ExceptionHandler]:
+    raw_handlers: object = handlers
+    if raw_handlers is None:
+        return _HandlerMap({})
+    if not isinstance(raw_handlers, Mapping):
+        msg = (
+            f"feature {feature_name!r} exception_handlers must be a mapping of "
+            "exception classes to handlers"
+        )
+        raise FeatureConfigurationError(msg)
+    normalized: dict[type[Exception], ExceptionHandler] = {}
+    for exception, handler in raw_handlers.items():
+        if not isinstance(exception, type) or not issubclass(exception, Exception):
+            msg = (
+                f"feature {feature_name!r} exception_handlers keys must be "
+                "Exception subclasses"
+            )
+            raise FeatureConfigurationError(msg)
+        if not callable(handler):
+            msg = (
+                f"feature {feature_name!r} exception handler for "
+                f"{exception.__qualname__} must be callable"
+            )
+            raise FeatureConfigurationError(msg)
+        normalized[exception] = handler
+    return _HandlerMap(normalized)
+
+
+class _HandlerMap(Mapping[type[Exception], ExceptionHandler]):
+    # Read-only and hashable, so Feature keeps its frozen dataclass hash.
+    __slots__ = ("_handlers",)
+
+    def __init__(self, handlers: dict[type[Exception], ExceptionHandler]) -> None:
+        self._handlers = dict(handlers)
+
+    def __getitem__(self, key: type[Exception]) -> ExceptionHandler:
+        return self._handlers[key]
+
+    def __iter__(self) -> Iterator[type[Exception]]:
+        return iter(self._handlers)
+
+    def __len__(self) -> int:
+        return len(self._handlers)
+
+    def __hash__(self) -> int:
+        return hash(tuple(self._handlers.items()))
+
+    def __repr__(self) -> str:
+        return repr(self._handlers)
 
 
 def _reject_duplicate_contributions(
@@ -1580,20 +1609,20 @@ def _prepare_routers(
 def _validate_handlers(app: FastAPI, features: tuple[Feature, ...]) -> None:
     seen: dict[type[Exception], str] = {}
     for feature in features:
-        for spec in feature.exception_handlers:
-            previous = seen.get(spec.exception)
+        for exception in feature.exception_handlers:
+            previous = seen.get(exception)
             if previous is not None:
                 msg = (
                     f"features {previous!r} and {feature.name!r} define an "
                     "exception handler for "
-                    f"{spec.exception.__qualname__}"
+                    f"{exception.__qualname__}"
                 )
                 raise FeatureConfigurationError(msg)
-            seen[spec.exception] = feature.name
-            if spec.exception in app.exception_handlers:
+            seen[exception] = feature.name
+            if exception in app.exception_handlers:
                 msg = (
                     f"feature {feature.name!r} defines an exception handler for "
-                    f"{spec.exception.__qualname__}, but the application already "
+                    f"{exception.__qualname__}, but the application already "
                     "defines one"
                 )
                 raise FeatureConfigurationError(msg)
@@ -1671,7 +1700,7 @@ def _make_container(
 def _validate_error_installation(
     app: FastAPI,
     routers: tuple[APIRouter, ...],
-    handler_specs: tuple[ExceptionHandlerSpec, ...],
+    handlers: tuple[tuple[type[Exception], ExceptionHandler], ...],
     registry: ErrorRegistry | None,
     *,
     include_validation_error: bool,
@@ -1706,8 +1735,8 @@ def _validate_error_installation(
     validation_app.exception_handlers.update(app.exception_handlers)
     for router in routers:
         validation_app.include_router(router)
-    for spec in handler_specs:
-        validation_app.add_exception_handler(spec.exception, spec.handler)
+    for exception, handler in handlers:
+        validation_app.add_exception_handler(exception, handler)
     try:
         if registry is not None:
             registry.install(

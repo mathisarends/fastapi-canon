@@ -292,6 +292,14 @@ The next release containing the breaking changes below must be 0.16.0.
   declaring it. `ErrorRegistry(...)` declarations no longer contribute mappings,
   and the `CAN002` message names the application catalog instead of the router
   registry.
+- `ExceptionHandlerSpec` is removed from `fastapi_canon`. `Feature` takes
+  `exception_handlers=` as a mapping from exception class to handler, like
+  FastAPI's `exception_handlers=`, and `Feature.exception_handlers` is a
+  read-only mapping. Migrate
+  `exception_handlers=[ExceptionHandlerSpec(DomainError, handler)]` to
+  `exception_handlers={DomainError: handler}`, and iterate
+  `feature.exception_handlers.items()` instead of reading `spec.exception` and
+  `spec.handler`.
 - Supported nested route factories now report contract gaps instead of blanket
   CAN003, and their operation names become `module.factory.<locals>.endpoint`.
   Before adopting 0.16.0, update report-name filters and map/declare newly exposed
