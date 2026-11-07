@@ -8,9 +8,12 @@ from typing import Any, cast, get_args, get_type_hints
 from fastapi import Request
 from pydantic import TypeAdapter
 from starlette.concurrency import iterate_in_threadpool
+from starlette.routing import Match
 
+from fastapi_canon.contract_routes import iter_contract_routes
 from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
 from fastapi_canon.error.catalog import app_registry, internal_problem, problem_for
+from fastapi_canon.error.openapi import inherited_contract
 from fastapi_canon.error.registry import AnyError
 from fastapi_canon.integrations.sse.router import (
     ServerSentEvent,
@@ -139,10 +142,12 @@ def _terminal_stream(
         except Exception as exc:  # pylint: disable=broad-exception-caught
             # This boundary handles arbitrary application generator exceptions.
             declared = catalog.resolve(exc)
+            effective_errors = (*errors, *_inherited_stream_errors(request))
             try:
                 problem = (
                     problem_for(catalog, exc)
-                    if declared is not None and any(declared is e for e in errors)
+                    if declared is not None
+                    and any(declared is e for e in effective_errors)
                     else None
                 )
             except Exception:  # pylint: disable=broad-exception-caught
@@ -193,3 +198,14 @@ def _terminal_stream(
         endpoint, "__canon_declared_endpoint__", endpoint
     )
     return wrapped
+
+
+def _inherited_stream_errors(request: Request) -> tuple[AnyError, ...]:
+    # Lazy FastAPI inclusion keeps parent callbacks on the effective route,
+    # while the request scope may still expose only the original child route.
+    for _, route in iter_contract_routes(request.app.routes, include_mounts=False):
+        match, _ = route.matches(request.scope)
+        if match is Match.FULL:
+            errors, _ = inherited_contract(route)
+            return errors
+    return ()
