@@ -124,7 +124,7 @@ def test_json_unsupported_operation_has_context_without_partial_writes(
     (diagnostic,) = report["diagnostics"]
     assert diagnostic["severity"] == "error"
     assert diagnostic["code"] == "canon.codegen.E002"
-    assert "only JSON request bodies" in diagnostic["message"]
+    assert "multipart requires a flat object" in diagnostic["message"]
     assert diagnostic["locations"] == [
         {
             "source": "upload",

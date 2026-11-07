@@ -6,7 +6,6 @@ documented in their merged PRs.
 | Ticket | Kind | Status |
 | --- | --- | --- |
 | [DX-017](DX-017-combined-sdk-example.md) | Documentation and fixture | Open |
-| [DX-018](DX-018-multipart-support-boundary.md) | Decision | Open |
 | [DX-019](DX-019-getting-started-path.md) | Documentation | Open |
 | [DX-020](DX-020-mcp-activation-policy.md) | Decision | Done ([#99](https://github.com/mathisarends/fastapi-canon/pull/99)) |
 | [DX-021](DX-021-composition-prefix-policy.md) | Decision | Done ([#99](https://github.com/mathisarends/fastapi-canon/pull/99)) |

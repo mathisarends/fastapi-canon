@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi_canon.codegen.config import SourceConfig
+from fastapi_canon.codegen.http_bodies import binary_schema, read_http_body
 from fastapi_canon.codegen.ir import (
     Binding,
     GenerationError,
@@ -143,28 +144,20 @@ def _openapi(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
                     )
                 )
             body = raw.get("requestBody")
+            request_media = ""
             if body is not None:
                 body = resolve_ref(document, body)
-                media = body.get("content", {})
-                if set(media) != {"application/json"}:
-                    raise GenerationError(
-                        f"{config.name}:{identity}: only JSON request bodies are supported",
-                        code="canon.codegen.E002",
-                        source=config.name,
-                        operation=identity,
-                        path=f"{method.upper()} {path}",
-                    )
-                parameters.append(
-                    Parameter(
-                        "body",
-                        "body",
-                        media["application/json"].get("schema", {}),
-                        body.get("required", False),
-                        "body",
-                    )
-                )
-            successes = {}
+                try:
+                    body_parameters, request_media = read_http_body(document, body)
+                except GenerationError as error:
+                    error.source = config.name
+                    error.operation = identity
+                    error.path = f"{method.upper()} {path}"
+                    raise
+                parameters.extend(body_parameters)
+            successes: dict[str, dict[str, Any]] = {}
             bodyless = []
+            binary_responses = []
             streams = []
             for status, raw_response in raw.get("responses", {}).items():
                 if not status.startswith("2"):
@@ -178,6 +171,13 @@ def _openapi(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
                     bodyless.append(status)
                 elif set(content) == {"application/json"}:
                     successes[status] = content["application/json"].get("schema", {})
+                elif len(content) == 1 and binary_schema(
+                    resolve_ref(
+                        document, next(iter(content.values())).get("schema", {})
+                    )
+                ):
+                    successes[status] = {"type": "string", "x-canon-binary": True}
+                    binary_responses.append(status)
                 else:
                     raise GenerationError(
                         f"{config.name}:{identity}: unsupported success response media type",
@@ -187,6 +187,14 @@ def _openapi(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
                         path=f"{method.upper()} {path}",
                     )
             if streams:
+                if request_media not in {"", "application/json"}:
+                    raise GenerationError(
+                        "SSE does not support multipart or binary request bodies",
+                        code="canon.codegen.E002",
+                        source=config.name,
+                        operation=identity,
+                        path=f"{method.upper()} {path}",
+                    )
                 if len(streams) != 1 or successes:
                     raise GenerationError(
                         f"{config.name}:{identity}: ambiguous streaming response",
@@ -263,7 +271,12 @@ def _openapi(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
                     identity,
                     path=path,
                     method=method.upper(),
-                    metadata={"responses": successes, "bodyless": bodyless},
+                    metadata={
+                        "responses": successes,
+                        "bodyless": bodyless,
+                        "request_media": request_media,
+                        "binary": binary_responses,
+                    },
                 )
                 interaction = "call"
             _parameter_names(parameters, config.name, identity)

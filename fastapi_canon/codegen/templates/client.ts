@@ -53,7 +53,9 @@ interface RequestSpec {
   method: string;
   statuses: readonly string[];
   bodyless: readonly string[];
-  parameters: readonly { name: string; wire: string; location: string; required: boolean }[];
+  binary: readonly string[];
+  requestMedia: string;
+  parameters: readonly { name: string; wire: string; location: string; required: boolean; array: boolean }[];
 }
 
 export class Runtime {
@@ -151,7 +153,8 @@ export class Runtime {
     const query = new URLSearchParams();
     const headers = new Headers(this.options.headers);
     new Headers(options.headers).forEach((value, key) => headers.set(key, value));
-    let body: string | undefined;
+    let body: BodyInit | undefined;
+    const form = spec.requestMedia === "multipart/form-data" ? new FormData() : undefined;
     for (const parameter of spec.parameters) {
       const value = (values as Record<string, unknown>)[parameter.name];
       if (value === undefined) {
@@ -159,8 +162,23 @@ export class Runtime {
         continue;
       }
       if (value === null && parameter.location !== "body" && !parameter.required) continue;
+      if (parameter.location === "file" || parameter.location === "form") {
+        if (parameter.array && !Array.isArray(value)) throw new TypeError(`Multipart part ${parameter.wire} requires an array`);
+        for (const item of parameter.array ? value as unknown[] : [value]) {
+          if (parameter.location === "file") {
+            if (!(item instanceof Blob)) throw new TypeError(`Multipart file ${parameter.wire} requires Blob or File`);
+            form!.append(parameter.wire, item);
+          } else form!.append(parameter.wire, scalar(item));
+        }
+        continue;
+      }
       if (parameter.location === "body") {
-        body = JSON.stringify(value); headers.set("content-type", "application/json");
+        if (spec.requestMedia === "application/octet-stream") {
+          if (!(value instanceof Blob)) throw new TypeError("Binary request bodies require Blob");
+          body = value; headers.set("content-type", "application/octet-stream");
+        } else {
+          body = JSON.stringify(value); headers.set("content-type", "application/json");
+        }
       } else if (parameter.location === "path") {
         const encoded = encodeURIComponent(scalar(value));
         if ([".", "..", ""].includes(encoded)) throw new TypeError("Invalid path parameter");
@@ -171,6 +189,7 @@ export class Runtime {
         headers.set(parameter.wire, scalar(value));
       }
     }
+    if (form) { body = form; headers.delete("content-type"); }
     const suffix = query.toString();
     const url = this.options.baseUrl.replace(/\/$/, "") + "/" + path.replace(/^\//, "") + (suffix ? "?" + suffix : "");
     const controller = new AbortController();
@@ -202,6 +221,14 @@ export class Runtime {
       if (response.status < 200 || response.status >= 300) throw new ProtocolError("Unexpected HTTP response status");
       const status = spec.statuses.includes(String(response.status)) ? String(response.status) : "2XX";
       if (!spec.statuses.includes(status)) throw new ProtocolError("Undocumented HTTP response status");
+      if (spec.binary.includes(status)) {
+        try { return await response.blob() as T; }
+        catch (cause) {
+          if (controller.signal.aborted) throw controller.signal.reason;
+          if (this.lifetime.signal.aborted) throw cause;
+          throw new TransportError("HTTP response body failed", { cause });
+        }
+      }
       const text = await this.readText(response, controller.signal);
       if (spec.bodyless.includes(status)) {
         if (text) throw new ProtocolError("Unexpected body for bodyless HTTP response");

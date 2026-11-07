@@ -254,8 +254,9 @@ duplicating DTOs across contracts.
 
 The [codegen guide](unified-canon-concept.md) covers naming, model identity,
 connection/auth options, operation selection and output ownership. It also
-documents limits: unified HTTP generation supports JSON and declared SSE;
-unsupported multipart/file operations must be explicitly excluded. WebRTC
+documents limits: unified HTTP generation supports JSON, declared SSE, flat
+multipart uploads and binary transfers. Unsupported nested multipart encodings
+must be explicitly excluded. WebRTC
 generation targets TypeScript. The [runnable canonical-errors example](../examples/canonical_errors/app.py)
 includes a complete multi-transport configuration.
 

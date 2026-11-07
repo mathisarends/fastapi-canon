@@ -333,9 +333,11 @@ are consumer-reported results, not independent workspace deployment verification
 Deployed TURN/NAT, PostgreSQL concurrency and proxies still require
 application-side validation.
 
-The 0.10.0 unified SDK is also exercised across HTTP, SSE and JSON-RPC
+The unified SDK is also exercised across HTTP, SSE and JSON-RPC
 with one problem/error identity and shared model classes. Tests compile and run
 the generated TypeScript facade, compile its socket/WebRTC session signatures,
-and exercise generated Python requests and cleanup. The common HTTP binding is
-a JSON subset; multipart, other parameter styles and unsupported schemas fail
+and exercise generated Python requests and cleanup. The next release also tests
+flat multipart uploads and binary round trips against a real FastAPI application
+with both Python HTTP backends and a compiled TypeScript consumer. Nested
+multipart encodings, other parameter styles and unsupported schemas fail
 preflight. See the [codegen guide](unified-canon-concept.md) for the precise scope.
