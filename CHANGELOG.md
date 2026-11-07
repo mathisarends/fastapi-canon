@@ -280,6 +280,11 @@ The next release containing the breaking changes below must be 0.16.0.
   checks run when their inputs change. Pushes to `main`, manual runs and the
   `full-ci` label run the complete matrix. The weekly upstream canary adds
   Python 3.13.
+- The reference service names its operations through router `namespace=`
+  (`tasks.create`, `tasks.list_recent`, `tasks.complete`, `system.health`)
+  instead of flat explicit operation IDs, so its generated SDK groups task
+  methods under `client.tasks`. The router guide imports `RpcChannel` from
+  `fastapi_canon.integrations.websockets`, where it is defined.
 
 ### Breaking changes
 
