@@ -71,7 +71,7 @@ represent another PyPI distribution.
 | Typed SSE | `APIRouter.sse()` | [SSE contracts](streams.md) |
 | WebSocket JSON-RPC | `APIRouter.include_channel()` with `fastapi_canon.integrations.websockets.RpcChannel` | [WebSockets](integrations/websockets/README.md) |
 | Raw WebSocket messages and binary streams | `fastapi_canon.integrations.websockets.CanonWebSocketRouter`, `RpcSocket` | [Sockets](integrations/websockets/sockets.md) |
-| WebRTC with Canon admission errors | `APIRouter.webrtc()`, `fastapi_canon.integrations.webrtc.Session` | [WebRTC admission](webrtc.md) |
+| WebRTC with Canon admission errors | `APIRouter.webrtc()`, `fastapi_canon.integrations.webrtc.Session`, `SessionCapacity`; engine adapters in `.webrtc.engines` | [WebRTC admission](webrtc.md) |
 | Contract export | `fastapi_canon.export_contracts`, `fastapi_canon.contracts.Contracts`, `fastapi-canon contracts export` | [Application export](contracts.md) |
 | OpenAPI contracts without `Composition` | `fastapi_canon.openapi.install_openapi_contracts`, `validate_openapi_contracts` | [Composition](composition.md) |
 | Startup configuration errors | `fastapi_canon.exceptions.ConfigurationError` and its subclasses | [Problems](problems.md) |

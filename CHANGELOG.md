@@ -20,6 +20,10 @@ The next release containing the breaking changes below must be 0.16.0.
   `Inject[T]` obtains their results by return type or resolves application services
   through DI. The shared `APIRouter.include_channel(...)` forwards these options;
   specialized WebSocket routers remain supported.
+- `APIRouter` is the only router applications use. Declare streams with
+  `@router.sse(...)` and WebRTC sessions with `@router.webrtc(...)`; the SSE and
+  WebRTC routers are internal. Engine, ICE, origin and limit options move to each
+  declaration, and `SessionCapacity` shares a session budget across declarations.
 - Dishka owns resources. Canon closes the admission REQUEST scope before
   acceptance. Return independently usable context data and put resources needed
   until disconnect in SESSION-scoped providers.
@@ -292,6 +296,37 @@ The next release containing the breaking changes below must be 0.16.0.
   Before adopting 0.16.0, update report-name filters and map/declare newly exposed
   escaping errors. Path and decorator line remain separate report fields; see
   [factory coverage](docs/error-checking.md#direct-local-route-factories).
+- `StreamRouter`, `CanonStreamRouter`, `WebRtcRouter` and `CanonWebRtcRouter`
+  are no longer exported from `fastapi_canon.integrations.sse` or
+  `fastapi_canon.integrations.webrtc`. Declare streams on an `APIRouter`: migrate
+  `streams = CanonStreamRouter(prefix="/runs")` with `@streams.stream(path, ...)`
+  to `router = APIRouter(prefix="/runs")` with `@router.sse(path, ...)`, and
+  `app.include_router(streams)` to including `router` in a `Feature`. A typed SSE
+  stream ends with `canon.complete` and reports failures as `canon.problem`, so
+  regenerate SSE clients after the migration. Existing plain SSE endpoints can
+  still get generated clients from an OpenAPI 3.2 contract
+  ([native transports](docs/integrations/sse/native-transports.md)).
+- WebRTC sessions are declared with `@router.webrtc(path, ...)` instead of
+  `rtc = WebRtcRouter(engine=..., prefix=...)` with `@rtc.session(path, ...)`.
+  Router-level `engine=`, `ice_servers=`, `on_event=`, `allowed_origins=` and
+  `limits=` move to each `webrtc()` declaration; put the path prefix on the
+  `APIRouter`. Shared declaration settings can be module constants, as in
+  `examples/webrtc/practice`.
+- A router-wide `max_sessions=` and `WebRtcRouter.active_sessions` are replaced by
+  `SessionCapacity`. Migrate `WebRtcRouter(max_sessions=50)` to
+  `CAPACITY = SessionCapacity(max_sessions=50)` passed as `capacity=CAPACITY` to
+  every declaration that shares the budget, and read `CAPACITY.active`. A
+  declaration's own `max_sessions=` keeps limiting that declaration.
+- `fastapi_canon.integrations.webrtc` no longer re-exports the engine adapter
+  types, `AdmissionErrors` or `SessionDeclaration`. Import `Engine`,
+  `EngineCapabilities`, `PeerConfig`, `PeerObserver`, `SessionDescription` and the
+  other adapter types from `fastapi_canon.integrations.webrtc.engines`. The SSE
+  and WebRTC facades no longer export `__version__`; use
+  `fastapi_canon.__version__`.
+- The `agent_runs` SSE example contract now uses Canon terminal frames and
+  problem details. Its regenerated clients raise `ProblemError` for problem
+  responses instead of `HttpError`, and consumers decode validation problems from
+  `ProblemError.problem`.
 
 - Supported context-manager paths can now expose CAN001/CAN002 gaps previously
   hidden behind unsupported `with`/`async with` statements. Before enabling strict
