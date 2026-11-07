@@ -44,7 +44,6 @@ from fastapi_canon.integrations.websockets.streams import (
     RpcBinaryOutput,
     RpcStreamDirection,
 )
-from fastapi_canon.integrations.websockets.wire import wire_annotation
 
 
 @dataclass(frozen=True, slots=True)
@@ -255,7 +254,7 @@ def method_definition(
         handler_name=handler_name,
         request_name=request_name,
         params=params,
-        result=wire_annotation(_result_annotation(function)),
+        result=_result_annotation(function),
         summary=summary,
         raises=raises,
         server=server,
@@ -288,7 +287,7 @@ def _router_params_model(
         if parameter.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD,) and _is_model(
             annotation
         ):
-            return wire_annotation(annotation), parameter.name, injected
+            return annotation, parameter.name, injected
 
     names = ", ".join(parameter.name for parameter in wire_parameters)
     raise ProtocolDefinitionError(

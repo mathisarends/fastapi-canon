@@ -344,6 +344,15 @@ accounting when the required bound spans workers or hosts.
 `RpcModel` is fastapi_canon.integrations.websockets's strict Pydantic base model. Existing Pydantic
 `BaseModel` classes are supported too, so domain models do not need to inherit
 from `RpcModel` merely to appear in an RPC signature.
+Plain models retain their declared field names, validation/serialization aliases,
+nested model configuration, validators and extra-field policy. RPC does not clone
+them or install its own alias generator. For example, `project_id: int` stays
+`project_id` on the wire unless the model declares an alias.
+
+When migrating from automatic adaptation, use `RpcModel` to retain camel-case
+names and rejection of unknown fields, or configure that policy explicitly on
+the Pydantic model. Regenerate clients after choosing the wire contract. See
+[shared DTOs](../../unified-canon-concept.md#names-and-shared-models).
 
 [Back to documentation](README.md)
 ## Idempotent methods

@@ -283,6 +283,18 @@ The next release containing the breaking changes below must be 0.16.0.
 
 ### Breaking changes
 
+- RPC now preserves plain Pydantic models' declared aliases, validation settings
+  and extra-field policy instead of cloning them with camel-case aliases and
+  `extra="forbid"`. Regenerate clients for the declared wire shape. Inherit from
+  `RpcModel` or explicitly configure aliases and `extra="forbid"` before upgrading
+  to retain the previous RPC convention. Shared HTTP/SSE/RPC DTOs need one semantic
+  model identity and compatible schemas, without an adapter-specific workaround.
+- Problem `title` remains required public text but is no longer a literal in
+  generated Python/TypeScript models, including built-in problems. Regenerate
+  and distribute clients before changing server titles, and replace title-based
+  discrimination with error classes or problem `type`. `Error(title=...)` and
+  the default server payload stay supported; no private diagnostics are added.
+
 - Regenerate common Python SDKs and type wrapper dictionaries with the generated
   `Bindings`, `Clients` and per-source connection option types. Misspelled
   options, wrong HTTP client objects and unknown source names now fail static

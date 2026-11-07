@@ -70,7 +70,7 @@ def test_same_domain_error_across_http_stream_and_rpc() -> None:
                     "jsonrpc": "2.0",
                     "id": 1,
                     "method": "projects.cancel",
-                    "params": {"projectId": 0},
+                    "params": {"project_id": 0},
                 }
             )
             response = socket.receive_json()
@@ -154,7 +154,7 @@ def test_nested_plain_router_keeps_declarations_isolated_between_applications() 
                     "jsonrpc": "2.0",
                     "id": 1,
                     "method": "projects.cancel",
-                    "params": {"projectId": 0},
+                    "params": {"project_id": 0},
                 }
             )
             rpc = socket.receive_json()
