@@ -54,7 +54,7 @@ def _main() -> None:
             "from typing import Annotated, Literal\n"
             "from fastapi import FastAPI, Path, Query\n"
             "from pydantic import BaseModel, Field\n"
-            "from fastapi_canon.integrations.sse import StreamRouter\n"
+            "from fastapi_canon.integrations.sse.router import StreamRouter\n"
             "class Event(BaseModel):\n"
             '    type: Literal["event"]\n'
             "    text: str = Field(min_length=2, max_length=20, pattern='^[a-z]+$')\n"
