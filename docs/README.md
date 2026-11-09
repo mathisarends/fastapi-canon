@@ -7,6 +7,7 @@ and WebSocket operations into one API and generates both client languages.
 | --- | --- |
 | Define public errors | [Shared problems](problems.md) |
 | Check error declarations in CI | [Static error checks](error-checking.md) |
+| Upload files, send multipart forms and download binary content | [File transfers](integrations/uploads.md) |
 | Send and consume typed SSE events | [Streaming](integrations/sse/README.md) |
 | Build WebSocket RPC and message streams | [WebSockets](integrations/websockets/README.md) |
 | Generate and configure clients | [Client generation](unified-canon-concept.md) |

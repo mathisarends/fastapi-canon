@@ -290,6 +290,7 @@ The installed-wheel matrix covers:
 | `[otel-httpx]` | Explicit per-client HTTPX instrumentation and cleanup |
 | `[otel-sqlalchemy]` | Engine-local sync/async SQLAlchemy instrumentation and pool observations |
 | Canon base | Composition with optional tools and engines absent |
+| `[uploads]` | Single/repeated file parts, scalar form fields and binary responses using the installed parser |
 | `[database]` | Database declarations without a driver or Alembic installed |
 | `[database,sqlite,migrations]` | SQLite transactions, Alembic upgrades and schema checks |
 | `[database,sqlite,migrations,sqlmodel]` | SQLModel sessions on the same transaction lifecycle |
@@ -299,10 +300,11 @@ The installed-wheel matrix covers:
 | `[webrtc]` | Session declarations, signaling, admission and missing-engine diagnostics |
 | `[webrtc,aiortc]` | Optional engine installation |
 | `[codegen]` | Offline specialized and unified generation without transport/engine extras; execution of a generated JSON HTTP client |
+| `[uploads,codegen]` | Multipart runtime and generator dependencies installed together |
 | `[sse,codegen]` | SSE contracts and clients |
 | `[websockets,codegen]` | OpenRPC export and client execution/compilation |
 | `[sse,websockets,codegen]` | Shared application state and Dishka cleanup |
-| `[sse,websockets,webrtc,aiortc,codegen,otel]` | Combined routing and client generation |
+| `[sse,websockets,webrtc,aiortc,codegen,otel,mcp,uploads]` | Combined routing and client generation |
 
 Run `scripts/check_distributions.py` through the locked root environment for
 current compatible dependencies. Add `--python 3.12 --dependencies minimum` for

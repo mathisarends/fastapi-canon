@@ -545,6 +545,12 @@ separate HTTP binding is needed for the supported cases. The common reader
 recognizes OpenAPI `format: binary` and FastAPI's unencoded
 `contentMediaType: application/octet-stream` string schemas.
 
+Install `fastapi-canon[uploads]` on the server for the multipart parser.
+Single `file: UploadFile` and repeated `files: list[UploadFile]` parameters work
+directly. Use `Annotated[..., File(...)]` for aliases or descriptions and
+`Annotated[T, Form()]` for scalar form fields. See the [file transfer guide](integrations/uploads.md)
+for the complete developer API and runnable upload/download example.
+
 Multipart request bodies must be flat objects with named parts. Parts
 may be files, strings, numbers, integers or booleans, including arrays of each.
 Arrays become repeated parts with the same wire name, preserving order. Optional

@@ -30,6 +30,7 @@ dependencies, telemetry runtimes or media engines.
 
 | Extra | Purpose |
 | --- | --- |
+| `uploads` | Multipart parser for single/multiple HTTP file uploads and form fields |
 | `sse` | FastAPI and Pydantic versions required by typed SSE |
 | `websockets` | Pydantic, core-schema and typing requirements for RPC and sockets |
 | `webrtc` | AnyIO, Starlette and typing requirements for session signaling |

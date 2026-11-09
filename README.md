@@ -18,6 +18,9 @@ WebSocket RPC, exported contracts, and generated Python and TypeScript clients.
 
 - **HTTP, SSE and WebSockets:** typed operations, event streams and RPC methods,
   with generated Python and TypeScript clients.
+- **File transfers:** single and multiple multipart uploads with form fields,
+  plus binary downloads in generated SDKs. See the [upload guide](docs/integrations/uploads.md)
+  for the unreleased source API.
 - **Public errors:** map domain exceptions once, declare them with `raises=`,
   and carry the contract into HTTP RFC 9457 Problem Details, streams and SDKs.
 - **Static checks and code generation:** find missing error mappings and

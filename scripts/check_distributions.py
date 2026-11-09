@@ -54,6 +54,7 @@ def _main() -> None:
         ("fastapi-canon" + (f"[{extras}]" if extras else ""),)
         for extras in (
             "",
+            "uploads",
             "otel",
             "otel-httpx",
             "otel-sqlalchemy",
@@ -66,11 +67,12 @@ def _main() -> None:
             "webrtc",
             "webrtc,aiortc",
             "codegen",
+            "uploads,codegen",
             "mcp",
             "sse,codegen",
             "websockets,codegen",
             "sse,websockets,codegen",
-            "sse,websockets,webrtc,aiortc,codegen,otel,mcp",
+            "sse,websockets,webrtc,aiortc,codegen,otel,mcp,uploads",
         )
     )
     for requirements in combinations:
@@ -120,6 +122,7 @@ def _main() -> None:
                 *(["--migrations"] if "migrations" in extras else []),
                 *(["--sqlmodel"] if "sqlmodel" in extras else []),
                 *(["--mcp"] if "mcp" in extras else []),
+                *(["--uploads"] if "uploads" in extras else []),
                 cwd=Path(temporary),
                 timeout=120,
             )

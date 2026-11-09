@@ -15,7 +15,14 @@ from fastapi import Body, FastAPI, File, Form, UploadFile
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
-from fastapi_canon import APIRouter, Composition, Error, Feature, export_contracts
+from fastapi_canon import (
+    APIRouter,
+    CanonResponse,
+    Composition,
+    Error,
+    Feature,
+    export_contracts,
+)
 from tests.unit.integrations.webrtc.server import serve
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -39,8 +46,8 @@ def file_app() -> FastAPI:
 
     @router.post("/upload", raises=[rejected])
     async def upload(
-        document: Annotated[UploadFile, File()],
-        attachments: Annotated[list[UploadFile], File()],
+        document: UploadFile,
+        attachments: list[UploadFile],
         title: Annotated[str, Form()],
         tags: Annotated[list[str], Form()],
         enabled: Annotated[bool, Form()],
@@ -87,16 +94,7 @@ def file_app() -> FastAPI:
 
     @router.get(
         "/download",
-        response_class=Response,
-        responses={
-            200: {
-                "content": {
-                    "application/pdf": {
-                        "schema": {"type": "string", "format": "binary"}
-                    }
-                }
-            }
-        },
+        response=CanonResponse.binary("application/pdf"),
     )
     async def download() -> Response:
         return Response(PAYLOAD, media_type="application/pdf")
