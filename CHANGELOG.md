@@ -10,7 +10,7 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 - Remove the Python/TypeScript HTTP generator and unified domain SDK. Replace
   version-1 `[codegen]` sources/targets with the version-2 workflow in
-  `docs/codegen.md`. Use external OpenAPI tooling for HTTP and specialized
+  [generation guide](docs/codegen.md). Use external OpenAPI tooling for HTTP and specialized
   SSE/RPC/WebRTC client APIs. Replace facade-specific `.safe()`, binding options
   and model identity/name mappings. Shared Python `Error` declarations and
   public problem contracts remain. JSON generation reports use schema version 2
@@ -34,11 +34,15 @@ All notable changes to `fastapi-canon` are documented in this file.
   storage and `CanonResponse.binary(...)` downloads. Installed-wheel smoke checks
   exercise the extra independently and alongside code generation.
 - Version-2 generation exports contracts once and coordinates specialized
-  clients and external HTTP generate/check commands. See `docs/sdk-design.md`
-  for the design rationale.
+  clients and external HTTP generate/check commands. See the
+  [design rationale](docs/sdk-design.md).
 
 ### Fixed
 
+- Public-index release verification now exercises multipart uploads with the
+  `uploads` extra, alongside code generation and in the combined installation.
+- Shorten the overview and contributor guides, preserve release evidence as
+  linked records, and remove obsolete shared-SDK claims from the quickstart.
 - Instrumented dependencies preserve their wrapped adapter's `isinstance` identity
   during Pydantic arbitrary-type validation. Concretely typed internal service
   fields in MCP authentication tokens accept valid instrumented registries while

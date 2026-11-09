@@ -47,6 +47,23 @@ Shared errors and common generation are documented in `docs/problems.md` and
   Application code uses feature slices, inward dependencies, framework-free domain
   and Dishka for application dependencies.
 
+## Documentation
+
+- Write for people who need to choose, install or use Canon. Lead with the task,
+  show one small working example, then explain only the behavior needed to use it.
+- Keep the README to an overview, installation and one example. Put walkthroughs
+  in task guides and link to them instead of repeating their content.
+- Document public contracts, ownership, limitations and migration steps. Read
+  implementation details from code and executable policy; do not narrate modules,
+  internal call graphs, test inventories or completed development work in guides.
+- Give each topic one primary page. Reuse links, remove stale claims and verify
+  examples against this checkout. Clearly label unpublished APIs and versions.
+- Keep release records compact: version, status and links to source, CI, runs and
+  artifacts. Preserve historical evidence; logs and manifests belong in Actions
+  and GitHub Releases, not prose transcripts in the documentation.
+- Update the affected guide when behavior changes. Avoid adding a design record,
+  checklist or summary page unless it answers a distinct reader need.
+
 ## Workflow and verification
 
 Run from the root:

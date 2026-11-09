@@ -1,133 +1,56 @@
 # Repository architecture
 
-Canon is one Python library, built from the root `pyproject.toml`. Its import
-package is `fastapi_canon/`; there is no Python or pnpm package workspace.
-Optional transports and telemetry ship inside the same distribution and version.
+Canon is one Python distribution, built from the root `pyproject.toml`.
+All integrations share its version. The reference service is an installable
+example, not a release target.
 
 ```text
-fastapi_canon/                  Library and public facades
-  error/                       Error values, catalog and HTTP/OpenAPI adapters
-  integrations/                SSE, WebSockets, WebRTC, MCP and telemetry
-    database/                  Optional SQLAlchemy ownership and Alembic runner
-  codegen/                     Generation workflow and shared problem templates
-  checks/                      Static error-contract analysis
-tests/
-  unit/                        Isolated behavior, including explicit test seams
-  integration/                 Real framework and transport interactions
-  contract/                    HTTP schemas, protocol contracts and artifacts
-  fixtures/                    Shared test support, snapshots and generated SDKs
-  typescript/                  Browser SDK runtime and type checks
-  browser/                     Real Chromium/WebRTC sessions
-examples/                      Runnable applications and their generated clients
-docs/                          Library, integration and contributor documentation
-  integrations/                Detailed transport guides
-scripts/                       Development, distribution and release entrypoints
+fastapi_canon/          Library and public facades
+  error/               Error values and HTTP/OpenAPI adapters
+  integrations/        Optional transports, database, MCP and telemetry
+  codegen/             Contract export and generation workflow
+  checks/              Static error-contract analysis
+tests/                 Unit, integration, contract, TypeScript and browser suites
+  fixtures/            Shared support, snapshots and generated clients
+examples/              Runnable applications
+docs/                  Task guides and contributor reference
+scripts/               Development, artifact and release commands
 ```
 
-The root owns build metadata, dependency groups, `uv.lock`, the Node tooling
-manifest and `pnpm-lock.yaml`. The reference service under
-`examples/reference-service/` is an editable development dependency and an
-independently installable example, not another Canon release target.
-`release.toml` selects the repository root as the sole Canon release directory.
+The root owns the Python and Node manifests, lockfiles, CI and release metadata.
+The dependency map and source policies are enforced by [Smelt](../smelt.yml).
 
-## Dependencies
+## Dependency direction
 
-Error values, metadata and rendering depend only on the standard library and
-Pydantic. Successful-response metadata builds on those values. HTTP and OpenAPI
-adapters consume the read-only `ErrorCatalog` protocol; routing builds on adapters,
-and composition owns routing, Dishka and lifecycle integration. Each transport
-has its own role and must not import sibling transports or eagerly load optional
-engines. Generators may read protocol contracts. Repository scripts sit outside
-the runtime package and may orchestrate its supported integrations.
+| Layer | Responsibility |
+| --- | --- |
+| Values and responses | Framework-independent data, metadata and rendering; standard library and Pydantic only |
+| HTTP/OpenAPI adapters | Consume values and the read-only `ErrorCatalog` protocol |
+| Routing | Builds on HTTP adapters |
+| Composition | Owns feature installation, routing, Dishka and lifecycle integration |
+| Integrations | Own their transport or resource lifecycle; transports do not import siblings |
+| Generation | Reads contracts and coordinates specialized or external generators |
+| Analysis | Checks source without importing application code; standard library only |
 
-`api_router.py` belongs to composition. Its public `APIRouter` builds on the core
-HTTP router and lazily delegates SSE, RPC and WebRTC declarations to their existing
-adapters. Composition explicitly permits the SSE dependency alongside RPC and
-WebRTC. Core routing does not depend back on transports. Included RPC channels
-are independent snapshots, preserving their functions, errors and resolver scopes.
-The application layer retains the corresponding transitive SSE edge when
-consuming the root facade, alongside its existing RPC and WebRTC edges.
-The root facade re-exports only application-building names and has no lazy
-lookups. Optional integration types, such as `RpcChannel` and `Database`, are
-imported from their `fastapi_canon.integrations.*` facade. The root remains a
-re-export-only facade, and core imports do not load RPC, database or media
-runtimes.
+The root facade exports application-building names. Optional types such as
+`Database` and `RpcChannel` come from integration facades. Core imports and CLI
+help must work without generator dependencies, telemetry runtimes or media
+engines. Composition delegates optional behavior lazily.
 
-`contracts.py` belongs to composition and coordinates the existing RPC and WebRTC
-contract renderers with native HTTP/SSE OpenAPI. This adds an explicit composition
-dependency on WebRTC and its AnyIO lifecycle types; consumers of the root facade
-inherit that declared direction. No transport imports another transport.
-`contract_routes.py` is an adapter shared by RPC, WebRTC and HTTP introspection
-for effective paths and declaration markers. Export inspects those markers before
-importing optional transport exporters, so HTTP-only apps retain their minimum
-dependency scope.
-`application_loading.py` belongs to generation and shares reference/factory
-loading among composition inspection, contract export and generation workflows.
-It imports FastAPI without generator/media engines and never enters lifespans.
-`diagnostic_explanations.py` is a generation-layer CLI adapter with static
-explanation data. Emitted codes remain owned by their existing checkers; the
-catalog imports neither static analysis nor composition runtimes and creates no
-reverse dependency from analysis to framework integration.
-OpenAPI copying/promotion lives in the core adapter; optional JSON Schema validation
-stays in generation, keeping root imports free of generator dependencies.
+See [public imports](canon.md) for supported consumer namespaces and
+[composition](composition.md) for application ownership.
 
-Core `scopes.py` belongs to composition and owns HTTP function scopes plus
-independent `ServiceScope` factories. `Scoped` executes one async callable use case
-through a fresh `ServiceScope` per invocation, completing cleanup before returning.
-It has no SQLAlchemy or Alembic dependency.
-The optional database integration sits above composition: it contributes an
-ordinary Feature and its Dishka provider, and owns database-specific session and
-migration behavior. The CLI may consume this integration; core composition does
-not depend on it. Root database exports are lazy so core imports and command help
-remain available without database runtimes.
+## Tests
 
-`request_logging` belongs to composition. It wraps the lazily built middleware
-stack outside the server-error handler, so it can observe the actual 500 response
-and successful streaming sends. HTTP problem handlers publish their code and
-status in the request scope; the logger never parses response bodies. Optional
-trace-context lookup does not load a telemetry SDK or configure process-wide logs.
+Python tests mirror library paths under `tests/unit`, `tests/integration` and
+`tests/contract`. Topic suffixes are supported; protocol scenarios are explicit
+exceptions in Smelt. Shared snapshots belong in `tests/fixtures`.
 
-Telemetry declarations remain importable without optional runtimes. Resource
-adapters live in explicit `integrations.opentelemetry.httpx` and `.sqlalchemy`
-modules so composition does not transitively depend on resource libraries through
-the declaration facade. The telemetry layer explicitly allows SQLAlchemy for its
-opt-in engine event adapter; core composition stays independent.
+All library Python tests run in one root pytest invocation with qualified
+imports. The reference service also has an installed-application test run.
+Integration and contract tests use real collaborators. Generated clients are
+updated through generators and checked for exact drift; distribution checks
+install real wheels in fresh environments.
 
-The executable dependency map and source inventory live in `smelt.yml`. Read
-[architecture guardrails](architecture-guardrails.md) for the individual rules,
-exceptions and test-quality requirements, and [public namespaces](canon.md) for
-consumer imports.
-
-## Tests and checks
-
-`diagnostics.py` contains framework-independent immutable descriptions and check
-results. `introspection.py` adapts effective HTTP route metadata; composition owns
-preflight orchestration, feature checks and the installed snapshot. CLI adapters
-consume those same APIs. Canon route declarations retain provenance as Python
-metadata that survives FastAPI route copies without entering exported OpenAPI.
-See [composition checks](system-checks.md) for scope and developer APIs.
-
-Unit, integration and contract roots mirror library paths independently. For
-example, `fastapi_canon/error/openapi.py` maps to
-`tests/contract/error/test_openapi.py`; focused topics can use a descriptive suffix.
-Existing protocol scenario suites remain explicitly listed in Smelt rather than
-silently disabling mirroring for all tests. Integration and contract tests use
-real collaborators and prohibit mocks. Shared snapshots live under `tests/fixtures/`.
-
-All Python library tests run from the root in one pytest process using importlib
-mode and qualified fixture/example imports. The reference service also has its
-own installed-application test run. Feature-specific type/lint policies live in the root configuration and integration
-directories; this does not create separate package metadata or environments.
-Generated files are updated through their generators and verified for drift.
-
-Run `uv run --frozen smelt context <module-or-path>` before implementation, then
-the checks in [contributing](contributing.md). Full Smelt coverage, errors and
-warnings gate both CI and the root pre-commit hook. Wheel and sdist checks install
-actual artifacts in fresh environments, without source-tree fallback.
-
-MCP declarations live in `integrations.mcp`. Composition lazily installs a fresh
-MCP root per application; call middleware borrows the APP container and owns
-REQUEST scopes. The registration adapter translates `Inject[T]` before FastMCP
-schema creation. No sibling transport or concrete error registry is imported.
-Smelt includes the new MCP edges and optional FastMCP dependency transitively
-for layers which already consume composition. Runtime imports remain lazy.
+Use [contributing](contributing.md) for commands and
+[guardrails](architecture-guardrails.md) for policy changes.

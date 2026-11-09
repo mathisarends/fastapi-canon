@@ -233,6 +233,7 @@ def verify_published(report: dict[str, Any], root: Path = ROOT) -> None:
         (f"fastapi-canon{extras}=={report['version']}",)
         for extras in (
             "",
+            "[uploads]",
             "[otel]",
             "[otel-httpx]",
             "[otel-sqlalchemy]",
@@ -244,7 +245,8 @@ def verify_published(report: dict[str, Any], root: Path = ROOT) -> None:
             "[websockets]",
             "[webrtc]",
             "[mcp]",
-            "[sse,websockets,webrtc,aiortc,codegen,otel,mcp]",
+            "[uploads,codegen]",
+            "[sse,websockets,webrtc,aiortc,codegen,otel,mcp,uploads]",
         )
     ]
     for requirements in combinations:
@@ -285,6 +287,8 @@ def verify_published(report: dict[str, Any], root: Path = ROOT) -> None:
                 selected.append("--sqlmodel")
             if "mcp" in extras:
                 selected.append("--mcp")
+            if "uploads" in extras:
+                selected.append("--uploads")
             _run(
                 [
                     str(python),

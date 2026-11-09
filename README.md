@@ -1,64 +1,32 @@
 # fastapi-canon
 
-Canon adds shared error handling, typed streams, WebSocket APIs and client
-generation to FastAPI. Public error definitions are shared across HTTP, SSE and
-WebSocket RPC, exported contracts, and generated Python and TypeScript clients.
-
-## Contents
-
-- [What Canon handles](#what-canon-handles)
-- [Install](#install)
-- [Shared error handling](#shared-error-handling)
-- [HTTP, SSE and WebSocket clients](#http-sse-and-websocket-clients)
-- [Instrument application boundaries](#instrument-application-boundaries)
-- [Check contracts in CI](#check-contracts-in-ci)
-- [Learn more](#learn-more)
-
-## What Canon handles
-
-- **HTTP, SSE and WebSockets:** typed contracts, event streams and RPC methods,
-  with specialized transport clients and external HTTP generation.
-- **File transfers:** single and multiple multipart uploads with form fields,
-  plus binary download contracts for OpenAPI tooling. See the [upload guide](docs/integrations/uploads.md)
-  for the unreleased source API.
-- **Public errors:** map domain exceptions once, declare them with `raises=`,
-  and carry the contract into HTTP RFC 9457 Problem Details, streams and SDKs.
-- **Static checks and code generation:** find missing error mappings and
-  declarations, report incomplete analysis, and catch generated-client drift in CI.
-- **Application composition:** features contribute routers, Dishka providers and
-  lifespans; composition owns installation and cleanup.
-- **Instrumentation:** declare observed services and ports at the feature boundary
-  without adding telemetry annotations to business logic.
-
-Generated SDKs do not depend on Canon. Python clients use Pydantic, an HTTP client
-and, for RPC, `websockets`; TypeScript clients use fetch/DOM APIs.
-See [client generation](docs/codegen.md) for supported operations
-and target requirements.
+Canon adds typed HTTP contracts, SSE, WebSockets and application composition to
+FastAPI. Define public errors once, reuse them across transports and export
+contracts for Python and TypeScript clients.
 
 ## Install
 
 ```console
-uv add "fastapi-canon[sse,websockets]"
-uv add --dev "fastapi-canon[codegen]"
+uv add fastapi-canon
 ```
 
-For HTTP-only applications, use `uv add fastapi-canon`. The base includes
-FastAPI, Pydantic and Dishka. Python 3.12–3.14 is supported.
+Python 3.12–3.14 is supported. Add extras for the features you use, for example
+`fastapi-canon[sse,websockets]` or `fastapi-canon[codegen]`.
 
-The current published release is **0.16.0**. See the
-[upgrade guide](docs/package-migration.md#upgrade-to-0160) and
-[tested compatibility](docs/compatibility.md). Upgrade servers and regenerated
-clients together.
+**Published: 0.16.0. Prepared source: 0.17.0, unreleased.**
+These docs follow the checkout. Version 0.17.0 replaces the combined SDK with
+separate client generators; follow the [migration guide](docs/package-migration.md#upgrade-to-0170).
+For published behavior, read the
+[0.16.0 docs](https://github.com/mathisarends/fastapi-canon/tree/fastapi-canon-v0.16.0/docs).
 
 ## Shared error handling
 
-Keep domain exceptions in ordinary Python. Define their public representation
-once with `Error`, then declare it on operations with `raises=`:
+Keep domain exceptions in ordinary Python and declare their public representation:
 
 ```python
 from fastapi import FastAPI
 
-from fastapi_canon import APIRouter, Composition, Error, ErrorOptions, Feature
+from fastapi_canon import APIRouter, Composition, Error, Feature
 
 
 class ProjectMissing(Exception):
@@ -75,11 +43,7 @@ project_missing = Error(
 router = APIRouter()
 
 
-@router.get(
-    "/projects/{project_id}",
-    operation_id="projects.get",
-    raises=[project_missing],
-)
+@router.get("/projects/{project_id}", raises=[project_missing])
 async def get_project(project_id: int) -> dict[str, int]:
     if project_id == 0:
         raise ProjectMissing()
@@ -88,123 +52,43 @@ async def get_project(project_id: int) -> dict[str, int]:
 
 app = Composition(
     features=(Feature(name="projects", routers=[router]),),
-    errors=ErrorOptions(type_base="https://api.example.com/problems"),
 ).build(FastAPI())
 ```
 
-`GET /projects/0` returns a 404 `application/problem+json` response following
-RFC 9457, with type `https://api.example.com/problems/project_missing` and code
-`project_missing`. OpenAPI documents the same problem. Exception messages stay
-private by default; the declared detail is public.
+`GET /projects/0` returns a 404 RFC 9457 Problem Details response.
+OpenAPI describes the same error; exception messages stay private by default.
+Reuse `project_missing` in SSE and RPC declarations. See the
+[quickstart](docs/quickstart.md) for the complete server and clients.
 
-Reuse the same `project_missing` object in `@router.sse(..., raises=[...])` and
-`@channel.method(raises=[...])`. There is one domain-to-public-error mapping:
+## What you can build
 
-| Where the failure occurs | How it reaches the client |
+| Task | Guide |
 | --- | --- |
-| HTTP request or SSE admission | HTTP Problem Details response |
-| During an SSE stream | Terminal `canon.problem` event |
-| WebSocket RPC method | Problem data in the JSON-RPC error envelope |
+| HTTP routes, dependencies and feature lifecycles | [Composition](docs/composition.md) |
+| Shared public errors and typed extensions | [Problems](docs/problems.md) |
+| File uploads and binary downloads | [File transfers](docs/integrations/uploads.md) |
+| Typed event streams | [SSE](docs/integrations/sse/README.md) |
+| RPC, sockets and binary streams | [WebSockets](docs/integrations/websockets/README.md) |
+| Media sessions, tools or database resources | [WebRTC](docs/integrations/webrtc/README.md), [MCP](docs/integrations/mcp/README.md), [database](docs/database.md) |
+| Service tracing and request logs | [Telemetry](docs/telemetry.md), [logging](docs/request-logging.md) |
 
-These bindings preserve the problem's `type`, `code` and declared public fields.
-HTTP status is included in HTTP problems and omitted from SSE terminal and RPC
-problems. RFC 9457 defines HTTP Problem Details; the stream and RPC bindings are
-Canon conventions.
+## Generate and check clients
 
-Generated SSE/RPC clients expose public problem data through `ProblemError`:
-
-```python
-from rpc_client import ProblemError
-
-try:
-    await client.projects.cancel(project_id=0)
-except ProblemError as error:
-    print(error.problem.type)
-```
-
-This client excerpt runs inside an async function with a generated client.
-The [quickstart](docs/quickstart.md) shows the complete server and SDK setup;
-[shared problems](docs/problems.md) covers typed extensions, validation failures
-and safe internal errors.
-
-## HTTP, SSE and WebSocket clients
-
-Use an OpenAPI generator such as Orval with your framework's query integration
-for HTTP. Canon generates specialized SSE, WebSocket and WebRTC clients.
-Each client retains its transport's cancellation and resource ownership rules.
-
-Configure a [generation workflow](docs/codegen.md), then run:
+The prepared 0.17.0 workflow exports contracts and runs specialized SSE,
+WebSocket and WebRTC generators. Add your HTTP generator through external
+commands. Configure it with the [generation guide](docs/codegen.md), then run:
 
 ```console
 uv run fastapi-canon generate
 uv run fastapi-canon generate --check --diff
-```
-
-The workflow exports contracts once, runs selected generators and reports drift.
-HTTP tooling runs through explicit external commands. There is no Canon HTTP
-client generator, shared client facade or cross-protocol model merger.
-
-Reuse Python models and `Error` definitions on the server. Each generator derives
-types from exported contracts. Separate generated error classes retain separate
-runtime identities. See the [shared-error example](examples/canonical_errors/README.md),
-[SSE clients](docs/integrations/sse/clients.md) and
-[RPC clients](docs/integrations/websockets/clients.md).
-
-
-## Instrument application boundaries
-
-Add the `otel` extra and declare the services or ports to observe:
-
-```python
-from fastapi_canon import Feature
-from fastapi_canon.integrations.opentelemetry import instrument
-
-tasks = Feature(
-    name="tasks",
-    routers=(router,),
-    providers=(TaskProvider,),
-    instrumentation=instrument(
-        TaskRepository,
-        TaskService,
-        expected=(TaskNotFound,),
-    ),
-)
-```
-
-This excerpt uses your application's router, provider and service types.
-Enable it with `Composition(..., telemetry=Telemetry(...))`. Canon observes
-declared async methods through Dishka and adds port spans alongside HTTP
-telemetry. Your application owns SDK providers and exporters.
-See the [instrumentation guide](docs/telemetry.md) for a complete setup.
-
-## Check contracts in CI
-
-```console
 uv run fastapi-canon check errors src --strict --require-complete
-uv run fastapi-canon generate --check --diff
 ```
 
-The static checker follows supported application calls and dependencies; it
-reports unresolved paths rather than claiming complete coverage. Use it alongside
-runtime tests. The generator checks exported contracts and client files for drift.
+Python models and error declarations are shared on the server. Generated
+clients have separate APIs and error classes. Static checks complement runtime
+tests and report paths they cannot resolve.
 
-## Learn more
-
-Start with the [quickstart](docs/quickstart.md), then choose a
-[task guide](docs/README.md) or a [runnable example](examples/README.md).
-
-Optional integrations also include [WebRTC media sessions](docs/integrations/webrtc/README.md),
-[MCP](docs/integrations/mcp/README.md) and [database resources](docs/database.md).
-
-For coding agents, install the bundled
-[`build-canon-backend` skill](fastapi_canon/skills/build-canon-backend/SKILL.md)
-from your application project:
-
-```console
-uv run fastapi-canon skill install
-```
-
-For updates and destination options, see
-[the skill installation guide](docs/package-migration.md#agent-skill).
-Contributor commands and repository architecture live in
-[contributing](docs/contributing.md).
+Browse the [task guides](docs/README.md), [examples](examples/README.md) or
+[contributor commands](docs/contributing.md). Coding agents can install the
+[bundled backend skill](fastapi_canon/skills/build-canon-backend/SKILL.md)
+with `uv run fastapi-canon skill install`.

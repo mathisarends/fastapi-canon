@@ -290,7 +290,11 @@ def test_public_verify_plan(  # smelt: ignore[SMT423] -- two seams
     installs = [
         command for command in commands if command[:3] == ["uv", "pip", "install"]
     ]
-    assert len(installs) == 13
+    assert len(installs) == 15
+    assert any("fastapi-canon[uploads]==0.6.0" in command for command in installs)
+    assert any(
+        "fastapi-canon[uploads,codegen]==0.6.0" in command for command in installs
+    )
     assert any("fastapi-canon[otel]==0.6.0" in command for command in installs)
     assert any("fastapi-canon[otel-httpx]==0.6.0" in command for command in installs)
     assert any(
@@ -310,12 +314,14 @@ def test_public_verify_plan(  # smelt: ignore[SMT423] -- two seams
     assert any("fastapi-canon[websockets]==0.6.0" in command for command in installs)
     assert any("fastapi-canon[mcp]==0.6.0" in command for command in installs)
     assert any(
-        "fastapi-canon[sse,websockets,webrtc,aiortc,codegen,otel,mcp]==0.6.0" in command
+        "fastapi-canon[sse,websockets,webrtc,aiortc,codegen,otel,mcp,uploads]==0.6.0"
+        in command
         for command in installs
     )
     smokes = [command for command in commands if "-I" in command]
     assert [command[3:] for command in smokes] == [
         ["fastapi-canon"],
+        ["fastapi-canon", "--uploads"],
         ["fastapi-canon", "--otel"],
         ["fastapi-canon", "--otel", "--httpx"],
         ["fastapi-canon", "--otel", "--sqlalchemy"],
@@ -327,7 +333,16 @@ def test_public_verify_plan(  # smelt: ignore[SMT423] -- two seams
         ["fastapi-canon", "websockets"],
         ["fastapi-canon", "webrtc"],
         ["fastapi-canon", "--mcp"],
-        ["fastapi-canon", "sse", "webrtc", "websockets", "--otel", "--mcp"],
+        ["fastapi-canon", "--uploads"],
+        [
+            "fastapi-canon",
+            "sse",
+            "webrtc",
+            "websockets",
+            "--otel",
+            "--mcp",
+            "--uploads",
+        ],
     ]
 
 

@@ -1,5 +1,8 @@
 # From Python to typed clients
 
+This walkthrough follows the prepared 0.17.0 source. For the published 0.16.0
+workflow, use the [release's docs](https://github.com/mathisarends/fastapi-canon/tree/fastapi-canon-v0.16.0/docs).
+
 Build one small Projects API with an HTTP lookup, an SSE event stream and a
 WebSocket cancellation method. The example demonstrates shared contracts;
 connect the operations to your own application services for real project work.
@@ -76,7 +79,7 @@ confirms the installed app compiles to valid OpenAPI.
 `application/problem+json` response with the stable type
 `https://api.example.com/problems/project_missing` and code `project_missing`.
 The same problem is documented in OpenAPI. An explicit `operation_id` gives
-codegen the public SDK name `projects.get`; the `Project` return annotation
+client generators a stable contract identifier; the `Project` return annotation
 supplies its typed result and validates the server's returned data.
 
 A feature can also contribute Dishka `providers=`, a `lifespan=` and optional
@@ -162,9 +165,9 @@ uv run uvicorn src.app:app --reload
 
 The contract describes `projects.cancel` and its typed parameters and failures.
 Methods request application services with `Inject[T]`, resolved from the
-composition's Dishka container. Codegen handles request IDs, serialization,
-response correlation and typed problem errors; the consumer calls `client.projects.cancel(...)`. HTTP, SSE and RPC
-share the SDK's public model/error runtime. Protocol bindings stay internal.
+composition's Dishka container. The RPC generator handles request IDs,
+serialization, response correlation and typed problem errors. HTTP, SSE and RPC
+clients have separate APIs and error classes; the Python declarations remain shared.
 
 WebSockets also support notifications, message streams, typed sockets and binary
 streams, with explicit session lifecycles. See [services and channels](integrations/websockets/services.md),
@@ -183,19 +186,33 @@ Use external OpenAPI tooling for HTTP and specialized generators for streams,
 RPC and media. The [generation workflow](codegen.md) coordinates them without
 imposing a shared model graph or client API.
 
-The runnable [shared-error example](../examples/canonical_errors/README.md)
-includes a version-2 configuration for separate Python and TypeScript clients:
+Save `fastapi-canon.toml` in your project root. This configuration generates
+separate TypeScript stream and RPC clients:
+
+```toml
+[codegen]
+version = 2
+app = "src.app:app"
+
+[codegen.targets.streams]
+generator = "sse"
+output = "generated/streams"
+
+[codegen.targets.rpc]
+generator = "websockets"
+output = "generated/rpc"
+```
 
 ```console
-cd examples/canonical_errors
 uv run fastapi-canon generate
 uv run fastapi-canon generate --check --diff
 ```
 
 Add your HTTP generator through external `generate-command` and `check-command`
 argument arrays. Its input is the exported OpenAPI document. Keep query and
-mutation options in that generator's configuration. See specialized
-[SSE usage](integrations/sse/clients.md) and [RPC usage](integrations/websockets/clients.md).
+mutation options in that generator's configuration. See
+[SSE usage](integrations/sse/clients.md), [RPC usage](integrations/websockets/clients.md)
+and the runnable [shared-error example](../examples/canonical_errors/README.md).
 
 
 ## Check the contract in CI
