@@ -29,6 +29,11 @@ All notable changes to `fastapi-canon` are documented in this file.
 - Bundled backend-building guidance and `canon.codegen.E002` explanations now
   describe the supported multipart/binary contracts instead of recommending
   blanket exclusion of file operations.
+- Built-in request-validation and internal-server problems use the declared
+  discriminator property when joining an existing OpenAPI problem union. Unions
+  discriminated by `type` now map their full problem URI instead of their `code`,
+  matching runtime 422 and 500 responses. Existing `code` unions keep their
+  discriminator and mapping format.
 
 ## 0.16.0 - 2026-11-07
 
