@@ -83,12 +83,26 @@ OpenTelemetry calls.
 Dishka still owns scope, caching and finalization of the original dependency.
 The integration caches a proxy class and method wrappers per registration and
 composition, then creates one proxy per dependency resolution. It forwards method
-calls and public attribute reads; it is not a general replacement for object
-identity, concrete-type checks, attribute mutation, or other Python special
-methods. Register a port only once per Dishka component, including across
+calls and public attribute reads. Its `__class__` reports the wrapped adapter's
+actual type, so `isinstance(dependency, Port)` and Pydantic arbitrary-type instance
+validation accept an adapter implementing that class. The model retains the proxy
+and subsequent calls still produce telemetry. An unrelated adapter remains invalid,
+even if its methods match the port or its provider declares `provides=Port`.
+`type(dependency)` still returns the proxy class; identity, exact `type(...) is ...`
+checks, attribute mutation and other Python special methods are not forwarded.
+Register a port only once per Dishka component, including across
 features. Use `instrument(Port, component="billing")` for a named binding; the
 default is Dishka's empty component. Spans belong to the feature declaring the
 instrumentation, even when another feature contributes the binding.
+
+Pydantic's `Field(exclude=True)` controls serialization, not validation. An internal
+service reference can remain concretely typed with
+`model_config = ConfigDict(arbitrary_types_allowed=True)` and
+`registry: ToolAccessRegistry = Field(exclude=True)` when the wrapped adapter is a
+`ToolAccessRegistry`. This also applies to FastMCP `AccessToken` subclasses returned
+by an `McpOptions(auth_factory=...)` verifier. Token validity, tool/turn scoping and
+revocation remain the application's responsibility. Keep request-scoped services
+out of longer-lived tokens; return detached identity data for those bindings.
 
 ### Migration from 0.11
 

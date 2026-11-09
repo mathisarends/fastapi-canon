@@ -32,6 +32,12 @@ class _InstrumentedProxy:
     def __init__(self, instance: Any) -> None:
         self._instance = instance
 
+    @property  # type: ignore[misc]  # Proxy type reporting is intentionally read-only.
+    def __class__(self) -> type[Any]:
+        # isinstance (including Pydantic's arbitrary-type validation) consults
+        # __class__. Preserve the actual adapter's type without unwrapping it.
+        return type(self._instance)
+
     def __getattr__(self, name: str) -> Any:
         return getattr(self._instance, name)
 
