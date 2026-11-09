@@ -16,6 +16,7 @@ Use these when you need the specific behavior; they are not additional quickstar
 - [SSE admission and authentication](streams/README.md)
 - [WebSocket methods, notifications and protocols](websockets/README.md)
 - [Database resources and migrations](database/README.md)
+- [File uploads, multipart forms and downloads](../docs/integrations/uploads.md#run-the-example)
 - [WebRTC remote video](webrtc/remote_video/README.md)
 
 The remaining transport examples and generated artifacts support specialized

@@ -6,6 +6,11 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Added
 
+- The `uploads` extra installs the multipart parser for native HTTP file and
+  form inputs. A runnable example and file-transfer guide show direct
+  `UploadFile`/`list[UploadFile]` declarations, scalar form fields, Dishka-owned
+  storage and `CanonResponse.binary(...)` downloads. Installed-wheel smoke checks
+  exercise the extra independently and alongside code generation.
 - Common application-derived Python and TypeScript SDKs support flat multipart
   uploads with scalar form fields, repeated fields and multiple files. Python
   exposes `Upload(filename, content, content_type=...)`, borrowing binary file
@@ -18,6 +23,12 @@ All notable changes to `fastapi-canon` are documented in this file.
   `contentMediaType: application/octet-stream` declarations are recognized.
 - The codegen guide documents file ownership, repeated parts and unsupported
   multipart encodings. The earlier multipart deferral decision is removed.
+
+### Fixed
+
+- Bundled backend-building guidance and `canon.codegen.E002` explanations now
+  describe the supported multipart/binary contracts instead of recommending
+  blanket exclusion of file operations.
 
 ## 0.16.0 - 2026-11-07
 

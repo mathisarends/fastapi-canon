@@ -159,8 +159,8 @@ _EXPLANATIONS = {
     ),
     "canon.codegen.E002": _Explanation(
         "An operation requests a binding feature unsupported by common generation.",
-        "POST /upload documents multipart/form-data, while the common HTTP binding supports JSON request bodies.",
-        "Use a supported operation contract or keep that feature outside common generation until it is explicitly supported; review the reported source and operation.",
+        "POST /upload contains a nested multipart object, while the common HTTP binding supports flat scalar and file parts.",
+        "Use flat multipart fields or a supported JSON/binary contract; review the reported source, operation and schema location for the unsupported encoding.",
         _CODEGEN,
     ),
 }

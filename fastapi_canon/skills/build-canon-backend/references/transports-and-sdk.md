@@ -153,8 +153,16 @@ its manifest-listed files; do not hand-edit them or overwrite handwritten files.
 Python and TypeScript consumers have their own runtime dependencies and do not
 import Canon. Read [unified-canon-concept.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/unified-canon-concept.md) before adding mappings, changing
 output ownership or supporting additional media. Unified HTTP generation covers
-JSON and declared SSE; unsupported multipart/file operations need explicit
-exclusion. Python WebRTC generation is unsupported.
+JSON, declared SSE, flat multipart uploads and binary transfers. Install
+`fastapi-canon[uploads]` for multipart parsing on the server. Declare a single
+`file: UploadFile` or repeated `files: list[UploadFile]` directly; use
+`Annotated[T, Form()]` for scalar form fields and `Annotated[..., File(...)]`
+for file aliases or descriptions. Python SDKs accept generated `Upload` values
+with bytes or borrowed binary handles; TypeScript accepts native `File`/`Blob`.
+Nested multipart objects and custom per-part encodings remain unsupported; only
+exclude operations after checking the actual diagnostic. See the
+[file upload guide](https://github.com/mathisarends/fastapi-canon/blob/main/docs/integrations/uploads.md).
+Python WebRTC generation is unsupported.
 
 ## Telemetry and request logging
 

@@ -13,10 +13,11 @@ from collections.abc import AsyncIterator
 from importlib.metadata import version
 from logging.handlers import BufferingHandler
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter as FastAPIRouter
-from fastapi import Depends, FastAPI, Header, WebSocket
+from fastapi import Depends, FastAPI, Form, Header, UploadFile, WebSocket
+from fastapi.responses import Response
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, ConfigDict
 from starlette.websockets import WebSocketDisconnect
@@ -90,6 +91,8 @@ def _main() -> None:
         _resource_telemetry_check(selected)
         _database_check(selected)
         _mcp_check(selected)
+        if "--uploads" in selected:
+            _uploads_check()
     if "sse" in selected:
         from fastapi_canon import APIRouter
 
@@ -219,6 +222,58 @@ def _main() -> None:
             )
         assert counter.closed
     print(f"Installed artifact checks passed: {', '.join(sorted(selected))}")
+
+
+def _uploads_check() -> None:
+    from fastapi_canon import APIRouter, CanonResponse, Composition, Feature
+
+    router = APIRouter(namespace="files")
+
+    @router.post("/upload")
+    async def upload(
+        document: UploadFile,
+        attachments: list[UploadFile],
+        title: Annotated[str, Form()],
+        note: Annotated[str | None, Form()] = None,
+    ) -> dict:
+        return {
+            "names": [item.filename for item in [document, *attachments]],
+            "hex": (await document.read()).hex(),
+            "title": title,
+            "note": note,
+        }
+
+    @router.get("/download", response=CanonResponse.binary("application/octet-stream"))
+    async def download() -> Response:
+        return Response(b"\x00\xffCanon", media_type="application/octet-stream")
+
+    app = Composition(features=(Feature(name="files", routers=[router]),)).build(
+        FastAPI()
+    )
+    with TestClient(app) as client:
+        uploaded = client.post(
+            "/upload",
+            files=[
+                ("document", ("report.bin", b"\x00\xffCanon")),
+                ("attachments", ("first.txt", b"first")),
+                ("attachments", ("empty.txt", b"")),
+            ],
+            data={"title": "Report"},
+        )
+        assert uploaded.status_code == 200, uploaded.text
+        assert uploaded.json() == {
+            "names": ["report.bin", "first.txt", "empty.txt"],
+            "hex": b"\x00\xffCanon".hex(),
+            "title": "Report",
+            "note": None,
+        }
+        downloaded = client.get("/download")
+        assert downloaded.status_code == 200
+        assert downloaded.content == b"\x00\xffCanon"
+    assert (
+        "multipart/form-data"
+        in app.openapi()["paths"]["/upload"]["post"]["requestBody"]["content"]
+    )
 
 
 def _mcp_check(selected: set[str]) -> None:
