@@ -19,6 +19,14 @@ All notable changes to `fastapi-canon` are documented in this file.
 - The codegen guide documents file ownership, repeated parts and unsupported
   multipart encodings. The earlier multipart deferral decision is removed.
 
+### Fixed
+
+- Built-in request-validation and internal-server problems use the declared
+  discriminator property when joining an existing OpenAPI problem union. Unions
+  discriminated by `type` now map their full problem URI instead of their `code`,
+  matching runtime 422 and 500 responses. Existing `code` unions keep their
+  discriminator and mapping format.
+
 ## 0.16.0 - 2026-11-07
 
 Upgrade servers and regenerated

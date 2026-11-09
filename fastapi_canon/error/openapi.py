@@ -862,7 +862,8 @@ def _add_builtin_response(
     schema = problem["schema"]
     if schema == {"$ref": reference}:
         return
-    mapping = schema.get("discriminator", {}).get("mapping", {})
+    discriminator = schema.get("discriminator", {})
+    mapping = discriminator.get("mapping", {})
     if "$ref" in schema:
         existing_reference = schema["$ref"]
         existing_component = components.get(existing_reference.rsplit("/", 1)[-1], {})
@@ -889,8 +890,10 @@ def _add_builtin_response(
                     f"problem code {code!r} conflicts with normalization"
                 )
             return
+        property_name = discriminator["propertyName"]
+        identity = components[component]["properties"][property_name]["const"]
         schema["oneOf"].append({"$ref": reference})
-        mapping[code] = reference
+        mapping[identity] = reference
 
 
 def _internal_error_schema(registry: ErrorCatalog) -> dict[str, Any]:
