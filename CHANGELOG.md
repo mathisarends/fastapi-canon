@@ -39,6 +39,11 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Fixed
 
+- Instrumented dependencies preserve their wrapped adapter's `isinstance` identity
+  during Pydantic arbitrary-type validation. Concretely typed internal service
+  fields in MCP authentication tokens accept valid instrumented registries while
+  retaining the proxy and its telemetry. Unrelated implementations remain invalid;
+  exact `type(...)` checks and object identity still expose the proxy.
 - Shared HTTP/WebSocket auth dependencies preserve caught application exceptions
   through bare re-raises. Framework HTTP/WebSocket exception aliases are recognized;
   direct `isinstance` guards on framework-injected HTTP connections exclude the
