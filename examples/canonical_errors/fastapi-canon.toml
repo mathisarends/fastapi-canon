@@ -1,23 +1,27 @@
 [codegen]
-version = 1
+version = 2
+app = "app:create_app"
+contracts = "contracts"
 
-[codegen.sources.api]
-kind = "openapi"
-source = "app:app"
-output = "contracts/openapi.json"
-
-[codegen.sources.control]
-kind = "openrpc"
-source = "app:app"
-output = "contracts/openrpc.json"
-
-[codegen.targets.browser]
+[codegen.targets.streams]
+generator = "sse"
 language = "typescript"
-sources = ["api", "control"]
-output = "dist/generated/typescript"
+output = "dist/streams/typescript"
 
-[codegen.targets.python]
+[codegen.targets.rpc]
+generator = "websockets"
+language = "typescript"
+output = "dist/rpc/typescript"
+client-name = "ProjectsClient"
+
+[codegen.targets.python_streams]
+generator = "sse"
 language = "python"
-sources = ["api", "control"]
-output = "dist/generated/python/api_client"
-package = "api_client"
+output = "dist/streams/python"
+
+[codegen.targets.python_rpc]
+generator = "websockets"
+language = "python"
+output = "dist/rpc/python/projects_client"
+client-name = "ProjectsClient"
+package = "projects_client"

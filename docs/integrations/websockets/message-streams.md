@@ -69,7 +69,7 @@ Entering a message stream opens it without waiting for its first data item.
 Leaving the block cancels unfinished work and awaits cleanup. The iterator also
 supports direct iteration and `aclose()`; use a context when leaving early.
 `aclose()` interrupts a pending read. Each stream resource has one consumer and
-cannot be entered twice. The common domain SDK also provides managed resources.
+cannot be entered twice. These lifetimes belong to the specialized RPC client.
 
 ## Generated TypeScript
 

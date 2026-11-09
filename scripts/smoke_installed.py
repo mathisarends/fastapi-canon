@@ -63,7 +63,7 @@ def _main() -> None:
     app = FastAPI()
     if importlib.util.find_spec("jsonschema") and importlib.util.find_spec("jinja2"):
         _offline_sse_codegen()
-        _unified_codegen()
+        _generation_pipeline()
     routers = []
     if "fastapi-canon" in selected:
         from fastapi_canon import APIRouter
@@ -608,10 +608,9 @@ def _core_generation_diagnostics() -> None:
             encoding="utf-8",
         )
         (root / "fastapi-canon.toml").write_text(
-            '[codegen]\nversion = 1\n[codegen.sources.api]\nkind = "openapi"\n'
-            'source = "minimal_app:app"\noutput = "contracts/api.json"\n'
-            '[codegen.targets.python]\nlanguage = "python"\nsources = ["api"]\n'
-            'output = "sdk"\n',
+            '[codegen]\nversion = 2\napp = "minimal_app:app"\n'
+            '[codegen.targets.python]\ngenerator = "sse"\n'
+            'language = "python"\noutput = "sdk"\n',
             encoding="utf-8",
         )
         result = subprocess.run(
@@ -632,10 +631,8 @@ def _core_generation_diagnostics() -> None:
         )
         assert result.returncode == 2, result.stderr
         report = json.loads(result.stdout)
-        assert report["schema_version"] == 1 and report["status"] == "error"
-        (diagnostic,) = report["diagnostics"]
-        assert diagnostic["code"] == "canon.codegen.E001"
-        assert "fastapi-canon[codegen]" in diagnostic["message"]
+        assert report["schema_version"] == 2 and report["status"] == "error"
+        assert "fastapi-canon[codegen]" in report["error"], report
         assert not (root / "contracts").exists() and not (root / "sdk").exists()
 
 
@@ -664,82 +661,28 @@ def _offline_sse_codegen() -> None:
             subprocess.run([*command, "--check"], cwd=temporary, check=True, timeout=30)
 
 
-def _unified_codegen() -> None:
-    import httpx
-
+def _generation_pipeline() -> None:
     document = {
         "openapi": "3.1.0",
         "info": {"title": "Health", "version": "1"},
-        "paths": {
-            "/health": {
-                "get": {
-                    "operationId": "health.get",
-                    "responses": {
-                        "200": {
-                            "description": "OK",
-                            "content": {
-                                "application/json": {"schema": {"type": "string"}}
-                            },
-                        }
-                    },
-                }
-            }
-        },
+        "paths": {},
     }
-    with tempfile.TemporaryDirectory(prefix="canon-unified-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="canon-generation-") as temporary:
         root = Path(temporary)
-        (root / "openapi.json").write_text(json.dumps(document), encoding="utf-8")
+        contracts = root / "contracts"
+        contracts.mkdir()
+        (contracts / "openapi.json").write_text(json.dumps(document), encoding="utf-8")
         (root / "fastapi-canon.toml").write_text(
-            """[codegen]
-version = 1
-[codegen.sources.api]
-kind = "openapi"
-source = "must_not_import:app"
-output = "openapi.json"
-[codegen.targets.python]
-language = "python"
-sources = ["api"]
-output = "artifact_sdk"
-package = "artifact_sdk"
-[codegen.targets.browser]
-language = "typescript"
-sources = ["api"]
-output = "browser"
-""",
+            '[codegen]\nversion = 2\napp = "must_not_import:app"\n'
+            'contracts = "contracts"\n'
+            '[codegen.targets.streams]\ngenerator = "sse"\n'
+            'language = "python"\noutput = "streams"\n',
             encoding="utf-8",
         )
-        command = [
-            str(
-                Path(sys.executable).with_name(
-                    "fastapi-canon.exe" if sys.platform == "win32" else "fastapi-canon"
-                )
-            ),
-            "generate",
-            "--offline",
-        ]
-        subprocess.run(command, cwd=temporary, check=True, timeout=30)
-        subprocess.run([*command, "--check"], cwd=temporary, check=True, timeout=30)
-        sys.path.insert(0, temporary)
-        try:
-            sdk = importlib.import_module("artifact_sdk")
-
-            async def consume() -> None:
-                transport = httpx.MockTransport(
-                    lambda request: httpx.Response(200, json="ok")
-                )
-                async with httpx.AsyncClient(transport=transport) as http:
-                    async with sdk.ApiClient(
-                        "https://test", http_client=http
-                    ) as client:
-                        assert await client.health.get() == "ok"
-                    assert not http.is_closed
-
-            asyncio.run(consume())
-        finally:
-            sys.path.remove(temporary)
-            for name in tuple(sys.modules):
-                if name == "artifact_sdk" or name.startswith("artifact_sdk."):
-                    del sys.modules[name]
+        command = [sys.executable, "-I", "-m", "fastapi_canon", "generate", "--offline"]
+        subprocess.run(command, cwd=root, check=True, timeout=30)
+        subprocess.run([*command, "--check"], cwd=root, check=True, timeout=30)
+        assert (root / "streams/.fastapi-canon-sse.json").is_file()
 
 
 class _RecordingEngine:

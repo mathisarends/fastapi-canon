@@ -151,11 +151,9 @@ alone does not add those errors to an operation's documented contract.
 `export_contracts` reads the composed app, so `contracts.openapi` and
 `contracts.openrpc` use the same resolved type URIs as the runtime responses.
 
-Use `fastapi-canon generate --config fastapi-canon.toml` to export both documents
-from `source = "app:app"` and generate one domain SDK with shared models and one
-error runtime. The [common codegen guide](unified-canon-concept.md) and
-[example configuration](../examples/canonical_errors/fastapi-canon.toml) show the
-complete workflow. Generated runtimes do not depend on Canon.
+Use the [generation workflow](codegen.md) for separate clients. Reuse comes
+from Python declarations and public problem contracts. Generated classes have
+separate runtime identities.
 
 ## What goes over the wire
 
@@ -206,36 +204,13 @@ It reports incomplete analysis as `CAN003` and covers HTTP operations, SSE
 streams, WebRTC sessions and RPC methods. Runtime mapping, document validation and source analysis cover distinct
 parts of the contract.
 
-```typescript
-import { createClient, ProblemError } from "./generated";
+SSE clients consume completion frames and expose terminal problems. RPC clients
+unwrap problems from the JSON-RPC envelope. Unknown type URIs remain generic
+problems; a familiar `code` alone does not make them a known subclass.
+Separate clients have separate error classes. Use each client's exports or
+normalize public problem payloads in an application adapter. External HTTP
+tooling owns its HTTP error handling.
 
-const client = createClient({ baseUrl: "https://api.example.com" });
-try {
-  const project = await client.projects.get({ projectId: 1 });
-  for await (const event of client.projects.events({ projectId: 2 })) {
-    render(event);
-  }
-  await client.projects.cancel({ projectId: project.id });
-} catch (error) {
-  if (error instanceof ProblemError) showProblem(error.problem);
-  else throw error;
-} finally {
-  await client.close();
-}
-```
-
-The generated stream iterator yields business events only. It consumes completion
-frames, throws `ProblemError` on a terminal problem or HTTP problem response, and
-throws `TransportError` on EOF without completion. Invalid control messages raise
-`ProtocolError`. Terminal problems are not retried. Consumers using native
-`EventSource` must close it after `canon.problem` or `canon.complete` to prevent
-its automatic reconnection.
-
-The same `ProblemError.problem` convention applies to generated RPC clients.
-Unknown type URIs remain generic problems; matching a familiar `code` alone does
-not turn them into a known generated subclass. The common workflow emits one shared error runtime and canonical model graph
-inside the SDK. Specialized generators producing separate SDKs still have
-separate runtime/class identities.
 
 ## Migration
 

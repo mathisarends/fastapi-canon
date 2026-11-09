@@ -5,15 +5,9 @@ then generates clients from that document rather than from Python internals.
 The resulting artifact can therefore be reviewed, versioned, and consumed by
 other tooling.
 
-For one public domain API across HTTP, SSE and WebSockets, use
-[`fastapi-canon generate`](../../unified-canon-concept.md). It combines
-OpenRPC and OpenAPI sources, shares public models and problem errors, and exposes
-calls such as `client.projects.cancel(...)`. Its internal binding handles
-serialization, request IDs, response correlation and connection ownership.
-The [quickstart](../../quickstart.md#websockets-rpc-calls-as-domain-methods)
-shows a channel method beside its generated Python and TypeScript calls.
-The specialized workflow below retains RPC-specific generation options and
-separate output ownership.
+Use the [generation workflow](../../codegen.md) to coordinate specialized
+clients and external HTTP tooling. This guide documents standalone generation
+and transport-specific options.
 
 Install the generator extra:
 

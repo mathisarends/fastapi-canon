@@ -1,7 +1,5 @@
-"""Structured common generation through real configurations and artifacts."""
-
 import json
-import shutil
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -12,194 +10,209 @@ import pytest
 @pytest.fixture
 def project(tmp_path: Path) -> Path:
     example = Path(__file__).parents[3] / "examples/canonical_errors"
-    shutil.copy2(example / "fastapi-canon.toml", tmp_path)
-    shutil.copytree(example / "contracts", tmp_path / "contracts")
-    source = (example / "app.py").read_text(encoding="utf-8")
-    (tmp_path / "app.py").write_text(
-        "print('private application stdout')\n" + source, encoding="utf-8"
+    (tmp_path / "application.py").write_text(
+        "print('private app output')\n"
+        + (example / "app.py").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (tmp_path / "fastapi-canon.toml").write_text(
+        """[codegen]
+version = 2
+app = "application:create_app"
+contracts = "contracts"
+[codegen.targets.streams]
+generator = "sse"
+language = "python"
+output = "streams"
+[codegen.targets.rpc]
+generator = "websockets"
+language = "python"
+output = "rpc"
+package = "rpc"
+client-name = "ProjectsClient"
+""",
+        encoding="utf-8",
     )
     return tmp_path
 
 
-def test_json_generation_and_clean_check_report_source_warnings(project: Path) -> None:
+def test_generate_and_read_only_check_use_specialized_manifests(project: Path) -> None:
     generated = _run(project)
-    assert generated.returncode == 0, generated.stderr
+    assert generated.returncode == 0, generated.stderr + generated.stdout
     report = json.loads(generated.stdout)
-    assert report["schema_version"] == 1
-    assert report["command"] == "generate"
-    assert report["status"] == "success" and report["changed"] is True
-    assert report["check"] is False and report["offline"] is False
-    assert report["targets"] == ["browser", "python"]
-    assert report["changes"]
-    assert report["diff"] is None
-    warnings = [d for d in report["diagnostics"] if d["code"] == "canon.codegen.W002"]
-    assert warnings
-    assert warnings[0]["severity"] == "warning"
-    assert warnings[0]["locations"][0]["source"] == "api"
-    assert warnings[0]["locations"][0]["operation"] == "projects.events"
-    assert warnings[0]["locations"][0]["target"] == "browser"
-    assert warnings[0]["locations"][0]["schema_pointer"].startswith("/components/")
-    assert any(d["code"] == "canon.codegen.I001" for d in report["diagnostics"])
-    assert "private application stdout" not in generated.stdout + generated.stderr
-    assert not generated.stderr
+    assert report["schema_version"] == 2
+    assert [step["name"] for step in report["steps"]] == ["contracts", "streams", "rpc"]
+    assert "private app output" not in generated.stdout + generated.stderr
+    assert (project / "streams/.fastapi-canon-sse.json").is_file()
+    assert (project / "rpc/.rpcgen/manifest.json").is_file()
+    assert (project / "rpc/namespaces/projects.py").is_file()
     before = _artifacts(project)
-    checked = _run(project, "--check", "--offline")
-    assert checked.returncode == 0, checked.stderr
-    report = json.loads(checked.stdout)
-    assert report["status"] == "success" and report["changed"] is False
-    assert report["changes"] == []
-    assert report["offline"] and report["check"]
-    assert {d["code"] for d in report["diagnostics"]} == {"canon.codegen.W002"}
+    checked = _run(project, "--check")
+    assert checked.returncode == 0, checked.stdout + checked.stderr
+    assert all(
+        step["status"] == "current" for step in json.loads(checked.stdout)["steps"]
+    )
     assert _artifacts(project) == before
 
 
-@pytest.mark.parametrize("option", ["--check", "--diff"])
-def test_json_drift_is_read_only_and_separates_diff(project: Path, option: str) -> None:
+@pytest.mark.parametrize(
+    "target,filename", [("streams", "models.py"), ("rpc", "models.py")]
+)
+def test_diff_selects_one_target_and_preserves_all_files(
+    project: Path, target: str, filename: str
+) -> None:
     assert _run(project).returncode == 0
-    changed = project / "dist/generated/typescript/client.ts"
-    changed.write_text(
-        changed.read_text(encoding="utf-8") + "// local edit\n", encoding="utf-8"
+    path = project / target / filename
+    path.write_text(
+        path.read_text(encoding="utf-8") + "# manual drift\n", encoding="utf-8"
     )
     before = _artifacts(project)
-    result = _run(project, option, "--target", "browser")
-    assert result.returncode == 1, result.stderr
-    report = json.loads(result.stdout)
-    assert report["schema_version"] == 1
-    assert report["status"] == "drift" and report["check"]
-    assert report["targets"] == ["browser"]
-    assert report["changes"] == [str(changed)]
-    drift = next(d for d in report["diagnostics"] if d["code"] == "canon.codegen.W001")
-    assert drift["severity"] == "warning"
-    assert drift["locations"] == [{"path": str(changed)}]
-    if option == "--diff":
-        assert "// local edit" in report["diff"]
-    else:
-        assert report["diff"] is None
+    checked = _run(project, "--diff", "--target", target)
+    assert checked.returncode == 1, checked.stdout + checked.stderr
+    report = json.loads(checked.stdout)
+    assert [step["name"] for step in report["steps"]] == ["contracts", target]
+    assert "manual drift" in report["steps"][1]["diff"]
     assert _artifacts(project) == before
 
 
-def test_json_unsupported_operation_has_context_without_partial_writes(
+def test_contract_drift_blocks_clients_and_removes_stale_contract_on_generation(
     project: Path,
 ) -> None:
-    document = {
-        "openapi": "3.2.0",
-        "info": {"title": "Upload", "version": "1"},
-        "paths": {
-            "/upload": {
-                "post": {
-                    "operationId": "files.upload",
-                    "requestBody": {
-                        "content": {
-                            "multipart/form-data": {
-                                "schema": {
-                                    "type": "object",
-                                    "description": "private schema value",
-                                }
-                            }
-                        }
-                    },
-                    "responses": {"200": {"description": "OK"}},
-                }
-            }
-        },
-    }
-    (project / "upload.json").write_text(json.dumps(document), encoding="utf-8")
-    configuration = project / "fastapi-canon.toml"
-    configuration.write_text(
-        configuration.read_text(encoding="utf-8")
-        + (
-            '\n[codegen.sources.upload]\nkind = "openapi"\ninput = "upload.json"\n'
-            '[codegen.targets.unsupported]\nlanguage = "python"\nsources = ["upload"]\n'
-            'output = "bad-sdk"\npackage = "bad_sdk"\n'
-        ),
+    assert _run(project).returncode == 0
+    path = project / "contracts/openapi.json"
+    path.write_text("{}\n", encoding="utf-8")
+    stale = project / "contracts/webrtc.json"
+    stale.write_text("{}\n", encoding="utf-8")
+    before = _artifacts(project)
+    checked = _run(project, "--diff")
+    assert checked.returncode == 1
+    report = json.loads(checked.stdout)
+    assert report["steps"][0]["status"] == "drift"
+    assert [step["status"] for step in report["steps"][1:]] == ["blocked", "blocked"]
+    assert _artifacts(project) == before
+    assert _run(project).returncode == 0
+    assert not stale.exists()
+    assert json.loads(path.read_text(encoding="utf-8"))["openapi"].startswith("3.")
+
+
+def test_offline_does_not_import_the_application(project: Path) -> None:
+    assert _run(project).returncode == 0
+    (project / "application.py").write_text(
+        "raise RuntimeError('do not import')\n", encoding="utf-8"
+    )
+    checked = _run(project, "--offline", "--check")
+    assert checked.returncode == 0, checked.stdout + checked.stderr
+    assert (project / "rpc/client.py").is_file()
+
+
+def test_external_commands_run_from_config_root_and_report_drift(project: Path) -> None:
+    (project / "external.py").write_text(
+        "import sys\nfrom pathlib import Path\np = Path('external-client.txt')\nif sys.argv[1] == 'generate':\n    p.write_text('generated')\nelse:\n    raise SystemExit(0 if p.read_text() == 'generated' else 1)\n",
         encoding="utf-8",
     )
+    _external_config(project, "http", "external.py")
+    assert _run(project).returncode == 0
+    path = project / "external-client.txt"
+    assert path.read_text() == "generated"
+    path.write_text("drift")
     before = _artifacts(project)
+    checked = _run(project, "--check", "--target", "http")
+    assert checked.returncode == 1
+    assert json.loads(checked.stdout)["steps"][-1]["status"] == "drift"
+    assert _artifacts(project) == before
+
+
+def test_external_error_does_not_hide_other_target_results(project: Path) -> None:
+    (project / "failing.py").write_text("raise SystemExit(7)\n", encoding="utf-8")
+    _external_config(project, "http", "failing.py")
     result = _run(project)
-    assert result.returncode == 2, result.stderr
-    report = json.loads(result.stdout)
-    assert report["status"] == "error" and report["changed"] is None
-    assert report["changes"] == []
-    assert report["targets"] == ["browser", "python", "unsupported"]
-    (diagnostic,) = report["diagnostics"]
-    assert diagnostic["severity"] == "error"
-    assert diagnostic["code"] == "canon.codegen.E002"
-    assert "multipart requires a flat object" in diagnostic["message"]
-    assert diagnostic["locations"] == [
-        {
-            "source": "upload",
-            "operation": "files.upload",
-            "path": "POST /upload",
-            "target": "unsupported",
-        }
-    ]
-    assert "private schema value" not in result.stdout
-    assert "private application stdout" not in result.stdout + result.stderr
-    assert _artifacts(project) == before
-    assert not (project / "bad-sdk").exists()
-
-
-@pytest.mark.parametrize("failure", ["configuration", "import", "target"])
-def test_json_preflight_errors_keep_exit_two_and_do_not_write(
-    project: Path, failure: str
-) -> None:
-    options: list[str] = []
-    if failure == "configuration":
-        (project / "fastapi-canon.toml").write_text(
-            "[codegen]\nversion = 2\n", encoding="utf-8"
-        )
-    elif failure == "import":
-        (project / "app.py").write_text(
-            "raise RuntimeError('private configuration value')\n", encoding="utf-8"
-        )
-    else:
-        options = ["--target", "unknown"]
-    before = _artifacts(project)
-    result = _run(project, *options)
     assert result.returncode == 2
-    report = json.loads(result.stdout)
-    assert report["schema_version"] == 1 and report["status"] == "error"
-    (diagnostic,) = report["diagnostics"]
-    assert diagnostic["severity"] == "error"
-    assert diagnostic["code"] == "canon.codegen.E001"
-    assert diagnostic["message"]
-    assert "private configuration value" not in result.stdout + result.stderr
-    assert "Traceback" not in result.stdout + result.stderr
-    if failure == "import":
-        assert diagnostic["locations"] == [{"source": "api"}]
-        assert "Cannot import" in diagnostic["message"]
-    elif failure == "target":
-        assert report["targets"] == ["unknown"]
-    assert _artifacts(project) == before
+    steps = json.loads(result.stdout)["steps"]
+    assert steps[-1]["status"] == "error"
+    assert steps[1]["status"] == "updated"
+    assert (project / "rpc/client.py").is_file()
 
 
-def test_json_empty_contract_clean_success_has_no_diagnostics(tmp_path: Path) -> None:
-    (tmp_path / "api.json").write_text(
-        json.dumps(
-            {
-                "openapi": "3.2.0",
-                "info": {"title": "Empty", "version": "1"},
-                "paths": {},
-            }
-        ),
+def test_old_configuration_fails_before_writing(project: Path) -> None:
+    path = project / "fastapi-canon.toml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("version = 2", "version = 1"),
         encoding="utf-8",
+    )
+    result = _run(project)
+    assert result.returncode == 2
+    assert (
+        "version 1 domain SDK generation was removed"
+        in json.loads(result.stdout)["error"]
+    )
+    assert not (project / "contracts").exists()
+
+
+def test_native_preflight_failure_leaves_contracts_and_clients_unwritten(
+    project: Path,
+) -> None:
+    with (project / "fastapi-canon.toml").open("a", encoding="utf-8") as file:
+        file.write(
+            '\n[codegen.targets.video]\ngenerator = "webrtc"\noutput = "video"\n'
+        )
+    result = _run(project)
+    assert result.returncode == 2
+    assert "registered webrtc contract" in json.loads(result.stdout)["error"]
+    assert not (project / "contracts").exists()
+    assert not (project / "streams").exists()
+    assert not (project / "rpc").exists()
+
+
+def test_specialized_ownership_removes_stale_files_and_preserves_handwritten_files(
+    project: Path,
+) -> None:
+    assert _run(project).returncode == 0
+    output = project / "streams"
+    manifest = output / ".fastapi-canon-sse.json"
+    value = json.loads(manifest.read_text(encoding="utf-8"))
+    value["files"].append("obsolete.py")
+    manifest.write_text(json.dumps(value), encoding="utf-8")
+    stale = output / "obsolete.py"
+    stale.write_text("# obsolete\n", encoding="utf-8")
+    handwritten = output / "notes.txt"
+    handwritten.write_text("keep me", encoding="utf-8")
+    before = _artifacts(project)
+    assert _run(project, "--check", "--target", "streams").returncode == 1
+    assert _artifacts(project) == before
+    assert _run(project, "--target", "streams").returncode == 0
+    assert not stale.exists()
+    assert handwritten.read_text(encoding="utf-8") == "keep me"
+
+
+def test_offline_webrtc_target_generates_and_checks_specialized_client(
+    tmp_path: Path,
+) -> None:
+    root = Path(__file__).parents[3]
+    contracts = tmp_path / "contracts"
+    contracts.mkdir()
+    (contracts / "webrtc.json").write_bytes(
+        (root / "examples/webrtc/practice/contract.json").read_bytes()
     )
     (tmp_path / "fastapi-canon.toml").write_text(
-        '[codegen]\nversion = 1\n[codegen.sources.api]\nkind = "openapi"\ninput = "api.json"\n'
-        '[codegen.targets.python]\nlanguage = "python"\nsources = ["api"]\n'
-        'output = "sdk"\npackage = "sdk"\n',
+        '[codegen]\nversion = 2\napp = "unused:app"\n[codegen.targets.video]\ngenerator = "webrtc"\noutput = "video"\n',
         encoding="utf-8",
     )
-    assert _run(tmp_path).returncode == 0
-    checked = _run(tmp_path, "--check")
-    assert checked.returncode == 0, checked.stderr
-    report = json.loads(checked.stdout)
-    assert report["status"] == "success" and report["changed"] is False
-    assert report["diagnostics"] == []
-    assert report["changes"] == []
+    result = _run(tmp_path, "--offline")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (tmp_path / "video/client.ts").is_file()
+    assert (tmp_path / "video/.fastapi-webrtc.json").is_file()
+    assert _run(tmp_path, "--offline", "--check").returncode == 0
 
 
-def _run(project: Path, *options: str) -> subprocess.CompletedProcess[str]:
+def _external_config(project: Path, name: str, script: str) -> None:
+    with (project / "fastapi-canon.toml").open("a", encoding="utf-8") as file:
+        file.write(
+            f'\n[codegen.targets.{name}]\ngenerator = "external"\ngenerate-command = {json.dumps([sys.executable, script, "generate"])}\ncheck-command = {json.dumps([sys.executable, script, "check"])}\n'
+        )
+
+
+def _run(root: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
+    env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
     return subprocess.run(
         [
             sys.executable,
@@ -208,20 +221,20 @@ def _run(project: Path, *options: str) -> subprocess.CompletedProcess[str]:
             "generate",
             "--format",
             "json",
-            *options,
+            *arguments,
         ],
-        cwd=project,
+        cwd=root,
+        env=env,
         capture_output=True,
         text=True,
         check=False,
-        timeout=45,
+        timeout=30,
     )
 
 
-def _artifacts(project: Path) -> dict[str, bytes]:
+def _artifacts(root: Path) -> dict[str, bytes]:
     return {
-        str(path.relative_to(project)): path.read_bytes()
-        for directory in ("contracts", "dist", "sdk", "bad-sdk")
-        for path in (project / directory).rglob("*")
-        if path.is_file()
+        path.relative_to(root).as_posix(): path.read_bytes()
+        for path in root.rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts
     }

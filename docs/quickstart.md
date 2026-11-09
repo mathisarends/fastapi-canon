@@ -177,89 +177,25 @@ Install `fastapi-canon[mcp]` for FastMCP feature mounts with Dishka `Inject[T]`.
 See the [MCP guide](integrations/mcp/README.md) for composition, namespaces,
 endpoint defaults and supported execution lifetimes.
 
-## Generate and use the SDK
+## Generate and use clients
 
-Save `fastapi-canon.toml` at the project root. This configuration exports every
-contract the app above has (HTTP/SSE, RPC and WebRTC) into `contracts/` and
-generates both language targets from them:
+Use external OpenAPI tooling for HTTP and specialized generators for streams,
+RPC and media. The [generation workflow](codegen.md) coordinates them without
+imposing a shared model graph or client API.
 
-```toml
-[codegen]
-version = 1
-app = "src.app:app"
-
-[codegen.targets.browser]
-language = "typescript"
-output = "frontend/generated"
-
-[codegen.targets.python]
-language = "python"
-output = "api_client"
-package = "api_client"
-```
+The runnable [shared-error example](../examples/canonical_errors/README.md)
+includes a version-2 configuration for separate Python and TypeScript clients:
 
 ```console
+cd examples/canonical_errors
 uv run fastapi-canon generate
 uv run fastapi-canon generate --check --diff
 ```
 
-`app` derives one source per contract kind the application has: `http`
-(HTTP and SSE), `rpc` and `webrtc`. An HTTP-only app therefore exports only
-`contracts/openapi.json`; a stream-only addition uses the same OpenAPI source as
-HTTP.
-`--check --diff` checks generated files and exported contracts without writing;
-use it in CI to catch drift. Offline generation can consume saved contracts
-without importing application code.
-
-The generated TypeScript API:
-
-```typescript
-import { createClient, ProblemError } from "./generated";
-
-const client = createClient({ baseUrl: "http://localhost:8000" });
-try {
-  const project = await client.projects.get({ projectId: 1 });
-  for await (const event of client.projects.events({ projectId: project.id })) {
-    console.log(event.sequence);
-  }
-  await client.projects.cancel({ projectId: project.id });
-} catch (error) {
-  if (error instanceof ProblemError) console.error(error.problem.type);
-  else throw error;
-} finally {
-  await client.close();
-}
-```
-
-The same domain API in Python, inside an async function:
-
-```python
-from api_client import ApiClient, ProblemError
-
-async with ApiClient("http://localhost:8000") as client:
-    try:
-        project = await client.projects.get(project_id=1)
-        async for event in client.projects.events(project_id=project.id):
-            print(event.sequence)
-        await client.projects.cancel(project_id=project.id)
-    except ProblemError as error:
-        print(error.problem.type)
-```
-
-Generated SDKs do not depend on Canon. Python consumers install Pydantic, `httpx`
-(or configured `httpx2`) and `websockets` for RPC; TypeScript uses fetch/DOM APIs
-and the `ESNext.Disposable` type library. Bindings connect lazily, and closing the
-client releases resources it owns. Shared semantic model identities avoid
-duplicating DTOs across contracts.
-
-The [codegen guide](unified-canon-concept.md) covers naming, model identity,
-connection/auth options, operation selection and output ownership. It also
-documents limits: unified HTTP generation supports JSON, declared SSE, flat
-multipart uploads and binary transfers. Unsupported nested multipart encodings
-must be explicitly excluded. WebRTC
-generation targets TypeScript. The [runnable canonical-errors example](../examples/canonical_errors/app.py)
-includes a complete multi-transport configuration.
-
+Add your HTTP generator through external `generate-command` and `check-command`
+argument arrays. Its input is the exported OpenAPI document. Keep query and
+mutation options in that generator's configuration. See specialized
+[SSE usage](integrations/sse/clients.md) and [RPC usage](integrations/websockets/clients.md).
 
 
 ## Check the contract in CI

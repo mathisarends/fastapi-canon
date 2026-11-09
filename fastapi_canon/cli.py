@@ -15,7 +15,7 @@ from fastapi_canon._version import __version__
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="fastapi-canon",
-        description="Declare and check Canon applications, export contracts and generate domain SDKs.",
+        description="Declare and check Canon applications, export contracts and coordinate client generation.",
         epilog="Use COMMAND --help for target syntax, defaults, side effects and exit policies.",
     )
     parser.add_argument("--version", action="version", version=__version__)
@@ -28,7 +28,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ("check", "Check source contracts or an imported application composition"),
         ("inspect", "Describe an installed application composition"),
         ("explain", "Explain a built-in source, composition or generation diagnostic"),
-        ("generate", "Generate one domain SDK from configured application contracts"),
+        ("generate", "Export contracts and run specialized or external generators"),
         ("db", "Manage database revisions with Alembic"),
         ("skill", "Install the bundled backend-building skill in your project"),
     ):

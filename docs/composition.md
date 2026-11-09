@@ -18,10 +18,9 @@ contracts, and declares typed SSE (`@router.sse`), JSON-RPC channels
 router. See [routers](routers.md) for every transport option.
 
 Use the [quickstart](quickstart.md#core-api-routes-errors-and-composition)
-for the server-to-SDK path: HTTP, typed SSE and WebSocket RPC declarations become
-one Python/TypeScript domain API. This guide covers the core composition and HTTP
-options in detail; the [codegen guide](unified-canon-concept.md)
-explains shared models, errors and generated bindings.
+for HTTP, typed SSE and WebSocket RPC declarations. This guide covers core
+composition and HTTP options; the [codegen guide](codegen.md) explains contract
+export and the workflow for separate generated clients.
 
 Dishka is a deliberate part of this canon, not an optional integration.
 `fastapi-canon` defines one dependency-injection approach: features contribute
@@ -46,7 +45,7 @@ outside the library's intended architecture.
 - [Success response contracts](#success-response-contracts)
   - [Binary and PDF streams](#binary-and-pdf-streams)
   - [Streaming boundary](#streaming-boundary)
-- [Generated domain SDK](#generated-domain-sdk)
+- [Client generation](#client-generation)
 - [Low-level FastAPI compatibility](#low-level-fastapi-compatibility)
 - [Installation guarantees](#installation-guarantees)
 - [Optional OpenTelemetry integration](telemetry.md)
@@ -57,9 +56,9 @@ outside the library's intended architecture.
 ## Quick start
 
 Install feature dependencies with `fastapi-canon[sse,websockets,webrtc]` and
-generation tooling with `fastapi-canon[codegen]`. `fastapi-canon generate` builds
-one domain SDK with shared models and errors; see the
-[codegen guide](unified-canon-concept.md).
+generation tooling with `fastapi-canon[codegen]`. The generation workflow exports
+shared server contracts and coordinates separate clients; see the
+[codegen guide](codegen.md).
 
 ```python
 from fastapi import FastAPI
@@ -693,19 +692,14 @@ exception inside the iterator cannot be converted into another HTTP response; a
 failed binary iterator produces an incomplete download. Typed SSE streams report
 such failures as terminal `canon.problem` events instead.
 
-## Generated domain SDK
+## Client generation
 
-Use `fastapi-canon generate` to export HTTP/SSE and OpenRPC contracts and generate
-one domain API with shared public models and errors. Consumers call
-`client.projects.get(...)`, iterate `client.projects.events(...)`, or await
-`client.projects.cancel(...)`; protocol bindings handle their wire behavior.
+The [generation workflow](codegen.md) exports contracts and runs specialized
+SSE/RPC/WebRTC generators together with external HTTP tooling. Shared Python
+models and `Error` declarations supply the contracts; each generator owns its
+client API and generated files. Use `fastapi-canon generate --check --diff` for
+contract and client drift.
 
-The [quickstart examples](quickstart.md#generate-and-use-the-sdk) show the complete
-configuration and Python/TypeScript calls. The
-[codegen guide](unified-canon-concept.md) documents naming, dependency
-requirements, operation selection and supported schemas. Run
-`fastapi-canon generate --check --diff` in CI to detect drift without rewriting
-files. Generated runtimes do not import Canon.
 
 ## Low-level FastAPI compatibility
 

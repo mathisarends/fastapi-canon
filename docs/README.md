@@ -1,7 +1,7 @@
 # Build with Canon
 
 Start with [From Python to typed clients](quickstart.md). It builds HTTP, SSE
-and WebSocket operations into one API and generates both client languages.
+and WebSocket declarations with shared errors and separate client generators.
 
 | I want to… | Guide |
 | --- | --- |
@@ -10,7 +10,7 @@ and WebSocket operations into one API and generates both client languages.
 | Upload files, send multipart forms and download binary content | [File transfers](integrations/uploads.md) |
 | Send and consume typed SSE events | [Streaming](integrations/sse/README.md) |
 | Build WebSocket RPC and message streams | [WebSockets](integrations/websockets/README.md) |
-| Generate and configure clients | [Client generation](unified-canon-concept.md) |
+| Generate and configure clients | [Client generation](codegen.md) |
 | Wire features, dependencies and lifecycles | [Application composition](composition.md) |
 | Trace application services | [Instrumentation](telemetry.md) |
 | Correlate HTTP logs and traces | [Request logging](request-logging.md) |

@@ -29,11 +29,6 @@ from fastapi_canon.cli import main
         "canon.description.E001",
         "canon.contracts.E001",
         "canon.checks.E001",
-        "canon.codegen.I001",
-        "canon.codegen.W001",
-        "canon.codegen.W002",
-        "canon.codegen.E001",
-        "canon.codegen.E002",
     ],
 )
 def test_builtin_codes_have_versioned_meaning_example_repair_and_guide(

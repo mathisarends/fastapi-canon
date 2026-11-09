@@ -16,10 +16,10 @@ WebSocket RPC, exported contracts, and generated Python and TypeScript clients.
 
 ## What Canon handles
 
-- **HTTP, SSE and WebSockets:** typed operations, event streams and RPC methods,
-  with generated Python and TypeScript clients.
+- **HTTP, SSE and WebSockets:** typed contracts, event streams and RPC methods,
+  with specialized transport clients and external HTTP generation.
 - **File transfers:** single and multiple multipart uploads with form fields,
-  plus binary downloads in generated SDKs. See the [upload guide](docs/integrations/uploads.md)
+  plus binary download contracts for OpenAPI tooling. See the [upload guide](docs/integrations/uploads.md)
   for the unreleased source API.
 - **Public errors:** map domain exceptions once, declare them with `raises=`,
   and carry the contract into HTTP RFC 9457 Problem Details, streams and SDKs.
@@ -32,7 +32,7 @@ WebSocket RPC, exported contracts, and generated Python and TypeScript clients.
 
 Generated SDKs do not depend on Canon. Python clients use Pydantic, an HTTP client
 and, for RPC, `websockets`; TypeScript clients use fetch/DOM APIs.
-See [client generation](docs/unified-canon-concept.md) for supported operations
+See [client generation](docs/codegen.md) for supported operations
 and target requirements.
 
 ## Install
@@ -111,13 +111,13 @@ HTTP status is included in HTTP problems and omitted from SSE terminal and RPC
 problems. RFC 9457 defines HTTP Problem Details; the stream and RPC bindings are
 Canon conventions.
 
-Generated SDKs expose these failures through a shared `ProblemError`:
+Generated SSE/RPC clients expose public problem data through `ProblemError`:
 
 ```python
-from api_client import ProblemError
+from rpc_client import ProblemError
 
 try:
-    project = await client.projects.get(project_id=0)
+    await client.projects.cancel(project_id=0)
 except ProblemError as error:
     print(error.problem.type)
 ```
@@ -129,75 +129,27 @@ and safe internal errors.
 
 ## HTTP, SSE and WebSocket clients
 
-Declare a typed stream on Canon's `APIRouter`:
+Use an OpenAPI generator such as Orval with your framework's query integration
+for HTTP. Canon generates specialized SSE, WebSocket and WebRTC clients.
+Each client retains its transport's cancellation and resource ownership rules.
 
-```python
-from collections.abc import AsyncIterator
-
-from fastapi import FastAPI
-from pydantic import BaseModel
-
-from fastapi_canon import APIRouter, Composition, Feature
-
-
-class Token(BaseModel):
-    text: str
-
-
-router = APIRouter()
-
-
-@router.sse("/tokens", operation_id="generation.tokens")
-async def tokens() -> AsyncIterator[Token]:
-    yield Token(text="Hello")
-    yield Token(text=" world")
-
-
-app = Composition(
-    features=(Feature(name="generation", routers=[router]),),
-).build(FastAPI())
-```
-
-With a [codegen configuration](docs/quickstart.md#generate-and-use-the-sdk)
-pointing at your app, generate both clients. The SSE-only app exports only its
-OpenAPI contract:
+Configure a [generation workflow](docs/codegen.md), then run:
 
 ```console
 uv run fastapi-canon generate
+uv run fastapi-canon generate --check --diff
 ```
 
-TypeScript:
+The workflow exports contracts once, runs selected generators and reports drift.
+HTTP tooling runs through explicit external commands. There is no Canon HTTP
+client generator, shared client facade or cross-protocol model merger.
 
-```typescript
-import { createClient } from "./generated";
+Reuse Python models and `Error` definitions on the server. Each generator derives
+types from exported contracts. Separate generated error classes retain separate
+runtime identities. See the [shared-error example](examples/canonical_errors/README.md),
+[SSE clients](docs/integrations/sse/clients.md) and
+[RPC clients](docs/integrations/websockets/clients.md).
 
-const client = createClient({ baseUrl: "http://localhost:8000" });
-try {
-  for await (const token of client.generation.tokens()) {
-    console.log(token.text);
-  }
-} finally {
-  await client.close();
-}
-```
-
-Python, inside an async function:
-
-```python
-from api_client import ApiClient
-
-async with ApiClient("http://localhost:8000") as client:
-    async for token in client.generation.tokens():
-        print(token.text)
-```
-
-The event model becomes the client's item type. Canon handles framing, decoding
-and explicit stream completion. Declared terminal problems raise `ProblemError`;
-an unexpected EOF raises `TransportError`.
-
-The same SDK can expose HTTP lookups and WebSocket RPC calls such as
-`client.projects.get(...)` and `client.projects.cancel(...)`, with shared models
-and public problem errors. See the [complete walkthrough](docs/quickstart.md).
 
 ## Instrument application boundaries
 

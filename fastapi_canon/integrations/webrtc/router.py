@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket
 from fastapi.params import Depends as DependsParam
 from starlette.requests import HTTPConnection
 
+from fastapi_canon.contract_routes import WEBRTC_DECLARATION_ATTRIBUTE
 from fastapi_canon.injection import injected_dependency
 from fastapi_canon.integrations.webrtc.capacity import SessionCapacity, SlotReservation
 from fastapi_canon.integrations.webrtc.declarations import (
@@ -50,7 +51,7 @@ logger = logging.getLogger("fastapi_canon.integrations.webrtc")
 
 Factory = TypeVar("Factory", bound=Callable[..., Any])
 
-DECLARATION_ATTRIBUTE = "__canon_webrtc__"
+DECLARATION_ATTRIBUTE = WEBRTC_DECLARATION_ATTRIBUTE
 
 
 class WebRtcRouter(APIRouter):

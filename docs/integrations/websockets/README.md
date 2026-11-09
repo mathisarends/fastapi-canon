@@ -58,7 +58,7 @@ early, and close owned clients on shutdown.
 
 - [Dependencies and authentication](dependencies.md)
 - [Public errors](errors.md)
-- [Generated clients](clients.md) and [shared SDK configuration](../../unified-canon-concept.md)
+- [Generated clients](clients.md) and [generation workflow](../../codegen.md)
 - [Telemetry](observability.md)
 - [Upgrade guide](migration.md) and [resilience options](hardening-overview.md)
 

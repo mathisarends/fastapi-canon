@@ -6,7 +6,7 @@ test structure. They describe this checkout's implemented library. Verify an API
 Use `README.md` for the library overview, `docs/canon.md` for public namespaces,
 `docs/contributing.md` for commands and `docs/compatibility.md` for tested scope.
 Shared errors and common generation are documented in `docs/problems.md` and
-`docs/unified-canon-concept.md`. The canonical repository is
+`docs/codegen.md`. The canonical repository is
 `mathisarends/fastapi-canon`; preserve historical release evidence in
 `mathisarends/canon` as described in `docs/repository-migration.md`.
 

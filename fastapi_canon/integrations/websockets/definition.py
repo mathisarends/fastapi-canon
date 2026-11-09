@@ -9,6 +9,7 @@ from urllib.parse import unquote
 
 from pydantic import BaseModel
 
+from fastapi_canon.contract_routes import RPC_ENDPOINT_ATTRIBUTE
 from fastapi_canon.error.catalog import app_registry
 
 if TYPE_CHECKING:
@@ -46,7 +47,7 @@ from fastapi_canon.integrations.websockets.server import (
     RpcServer,
 )
 
-ENDPOINT_ATTRIBUTE = "__canon_rpc_endpoint__"
+ENDPOINT_ATTRIBUTE = RPC_ENDPOINT_ATTRIBUTE
 
 
 @dataclass(frozen=True, slots=True, eq=False)

@@ -34,8 +34,8 @@ schemas:
 uv run --locked fastapi-canon contracts export --app examples.streams.app:app --output-dir contracts
 ```
 
-Use [`fastapi-canon generate`](../../docs/unified-canon-concept.md) to generate a
-Python or TypeScript SDK whose stream methods are async iterators.
+Use [`fastapi-canon generate`](../../docs/codegen.md) to coordinate separate
+Python or TypeScript stream clients. HTTP generation uses external tooling.
 
 ## Tests
 

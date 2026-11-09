@@ -299,7 +299,7 @@ The installed-wheel matrix covers:
 | `[websockets]` | RPC and typed/raw/binary sockets |
 | `[webrtc]` | Session declarations, signaling, admission and missing-engine diagnostics |
 | `[webrtc,aiortc]` | Optional engine installation |
-| `[codegen]` | Offline specialized and unified generation without transport/engine extras; execution of a generated JSON HTTP client |
+| `[codegen]` | Offline specialized generation and workflow checks without transport/engine extras; execution of a generated JSON HTTP client |
 | `[uploads,codegen]` | Multipart runtime and generator dependencies installed together |
 | `[sse,codegen]` | SSE contracts and clients |
 | `[websockets,codegen]` | OpenRPC export and client execution/compilation |
@@ -335,11 +335,7 @@ are consumer-reported results, not independent workspace deployment verification
 Deployed TURN/NAT, PostgreSQL concurrency and proxies still require
 application-side validation.
 
-The unified SDK is also exercised across HTTP, SSE and JSON-RPC
-with one problem/error identity and shared model classes. Tests compile and run
-the generated TypeScript facade, compile its socket/WebRTC session signatures,
-and exercise generated Python requests and cleanup. The next release also tests
-flat multipart uploads and binary round trips against a real FastAPI application
-with both Python HTTP backends and a compiled TypeScript consumer. Nested
-multipart encodings, other parameter styles and unsupported schemas fail
-preflight. See the [codegen guide](unified-canon-concept.md) for the precise scope.
+The prepared source verifies separate SSE/RPC clients and the version-2
+generation/check workflow. HTTP client generation belongs to external OpenAPI
+tooling. Prior common-SDK checks describe older release evidence and do not
+establish the removed facade as a current API. See [generation](codegen.md).
