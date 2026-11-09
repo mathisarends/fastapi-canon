@@ -1,6 +1,6 @@
 # From Python to typed clients
 
-This walkthrough follows the prepared 0.17.0 source. For the published 0.16.0
+This walkthrough uses Canon 0.17.0. For the earlier 0.16.0
 workflow, use the [release's docs](https://github.com/mathisarends/fastapi-canon/tree/fastapi-canon-v0.16.0/docs).
 
 Build one small Projects API with an HTTP lookup, an SSE event stream and a

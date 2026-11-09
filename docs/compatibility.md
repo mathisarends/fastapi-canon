@@ -1,5 +1,14 @@
 # Compatibility
 
+## Canon 0.17.0
+
+The published source passed full CI on Linux/Python 3.12–3.14 and Windows/Python
+3.14, including PostgreSQL and Chromium/WebRTC contracts. Both 20-combination
+wheel matrices passed with current and minimum dependencies. Installed SSE and
+WebRTC CLI/client checks and all 15 public-index installation combinations passed.
+PyPI hashes, downloaded GitHub assets, release notes, manifest and tag agree.
+See the [publication record](releases.md#current-versions).
+
 ## Canon 0.16.0
 
 The published source passed exact-commit CI on Linux/Python 3.12–3.14 and
@@ -104,7 +113,7 @@ integration implementations, which share Canon's version.
 
 | Package | Published |
 | --- | --- |
-| `fastapi-canon` | 0.16.0 |
+| `fastapi-canon` | 0.17.0 |
 | `fastapi-streams` | 0.5.0 |
 | `fastapi-rpckit` | 0.4.1 |
 | `fastapi-webrtc` | 0.3.0 |
@@ -335,7 +344,7 @@ are consumer-reported results, not independent workspace deployment verification
 Deployed TURN/NAT, PostgreSQL concurrency and proxies still require
 application-side validation.
 
-The prepared source verifies separate SSE/RPC clients and the version-2
+Canon 0.17.0 verifies separate SSE/RPC clients and the version-2
 generation/check workflow. HTTP client generation belongs to external OpenAPI
 tooling. Prior common-SDK checks describe older release evidence and do not
 establish the removed facade as a current API. See [generation](codegen.md).

@@ -13,7 +13,7 @@ PyPI project or add further Python import changes.
 
 ## Upgrade to 0.17.0
 
-The prepared source replaces domain SDK generation with a version-2 workflow.
+Canon 0.17.0 replaces domain SDK generation with a version-2 workflow.
 Use external HTTP tooling and specialized clients; see [migration](codegen.md#migration-from-version-1).
 The error checker also follows additional call paths and can report previously
 missed CAN001/CAN002 findings. Run it against all application import roots,

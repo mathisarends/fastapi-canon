@@ -74,7 +74,7 @@ See [composition](composition.md) and the integration guides for lifecycle rules
 | `fastapi-canon websockets` | Export OpenRPC and generate RPC/socket clients |
 | `fastapi-canon webrtc` | Export media contracts and generate TypeScript clients |
 
-The prepared 0.17.0 workflow uses separate transport clients and external HTTP
+The 0.17.0 workflow uses separate transport clients and external HTTP
 tooling. Use `generate --check --diff` for drift, `--target NAME` to select a
 client and `--offline` for saved contracts. See [configuration and migration](codegen.md).
 

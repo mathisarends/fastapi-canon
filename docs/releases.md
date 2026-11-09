@@ -6,8 +6,8 @@ version; the reference service is an example. `release.toml` and
 
 ## Current versions
 
-**Prepared: 0.17.0, unreleased. Published: 0.16.0 (2026-11-07).**
-The next release replaces the combined SDK and expands error-checker coverage.
+**Published: 0.17.0 (2026-11-10).**
+This release replaces the combined SDK and expands error-checker coverage.
 Follow the [0.17.0 migration](package-migration.md#upgrade-to-0170) and
 [changelog](../CHANGELOG.md#0170---2026-11-10).
 
@@ -17,6 +17,7 @@ Historical links retain their original repositories.
 
 | Version | Source | CI | Dry run | Publication | Wheel, sdist and manifest |
 | --- | --- | --- | --- | --- | --- |
+| 0.17.0 (2026-11-10) | [Source](https://github.com/mathisarends/fastapi-canon/commit/9745a85fe6f16852a7eee16161be73d6a3703fbd) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/42719244150) | [Earlier dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/42717728251) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/42721013782) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.17.0) |
 | 0.16.0 (2026-11-07) | [Source](https://github.com/mathisarends/fastapi-canon/commit/5b36111a1b5750424052a9af96e8bbbed07bc0cc) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/42382306017) | [Dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/42383067506) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/42383550071) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.16.0) |
 | 0.15.0 (2026-11-04) | [Source](https://github.com/mathisarends/fastapi_canon/commit/e4abb2c54706854d9ec7b0c4cb668b9cbfa23545) | [CI](https://github.com/mathisarends/fastapi_canon/actions/runs/41883371046) | [Dry run](https://github.com/mathisarends/fastapi_canon/actions/runs/41884977604) | [Publish](https://github.com/mathisarends/fastapi_canon/actions/runs/41886079014) | [Assets](https://github.com/mathisarends/fastapi_canon/releases/tag/fastapi-canon-v0.15.0) |
 | 0.14.0 (2026-11-03) | [Source](https://github.com/mathisarends/fastapi_canon/commit/8e90a68315dcc311a9ac64a1ab09ea1315d4fc38) | [CI](https://github.com/mathisarends/fastapi_canon/actions/runs/41697444397) | [Dry run](https://github.com/mathisarends/fastapi_canon/actions/runs/41698678199) | [Publish](https://github.com/mathisarends/fastapi_canon/actions/runs/41699504831) | [Assets](https://github.com/mathisarends/fastapi_canon/releases/tag/fastapi-canon-v0.14.0) |
@@ -24,6 +25,10 @@ Historical links retain their original repositories.
 | 0.12.0 (2026-11-02) | [Source](https://github.com/mathisarends/fastapi_canon/commit/703fce8a769253c604b0e4f1901e69f43aac42b9) | [CI](https://github.com/mathisarends/fastapi_canon/actions/runs/41427274311) | [Dry run](https://github.com/mathisarends/fastapi_canon/actions/runs/41428297603) | [Publish](https://github.com/mathisarends/fastapi_canon/actions/runs/41428704283) | [Assets](https://github.com/mathisarends/fastapi_canon/releases/tag/fastapi-canon-v0.12.0) |
 | 0.11.0 (2026-11-01) | [Source](https://github.com/mathisarends/fastapi_canon/commit/2773b56498fad05ac9e1f1163ee33241b6d70eff) | [CI](https://github.com/mathisarends/fastapi_canon/actions/runs/41346976457) | [Dry run](https://github.com/mathisarends/fastapi_canon/actions/runs/41347623801) | [Publish](https://github.com/mathisarends/fastapi_canon/actions/runs/41348067349) | [Assets](https://github.com/mathisarends/fastapi_canon/releases/tag/fastapi-canon-v0.11.0) |
 | 0.10.0 (2026-11-01) | [Source](https://github.com/mathisarends/fastapi_canon/commit/4d9ce1842b350a9bf867d512cc89aafc4b44d53b) | [CI](https://github.com/mathisarends/fastapi_canon/actions/runs/41311732023) | [Dry run](https://github.com/mathisarends/fastapi_canon/actions/runs/41312304534) | [Publish](https://github.com/mathisarends/fastapi_canon/actions/runs/41312590718) | [Assets](https://github.com/mathisarends/fastapi_canon/releases/tag/fastapi-canon-v0.10.0) |
+
+The 0.17.0 preparatory dry run predates changelog finalization. Publication
+revalidated the final dated source; its public installs and attached artifacts
+are verified.
 
 Recovery notes: 0.15.0 and 0.14.0 needed public-index verification after stale
 index results; 0.11.0 needed GitHub finalization retried after incomplete PyPI

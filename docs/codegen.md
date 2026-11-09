@@ -1,6 +1,6 @@
 # Generate and check separate clients
 
-Version 2 requires the prepared 0.17.0 source; it is not yet published.
+Version 2 is available in Canon 0.17.0 and later.
 
 Canon exports application contracts and coordinates specialized generators.
 Use an external OpenAPI generator such as Orval with your framework's query

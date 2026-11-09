@@ -1,6 +1,6 @@
 # Retired domain SDK
 
-The prepared 0.17.0 source removes the common HTTP/SSE/RPC domain SDK and its
+Canon 0.17.0 removes the common HTTP/SSE/RPC domain SDK and its
 HTTP generator. Use the [version-2 generation workflow](codegen.md) and follow
 its [migration instructions](codegen.md#migration-from-version-1).
 

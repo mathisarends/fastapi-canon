@@ -1,6 +1,6 @@
 # SDK design: shared contracts, separate clients
 
-Accepted for the prepared 0.17.0 source. For usage and migration, see
+Shipped in Canon 0.17.0. For usage and migration, see
 [client generation](codegen.md).
 
 ## Decision

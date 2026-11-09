@@ -2,7 +2,7 @@
 
 Declare file operations on the same Canon `APIRouter` as other HTTP operations.
 Their OpenAPI contracts are inputs for your chosen HTTP client generator, including
-canonical problem schemas. This guide describes the unreleased source support.
+canonical problem schemas. This guide covers Canon 0.17.0 and later.
 
 ## Install
 
