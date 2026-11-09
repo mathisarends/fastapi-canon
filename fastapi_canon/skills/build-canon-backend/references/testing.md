@@ -66,9 +66,9 @@ exit 1; adding `--require-complete` exits 2 if dependent checks were skipped.
 Check both automatic IDs and explicit overrides. Reusing a handler or mounting a
 router under a new URL prefix does not give it a new ID. Rename the function,
 choose a distinct router namespace or explicitly name the separate operation;
-do not append disambiguating suffixes automatically. `fastapi-canon generate`
-also rejects duplicate IDs and SDK naming conflicts before writing output,
-including generation from saved contracts.
+do not append disambiguating suffixes automatically. Specialized generators
+validate names within their own contracts before writing. The generation
+workflow does not add cross-protocol SDK naming rules.
 
 ### Application gates and error declarations
 

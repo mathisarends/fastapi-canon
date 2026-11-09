@@ -88,7 +88,7 @@ def test_commands_load_instances_or_one_factory_without_runtime_execution(
         )
         assert document["paths"]["/ping"]["get"]["operationId"] == "demo.ping"
     else:
-        assert "def ping(" in (application_module / "sdk/client.py").read_text()
+        assert (application_module / "sdk/.fastapi-canon-sse.json").is_file()
 
 
 @pytest.mark.parametrize("kind", ["inspect", "check", "contracts", "generate"])
@@ -191,11 +191,9 @@ def _run(
         ]
     else:
         (directory / "fastapi-canon.toml").write_text(
-            "[codegen]\nversion = 1\n"
-            '[codegen.sources.api]\nkind = "openapi"\n'
-            f'source = "{reference}"\nfactory = true\noutput = "contracts/openapi.json"\n'
-            '[codegen.targets.python]\nlanguage = "python"\nsources = ["api"]\n'
-            'output = "sdk"\npackage = "sdk"\n',
+            f'[codegen]\nversion = 2\napp = "{reference}"\n'
+            '[codegen.targets.streams]\ngenerator = "sse"\n'
+            'language = "python"\noutput = "sdk"\n',
             encoding="utf-8",
         )
         arguments = ["generate"]

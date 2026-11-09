@@ -8,6 +8,16 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Breaking changes
 
+- Remove the Python/TypeScript HTTP generator and unified domain SDK. Replace
+  version-1 `[codegen]` sources/targets with the version-2 workflow in
+  `docs/codegen.md`. Use external OpenAPI tooling for HTTP and specialized
+  SSE/RPC/WebRTC client APIs. Replace facade-specific `.safe()`, binding options
+  and model identity/name mappings. Shared Python `Error` declarations and
+  public problem contracts remain. JSON generation reports use schema version 2
+  with per-step results. Core no longer emits SDK-only `x-canon-model-id` and
+  `x-canon-model-name` hints. SDK-only `canon.codegen.*` explanation codes are
+  retired. `ruff` is no longer installed by `[codegen]`.
+
 - Error-contract source checking now follows callable instances, bound classmethod
   constructors and methods on `Self` return values. Previously hidden CAN001/CAN002
   findings can make `check errors --strict` exit 1. Before enabling the new checker
@@ -23,18 +33,9 @@ All notable changes to `fastapi-canon` are documented in this file.
   `UploadFile`/`list[UploadFile]` declarations, scalar form fields, Dishka-owned
   storage and `CanonResponse.binary(...)` downloads. Installed-wheel smoke checks
   exercise the extra independently and alongside code generation.
-- Common application-derived Python and TypeScript SDKs support flat multipart
-  uploads with scalar form fields, repeated fields and multiple files. Python
-  exposes `Upload(filename, content, content_type=...)`, borrowing binary file
-  handles; TypeScript accepts native `File` and `Blob` values. Both bindings let
-  their HTTP library generate the multipart boundary and preserve canonical
-  problem errors, deadlines and cancellation.
-- Common HTTP methods accept raw `application/octet-stream` bodies and return
-  declared binary responses as Python `bytes` or TypeScript `Blob`. Downloads
-  are buffered. Both OpenAPI `format: binary` and FastAPI's unencoded
-  `contentMediaType: application/octet-stream` declarations are recognized.
-- The codegen guide documents file ownership, repeated parts and unsupported
-  multipart encodings. The earlier multipart deferral decision is removed.
+- Version-2 generation exports contracts once and coordinates specialized
+  clients and external HTTP generate/check commands. See `docs/sdk-design.md`
+  for the design rationale.
 
 ### Fixed
 
@@ -51,9 +52,6 @@ All notable changes to `fastapi-canon` are documented in this file.
   across `await`, local assignments and aliases, including generic `Result[T]`
   annotations. Application callbacks are still followed; extracted model values
   and unknown external return types remain conservative.
-- Bundled backend-building guidance and `canon.codegen.E002` explanations now
-  describe the supported multipart/binary contracts instead of recommending
-  blanket exclusion of file operations.
 - Built-in request-validation and internal-server problems use the declared
   discriminator property when joining an existing OpenAPI problem union. Unions
   discriminated by `type` now map their full problem URI instead of their `code`,

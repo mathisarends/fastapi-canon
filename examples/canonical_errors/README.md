@@ -24,6 +24,10 @@ uv run fastapi-canon generate --check --diff
 ```
 
 The local `fastapi-canon.toml` exports OpenAPI and OpenRPC, then produces
-TypeScript under `dist/generated/typescript` and the Python package under
-`dist/generated/python/api_client`. The quickstart shows how to call them.
+separate TypeScript SSE/RPC clients under `dist/streams/typescript` and
+`dist/rpc/typescript`, plus Python clients under `dist/streams/python` and
+`dist/rpc/python/projects_client`. Use an external OpenAPI generator for HTTP.
+See the [workflow](../../docs/codegen.md) and
+[design rationale](../../docs/sdk-design.md). Shared errors come from the same
+Python declarations; separate generated classes have separate runtime identities.
 Do not edit generated files; change the Python declarations and regenerate.

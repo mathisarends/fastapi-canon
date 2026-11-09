@@ -11,6 +11,12 @@ The [repository migration](repository-migration.md) records the
 source history and publishing setup. The repository move does not rename the
 PyPI project or add further Python import changes.
 
+## Upgrade to 0.17.0
+
+The prepared source replaces domain SDK generation with a version-2 workflow.
+Use external HTTP tooling and specialized clients; see [migration](codegen.md#migration-from-version-1).
+Older sections below describe previous release transitions.
+
 ## Upgrade to 0.16.0
 
 Version 0.16.0 was published on 2026-11-07. It contains
@@ -115,7 +121,7 @@ RPC now preserves plain Pydantic models' own aliases, validation and extra-field
 policy. Inherit from `RpcModel`, or explicitly configure the previous camel-case
 and `extra="forbid"` policy, when retaining the old RPC convention. Regenerate
 clients for the declared wire shape. Shared DTOs need compatible schemas and one
-semantic identity; see [shared models](unified-canon-concept.md).
+semantic identity; see [shared models](codegen.md).
 
 Regenerate both SDK languages through `fastapi-canon generate`. Existing source
 tables stay supported; `[codegen] app = "module:app"` can now export the app's
@@ -135,7 +141,7 @@ contracts and select the supported sources for each target automatically.
 - Remove consumer imports of protocol envelopes and implementation aliases from
   the common TypeScript root. Use its reachable domain/problem models. Node ESM
   imports use `.js`; explicit resource management requires `ESNext.Disposable`
-  types. See [SDK scope](unified-canon-concept.md#connections-and-supported-scope).
+  types. See [SDK scope](codegen.md).
 - Preserve the optional initialization `signal` in TypeScript RPC connection
   wrappers. Rename a server URL variable named `signal` before generation.
   Closing a common SDK cancels pending eager handshakes while individual call
@@ -380,7 +386,7 @@ Canon 0.10.0 added version-1 `fastapi-canon generate` configuration, shared mode
 identity and a domain SDK facade. JSON HTTP calls, SSE, JSON-RPC and sessions can
 contribute to one output per language. Put generation settings in `[codegen]` in
 `fastapi-canon.toml`, or `[tool.fastapi-canon.codegen]` in `pyproject.toml`. Follow the
-[codegen guide](unified-canon-concept.md) and choose a fresh output
+[codegen guide](codegen.md) and choose a fresh output
 when adopting the common workflow. Specialized generator commands remain
 available with their own configuration and ownership; never point multiple
 generators at the same SDK directory.

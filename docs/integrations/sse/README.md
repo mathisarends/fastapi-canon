@@ -31,4 +31,4 @@ Canon does not add application replay or reconnection semantics.
 - [Client usage](clients.md): typed values, cancellation and validation.
 - [Generation options](codegen.md): export, validation and CI checks.
 - [Existing SSE endpoints](native-transports.md): contract-first generation and proxies.
-- [Common domain SDK](../../unified-canon-concept.md): combine SSE, HTTP and RPC.
+- [Generation workflow](../../codegen.md): coordinate separate clients.

@@ -17,7 +17,6 @@ class _Explanation:
 
 _DOCS = "https://github.com/mathisarends/fastapi-canon/blob/main/docs/"
 _CHECKS = _DOCS + "system-checks.md#findings-and-coverage"
-_CODEGEN = _DOCS + "unified-canon-concept.md#json-generation-diagnostics"
 _EXPLANATIONS = {
     "CAN001": _Explanation(
         "A reachable application exception has a known Error mapping but is missing from the operation's raises declaration.",
@@ -133,44 +132,14 @@ _EXPLANATIONS = {
         "Return a finite list or tuple of CheckIssue values from a deterministic synchronous check. Keep resource probes and runtime work outside this profile.",
         _DOCS + "system-checks.md#add-a-feature-check",
     ),
-    "canon.codegen.I001": _Explanation(
-        "Common SDK generation successfully updated generated artifacts.",
-        "generate --format json writes a changed client.py and reports its path in changes.",
-        "Review and commit the generator-owned contracts/SDK files, then run generate --check for exact drift.",
-        _CODEGEN,
-    ),
-    "canon.codegen.W001": _Explanation(
-        "A read-only common generation check found contract or SDK artifact drift.",
-        "generate --check --format json finds that a committed client differs from current declarations and exits 1.",
-        "Run generation without --check/--diff, review the changes and commit the owned artifacts; avoid hand-editing generated output.",
-        _CODEGEN,
-    ),
-    "canon.codegen.W002": _Explanation(
-        "A specialized SSE binding reports a validation constraint that its generated target cannot enforce.",
-        "An SSE schema uses format='uri-reference' while its selected SDK target lacks that validator.",
-        "Review the source operation, schema pointer and target capability; retain necessary validation at the application boundary. This warning alone does not change the generation exit code.",
-        _CODEGEN,
-    ),
-    "canon.codegen.E001": _Explanation(
-        "Common generation failed configuration, dependency, target-loading, contract/planning or artifact-ownership validation.",
-        "A source reference cannot import its app, a generation dependency is missing, or an output contains an unowned file.",
-        "Follow the source/target location and corrective hint. Check module:attribute and factory selection, install fastapi-canon[codegen] when needed, and use a valid owned output directory.",
-        _CODEGEN,
-    ),
-    "canon.codegen.E002": _Explanation(
-        "An operation requests a binding feature unsupported by common generation.",
-        "POST /upload contains a nested multipart object, while the common HTTP binding supports flat scalar and file parts.",
-        "Use flat multipart fields or a supported JSON/binary contract; review the reported source, operation and schema location for the unsupported encoding.",
-        _CODEGEN,
-    ),
 }
 
 
 def _main(arguments: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="fastapi-canon explain",
-        description="Explain built-in source, composition and common generation diagnostic codes without importing application code.",
-        epilog="Examples: CAN003, canon.routing.E002, canon.codegen.E002. Codes are case-sensitive. Exit codes: 0 explained; 2 unknown code or invalid arguments. Application-defined codes use their own CheckIssue hint.",
+        description="Explain built-in source, composition and generation diagnostic codes without importing application code.",
+        epilog="Examples: CAN003, canon.routing.E002, canon.routing.E002. Codes are case-sensitive. Exit codes: 0 explained; 2 unknown code or invalid arguments. Application-defined codes use their own CheckIssue hint.",
     )
     parser.add_argument("code", help="Diagnostic code exactly as printed in its report")
     parser.add_argument(

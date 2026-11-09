@@ -352,7 +352,7 @@ them or install its own alias generator. For example, `project_id: int` stays
 When migrating from automatic adaptation, use `RpcModel` to retain camel-case
 names and rejection of unknown fields, or configure that policy explicitly on
 the Pydantic model. Regenerate clients after choosing the wire contract. See
-[shared DTOs](../../unified-canon-concept.md#names-and-shared-models).
+[shared DTOs](../../codegen.md).
 
 [Back to documentation](README.md)
 ## Idempotent methods

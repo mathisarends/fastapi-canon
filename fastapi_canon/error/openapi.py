@@ -241,14 +241,6 @@ def compile_problem_schema(
         required.extend(extension_schema.get("required", []))
         if "$defs" in extension_schema:
             schema["$defs"] = copy.deepcopy(extension_schema["$defs"])
-            for name, definition in schema["$defs"].items():
-                if isinstance(definition, dict):
-                    definition.setdefault(
-                        "x-canon-model-id", f"{type_uri}#/$defs/{name}"
-                    )
-                    definition.setdefault(
-                        "x-canon-model-name", error.effective_schema_name + name
-                    )
     elif isinstance(error.extensions, Mapping):
         for name, value in error.extensions.items():
             properties[name] = _schema_for_static_value(value)

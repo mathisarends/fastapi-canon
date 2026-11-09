@@ -6,6 +6,11 @@ from typing import Any, Literal
 
 from fastapi import FastAPI
 
+from fastapi_canon.contract_routes import (
+    RPC_ENDPOINT_ATTRIBUTE,
+    WEBRTC_DECLARATION_ATTRIBUTE,
+    iter_contract_routes,
+)
 from fastapi_canon.openapi import export_openapi
 
 type ContractKind = Literal["openapi", "openrpc", "webrtc"]
@@ -55,15 +60,23 @@ def export_contracts(
             "kinds must select unique openapi, openrpc or webrtc contracts"
         )
     documents: dict[str, Any] = {}
+    endpoints = tuple(
+        getattr(route, "endpoint", None)
+        for _, route in iter_contract_routes(app.routes)
+    )
     if "openapi" in selected:
         documents["openapi"] = export_openapi(app)
-    if "openrpc" in selected:
+    if "openrpc" in selected and any(
+        hasattr(endpoint, RPC_ENDPOINT_ATTRIBUTE) for endpoint in endpoints
+    ):
         from fastapi_canon.integrations.websockets.schema.application import (
             export_rpc_contract,
         )
 
         documents["openrpc"] = export_rpc_contract(app, base_url=base_url)
-    if "webrtc" in selected:
+    if "webrtc" in selected and any(
+        hasattr(endpoint, WEBRTC_DECLARATION_ATTRIBUTE) for endpoint in endpoints
+    ):
         from fastapi_canon.integrations.webrtc.contract import build_contract
 
         document = build_contract(app)

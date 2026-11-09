@@ -1,214 +1,128 @@
-from __future__ import annotations
-
 import argparse
 import io
 import json
 import sys
 from collections.abc import Sequence
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import asdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
 
 from fastapi_canon.codegen.config import load_config
-from fastapi_canon.codegen.ir import GenerationError
-
-if TYPE_CHECKING:
-    from fastapi_canon.codegen.generate import _GenerationResult
+from fastapi_canon.codegen.generate import generate
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="fastapi-canon generate",
-        description="Generate domain SDKs from live application exports or saved contracts.",
-        epilog="Live sources import application code and call explicitly selected factories; lifespan is never entered. "
-        "Exit codes: 0 successful generation or clean check; 1 drift in check/diff mode; 2 invalid configuration or generation failure.",
+        description="Export contracts once and run specialized or external client generators.",
+        epilog="Live sources import application code; lifespan is never entered. Exit codes: 0 success; 1 drift; 2 invalid configuration or generator error. Check/diff never writes Canon-owned files. External check commands must be read-only.",
     )
     parser.add_argument(
         "--config",
         type=Path,
-        help="Configuration path (default in the working directory: fastapi-canon.toml, otherwise pyproject.toml)",
+        help="Version-2 configuration (default: fastapi-canon.toml, otherwise pyproject.toml)",
     )
     parser.add_argument(
         "--target",
         action="append",
         default=[],
-        help="Select a configured target name; repeat for several targets (default: all targets)",
+        help="Select a target; repeat for several targets (default: all targets)",
+    )
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        help="Read saved contracts without importing application code",
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Check contracts and clients without writing",
+    )
+    parser.add_argument(
+        "--diff",
+        action="store_true",
+        help="Show native artifact differences; implies --check",
     )
     parser.add_argument(
         "--format",
         choices=("text", "json"),
         default="text",
-        help="Diagnostics: text (default) or a versioned JSON envelope on stdout",
-    )
-    parser.add_argument(
-        "--offline",
-        action="store_true",
-        help="Read saved input/output contracts without importing application code",
-    )
-    parser.add_argument(
-        "--check",
-        action="store_true",
-        help="Check contract/SDK drift without writing; exit 1 when output differs",
-    )
-    parser.add_argument(
-        "--diff",
-        action="store_true",
-        help="Show a unified diff (JSON diff field in JSON mode); implies --check",
+        help="Text (default) summary or versioned JSON report",
     )
     args = parser.parse_args(argv)
-    checked = args.check or args.diff
-    selected = tuple(args.target)
+    captured = io.StringIO()
     try:
-        from fastapi_canon.codegen.generate import _generate, generate
-
-        path = args.config or (
-            Path("fastapi-canon.toml")
-            if Path("fastapi-canon.toml").exists()
-            else Path("pyproject.toml")
+        with redirect_stdout(captured), redirect_stderr(captured):
+            path = args.config or (
+                Path("fastapi-canon.toml")
+                if Path("fastapi-canon.toml").exists()
+                else Path("pyproject.toml")
+            )
+            config = load_config(path)
+            results = generate(
+                config,
+                targets=tuple(args.target),
+                offline=args.offline,
+                check=args.check,
+                diff=args.diff,
+            )
+    except Exception as error:
+        message = (
+            "Install fastapi-canon[codegen] to generate specialized clients"
+            if isinstance(error, ImportError)
+            else str(error)
+            if isinstance(error, (ValueError, TypeError, OSError))
+            else f"Generation failed ({type(error).__name__}); check configuration and application export"
         )
-        configuration = load_config(path)
-        selected = tuple(
-            target.name
-            for target in configuration.targets
-            if not args.target or target.name in args.target
-        ) or tuple(args.target)
-        if args.format == "text":
-            changed, report = generate(
-                configuration,
-                targets=tuple(args.target),
-                offline=args.offline,
-                check=checked,
-                diff=args.diff,
-            )
-            if report:
-                print(report)
-            return int(changed and checked)
-        # Application imports/factories may print. JSON stdout belongs entirely
-        # to the diagnostic envelope, including on a failed export.
-        with redirect_stdout(io.StringIO()):
-            result = _generate(
-                configuration,
-                targets=tuple(args.target),
-                offline=args.offline,
-                check=checked,
-                diff=args.diff,
-                collect_diagnostics=True,
-            )
-    except Exception as exc:
         if args.format == "json":
             print(
-                _json_report(
-                    result=None,
-                    targets=selected,
-                    check=checked,
-                    offline=args.offline,
-                    diff=args.diff,
-                    error=exc,
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "status": "error",
+                        "error": message,
+                        "check": args.check or args.diff,
+                        "offline": args.offline,
+                        "diagnostics": captured.getvalue(),
+                        "steps": [],
+                    }
                 )
             )
         else:
-            print(f"fastapi-canon generate: {_failure_message(exc)}", file=sys.stderr)
+            print(f"fastapi-canon generate: {message}", file=sys.stderr)
         return 2
-    print(
-        _json_report(
-            result=result,
-            targets=result.targets,
-            check=checked,
-            offline=args.offline,
-            diff=args.diff,
-        )
+    code = (
+        2
+        if any(item.status == "error" for item in results)
+        else int(any(item.status in {"drift", "blocked"} for item in results))
     )
-    return int(result.changed and checked)
-
-
-def _json_report(
-    *,
-    result: _GenerationResult | None,
-    targets: tuple[str, ...],
-    check: bool,
-    offline: bool,
-    diff: bool,
-    error: Exception | None = None,
-) -> str:
-    diagnostics: list[dict[str, Any]] = []
-    if result is not None:
-        diagnostics.extend(
-            {
-                "severity": "warning",
-                "code": "canon.codegen.W002",
-                "message": item.message,
-                "locations": [
-                    {
-                        "source": item.source,
-                        "operation": item.operation,
-                        "path": item.path,
-                        "target": item.target,
-                        "schema_pointer": item.schema_pointer,
-                    }
-                ],
-            }
-            for item in result.diagnostics
+    if args.format == "json":
+        print(
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "status": "error"
+                    if code == 2
+                    else "drift"
+                    if code == 1
+                    else "success",
+                    "check": args.check or args.diff,
+                    "offline": args.offline,
+                    "steps": [asdict(item) for item in results],
+                    "diagnostics": captured.getvalue(),
+                },
+                indent=2,
+            )
         )
-    if error is not None:
-        locations = []
-        if isinstance(error, GenerationError):
-            location = {
-                key: value
-                for key, value in {
-                    "source": error.source,
-                    "operation": error.operation,
-                    "path": error.path,
-                    "target": error.target,
-                }.items()
-                if value is not None
-            }
-            if location:
-                locations.append(location)
-        diagnostics.append(
-            {
-                "severity": "error",
-                "code": error.code
-                if isinstance(error, GenerationError)
-                else "canon.codegen.E001",
-                "message": _failure_message(error),
-                "locations": locations,
-            }
-        )
-    elif result is not None and result.changed:
-        diagnostics.append(
-            {
-                "severity": "warning" if check else "info",
-                "code": "canon.codegen.W001" if check else "canon.codegen.I001",
-                "message": "Generated artifacts are out of date"
-                if check
-                else "Generated artifacts updated",
-                "locations": [{"path": path} for path in result.paths],
-            }
-        )
-    return json.dumps(
-        {
-            "schema_version": 1,
-            "command": "generate",
-            "status": "error"
-            if error is not None
-            else "drift"
-            if result and result.changed and check
-            else "success",
-            "changed": result.changed if result is not None else None,
-            "check": check,
-            "offline": offline,
-            "targets": list(targets),
-            "changes": list(result.paths) if result is not None else [],
-            "diagnostics": diagnostics,
-            "diff": result.report if result is not None and diff else None,
-        },
-        indent=2,
-    )
-
-
-def _failure_message(error: Exception) -> str:
-    if isinstance(error, GenerationError):
-        return str(error)
-    if isinstance(error, ImportError):
-        return "Generation dependencies are unavailable; install fastapi-canon[codegen]"
-    return f"Generation failed ({type(error).__name__}); check the configuration and application export"
+    else:
+        if captured.getvalue():
+            print(captured.getvalue(), end="", file=sys.stderr)
+        for item in results:
+            print(f"{item.name}: {item.status}")
+            for changed in item.changes:
+                print(f"  {changed}")
+            if item.diff:
+                print(item.diff, end="")
+            if item.output:
+                print(item.output, end="" if item.output.endswith("\n") else "\n")
+    return code

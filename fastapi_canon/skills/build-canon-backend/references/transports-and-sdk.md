@@ -102,7 +102,7 @@ before choosing an engine for `@router.webrtc(...)`. Media and session lifetimes
 need explicit ownership; an SSE convention is not a WebRTC or binary-socket
 protocol.
 
-## One generated domain SDK
+## One workflow for separate clients
 
 Use router namespaces and endpoint names to obtain operations such as
 `projects.get` and `projects.events`, following
@@ -110,59 +110,14 @@ Use router namespaces and endpoint names to obtain operations such as
 do not define SDK namespaces. Preserve existing public operation IDs with
 `operation_id=` when refactoring; use explicit generation mappings when adapting
 an existing naming contract.
-Use shared semantic model identities for the same data across transports, rather
-than assuming structurally similar models are the same type.
+Reuse server Pydantic models and `Error` definitions. Generated client types may
+be repeated across transport outputs. Use the version-2 workflow documented in
+[codegen.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/codegen.md).
+Configure specialized SSE/RPC/WebRTC targets and explicit external HTTP commands.
+HTTP runtime and query/mutation helpers belong to established OpenAPI tooling.
+Run `fastapi-canon generate --check --diff` after changing contract sources.
+Do not recreate the removed HTTP generator, shared model registry or domain facade.
 
-For the HTTP walkthrough, save this in the consumer's root `fastapi-canon.toml`:
-
-```toml
-[codegen]
-version = 1
-
-[codegen.sources.api]
-kind = "openapi"
-source = "backend.main:app"
-output = "contracts/openapi.json"
-
-[codegen.targets.python]
-language = "python"
-sources = ["api"]
-output = "clients/python"
-package = "projects_client"
-
-[codegen.targets.browser]
-language = "typescript"
-sources = ["api"]
-output = "frontend/generated"
-```
-
-Install the `codegen` extra as development tooling, then run:
-
-```console
-uv run fastapi-canon generate
-uv run fastapi-canon generate --check --diff
-```
-
-Consumers call `client.projects.get(...)`. HTTP and typed SSE use the OpenAPI
-source. Add an `openrpc` source with the same `source = "backend.main:app"` for
-RPC channels and include it in the same target's `sources`. Use saved contracts and `--offline`
-when generation must avoid importing the app.
-
-Change declarations/templates, regenerate, and inspect drift. The generator owns
-its manifest-listed files; do not hand-edit them or overwrite handwritten files.
-Python and TypeScript consumers have their own runtime dependencies and do not
-import Canon. Read [unified-canon-concept.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/unified-canon-concept.md) before adding mappings, changing
-output ownership or supporting additional media. Unified HTTP generation covers
-JSON, declared SSE, flat multipart uploads and binary transfers. Install
-`fastapi-canon[uploads]` for multipart parsing on the server. Declare a single
-`file: UploadFile` or repeated `files: list[UploadFile]` directly; use
-`Annotated[T, Form()]` for scalar form fields and `Annotated[..., File(...)]`
-for file aliases or descriptions. Python SDKs accept generated `Upload` values
-with bytes or borrowed binary handles; TypeScript accepts native `File`/`Blob`.
-Nested multipart objects and custom per-part encodings remain unsupported; only
-exclude operations after checking the actual diagnostic. See the
-[file upload guide](https://github.com/mathisarends/fastapi-canon/blob/main/docs/integrations/uploads.md).
-Python WebRTC generation is unsupported.
 
 ## Telemetry and request logging
 

@@ -9,7 +9,7 @@ fastapi_canon/                  Library and public facades
   error/                       Error values, catalog and HTTP/OpenAPI adapters
   integrations/                SSE, WebSockets, WebRTC, MCP and telemetry
     database/                  Optional SQLAlchemy ownership and Alembic runner
-  codegen/                     Shared SDK planning and generation
+  codegen/                     Generation workflow and shared problem templates
   checks/                      Static error-contract analysis
 tests/
   unit/                        Isolated behavior, including explicit test seams
@@ -58,9 +58,11 @@ contract renderers with native HTTP/SSE OpenAPI. This adds an explicit compositi
 dependency on WebRTC and its AnyIO lifecycle types; consumers of the root facade
 inherit that declared direction. No transport imports another transport.
 `contract_routes.py` is an adapter shared by RPC, WebRTC and HTTP introspection
-for effective paths.
+for effective paths and declaration markers. Export inspects those markers before
+importing optional transport exporters, so HTTP-only apps retain their minimum
+dependency scope.
 `application_loading.py` belongs to generation and shares reference/factory
-loading among composition inspection, contract export and common SDK generation.
+loading among composition inspection, contract export and generation workflows.
 It imports FastAPI without generator/media engines and never enters lifespans.
 `diagnostic_explanations.py` is a generation-layer CLI adapter with static
 explanation data. Emitted codes remain owned by their existing checkers; the

@@ -41,7 +41,7 @@ explicit tooling role; they are not runtime dependencies of the package.
 | HTTP/OpenAPI adapters | Depend on values and responses |
 | Routing and composition | Build on the HTTP adapters; composition owns Dishka and optional telemetry wiring |
 | SSE, WebSockets and WebRTC | Separate transport roles; no dependency on sibling transports |
-| Transport generators and common SDK planning | Explicit generation role, allowed to consume protocol contracts |
+| Transport generators and generation workflow | Explicit generation role, allowed to consume protocol contracts |
 | Static error-contract analysis | Standard library only |
 | Testing and reference application | Explicit roles and dependency allowlists |
 

@@ -14,9 +14,6 @@ import pytest
 import uvicorn
 from fastapi import FastAPI
 
-from fastapi_canon.codegen.config import SourceConfig, TargetConfig
-from fastapi_canon.codegen.planner import build_plan
-from fastapi_canon.codegen.render import render
 from fastapi_canon.integrations.websockets import (
     CanonWebSocketRouter,
     RpcChannel,
@@ -39,7 +36,7 @@ class Params(RpcModel):
 async def test_context_opens_before_first_value_and_closes_its_generator(
     tmp_path: Path,
 ) -> None:
-    started, stopped = asyncio.Event(), asyncio.Event()
+    started, stopped = (asyncio.Event(), asyncio.Event())
     channel = RpcChannel("jobs")
 
     @channel.stream()
@@ -60,17 +57,15 @@ async def test_context_opens_before_first_value_and_closes_its_generator(
         assert stopped.is_set()
 
 
-@pytest.mark.parametrize("unified", [False, True])
 async def test_message_and_binary_streams_share_context_iteration(
     tmp_path: Path,
-    unified: bool,
 ) -> None:
     channel = RpcChannel("results")
 
     @channel.stream()
     async def numbers(params: Params) -> AsyncIterator[int]:
         yield params.value
-        yield params.value + 1
+        yield (params.value + 1)
 
     @channel.stream(content_type="application/octet-stream")
     async def frames() -> AsyncIterator[bytes]:
@@ -80,10 +75,7 @@ async def test_message_and_binary_streams_share_context_iteration(
     service = CanonWebSocketRouter()
     service.socket("/rpc", channels=[channel])
     service.stream("/frames", frames)
-    async with (
-        asyncio.timeout(5),
-        _client(tmp_path, service, unified=unified) as client,
-    ):
+    async with asyncio.timeout(5), _client(tmp_path, service) as client:
         async with client.results.numbers(value=3) as numbers_stream:
             assert [item async for item in numbers_stream] == [3, 4]
         async with client.results.frames() as binary_stream:
@@ -121,7 +113,7 @@ async def test_closing_stream_interrupts_a_pending_read_and_cleans_up(
 async def test_client_close_cancels_stream_without_closing_borrowed_transport(
     tmp_path: Path,
 ) -> None:
-    started, stopped = asyncio.Event(), asyncio.Event()
+    started, stopped = (asyncio.Event(), asyncio.Event())
     channel = RpcChannel("jobs")
 
     @channel.method()
@@ -159,7 +151,7 @@ async def test_client_close_cancels_stream_without_closing_borrowed_transport(
 async def test_stream_overflow_reports_failure_and_keeps_diagnostics(
     tmp_path: Path,
 ) -> None:
-    overflow, stopped = asyncio.Event(), asyncio.Event()
+    overflow, stopped = (asyncio.Event(), asyncio.Event())
     observations = []
     channel = RpcChannel("jobs")
 
@@ -195,10 +187,8 @@ async def test_stream_overflow_reports_failure_and_keeps_diagnostics(
         assert stopped.is_set()
 
 
-@pytest.mark.parametrize("unified", [False, True])
 async def test_typescript_stream_disposal_cleans_up_a_real_server(
     tmp_path: Path,
-    unified: bool,
 ) -> None:
     pnpm = shutil.which("pnpm.cmd") or shutil.which("pnpm")
     node = shutil.which("node")
@@ -211,7 +201,7 @@ async def test_typescript_stream_disposal_cleans_up_a_real_server(
     async def progress(params: Params) -> AsyncIterator[int]:
         try:
             yield params.value
-            yield params.value + 1
+            yield (params.value + 1)
             await asyncio.Event().wait()
         finally:
             stopped.set()
@@ -221,52 +211,19 @@ async def test_typescript_stream_disposal_cleans_up_a_real_server(
     async with asyncio.timeout(20), _client(tmp_path, service):
         document = json.loads((tmp_path / "openrpc.json").read_text("utf-8"))
         output = tmp_path / "typescript"
-        if unified:
-            files = render(
-                build_plan(((SourceConfig("rpc", "openrpc"), document),)),
-                TargetConfig("typescript", "typescript", ("rpc",), output),
-            )
-            for name, content in files.items():
-                path = output / name
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(content, encoding="utf-8")
-            base_url = (
-                document["servers"][0]["url"]
-                .replace("ws://", "http://")
-                .removesuffix("/rpc")
-            )
-            opening = f"createClient({{baseUrl: {json.dumps(base_url)}}})"
-            importing = 'import { createClient } from "./typescript/client";'
-        else:
-            generate_typescript_client(
-                document,
-                output,
-                TypeScriptClientOptions(
-                    client_name="StreamsClient", with_transport="websocket"
-                ),
-            )
-            opening = "await StreamsClient.connect()"
-            importing = 'import { StreamsClient } from "./typescript";'
+        generate_typescript_client(
+            document,
+            output,
+            TypeScriptClientOptions(
+                client_name="StreamsClient", with_transport="websocket"
+            ),
+        )
+        opening = "await StreamsClient.connect()"
+        importing = 'import { StreamsClient } from "./typescript";'
         runner = tmp_path / "stream.test.ts"
         runner.write_text(
             importing
-            + f"""
-async function main(): Promise<void> {{
-  const client = {opening};
-  try {{
-    await using stream = await client.jobs.progress({{ value: 7 }});
-    const received: number[] = [];
-    for await (const value of stream) {{
-      received.push(value);
-      if (received.length === 2) break;
-    }}
-    if (JSON.stringify(received) !== "[7,8]") throw new Error("Wrong values");
-    await stream.closed;
-  }} finally {{ await client.close(); }}
-  console.log("stream disposed");
-}}
-void main();
-""",
+            + f'\nasync function main(): Promise<void> {{\n  const client = {opening};\n  try {{\n    await using stream = await client.jobs.progress({{ value: 7 }});\n    const received: number[] = [];\n    for await (const value of stream) {{\n      received.push(value);\n      if (received.length === 2) break;\n    }}\n    if (JSON.stringify(received) !== "[7,8]") throw new Error("Wrong values");\n    await stream.closed;\n  }} finally {{ await client.close(); }}\n  console.log("stream disposed");\n}}\nvoid main();\n',
             encoding="utf-8",
         )
         compiled = await asyncio.to_thread(
@@ -312,7 +269,6 @@ async def _client(
     tmp_path: Path,
     service: CanonWebSocketRouter,
     *,
-    unified: bool = False,
     options: dict[str, Any] | None = None,
 ) -> AsyncIterator[Any]:
     package = "stream_integration_client"
@@ -338,38 +294,20 @@ async def _client(
             (tmp_path / "openrpc.json").write_text(
                 json.dumps(document), encoding="utf-8"
             )
-            if unified:
-                files = render(
-                    build_plan(((SourceConfig("rpc", "openrpc"), document),)),
-                    TargetConfig(
-                        "python", "python", ("rpc",), tmp_path, package=package
-                    ),
-                )
-                for name, content in files.items():
-                    path = tmp_path / package / name
-                    path.parent.mkdir(parents=True, exist_ok=True)
-                    path.write_text(content, encoding="utf-8")
-            else:
-                generate_python_client(
-                    document,
-                    tmp_path / package,
-                    PythonClientOptions(
-                        package=package,
-                        client_name="StreamsClient",
-                        with_transport="websocket",
-                    ),
-                )
+            generate_python_client(
+                document,
+                tmp_path / package,
+                PythonClientOptions(
+                    package=package,
+                    client_name="StreamsClient",
+                    with_transport="websocket",
+                ),
+            )
             sys.path.insert(0, str(tmp_path))
             importlib.invalidate_caches()
             try:
                 module = importlib.import_module(package)
-                connection = (
-                    module.ApiClient(
-                        f"http://127.0.0.1:{port}", bindings={"rpc": options or {}}
-                    )
-                    if unified
-                    else module.StreamsClient.connect(**(options or {}))
-                )
+                connection = module.StreamsClient.connect(**options or {})
                 async with connection as client:
                     yield client
             finally:

@@ -129,8 +129,8 @@ async def events(project_id: int) -> AsyncIterator[int]:
     yield project_id
 ```
 
-These operations export as `projects.get` and `projects.events`, producing
-`client.projects.get(...)` and `client.projects.events(...)` in the common SDK.
+These operations export stable IDs `projects.get` and `projects.events`.
+Each generator determines its client naming from the exported contract.
 The same rule applies to WebSocket channels declared on the router.
 
 - An explicit `operation_id=` always wins and is never prefixed.
@@ -180,9 +180,8 @@ fastapi-canon check composition app:composition --format json
 The command exits with status 1 for collisions and reports `canon.routing.E002`,
 the duplicate ID, owning features, both effective method/path locations and a
 hint to set distinct `operation_id` values. `--require-complete` exits with status
-2 when dependent checks were skipped. `fastapi-canon generate` also rejects
-duplicate IDs and SDK naming conflicts before writing contracts or clients,
-including generation from saved OpenAPI documents.
+2 when dependent checks were skipped. Specialized generators validate names in
+their own contracts before writing; the workflow adds no global SDK naming rules.
 
 ## Compose channels before choosing their URL
 
@@ -326,7 +325,7 @@ points to these decorators.
 
 See [WebSocket streams](integrations/websockets/README.md) for controls, limits,
 error mappings, dependency lifetimes and generated resource APIs. Operation names
-and endpoint names must be unique across the application when exporting a common SDK.
+and endpoint names must be unique within their exported transport contract.
 
 ## Typed SSE and WebRTC on the same router
 

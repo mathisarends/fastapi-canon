@@ -1,23 +1,29 @@
-from __future__ import annotations
-
 import difflib
 import hashlib
+import io
 import json
+import shutil
+import subprocess
+from collections.abc import Callable
+from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
-from typing import Any, cast
+from functools import partial
+from pathlib import Path
+from typing import Any
 
 from fastapi_canon._version import __version__
-from fastapi_canon.application_loading import (
-    _application_path,
-    _load_reference,
-    _resolve_factory,
-)
-from fastapi_canon.codegen.config import Configuration
-from fastapi_canon.codegen.ir import GenerationError, _GenerationWarning
-from fastapi_canon.codegen.planner import build_plan
+from fastapi_canon.application_loading import _load_application
+from fastapi_canon.codegen.config import Configuration, TargetConfig
+from fastapi_canon.contracts import export_contracts
 
-_MANIFEST = ".canon-codegen.json"
+
+@dataclass(frozen=True)
+class StepResult:
+    name: str
+    status: str
+    changes: tuple[str, ...] = ()
+    diff: str = ""
+    output: str = ""
 
 
 def generate(
@@ -27,265 +33,238 @@ def generate(
     offline: bool = False,
     check: bool = False,
     diff: bool = False,
-) -> tuple[bool, str]:
-    result = _generate(
-        config,
-        targets=targets,
-        offline=offline,
-        check=check,
-        diff=diff,
-        collect_diagnostics=True,
-    )
-    summary = (
-        f"{len(result.diagnostics)} validation constraint limitations; use --format json for details."
-        if result.diagnostics
-        else ""
-    )
-    return result.changed, "\n".join(part for part in (summary, result.report) if part)
-
-
-@dataclass(frozen=True)
-class _GenerationResult:
-    changed: bool
-    report: str
-    paths: tuple[str, ...]
-    targets: tuple[str, ...]
-    diagnostics: tuple[_GenerationWarning, ...] = ()
-
-
-def _generate(
-    config: Configuration,
-    *,
-    targets: tuple[str, ...] = (),
-    offline: bool = False,
-    check: bool = False,
-    diff: bool = False,
-    collect_diagnostics: bool = False,
-) -> _GenerationResult:
-    from fastapi_canon.codegen.render import render
-
+) -> tuple[StepResult, ...]:
+    check = check or diff
     selected = tuple(
         target for target in config.targets if not targets or target.name in targets
     )
     if not selected or set(targets) - {target.name for target in selected}:
-        raise GenerationError("Unknown generation target")
-    needed = {name for target in selected for name in target.sources}
-    documents: dict[str, dict[str, Any]] = {}
-    writes: dict[Path, str] = {}
-    deletes: set[Path] = set()
-    loaded_sources: dict[tuple[str, bool | None], Any] = {}
-    diagnostics: list[_GenerationWarning] | None = [] if collect_diagnostics else None
-    for source in config.sources:
-        if source.name not in needed:
-            continue
-        try:
-            if source.input is not None or offline:
-                path = source.input or source.output
-                assert path is not None
-                if source.optional and not path.exists():
-                    # The application had no contract of this kind at export.
-                    continue
-                try:
-                    document = json.loads(path.read_text(encoding="utf-8"))
-                except (OSError, ValueError) as exc:
-                    raise GenerationError(
-                        f"Cannot read contract {path}: {exc}", path=str(path)
-                    ) from exc
-            else:
-                assert source.source is not None and source.output is not None
-                exported = _export(
-                    source.source,
-                    source.kind,
-                    source.factory,
-                    config.path.parent,
-                    loaded_sources,
-                    optional=source.optional,
-                )
-                if exported is None:
-                    # Remove a contract left from an earlier export of this kind.
-                    deletes.add(source.output)
-                    continue
-                document = exported
-                writes[source.output] = _json(document)
-            if not isinstance(document, dict):
-                raise GenerationError(f"Source {source.name} must be a JSON object")
-        except GenerationError as error:
-            error.source = error.source or source.name
-            raise
-        except Exception as error:
-            if isinstance(error, ImportError) or isinstance(
-                error.__cause__, ImportError
-            ):
-                raise GenerationError(
-                    "Generation dependencies are unavailable; install fastapi-canon[codegen]",
-                    source=source.name,
-                ) from None
-            raise GenerationError(
-                f"Cannot export source {source.name!r} ({type(error).__name__}); check its application reference, factory selection and contract schema",
-                source=source.name,
-            ) from None
-        documents[source.name] = document
-    for target in selected:
-        inputs = tuple(
-            (source, documents[source.name])
-            for source in config.sources
-            if source.name in target.sources and source.name in documents
-        )
-        if not inputs:
-            raise GenerationError(
-                f"Target {target.name} has no exported contracts", target=target.name
-            )
-        try:
-            files = render(build_plan(inputs), target, diagnostics=diagnostics)
-        except GenerationError as error:
-            error.target = error.target or target.name
-            raise
-        manifest = {
-            "version": 1,
-            "generator": {"name": "fastapi-canon", "version": __version__},
-            "options": {
-                "package": target.package,
-                "clientName": target.client_name,
-                "httpClient": target.http_client,
-            },
-            "mappings": {
-                source.name: {
-                    "operations": source.operations,
-                    "identities": source.identities,
-                    "names": source.names,
-                    "includeOperations": source.include_operations,
-                    "excludeOperations": source.exclude_operations,
-                }
-                for source, _ in inputs
-            },
-            "language": target.language,
-            "sources": {
-                name: hashlib.sha256(_json(documents[name]).encode()).hexdigest()
-                for name in sorted(target.sources)
-                if name in documents
-            },
-            "files": sorted(files),
+        raise ValueError("Unknown generation target")
+    root = config.path.parent
+    filenames = ("openapi", "openrpc", "webrtc")
+    if offline:
+        documents = {
+            kind: json.loads(path.read_text(encoding="utf-8"))
+            for kind in filenames
+            if (path := config.contracts / f"{kind}.json").is_file()
         }
-        old: list[str] = []
-        manifest_path = target.output / _MANIFEST
-        if manifest_path.exists():
-            try:
-                previous = json.loads(manifest_path.read_text(encoding="utf-8"))
-                old = previous["files"]
-                if (
-                    previous["version"] != 1
-                    or not isinstance(old, list)
-                    or any(not isinstance(name, str) or not _safe(name) for name in old)
-                ):
-                    raise ValueError("invalid manifest")
-            except (OSError, ValueError, KeyError) as exc:
-                raise GenerationError(
-                    f"Invalid ownership manifest at {manifest_path}"
-                ) from exc
-        for name, content in files.items():
-            if not _safe(name):
-                raise GenerationError(f"Unsafe generated path {name!r}")
-            path = target.output / name
-            if path.exists() and name not in old:
-                raise GenerationError(f"Refusing to overwrite unowned file {path}")
-            writes[path] = content
-        writes[manifest_path] = _json(manifest)
-        deletes.update(target.output / name for name in set(old) - files.keys())
-    changed = []
-    for path, content in writes.items():
-        _no_symlink(path)
-        if path.exists() and not path.is_file():
-            raise GenerationError(f"Output is not a regular file: {path}")
-        previous_text = path.read_text(encoding="utf-8") if path.exists() else ""
-        if not path.exists() or previous_text != content:
-            changed.append((path, previous_text, content))
-    for path in deletes:
-        _no_symlink(path)
-        if path.exists():
-            changed.append((path, path.read_text(encoding="utf-8"), ""))
-    report = "\n".join(str(path) for path, _, _ in changed)
-    if diff:
-        report = "".join(
-            "".join(
-                difflib.unified_diff(
-                    before.splitlines(True),
-                    after.splitlines(True),
-                    fromfile=str(path),
-                    tofile=str(path),
+        contracts: dict[Path, str] = {}
+    else:
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            app = _load_application(config.app, root=root)
+            documents = export_contracts(app).documents
+        contracts = {
+            config.contracts / f"{kind}.json": _json(documents[kind])
+            if kind in documents
+            else ""
+            for kind in filenames
+        }
+    documents = {
+        kind: json.loads(_json(document)) for kind, document in documents.items()
+    }
+    changed = tuple(path for path, text in contracts.items() if _changed(path, text))
+    contract_result = StepResult(
+        "contracts",
+        "drift" if check and changed else "updated" if changed else "current",
+        tuple(str(path) for path in changed),
+        _diff(contracts, changed) if diff else "",
+    )
+    if check and changed:
+        return (
+            contract_result,
+            *(
+                StepResult(
+                    target.name,
+                    "blocked",
+                    output="Exported contracts are stale; regenerate before checking dependent clients.",
+                )
+                for target in selected
+            ),
+        )
+    # Render every native target and validate all owned paths before writing contracts.
+    prepared = []
+    for target in selected:
+        if target.generator != "external":
+            expected, writer = _render(target, documents, config.contracts)
+            assert target.output is not None
+            for name in expected:
+                _regular(target.output / name)
+            paths = writer(check=True)
+            prepared.append((target, expected, writer, paths))
+    for path in contracts:
+        _regular(path)
+    if not check:
+        for path in changed:
+            if contracts[path]:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(contracts[path], encoding="utf-8", newline="\n")
+            else:
+                path.unlink()
+    results = [contract_result]
+    for target in selected:
+        if target.generator == "external":
+            results.append(_external(target, root, check=check))
+            continue
+        _, expected, writer, paths = next(
+            item for item in prepared if item[0] == target
+        )
+        assert target.output is not None
+        report = (
+            _diff(
+                {target.output / name: text for name, text in expected.items()}, paths
+            )
+            if diff
+            else ""
+        )
+        if not check:
+            writer(check=False)
+        results.append(
+            StepResult(
+                target.name,
+                "drift" if check and paths else "updated" if paths else "current",
+                tuple(str(path) for path in paths),
+                report,
+            )
+        )
+    return tuple(results)
+
+
+def _render(
+    target: TargetConfig, documents: dict[str, Any], contracts: Path
+) -> tuple[dict[str, str], Callable[..., tuple[Path, ...]]]:
+    assert target.output is not None
+    kind = {"sse": "openapi", "websockets": "openrpc", "webrtc": "webrtc"}[
+        target.generator
+    ]
+    if kind not in documents:
+        raise ValueError(f"Target {target.name} needs a registered {kind} contract")
+    document = documents[kind]
+    match target.generator:
+        case "sse":
+            from fastapi_canon.integrations.sse.codegen.ir import build_ir
+            from fastapi_canon.integrations.sse.codegen.python import generate_python
+            from fastapi_canon.integrations.sse.codegen.typescript import (
+                generate_typescript,
+            )
+            from fastapi_canon.integrations.sse.codegen.writer import (
+                planned_files,
+                write_files,
+            )
+
+            contract = build_ir(document, target=target.language)
+            generated = (
+                generate_python(contract, http_client=target.http_client)
+                if target.language == "python"
+                else generate_typescript(contract)
+            )
+            generation = {
+                "generator": "fastapi-canon",
+                "generator_version": __version__,
+                "schema_sha256": hashlib.sha256(
+                    json.dumps(
+                        document,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        ensure_ascii=False,
+                    ).encode("utf-8")
+                ).hexdigest(),
+                "schema_hash_encoding": "canonical-json-v1",
+                "target": target.language,
+                "python_http_client": target.http_client
+                if target.language == "python"
+                else None,
+            }
+            return planned_files(generated, generation=generation), partial(
+                write_files, target.output, generated, generation=generation
+            )
+        case "websockets":
+            from fastapi_canon.integrations.websockets.codegen import (
+                PythonClientOptions,
+                TypeScriptClientOptions,
+                render_python_client,
+                render_typescript_client,
+            )
+            from fastapi_canon.integrations.websockets.codegen import (
+                write_files as write_rpc,
+            )
+
+            source = contracts / "openrpc.json"
+            generated = (
+                dict(
+                    render_python_client(
+                        document,
+                        PythonClientOptions(
+                            package=target.package,
+                            client_name=target.client_name,
+                            with_transport="websocket",
+                            source=source.name,
+                            contract=source,
+                        ),
+                    )
+                )
+                if target.language == "python"
+                else dict(
+                    render_typescript_client(
+                        document,
+                        TypeScriptClientOptions(
+                            client_name=target.client_name,
+                            with_transport="websocket",
+                            source=source.name,
+                            contract=source,
+                        ),
+                    )
                 )
             )
-            for path, before, after in changed
+            return generated, partial(write_rpc, target.output, generated)
+        case "webrtc":
+            from fastapi_canon.integrations.webrtc.codegen.typescript import (
+                generate_typescript as render_rtc,
+            )
+            from fastapi_canon.integrations.webrtc.codegen.writer import (
+                write_files as write_rtc,
+            )
+
+            generated = render_rtc(document, client_name=target.client_name)
+            # Let the specialized writer produce its own ownership manifest.
+            manifest = ".fastapi-webrtc.json"
+            expected = {**generated, manifest: _json({"files": sorted(generated)})}
+            return expected, partial(write_rtc, target.output, generated)
+        case _:
+            raise ValueError("External targets do not render Canon clients")
+
+
+def _external(target: TargetConfig, root: Path, *, check: bool) -> StepResult:
+    command = target.check_command if check else target.generate_command
+    executable = shutil.which(command[0])
+    if executable is None:
+        return StepResult(
+            target.name, "error", output=f"Executable not found: {command[0]}"
         )
-    if not check:
-        for path, _, content in changed:
-            if path in deletes:
-                path.unlink()
-            else:
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(content, encoding="utf-8", newline="\n")
-    return _GenerationResult(
-        bool(changed),
-        report,
-        tuple(sorted(str(path) for path, _, _ in changed)),
-        tuple(target.name for target in selected),
-        tuple(diagnostics or ()),
+    try:
+        result = subprocess.run(
+            [executable, *command[1:]],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=target.timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return StepResult(
+            target.name,
+            "error",
+            output=f"External command failed ({type(error).__name__})",
+        )
+    status = (
+        "current"
+        if check and result.returncode == 0
+        else "success"
+        if result.returncode == 0
+        else "drift"
+        if check and result.returncode == 1
+        else "error"
     )
-
-
-def _export(
-    reference: str,
-    kind: str,
-    factory: bool | None,
-    root: Path,
-    loaded_sources: dict[tuple[str, bool | None], Any],
-    *,
-    optional: bool = False,
-) -> dict[str, Any] | None:
-    with _application_path(root):
-        key = (reference, factory)
-        if key not in loaded_sources:
-            try:
-                value = _load_reference(reference, root=root)
-                if factory is None:
-                    from fastapi import FastAPI
-
-                    # ``codegen.app`` accepts an application or its factory.
-                    factory = not isinstance(value, FastAPI)
-                if factory:
-                    value = _resolve_factory(value, reference)
-            except (TypeError, ValueError) as error:
-                raise GenerationError(str(error)) from None
-            loaded_sources[key] = value
-        value = loaded_sources[key]
-        from fastapi import FastAPI
-
-        if isinstance(value, FastAPI):
-            from fastapi_canon.codegen.ir import ContractKind
-            from fastapi_canon.contracts import export_contracts
-
-            documents = export_contracts(
-                value, kinds=(cast(ContractKind, kind),)
-            ).documents
-            if kind not in documents:
-                if optional:
-                    return None
-                raise GenerationError(f"{reference}: no registered {kind} endpoints")
-            if kind == "openapi":
-                from fastapi_canon.integrations.sse.codegen.openapi import (
-                    validate_contract,
-                )
-
-                validate_contract(documents[kind])
-            return documents[kind]
-        if kind == "openapi":
-            from fastapi_canon.integrations.sse.codegen.openapi import export_schema
-
-            return export_schema(value)
-        if kind == "openrpc":
-            return cast(dict[str, Any], value.to_openrpc())
-        from fastapi_canon.integrations.webrtc.contract import build_contract
-
-        return build_contract(value)
+    return StepResult(target.name, status, output=result.stdout + result.stderr)
 
 
 def _json(value: Any) -> str:
@@ -295,38 +274,33 @@ def _json(value: Any) -> str:
     )
 
 
-def _safe(name: str) -> bool:
-    path = PurePosixPath(name)
-    reserved = {
-        "CON",
-        "PRN",
-        "AUX",
-        "NUL",
-        "CONIN$",
-        "CONOUT$",
-        *(f"COM{index}" for index in range(1, 10)),
-        *(f"LPT{index}" for index in range(1, 10)),
-    }
-    return (
-        not any(
-            part.endswith((".", " ")) or part.split(".", 1)[0].upper() in reserved
-            for part in path.parts
-        )
-        and bool(name)
-        and bool(path.parts)
-        and "\\" not in name
-        and not path.is_absolute()
-        and not any(part in {"..", "."} or ":" in part for part in path.parts)
-        and name != _MANIFEST
-    )
-
-
-def _no_symlink(path: Path) -> None:
-    if any(parent.exists() and not parent.is_dir() for parent in path.parents):
-        raise GenerationError(f"Output parent is not a directory: {path}")
-    if any(
-        parent.is_symlink() or parent.is_junction() for parent in (path, *path.parents)
+def _regular(path: Path) -> None:
+    if any(parent.is_symlink() for parent in (path, *path.parents)) or (
+        path.exists() and not path.is_file()
     ):
-        raise GenerationError(
-            f"Generated output cannot traverse a symbolic link or junction: {path}"
+        raise ValueError(
+            f"Generated output must be a regular file without symlinks: {path}"
         )
+
+
+def _changed(path: Path, expected: str) -> bool:
+    _regular(path)
+    if not expected:
+        return path.exists()
+    return not path.is_file() or path.read_bytes() != expected.encode("utf-8")
+
+
+def _diff(expected: dict[Path, str], changed: tuple[Path, ...]) -> str:
+    return "".join(
+        "".join(
+            difflib.unified_diff(
+                (path.read_text(encoding="utf-8") if path.is_file() else "").splitlines(
+                    True
+                ),
+                expected.get(path, "").splitlines(True),
+                fromfile=str(path),
+                tofile=str(path),
+            )
+        )
+        for path in changed
+    )

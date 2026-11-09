@@ -8,8 +8,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from fastapi_canon.application_loading import _load_application
-from fastapi_canon.codegen.ir import ContractKind
-from fastapi_canon.contracts import export_contracts
+from fastapi_canon.contracts import ContractKind, export_contracts
 
 
 def main(argv: Sequence[str] | None = None) -> int:

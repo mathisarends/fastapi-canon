@@ -9,7 +9,7 @@ source interface; see [Unreleased changes](../CHANGELOG.md#unreleased) and the
 fastapi-canon explain CAN001
 fastapi-canon explain CAN003
 fastapi-canon explain canon.routing.E002
-fastapi-canon explain canon.codegen.E002 --format json
+fastapi-canon explain canon.routing.E002 --format json
 ```
 
 Copy the code exactly as printed: names are case-sensitive. Lookup is offline
@@ -29,7 +29,6 @@ and application documentation, rather than a built-in catalogue entry.
 | `CAN002` | A supported explicit application exception lacks a known mapping; see [source checking](error-checking.md). |
 | `CAN003` | Source analysis is incomplete; see [analysis boundaries](error-checking.md#analysis-boundaries). |
 | `canon.*` composition codes | Configuration, routing, provider-root and contract checks; see [findings and coverage](system-checks.md#findings-and-coverage). |
-| `canon.codegen.*` | Generation success, drift, constraint warnings and errors; see [JSON generation diagnostics](unified-canon-concept.md#json-generation-diagnostics). |
 
 The catalogue also links specific [RPC roots](system-checks.md#rpc-method-dependency-preflight),
 [HTTP/SSE roots](system-checks.md#http-and-sse-endpoint-dependency-preflight),
