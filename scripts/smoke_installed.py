@@ -663,7 +663,7 @@ def _offline_sse_codegen() -> None:
 
 def _generation_pipeline() -> None:
     document = {
-        "openapi": "3.1.0",
+        "openapi": "3.2.0",
         "info": {"title": "Health", "version": "1"},
         "paths": {},
     }

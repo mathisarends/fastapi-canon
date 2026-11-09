@@ -15,8 +15,8 @@ All notable changes to `fastapi-canon` are documented in this file.
   and model identity/name mappings. Shared Python `Error` declarations and
   public problem contracts remain. JSON generation reports use schema version 2
   with per-step results. Core no longer emits SDK-only `x-canon-model-id` and
-  `x-canon-model-name` hints. `ruff` is no longer installed by `[codegen]`.
-
+  `x-canon-model-name` hints. SDK-only `canon.codegen.*` explanation codes are
+  retired. `ruff` is no longer installed by `[codegen]`.
 
 - Error-contract source checking now follows callable instances, bound classmethod
   constructors and methods on `Self` return values. Previously hidden CAN001/CAN002

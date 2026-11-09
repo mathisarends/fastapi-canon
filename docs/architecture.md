@@ -58,7 +58,9 @@ contract renderers with native HTTP/SSE OpenAPI. This adds an explicit compositi
 dependency on WebRTC and its AnyIO lifecycle types; consumers of the root facade
 inherit that declared direction. No transport imports another transport.
 `contract_routes.py` is an adapter shared by RPC, WebRTC and HTTP introspection
-for effective paths.
+for effective paths and declaration markers. Export inspects those markers before
+importing optional transport exporters, so HTTP-only apps retain their minimum
+dependency scope.
 `application_loading.py` belongs to generation and shares reference/factory
 loading among composition inspection, contract export and generation workflows.
 It imports FastAPI without generator/media engines and never enters lifespans.

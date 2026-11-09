@@ -45,8 +45,8 @@ commands are argument arrays executed without shell interpolation; Canon neither
 imports Orval nor manages its output directory. Install Node tooling separately
 and pin all generator dependencies in the consumer's lockfiles.
 
-Native generators accept `language`, `output`, `client-name` and `package`
-(Python RPC package name). Python SSE targets can set
+Native targets accept `language` and `output`. RPC and WebRTC targets accept
+`client-name`; Python RPC targets also accept `package`. Python SSE targets can set
 `python-http-client = "httpx2"`; the default is `httpx`. WebRTC targets support
 TypeScript only. Every native output must be a dedicated directory outside the
 contracts directory and other native outputs. For additional transport-specific
