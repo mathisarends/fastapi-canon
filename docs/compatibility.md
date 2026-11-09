@@ -2,7 +2,7 @@
 
 ## Canon 0.16.0
 
-The published source passed exact-commit CI on Linux/Python 3.12?3.14 and
+The published source passed exact-commit CI on Linux/Python 3.12–3.14 and
 Windows/Python 3.14, including the minimum-dependency Python suite and live
 PostgreSQL contracts. Both eighteen-combination installed-wheel matrices passed
 from the original upload artifacts: current dependencies on Python 3.14 and
