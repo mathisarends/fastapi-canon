@@ -1,6 +1,6 @@
 {
   "generator": "fastapi-canon",
-  "generatorVersion": "0.16.0",
+  "generatorVersion": "0.17.0",
   "layoutVersion": 12,
   "language": "typescript",
   "contractSha256": "f655e6a61d8efb6801cb790d561a4ad31b6216c76412bc0655fa63db387541f4",

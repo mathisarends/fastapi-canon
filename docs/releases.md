@@ -14,6 +14,12 @@ historical runs, tags and assets linked below remain in their original repositor
 
 ## Current versions
 
+The checkout prepares **0.17.0**, which is not published. Its stricter error-contract
+checking can expose previously missed CAN001/CAN002 findings; follow the
+[migration steps](../CHANGELOG.md#0170---unreleased). Canon 0.16.0 remains the
+current published release until the documented publication and verification flow
+has completed.
+
 Canon **0.16.0** was published on 2026-11-07 from
 [verified source `5b36111`](https://github.com/mathisarends/fastapi-canon/commit/5b36111a1b5750424052a9af96e8bbbed07bc0cc),
 after [exact-source CI](https://github.com/mathisarends/fastapi-canon/actions/runs/42382306017)
