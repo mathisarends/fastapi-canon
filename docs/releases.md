@@ -9,7 +9,7 @@ version; the reference service is an example. `release.toml` and
 **Prepared: 0.17.0, unreleased. Published: 0.16.0 (2026-11-07).**
 The next release replaces the combined SDK and expands error-checker coverage.
 Follow the [0.17.0 migration](package-migration.md#upgrade-to-0170) and
-[changelog](../CHANGELOG.md#0170---unreleased).
+[changelog](../CHANGELOG.md#0170---2026-11-10).
 
 Published artifacts, manifests and run results are linked below. They record
 verified publications; prepared source versions are not publication evidence.

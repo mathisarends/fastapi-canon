@@ -19,7 +19,7 @@ The error checker also follows additional call paths and can report previously
 missed CAN001/CAN002 findings. Run it against all application import roots,
 map escaping application exceptions with `Error` and declare them on operations
 or router policies before updating CI. See the
-[breaking changes](../CHANGELOG.md#0170---unreleased).
+[breaking changes](../CHANGELOG.md#0170---2026-11-10).
 Older sections below describe previous release transitions.
 
 ## Upgrade to 0.16.0

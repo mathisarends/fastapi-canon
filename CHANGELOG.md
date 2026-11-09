@@ -4,14 +4,14 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## Unreleased
 
-## 0.17.0 - Unreleased
+## 0.17.0 - 2026-11-10
 
 ### Breaking changes
 
 - Remove the Python/TypeScript HTTP generator and unified domain SDK. Replace
-  version-1 `[codegen]` sources/targets with the version-2 workflow in
-  [generation guide](docs/codegen.md). Use external OpenAPI tooling for HTTP and specialized
-  SSE/RPC/WebRTC client APIs. Replace facade-specific `.safe()`, binding options
+  version-1 `[codegen]` sources/targets with the version-2 workflow in the
+  [generation guide](docs/codegen.md). Use external OpenAPI tooling for HTTP
+  and specialized SSE/RPC/WebRTC client APIs. Replace facade-specific `.safe()`, binding options
   and model identity/name mappings. Shared Python `Error` declarations and
   public problem contracts remain. JSON generation reports use schema version 2
   with per-step results. Core no longer emits SDK-only `x-canon-model-id` and
