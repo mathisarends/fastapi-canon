@@ -3,7 +3,7 @@
 import ast
 from dataclasses import dataclass, field
 
-from fastapi_canon.checks.source import _Definition, _Environment, _Source
+from fastapi_canon.checks.source import _Definition, _Environment, _Source, _Value
 
 _PLAIN_DECORATORS = frozenset(
     {
@@ -44,7 +44,7 @@ class _Analyzer:
     def __init__(self, source: _Source) -> None:
         self.source = source
         self._summaries: dict[
-            tuple[str, bool],
+            tuple[str, bool, str | None, str | None],
             tuple[tuple[_Escape, ...], tuple[_Unknown, ...], frozenset[str]],
         ] = {}
 
@@ -54,6 +54,8 @@ class _Analyzer:
         stack: tuple[str, ...] = (),
         *,
         iterated: bool = False,
+        receiver: str | None = None,
+        dependency_transport: str | None = None,
     ) -> _Flow:
         """Summarize *function*; iterated generators execute their bodies."""
         if function.name in stack:
@@ -62,7 +64,7 @@ class _Analyzer:
                     _Unknown("recursive call", function.name, function.node.lineno)
                 ]
             )
-        summary_key = function.name, iterated
+        summary_key = function.name, iterated, receiver, dependency_transport
         if summary_key in self._summaries:
             escapes, unknowns, modules = self._summaries[summary_key]
             self.source.touched.update(modules)
@@ -70,7 +72,13 @@ class _Analyzer:
         previous = self.source.touched
         self.source.touched = set()
         try:
-            flow = self._analyze_function(function, stack, iterated=iterated)
+            flow = self._analyze_function(
+                function,
+                stack,
+                iterated=iterated,
+                receiver=receiver,
+                dependency_transport=dependency_transport,
+            )
             # The report retains the first path per exception. Propagation and
             # catching depend on exception types, not duplicate paths to them.
             first: dict[str, _Escape] = {}
@@ -90,7 +98,13 @@ class _Analyzer:
             self.source.touched = previous
 
     def _analyze_function(
-        self, function: _Definition, stack: tuple[str, ...], *, iterated: bool
+        self,
+        function: _Definition,
+        stack: tuple[str, ...],
+        *,
+        iterated: bool,
+        receiver: str | None = None,
+        dependency_transport: str | None = None,
     ) -> _Flow:
         node = function.node
         assert isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
@@ -121,7 +135,7 @@ class _Analyzer:
                 )
             )
             return flow
-        env = self.source.environment(function)
+        env = self.source.environment(function, receiver, dependency_transport)
         flow.extend(self.block(node.body, function, env, (*stack, function.name)))
         return flow
 
@@ -169,12 +183,56 @@ class _Analyzer:
         if isinstance(node, ast.Call):
             for argument in [*node.args, *(kw.value for kw in node.keywords)]:
                 flow.extend(self.expression(argument, function, env, stack))
-            name = self.source.resolve(node.func, function.module, env)
+            target = self.source.infer(node.func, function.module, env)
+            name = target.name or self.source.resolve(node.func, function.module, env)
             definition = self.source.definitions.get(name or "")
+            if definition and isinstance(node.func, ast.Attribute | ast.Call):
+                receiver_expression = (
+                    node.func.value
+                    if isinstance(node.func, ast.Attribute)
+                    else node.func
+                )
+                flow.extend(self.expression(receiver_expression, function, env, stack))
             if name and name.startswith("builtins.") and self.source.exception(name):
                 return flow
             if definition and isinstance(definition.node, ast.ClassDef):
-                flow.extend(self._construct(definition, function, stack, node.lineno))
+                if target.instance:
+                    method = self.source.method(definition.name, "__call__")
+                    if method is None:
+                        flow.unknowns.append(
+                            _Unknown(
+                                f"unresolved callable instance: {ast.unparse(node.func)}",
+                                function.name,
+                                node.lineno,
+                            )
+                        )
+                    elif self.source.abstract(method):
+                        flow.extend(
+                            self._dispatch(
+                                node,
+                                method,
+                                function,
+                                stack,
+                                awaited=awaited,
+                                iterated=iterated,
+                            )
+                        )
+                    else:
+                        flow.extend(
+                            self._call(
+                                node,
+                                method,
+                                function,
+                                stack,
+                                awaited=awaited,
+                                iterated=iterated,
+                                receiver=definition.name,
+                            )
+                        )
+                else:
+                    flow.extend(
+                        self._construct(definition, function, stack, node.lineno)
+                    )
             elif definition and definition.owner and self.source.abstract(definition):
                 flow.extend(
                     self._dispatch(
@@ -191,7 +249,11 @@ class _Analyzer:
                     receiver = self.source.resolve(
                         node.func.value, function.module, env
                     )
-                    if receiver and receiver != definition.owner:
+                    if (
+                        receiver
+                        and receiver != definition.owner
+                        and not self.source.classmethod(definition)
+                    ):
                         flow.unknowns.append(
                             _Unknown(
                                 "inherited method dispatch may use subclass overrides",
@@ -207,6 +269,7 @@ class _Analyzer:
                         stack,
                         awaited=awaited,
                         iterated=iterated,
+                        receiver=target.receiver,
                     )
                 )
             elif self.source.origin(node.func, function.module, env) is not None:
@@ -403,7 +466,7 @@ class _Analyzer:
                 )
                 if returned in {"typing.Self", "typing_extensions.Self"}:
                     returned = manager
-                local[item.optional_vars.id] = returned or ""
+                local[item.optional_vars.id] = _Value(returned or "", instance=True)
             elif not isinstance(item.optional_vars, ast.Name):
                 flow.unknowns.append(
                     _Unknown(
@@ -525,7 +588,11 @@ class _Analyzer:
                 None,
             )
             if member is not None:
-                flow.extend(self._traced(function, self.function(member, stack)))
+                flow.extend(
+                    self._traced(
+                        function, self.function(member, stack, receiver=definition.name)
+                    )
+                )
         if external:
             for owner in classes:
                 owner_node = self.source.definitions[owner].node
@@ -570,26 +637,46 @@ class _Analyzer:
                 *parameters.kwonlyargs,
                 *filter(None, [parameters.vararg, parameters.kwarg]),
             ]:
-                lambda_env[item.arg] = ""
+                lambda_env[item.arg] = _Value()
             return self.expression(argument.body, function, lambda_env, stack)
-        if not isinstance(argument, ast.Name | ast.Attribute):
+        if not isinstance(argument, ast.Name | ast.Attribute | ast.Call):
             return _Flow()
-        name = self.source.resolve(argument, function.module, env)
+        inferred = self.source.infer(argument, function.module, env)
+        name = inferred.name or self.source.resolve(argument, function.module, env)
         definition = self.source.definitions.get(name or "")
         if definition is None:
             return _Flow()
         if isinstance(definition.node, ast.ClassDef):
-            root: ast.expr = argument
-            while isinstance(root, ast.Attribute):
-                root = root.value
             # Typed parameters and attributes resolve to their class; they
             # pass an instance, not a constructor.
-            if isinstance(root, ast.Name) and root.id in env:
-                return _Flow()
+            if inferred.instance:
+                method = self.source.method(definition.name, "__call__")
+                if method is not None and not self.source.abstract(method):
+                    return self._traced(
+                        function, self.function(method, stack, receiver=definition.name)
+                    )
+                return (
+                    _Flow(
+                        unknowns=[
+                            _Unknown(
+                                "unresolved application callback",
+                                function.name,
+                                argument.lineno,
+                            )
+                        ]
+                    )
+                    if method is not None
+                    else _Flow()
+                )
             return self._construct(definition, function, stack, argument.lineno)
         return self._traced(
             function,
-            self.function(definition, stack, iterated=_generator(definition.node)),
+            self.function(
+                definition,
+                stack,
+                iterated=_generator(definition.node),
+                receiver=inferred.receiver,
+            ),
         )
 
     def _traced(self, function: _Definition, called: _Flow) -> _Flow:
@@ -610,6 +697,7 @@ class _Analyzer:
         *,
         awaited: bool,
         iterated: bool,
+        receiver: str | None = None,
     ) -> _Flow:
         flow = _Flow()
         iterated_generator = iterated and _generator(definition.node)
@@ -626,7 +714,9 @@ class _Analyzer:
                 )
             )
             return flow
-        called = self.function(definition, stack, iterated=iterated_generator)
+        called = self.function(
+            definition, stack, iterated=iterated_generator, receiver=receiver
+        )
         flow.escapes.extend(
             _Escape(item.exception, (function.name, *item.trace), item.line)
             for item in called.escapes
@@ -712,7 +802,7 @@ class _Analyzer:
         for node in body:
             if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
                 # Nested definitions are not executed, but their bodies cannot be resolved.
-                env[node.name] = ""
+                env[node.name] = _Value()
                 for expression in node.decorator_list:
                     flow.extend(self.expression(expression, function, env, stack))
                 if isinstance(node, ast.ClassDef):
@@ -801,8 +891,9 @@ class _Analyzer:
                     handler_env = env.copy()
                     caught_types = {item.exception for item in caught}
                     if handler.name:
-                        handler_env[handler.name] = (
-                            next(iter(caught_types)) if len(caught_types) == 1 else ""
+                        handler_env[handler.name] = _Value(
+                            next(iter(caught_types)) if len(caught_types) == 1 else "",
+                            instance=True,
                         )
                     # Implicit failures (e.g. int(value)) can reach handlers too.
                     flow.extend(
@@ -836,13 +927,22 @@ class _Analyzer:
                 continue
             if isinstance(node, ast.If):
                 flow.extend(self.expression(node.test, function, env, stack))
-                flow.extend(
-                    self.block(node.body, function, env.copy(), stack, reraised)
-                )
-                flow.extend(
-                    self.block(node.orelse, function, env.copy(), stack, reraised)
-                )
+                condition = self.source.condition(node.test, function.module, env)
+                if condition is not False:
+                    flow.extend(
+                        self.block(node.body, function, env.copy(), stack, reraised)
+                    )
+                if condition is not True:
+                    flow.extend(
+                        self.block(node.orelse, function, env.copy(), stack, reraised)
+                    )
                 self._invalidate(node, env)
+                selected = node.body if condition else node.orelse
+                if condition is not None and any(
+                    isinstance(statement, ast.Return | ast.Raise)
+                    for statement in selected
+                ):
+                    break
                 continue
             if isinstance(node, ast.For | ast.AsyncFor | ast.While):
                 # Iterations may run zero or more times, like independent branches.
@@ -867,48 +967,17 @@ class _Analyzer:
                 targets = (
                     node.targets if isinstance(node, ast.Assign) else [node.target]
                 )
-                resolved = None
+                inferred = _Value()
                 if isinstance(node, ast.AnnAssign):
-                    resolved = self.source.annotation(node.annotation, function.module)
-                if not resolved and node.value is not None:
-                    resolved = self.source.resolve(node.value, function.module, env)
-                    if isinstance(node.value, ast.Call):
-                        called = self.source.resolve(
-                            node.value.func, function.module, env
-                        )
-                        definition = self.source.definitions.get(called or "")
-                        if definition and isinstance(definition.node, ast.ClassDef):
-                            resolved = definition.name
-                        elif (
-                            definition
-                            and isinstance(
-                                definition.node, ast.FunctionDef | ast.AsyncFunctionDef
-                            )
-                            and definition.node.returns
-                        ):
-                            resolved = self.source.annotation(
-                                definition.node.returns, definition.module
-                            )
-                    elif isinstance(node.value, ast.Await) and isinstance(
-                        node.value.value, ast.Call
-                    ):
-                        called = self.source.resolve(
-                            node.value.value.func, function.module, env
-                        )
-                        definition = self.source.definitions.get(called or "")
-                        if (
-                            definition
-                            and isinstance(
-                                definition.node, ast.FunctionDef | ast.AsyncFunctionDef
-                            )
-                            and definition.node.returns
-                        ):
-                            resolved = self.source.annotation(
-                                definition.node.returns, definition.module
-                            )
+                    inferred = _Value(
+                        self.source.annotation(node.annotation, function.module) or "",
+                        instance=True,
+                    )
+                if not inferred.name and node.value is not None:
+                    inferred = self.source.infer(node.value, function.module, env)
                 for target in targets:
                     key = self.source.key(target)
-                    env[key] = resolved or ""
+                    env[key] = inferred
                 continue
             if isinstance(node, ast.Return):
                 if node.value:
@@ -945,7 +1014,7 @@ class _Analyzer:
             if isinstance(child, ast.Name | ast.Attribute) and isinstance(
                 child.ctx, ast.Store
             ):
-                env[self.source.key(child)] = ""
+                env[self.source.key(child)] = _Value()
 
 
 _ROUTE_METHODS = frozenset(

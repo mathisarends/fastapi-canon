@@ -205,6 +205,23 @@ including `Annotated` aliases, nested dependencies and router/operation dependen
 lists. Dependencies supplied later while mounting an application are outside this
 source-declaration check.
 
+Callable application instances follow their resolved `__call__` method rather than
+their constructor. Bound classmethods bind their first parameter to the class
+used at the call site, including inherited factories; `cls(...)` follows that
+class's supported constructor path. A method's `Self` return resolves to that
+receiver, preserving subsequent application-method analysis. Unknown class
+dispatch, such as an unbound `type[Service]` parameter, remains CAN003.
+
+For HTTP/SSE/WebRTC endpoint and dependency parameters supplied by FastAPI, an
+`HTTPConnection` binding is known to be an HTTP `Request`. Direct `isinstance`
+checks against `Request` or `WebSocket`, including `not`, can exclude the other
+transport's branch. Ordinary helper calls do not inherit that injection fact:
+argument-sensitive cross-function narrowing remains unsupported. A possible
+`WebSocketException` escaping an HTTP operation retains an explicit CAN003.
+Known FastAPI/Starlette `HTTPException` and `WebSocketException` aliases are
+framework failures and do not require application `Error` mappings. Unrecognized
+external exception hierarchies remain unresolved.
+
 ### Dishka ports
 
 Calls to an abstract method or a `Protocol` member follow the implementations
@@ -235,8 +252,9 @@ Explicit `raise` statements propagate through supported function calls and simpl
 branches. `try`/`except` removes caught exceptions, preserves bare re-raises and
 includes translated exceptions from handlers. Exception matching and catalog
 selection follow statically resolvable Python inheritance order, so a more
-specific registered error takes precedence over a base mapping. Conditions are
-not proved feasible: a finding describes a possible source path, not a guarantee
+specific registered error takes precedence over a base mapping. Apart from the
+known transport guards above, conditions are not proved feasible: a finding
+describes a possible source path, not a guarantee
 that a particular request reaches it.
 
 ### Library calls
@@ -264,6 +282,17 @@ Receivers are recognized through parameter, constructor and field annotations,
 module-level library objects such as `bearer = HTTPBearer()`, literals and
 chained calls on library results. A FastAPI dependency on such an object, for
 example `Depends(bearer)`, is a library dependency.
+
+Known SQLAlchemy `AsyncSession` and `AsyncConnection` `execute`, `scalars`,
+`stream` and `stream_scalars` results retain their wrapper types after `await`,
+local assignments and aliases. `execute` returns a buffered synchronous `Result`;
+the streaming methods return asynchronous result wrappers. Result `scalars`,
+`mappings`, `unique` and `yield_per` transformations and explicit `Result[T]`
+family annotations preserve wrapper provenance. This is a bounded source summary,
+not a SQLAlchemy import or a database connection. Arbitrary external call results
+and application/model values extracted from a result are not inferred from that
+provenance. Their unresolved method calls remain CAN003; explicit application
+callbacks passed to result methods are still followed.
 
 Library code reaches application code only through what it receives, and the
 checker follows that code:

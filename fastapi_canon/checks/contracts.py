@@ -298,7 +298,11 @@ class _Checker:
         return result
 
     def _dependencies(
-        self, function: _Definition, seen: frozenset[str] = frozenset()
+        self,
+        function: _Definition,
+        seen: frozenset[str] = frozenset(),
+        *,
+        transport: str | None = None,
     ) -> _Flow:
         flow = _Flow()
         if function.name in seen:
@@ -340,8 +344,16 @@ class _Checker:
                 if dependency and isinstance(
                     dependency.node, ast.FunctionDef | ast.AsyncFunctionDef
                 ):
-                    flow.extend(self._analyzer.function(dependency))
-                    flow.extend(self._dependencies(dependency, seen | {function.name}))
+                    flow.extend(
+                        self._analyzer.function(
+                            dependency, dependency_transport=transport
+                        )
+                    )
+                    flow.extend(
+                        self._dependencies(
+                            dependency, seen | {function.name}, transport=transport
+                        )
+                    )
                 elif target is not None and self.source.origin(target, module):
                     # Library dependencies such as HTTPBearer() raise no
                     # application exceptions and declare no application
@@ -380,7 +392,8 @@ class _Checker:
             function.lineno = operation.line
             flow.extend(
                 self._dependencies(
-                    _Definition(f"{scope}.dependencies", scope, function)
+                    _Definition(f"{scope}.dependencies", scope, function),
+                    transport=operation.transport,
                 )
             )
         return flow
@@ -440,8 +453,12 @@ class _Checker:
         catalog.update(declared)
         contracts_known = not operation.diagnostics
         # SSE generator bodies run while the response streams; follow iterated calls.
-        flow = self._analyzer.function(function, iterated=operation.transport == "sse")
-        flow.extend(self._dependencies(function))
+        flow = self._analyzer.function(
+            function,
+            iterated=operation.transport == "sse",
+            dependency_transport=operation.transport,
+        )
+        flow.extend(self._dependencies(function, transport=operation.transport))
         for scope, layer in layers:
             flow.extend(self._router_dependencies(layer, scope, operation))
         if decorator is not None:
@@ -468,6 +485,21 @@ class _Checker:
     ) -> None:
         seen: set[tuple[str, str]] = set()
         for escape in flow.escapes:
+            if self.source.framework_exception(escape.exception):
+                if self.source.websocket_exception(
+                    escape.exception
+                ) and operation.transport in {"http", "sse", "webrtc"}:
+                    origin = self.source.definitions[escape.trace[-1]]
+                    operation.diagnostics.append(
+                        _Diagnostic(
+                            "CAN003",
+                            "WebSocketException may escape an HTTP operation; transport narrowing is unresolved",
+                            str(self.source.paths[origin.module]),
+                            escape.line,
+                            escape.trace,
+                        )
+                    )
+                continue
             # Only application-defined exceptions are in scope, not implicit runtime failures.
             if escape.exception.startswith("builtins."):
                 continue

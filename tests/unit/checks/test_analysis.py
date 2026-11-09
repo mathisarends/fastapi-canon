@@ -852,10 +852,21 @@ def second(): shared()
     original = analyzer._analyze_function
 
     def counted(
-        function: _Definition, stack: tuple[str, ...], *, iterated: bool
+        function: _Definition,
+        stack: tuple[str, ...],
+        *,
+        iterated: bool,
+        receiver: str | None = None,
+        dependency_transport: str | None = None,
     ) -> _Flow:
         calls.append(function.name)
-        return original(function, stack, iterated=iterated)
+        return original(
+            function,
+            stack,
+            iterated=iterated,
+            receiver=receiver,
+            dependency_transport=dependency_transport,
+        )
 
     monkeypatch.setattr(analyzer, "_analyze_function", counted)
     report = checker.check()

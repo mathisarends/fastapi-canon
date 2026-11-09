@@ -4,6 +4,18 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## Unreleased
 
+## 0.17.0 - Unreleased
+
+### Breaking changes
+
+- Error-contract source checking now follows callable instances, bound classmethod
+  constructors and methods on `Self` return values. Previously hidden CAN001/CAN002
+  findings can make `check errors --strict` exit 1. Before enabling the new checker
+  in CI, run it against all application import roots, map escaping application
+  exceptions with `Error` and declare those errors through the operation or its
+  router policy. Keep `--require-complete` as the independent coverage gate; do not
+  suppress dependencies or ORM calls to restore a successful exit.
+
 ### Added
 
 - The `uploads` extra installs the multipart parser for native HTTP file and
@@ -26,6 +38,14 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Fixed
 
+- Shared HTTP/WebSocket auth dependencies preserve caught application exceptions
+  through bare re-raises. Framework HTTP/WebSocket exception aliases are recognized;
+  direct `isinstance` guards on framework-injected HTTP connections exclude the
+  WebSocket branch. Unresolved cross-transport narrowing remains explicit CAN003.
+- Known SQLAlchemy async session/connection result wrappers retain their types
+  across `await`, local assignments and aliases, including generic `Result[T]`
+  annotations. Application callbacks are still followed; extracted model values
+  and unknown external return types remain conservative.
 - Bundled backend-building guidance and `canon.codegen.E002` explanations now
   describe the supported multipart/binary contracts instead of recommending
   blanket exclusion of file operations.

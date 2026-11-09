@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Self
 
 type _FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
-type _Environment = dict[str, str]
+type _Environment = dict[str, _Value]
 type _FactoryEnvironment = dict[str, tuple[str | None, ...]]
 
 # Builtins whose result or effect depends on application objects at runtime.
@@ -68,6 +68,63 @@ _FACTORY_DECLARATIONS = _ROUTER_DECLARATIONS | {
     "fastapi_canon.policy.RouterPolicy",
 }
 
+_REQUESTS = frozenset(
+    {"fastapi.Request", "fastapi.requests.Request", "starlette.requests.Request"}
+)
+_WEBSOCKETS = frozenset(
+    {
+        "fastapi.WebSocket",
+        "fastapi.websockets.WebSocket",
+        "starlette.websockets.WebSocket",
+    }
+)
+_CONNECTIONS = frozenset(
+    {"starlette.requests.HTTPConnection", "fastapi.requests.HTTPConnection"}
+)
+_FRAMEWORK_EXCEPTIONS = {
+    "starlette.exceptions.HTTPException": "builtins.Exception",
+    "fastapi.exceptions.HTTPException": "starlette.exceptions.HTTPException",
+    "starlette.exceptions.WebSocketException": "builtins.Exception",
+}
+_FRAMEWORK_ALIASES = {
+    "fastapi.HTTPException": "fastapi.exceptions.HTTPException",
+    "fastapi.WebSocketException": "starlette.exceptions.WebSocketException",
+    "fastapi.exceptions.WebSocketException": "starlette.exceptions.WebSocketException",
+}
+_RESULT_TYPES = frozenset(
+    f"{module}.{name}"
+    for module, names in (
+        ("sqlalchemy.engine", ("Result", "ScalarResult", "MappingResult")),
+        ("sqlalchemy.engine.result", ("Result", "ScalarResult", "MappingResult")),
+        (
+            "sqlalchemy.ext.asyncio",
+            ("AsyncResult", "AsyncScalarResult", "AsyncMappingResult"),
+        ),
+        (
+            "sqlalchemy.ext.asyncio.result",
+            ("AsyncResult", "AsyncScalarResult", "AsyncMappingResult"),
+        ),
+    )
+    for name in names
+)
+# Bounded external summaries: an awaited buffered execute returns a sync Result.
+# Values extracted from those results may be application objects and stay unknown.
+_EXTERNAL_RETURNS = {
+    f"{owner}.{method}": (returned, True)
+    for owner in (
+        "sqlalchemy.ext.asyncio.AsyncSession",
+        "sqlalchemy.ext.asyncio.session.AsyncSession",
+        "sqlalchemy.ext.asyncio.AsyncConnection",
+        "sqlalchemy.ext.asyncio.engine.AsyncConnection",
+    )
+    for method, returned in (
+        ("execute", "sqlalchemy.engine.Result"),
+        ("scalars", "sqlalchemy.engine.ScalarResult"),
+        ("stream", "sqlalchemy.ext.asyncio.AsyncResult"),
+        ("stream_scalars", "sqlalchemy.ext.asyncio.AsyncScalarResult"),
+    )
+}
+
 
 def _walk_error(error: OSError) -> None:
     raise error
@@ -79,6 +136,13 @@ class _Definition:
     module: str
     node: _FunctionNode | ast.ClassDef
     owner: str | None = None
+
+
+@dataclass(frozen=True)
+class _Value:
+    name: str = ""
+    instance: bool = False
+    receiver: str | None = None
 
 
 @dataclass
@@ -481,7 +545,7 @@ class _Source:
             resolved = self.canonical(prefix, seen | {name})
             if resolved != prefix:
                 return self.canonical(f"{resolved}.{member}", seen | {name})
-        return name
+        return _FRAMEWORK_ALIASES.get(name, name)
 
     def resolve(
         self,
@@ -496,7 +560,7 @@ class _Source:
         if env:
             text = self.key(node)
             if text in env:
-                return env[text] or None
+                return env[text].name or None
         if isinstance(node, ast.Name):
             local = f"{module}.{node.id}"
             if local in self.bindings or local in self.definitions:
@@ -505,6 +569,8 @@ class _Source:
                 return f"builtins.{node.id}"
         elif isinstance(node, ast.Attribute):
             parent = self.resolve(node.value, module, env, seen=seen)
+            if parent is None and isinstance(node.value, ast.Call | ast.Await):
+                parent = self.infer(node.value, module, env).name
             if parent:
                 candidate = self.canonical(f"{parent}.{node.attr}", seen)
                 if candidate in self.definitions or parent not in self.definitions:
@@ -561,7 +627,7 @@ class _Source:
                     else node.slice
                 )
                 return self.annotation(first, module, seen)
-            return None
+            return wrapper if wrapper in _RESULT_TYPES else None
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
             # Optional[T] after a guard still has T's methods; absence adds no
             # application-defined explicit exceptions to the supported subset.
@@ -594,6 +660,10 @@ class _Source:
             self.touched = previous
 
     def _mro(self, name: str, seen: frozenset[str]) -> list[str] | None:
+        if name in _FRAMEWORK_EXCEPTIONS:
+            framework_base = _FRAMEWORK_EXCEPTIONS[name]
+            order = self.mro(framework_base, seen | {name})
+            return [name, *order] if order else None
         if name.startswith("builtins."):
             value = getattr(builtins, name.split(".")[1], None)
             if isinstance(value, type):
@@ -648,6 +718,117 @@ class _Source:
 
     def exception(self, name: str) -> bool:
         return "builtins.Exception" in (self.mro(name) or [])
+
+    def framework_exception(self, name: str) -> bool:
+        return name in _FRAMEWORK_EXCEPTIONS
+
+    def websocket_exception(self, name: str) -> bool:
+        return "starlette.exceptions.WebSocketException" in (self.mro(name) or [])
+
+    def classmethod(self, function: _Definition) -> bool:
+        return isinstance(
+            function.node, ast.FunctionDef | ast.AsyncFunctionDef
+        ) and any(
+            self.resolve(decorator, function.module) == "builtins.classmethod"
+            for decorator in function.node.decorator_list
+        )
+
+    def condition(self, node: ast.expr, module: str, env: _Environment) -> bool | None:
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+            result = self.condition(node.operand, module, env)
+            return not result if result is not None else None
+        if (
+            isinstance(node, ast.Call)
+            and self.resolve(node.func, module, env) == "builtins.isinstance"
+            and len(node.args) == 2
+            and not node.keywords
+        ):
+            value = self.infer(node.args[0], module, env)
+            target = self.resolve(node.args[1], module, env)
+            if value.instance and value.name in _REQUESTS | _WEBSOCKETS:
+                if target in _WEBSOCKETS:
+                    return value.name in _WEBSOCKETS
+                if target in _REQUESTS:
+                    return value.name in _REQUESTS
+        return None
+
+    def infer(
+        self,
+        node: ast.expr,
+        module: str,
+        env: _Environment,
+        seen: frozenset[str] = frozenset(),
+        *,
+        awaited: bool = False,
+    ) -> _Value:
+        key = self.key(node)
+        if key in env:
+            return env[key]
+        match node:
+            case ast.Await():
+                return self.infer(node.value, module, env, seen, awaited=True)
+            case ast.Call():
+                target = self.infer(node.func, module, env, seen)
+                receiver_type = target.receiver
+                definition = self.definitions.get(target.name)
+                if definition and isinstance(definition.node, ast.ClassDef):
+                    if not target.instance:
+                        return _Value(definition.name, instance=True)
+                    receiver_type = definition.name
+                    definition = self.method(definition.name, "__call__")
+                if definition and isinstance(
+                    definition.node, ast.FunctionDef | ast.AsyncFunctionDef
+                ):
+                    if isinstance(definition.node, ast.AsyncFunctionDef) != awaited:
+                        return _Value()
+                    if definition.node.returns:
+                        name = self.annotation(
+                            definition.node.returns, definition.module
+                        )
+                        if name in {"typing.Self", "typing_extensions.Self"}:
+                            name = receiver_type
+                        return _Value(name or "", instance=True)
+                returned = _EXTERNAL_RETURNS.get(target.name)
+                if returned and returned[1] == awaited and self.external(target.name):
+                    return _Value(returned[0], instance=True)
+                if isinstance(node.func, ast.Attribute):
+                    receiver = self.infer(node.func.value, module, env, seen)
+                    if receiver.name in _RESULT_TYPES and self.external(receiver.name):
+                        if node.func.attr in {"unique", "yield_per"}:
+                            return receiver
+                        asynchronous = "Async" in receiver.name.rsplit(".", 1)[-1]
+                        prefix = (
+                            "sqlalchemy.ext.asyncio.Async"
+                            if asynchronous
+                            else "sqlalchemy.engine."
+                        )
+                        if node.func.attr == "scalars":
+                            return _Value(f"{prefix}ScalarResult", instance=True)
+                        if node.func.attr == "mappings":
+                            return _Value(f"{prefix}MappingResult", instance=True)
+                return _Value()
+            case ast.Name() | ast.Attribute():
+                if isinstance(node, ast.Name):
+                    local = f"{module}.{node.id}"
+                    binding = self.bindings.get(local)
+                    if isinstance(binding, tuple):
+                        if local in seen:
+                            return _Value()
+                        return self.infer(binding[1], binding[0], {}, seen | {local})
+                name = self.resolve(node, module, env)
+                if not name or name in seen:
+                    return _Value()
+                binding = self.bindings.get(name)
+                if isinstance(binding, tuple):
+                    return self.infer(binding[1], binding[0], {}, seen | {name})
+                if isinstance(node, ast.Attribute):
+                    receiver = self.infer(node.value, module, env, seen)
+                    field_type = self._field(receiver.name, node.attr)
+                    if field_type:
+                        return _Value(field_type, instance=True)
+                    return _Value(name, receiver=receiver.name or None)
+                return _Value(name)
+        return _Value()
 
     def external(self, name: str) -> bool:
         """Whether *name* belongs to an importable package outside the roots.
@@ -986,27 +1167,49 @@ class _Source:
             return definition.name
         return None
 
-    def environment(self, function: _Definition) -> _Environment:
+    def environment(
+        self,
+        function: _Definition,
+        receiver: str | None = None,
+        dependency_transport: str | None = None,
+    ) -> _Environment:
         assert isinstance(function.node, ast.FunctionDef | ast.AsyncFunctionDef)
         env: _Environment = {}
         arguments = function.node.args
         for arg in [*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs]:
-            env[arg.arg] = ""
+            env[arg.arg] = _Value()
             if arg.annotation is not None:
                 resolved = self.annotation(arg.annotation, function.module)
                 if resolved:
-                    env[arg.arg] = resolved
+                    if resolved in _CONNECTIONS and dependency_transport in {
+                        "http",
+                        "sse",
+                        "webrtc",
+                    }:
+                        resolved = "starlette.requests.Request"
+                    env[arg.arg] = _Value(resolved, instance=True)
         if function.owner:
-            env["self"] = function.owner
+            owner_type = receiver or function.owner
+            positional = [*arguments.posonlyargs, *arguments.args]
+            if positional:
+                if self.classmethod(function) or function.node.name == "__new__":
+                    env[positional[0].arg] = _Value(owner_type)
+                elif not any(
+                    self.resolve(decorator, function.module) == "builtins.staticmethod"
+                    for decorator in function.node.decorator_list
+                ):
+                    env[positional[0].arg] = _Value(owner_type, instance=True)
             # Base class constructors assign inherited attributes; subclass
             # assignments override them.
-            for owner in reversed(self.mro(function.owner) or [function.owner]):
+            for owner in reversed(self.mro(owner_type) or [owner_type]):
                 constructor = self.definitions.get(f"{owner}.__init__")
                 if constructor is None or not isinstance(
                     constructor.node, ast.FunctionDef
                 ):
                     continue
-                constructor_env: _Environment = {"self": function.owner}
+                constructor_env: _Environment = {
+                    "self": _Value(owner_type, instance=True)
+                }
                 for arg in (
                     constructor.node.args.posonlyargs
                     + constructor.node.args.args
@@ -1015,16 +1218,16 @@ class _Source:
                     if arg.annotation:
                         resolved = self.annotation(arg.annotation, constructor.module)
                         if resolved:
-                            constructor_env[arg.arg] = resolved
+                            constructor_env[arg.arg] = _Value(resolved, instance=True)
                 for statement in constructor.node.body:
                     if isinstance(statement, ast.Assign):
-                        resolved = self.resolve(
+                        inferred = self.infer(
                             statement.value, constructor.module, constructor_env
                         )
-                        if resolved:
+                        if inferred.name:
                             for target in statement.targets:
                                 if isinstance(target, ast.Attribute):
-                                    env[self.key(target)] = resolved
+                                    env[self.key(target)] = inferred
         return env
 
     def _field(self, owner: str, attribute: str) -> str | None:

@@ -10,7 +10,7 @@
     "contract_hash_encoding": "canonical-json-v1",
     "contract_sha256": "9a50e450faf23fe7aba94930e2068af9e8036f94b8baef1265086681920f1b5a",
     "generator": "fastapi-canon",
-    "generator_version": "0.16.0",
+    "generator_version": "0.17.0",
     "target": "typescript"
   }
 }
