@@ -62,6 +62,22 @@ def _main() -> None:
                     source,
                 )
         elif gate == "types":
+            # The runnable consumer imports generated, ignored example clients.
+            # Materialize them from saved contracts without rewriting those inputs,
+            # then verify live drift before checking the consumer's types.
+            example = "examples/canonical_errors/fastapi-canon.toml"
+            _run(
+                _ROOT,
+                "-m",
+                "fastapi_canon",
+                "generate",
+                "--config",
+                example,
+                "--offline",
+            )
+            _run(
+                _ROOT, "-m", "fastapi_canon", "generate", "--config", example, "--check"
+            )
             _run(_ROOT, "-m", "mypy")
             _run(
                 _ROOT,
