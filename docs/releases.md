@@ -10,7 +10,7 @@ version; the reference service is an example. `release.toml` and
 
 **Prepared source: 0.19.0 (unpublished).** The stricter RPC subclass source check
 requires the next minor version. Follow the [migration](package-migration.md#upgrade-to-0190)
-and [prepared changelog](../CHANGELOG.md#0190---unreleased). Publication still
+and [prepared changelog](../CHANGELOG.md#0190---2026-11-10). Publication still
 requires exact-source CI and a verified release preparation run.
 
 Published 0.18.0 adds native SSE target options, application-router testing and an
