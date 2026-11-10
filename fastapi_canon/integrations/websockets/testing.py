@@ -416,7 +416,7 @@ class InMemorySocketFactory:
                 raise outcome
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class RpcTestError(Exception):
     rpc_code: int
     code: str
