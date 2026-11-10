@@ -415,6 +415,46 @@ class _Analyzer:
             return self.block(node.body, function, env, stack, reraised)
         item = node.items[index]
         flow = self.expression(item.context_expr, function, env, stack)
+        if (
+            isinstance(node, ast.With)
+            and isinstance(item.context_expr, ast.Call)
+            and self.source.resolve(item.context_expr.func, function.module, env)
+            == "contextlib.suppress"
+        ):
+            local = env.copy()
+            if item.optional_vars is not None:
+                self._invalidate(item.optional_vars, local)
+            inner = self._context_manager(
+                node, function, local, stack, reraised, index + 1
+            )
+            names = [
+                self.source.resolve(argument, function.module, env)
+                for argument in item.context_expr.args
+            ]
+            if item.context_expr.keywords or any(
+                name is None
+                or not self.source.exception(name)
+                or self.source.mro(name) is None
+                for name in names
+            ):
+                flow.unknowns.append(
+                    _Unknown(
+                        "unresolved contextlib.suppress exception types",
+                        function.name,
+                        item.context_expr.lineno,
+                    )
+                )
+            else:
+                inner.escapes = [
+                    escape
+                    for escape in inner.escapes
+                    if not any(
+                        name in (self.source.mro(escape.exception) or [])
+                        for name in names
+                    )
+                ]
+            flow.extend(inner)
+            return flow
         manager = self._context_type(item.context_expr, function, env)
         asynchronous = isinstance(node, ast.AsyncWith)
         enter = (

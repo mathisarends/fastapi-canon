@@ -422,6 +422,11 @@ this slice; their diagnostic messages do not change.
 
 ## Analysis boundaries
 
+Synchronous `with contextlib.suppress(ErrorType, ...)` catches statically resolved
+exception types and their subclasses, including imported aliases. Other body
+errors, argument-evaluation errors and unresolved calls remain visible. Dynamic
+exception lists retain `CAN003`; exception-group splitting is not modeled.
+
 `complete` describes analysis of the supported explicit source paths, not proof
 that no other runtime exception can occur. The checker does not model implicit
 interpreter errors, every Python protocol or implicit descriptor invocation,

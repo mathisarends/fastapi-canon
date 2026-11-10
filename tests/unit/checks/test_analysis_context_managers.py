@@ -25,6 +25,102 @@ router = APIRouter()
 """
 
 
+@pytest.mark.parametrize(
+    "imports,manager",
+    [
+        ("import contextlib", "contextlib.suppress"),
+        ("import contextlib as contexts", "contexts.suppress"),
+        ("from contextlib import suppress as ignore", "ignore"),
+    ],
+)
+def test_contextlib_suppress_catches_subclasses_and_multiple_types(
+    analyze: Callable[..., tuple[int, dict[str, Any]]], imports: str, manager: str
+) -> None:
+    status, report = analyze(f"""
+{imports}
+class SpecificMissing(Missing): pass
+@router.get('/')
+def endpoint(flag: bool):
+    with {manager}(Missing, EnterFailure) as ignored:
+        if flag: raise SpecificMissing()
+        raise EnterFailure()
+""")
+    assert status == 0 and report["operations"][0]["complete"]
+
+
+@pytest.mark.parametrize("types", ["", "ExitFailure"])
+def test_contextlib_suppress_keeps_unmatched_errors(
+    analyze: Callable[..., tuple[int, dict[str, Any]]], types: str
+) -> None:
+    status, report = analyze(
+        f"""
+from contextlib import suppress
+@router.get('/')
+def endpoint():
+    with suppress({types}): require_item(-1)
+""",
+        mapping="registered",
+    )
+    (operation,) = report["operations"]
+    assert status == 1 and operation["complete"]
+    assert [d["code"] for d in operation["diagnostics"]] == ["CAN001"]
+
+
+@pytest.mark.parametrize("types", ["error_type", "*types", "Missing, error_type"])
+def test_dynamic_suppress_types_remain_incomplete(
+    analyze: Callable[..., tuple[int, dict[str, Any]]], types: str
+) -> None:
+    status, report = analyze(f"""
+from contextlib import suppress
+@router.get('/')
+def endpoint(error_type, types):
+    with suppress({types}): require_item(-1)
+""")
+    (operation,) = report["operations"]
+    assert status == 1 and not operation["complete"]
+    assert {d["code"] for d in operation["diagnostics"]} == {"CAN002", "CAN003"}
+
+
+def test_suppress_does_not_catch_argument_evaluation_errors(
+    analyze: Callable[..., tuple[int, dict[str, Any]]],
+) -> None:
+    status, report = analyze("""
+from contextlib import suppress
+def exception_type(): raise Missing()
+@router.get('/')
+def endpoint():
+    with suppress(exception_type()): pass
+""")
+    assert status == 1
+    assert any(
+        d["code"] == "CAN002" and d["trace"] == ["api.endpoint", "api.exception_type"]
+        for d in report["operations"][0]["diagnostics"]
+    )
+
+
+def test_suppress_keeps_outer_exit_failures_and_inner_unknowns(
+    analyze: Callable[..., tuple[int, dict[str, Any]]],
+) -> None:
+    status, report = analyze("""
+from contextlib import suppress
+class Outer:
+    def __enter__(self): return self
+    def __exit__(self, *args): raise ExitFailure()
+@router.get('/')
+def endpoint(service):
+    with Outer(), suppress(Missing):
+        service.unknown()
+        require_item(-1)
+""")
+    (operation,) = report["operations"]
+    assert status == 1 and not operation["complete"]
+    assert [
+        d["message"].split(":", 1)[0]
+        for d in operation["diagnostics"]
+        if d["code"] == "CAN002"
+    ] == ["api.ExitFailure"]
+
+
 @pytest.fixture
 def analyze(
     tmp_path: Path,
