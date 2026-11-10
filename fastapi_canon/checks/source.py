@@ -6,7 +6,7 @@ import importlib.util
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Self
+from typing import Literal, Self
 
 type _FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 type _Environment = dict[str, _Value]
@@ -51,13 +51,17 @@ _ITERATORS = frozenset(
     for module in ("collections.abc", "typing")
     for name in ("Iterator", "AsyncIterator", "Generator", "AsyncGenerator")
 )
-_ROUTER_DECLARATIONS = frozenset(
+_RPC_CHANNELS = frozenset(
+    {
+        "fastapi_canon.integrations.websockets.RpcChannel",
+        "fastapi_canon.integrations.websockets.channel.RpcChannel",
+    }
+)
+_ROUTER_DECLARATIONS = _RPC_CHANNELS | frozenset(
     {
         "fastapi_canon.APIRouter",
         "fastapi_canon.api_router.APIRouter",
         "fastapi_canon.router.CanonRouter",
-        "fastapi_canon.integrations.websockets.RpcChannel",
-        "fastapi_canon.integrations.websockets.channel.RpcChannel",
     }
 )
 _FACTORY_DECLARATIONS = _ROUTER_DECLARATIONS | {
@@ -364,9 +368,9 @@ class _Source:
             for item in returns:
                 assert item is not None
                 module, value = self.value(item, scope)
-                if (
-                    not isinstance(value, ast.Call)
-                    or self.resolve(value.func, module) not in _ROUTER_DECLARATIONS
+                if not isinstance(value, ast.Call) or (
+                    self.resolve(value.func, module) not in _ROUTER_DECLARATIONS
+                    and self.rpc_channel(self.resolve(value.func, module)) is None
                 ):
                     valid_values = False
             if not valid_values:
@@ -410,7 +414,12 @@ class _Source:
                 value, scope, seen
             )
         if isinstance(node, ast.Call):
-            return self.resolve(node.func, module) in _FACTORY_DECLARATIONS and all(
+            constructor = self.resolve(node.func, module)
+            declaration = (
+                constructor in _FACTORY_DECLARATIONS
+                or self.rpc_channel(constructor) is not None
+            )
+            return declaration and all(
                 self._route_factory_value(value, module, seen)
                 for value in [*node.args, *(item.value for item in node.keywords)]
             )
@@ -636,6 +645,58 @@ class _Source:
             if isinstance(node.left, ast.Constant) and node.left.value is None:
                 return self.annotation(node.right, module, seen)
         return self.resolve(node, module)
+
+    def rpc_channel(
+        self, name: str | None
+    ) -> Literal["supported", "incomplete"] | None:
+        """Recognize RPC ancestry without executing class or constructor code."""
+        pending = [name]
+        seen: set[str] = set()
+        recognized, supported = False, True
+        while pending:
+            current = pending.pop()
+            if current in _RPC_CHANNELS:
+                recognized = True
+                continue
+            if current is None or current in seen:
+                supported = False
+                continue
+            seen.add(current)
+            definition = self.definitions.get(current)
+            if definition is None or not isinstance(definition.node, ast.ClassDef):
+                supported = False
+                continue
+            self.touched.add(definition.module)
+            node = definition.node
+            pending.extend(
+                self.resolve(
+                    base.value if isinstance(base, ast.Subscript) else base,
+                    definition.module,
+                )
+                for base in node.bases
+            )
+            # Empty single-base classes preserve the constructor and decorator
+            # contracts without interpreting application class setup or dispatch.
+            if (
+                len(node.bases) != 1
+                or isinstance(node.bases[0], ast.Subscript)
+                or node.decorator_list
+                or node.keywords
+                or node.type_params
+                or not all(
+                    isinstance(statement, ast.Pass)
+                    or (
+                        isinstance(statement, ast.Expr)
+                        and isinstance(statement.value, ast.Constant)
+                        and isinstance(statement.value.value, str)
+                    )
+                    for statement in node.body
+                )
+            ):
+                supported = False
+        if not recognized:
+            return None
+        return "supported" if supported else "incomplete"
 
     def mro(
         self, name: str, seen: frozenset[str] = frozenset()

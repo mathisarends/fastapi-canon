@@ -183,6 +183,65 @@ reported as unresolved contracts (`CAN003`). Contracts of channels included into
 other channels do not propagate, like router contracts.
 `.method` decorators on other objects are ignored.
 
+### RPC channel subclasses
+
+Unreleased: the next minor release (0.19.0) also checks methods declared on
+statically resolved `RpcChannel` subclasses. Existing CLI flags and `raises=`
+declarations apply:
+
+```python
+from fastapi_canon import Error
+from fastapi_canon.integrations.websockets import RpcChannel
+
+
+class ProjectMissing(Exception):
+    pass
+
+
+project_missing = Error(
+    ProjectMissing, status=404, code="project_missing", title="Project missing"
+)
+
+
+class ProjectChannel(RpcChannel):
+    """A named application channel with the standard Canon contract."""
+
+
+channel = ProjectChannel("projects", raises=[project_missing])
+
+
+@channel.method
+async def find_project() -> None:
+    raise ProjectMissing()
+```
+
+Run `fastapi-canon check errors src --strict --require-complete` with this file
+under `src`. Removing the channel's `raises` produces CAN002; registering that
+error elsewhere in the scanned catalog produces CAN001 instead. A method-level
+`raises` can also cover it.
+
+Supported subclass chains have one base per class, without type arguments,
+class decorators, metaclass keywords or class type parameters. Class bodies
+contain only `pass` or string docstrings. Imported bases, explicit re-exports and aliases are followed within
+the scanned roots. These same channel declarations work inside supported
+[local route factories](#direct-local-route-factories).
+
+A recognized RPC subclass with custom class logic, including constructors,
+method overrides or assignments, remains in the report with CAN003. Its effective
+contracts cannot be established without executing application code. Multiple
+inheritance and unresolved declarations retain the same incomplete status when a
+Canon ancestor is statically visible. Arbitrary dynamic channel factories still
+fall outside these supported declaration forms.
+
+The existing channel identity and error declarations provide the source contract;
+applications need no checker-specific annotation. The checker never constructs
+the class or imports its module. `--strict` rejects discovered contract gaps;
+`--require-complete` independently rejects incomplete analysis. Before upgrading,
+run both flags over all application roots and map/declare newly discovered errors.
+Review CAN003 findings without excluding channels, dependencies or ORM calls to
+obtain a passing check. This change does not prove provider activation, branch
+feasibility, persisted invariants or full runtime exception coverage.
+
 ## Supported source patterns
 
 The checker follows direct `APIRouter` declarations with ordinary route
