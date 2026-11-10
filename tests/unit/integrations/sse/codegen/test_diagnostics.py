@@ -1,4 +1,5 @@
 import warnings
+from copy import deepcopy
 from typing import Annotated, Literal
 
 import pytest
@@ -6,8 +7,36 @@ from fastapi_canon.integrations.sse.codegen.diagnostics import (
     OptionalDiscriminatorWarning,
 )
 from fastapi_canon.integrations.sse.codegen.ir import Object, build_ir
+from fastapi_canon.integrations.sse.codegen.openapi import ContractError
 from pydantic import ConfigDict, Field, create_model
 from tests.unit.integrations.sse.codegen.helpers import event_contract, event_document
+
+
+def test_operation_selection_omits_unreachable_models_and_diagnostics():
+    document = event_document(str)
+    document["paths"]["/ignored"] = deepcopy(document["paths"]["/events"])
+    ignored = document["paths"]["/ignored"]["get"]
+    ignored["operationId"] = "ignored"
+    content = ignored["responses"]["200"]["content"]["text/event-stream"]
+    content["itemSchema"]["properties"]["data"]["contentSchema"] = {
+        "$ref": "#/components/schemas/Ignored"
+    }
+    document.setdefault("components", {}).setdefault("schemas", {})["Ignored"] = {
+        "type": "string",
+        "format": "uri-reference",
+    }
+    diagnostics = []
+    contract = build_ir(
+        document, include_operations=("events",), diagnostics=diagnostics
+    )
+    assert [operation.operation_id for operation in contract.operations] == ["events"]
+    assert not contract.declarations and not diagnostics
+
+
+@pytest.mark.parametrize("selection", [("missing",), (), ("events", "events")])
+def test_invalid_operation_selection_is_rejected(selection):
+    with pytest.raises(ContractError, match="operation"):
+        build_ir(event_document(str), include_operations=selection)
 
 
 @pytest.mark.parametrize("required_defaults", [False, True])

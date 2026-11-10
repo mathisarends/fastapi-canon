@@ -190,8 +190,17 @@ def build_ir(
     *,
     target: GenerationTarget = "python",
     diagnostics: list[GenerationDiagnostic] | None = None,
+    include_operations: tuple[str, ...] | None = None,
 ) -> Contract:
     validate_contract(document)
+    if include_operations is not None and (
+        not include_operations
+        or any(not name for name in include_operations)
+        or len(set(include_operations)) != len(include_operations)
+    ):
+        raise ContractError(
+            "include_operations must contain unique nonempty operation IDs"
+        )
     types = _Types(document)
     operations: list[Operation] = []
     ids: set[str] = set()
@@ -225,6 +234,17 @@ def build_ir(
                     streams.append((status, content["text/event-stream"]))
             if not streams:
                 continue
+            operation_id: str = raw.get("operationId", "")
+            if not operation_id or operation_id in ids:
+                raise ContractError(
+                    f"Missing or duplicate streaming operationId: {operation_id!r}"
+                )
+            ids.add(operation_id)
+            if (
+                include_operations is not None
+                and operation_id not in include_operations
+            ):
+                continue
             if len(streams) != 1 or method not in {"get", "post"}:
                 raise ContractError(
                     f"Expected one GET/POST SSE success response: {method} {path}"
@@ -250,12 +270,6 @@ def build_ir(
                 raise ContractError(
                     f"SSE data needs application/json contentSchema: {path}"
                 )
-            operation_id: str = raw.get("operationId", "")
-            if not operation_id or operation_id in ids:
-                raise ContractError(
-                    f"Missing or duplicate streaming operationId: {operation_id!r}"
-                )
-            ids.add(operation_id)
             public_name = identifier(operation_id, upper=True)
             if public_name in public_names:
                 raise ContractError(f"Operation identifier collision: {public_name}")
@@ -381,6 +395,8 @@ def build_ir(
                     tuple(problem_bindings),
                 )
             )
+    if include_operations is not None and (missing := set(include_operations) - ids):
+        raise ContractError(f"Unknown SSE operation IDs: {', '.join(sorted(missing))}")
     security: Document = document.get("components", {}).get("securitySchemes", {})
     schemes = tuple(
         SecurityScheme(name, scheme["type"], scheme.get("in"), scheme.get("name"))

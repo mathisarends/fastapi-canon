@@ -33,6 +33,13 @@ The generator extracts application data from
 reachable from their parameters, bodies, events and error responses are emitted.
 Operations use the first tag as their group, defaulting to `streams`.
 
+Prepared for 0.18.0 (unpublished): pass `--include-operation OPERATION_ID` to
+`generate` or `check`, repeating the option for multiple SSE operations. The
+standalone sync client table accepts `include-operations = ["operation_id"]`.
+Omitting selection generates all streams; empty, duplicate or unknown selections
+fail. Only selected streams' reachable models and diagnostics are emitted. App
+contract comparison always checks the full document.
+
 Generated method documentation carries each operation's `summary`, `description`,
 and `deprecated` marker alongside language-specific SDK behavior. Describe
 replay, retention, and server job lifetime explicitly on your endpoint; the

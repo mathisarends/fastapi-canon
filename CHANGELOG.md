@@ -4,6 +4,14 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## Unreleased
 
+### Breaking changes
+
+- The SSE IR builder accepts operation selection, and v2 SSE targets accept
+  strict diagnostic policy, report paths and exact allowances. These public
+  signature additions are prepared for Canon 0.18.0. Existing calls keep their
+  defaults; opt in with `include-operations`, `strict`, `diagnostics` and
+  `allow-diagnostics`, then review diagnostics before regenerating clients.
+
 ### Fixed
 
 - Error-contract checking recognizes synchronous `contextlib.suppress` with

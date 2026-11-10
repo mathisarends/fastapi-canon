@@ -52,8 +52,33 @@ Native targets accept `language` and `output`. RPC and WebRTC targets accept
 `python-http-client = "httpx2"`; the default is `httpx`. WebRTC targets support
 TypeScript only. Every native output must be a dedicated directory outside the
 contracts directory and other native outputs. For additional transport-specific
-options, bindings or diagnostic allowances, configure an external command pair
+options or bindings, configure an external command pair
 that invokes the existing standalone transport CLI.
+
+Prepared for 0.18.0 (unpublished): native SSE targets also accept `strict`,
+`diagnostics`, `allow-diagnostics` and `include-operations`:
+
+```toml
+[codegen.targets.streams]
+generator = "sse"
+language = "typescript"
+output = "frontend/src/api/generated-streams"
+include-operations = ["follow_conversation_turn"]
+strict = true
+diagnostics = "reports/streams.json"
+allow-diagnostics = "streams-allowances.json"
+```
+
+Omit `include-operations` to generate every SSE operation. An explicit list must
+contain unique, existing SSE operation IDs. Only selected operations' reachable
+models and diagnostics are emitted; live contract export and comparison still
+cover the whole application. This option does not rename methods or merge models.
+Review exact diagnostic IDs and reasons using the
+[SSE diagnostics guide](integrations/sse/codegen.md#source-diagnostics-and-ci-policy).
+Strict failures occur before writing contracts or clients. An explicitly requested
+diagnostic report is written even on failure or in check mode. Keep reports outside
+the contracts and native output directories and distinct from configuration and
+allowance inputs. Check mode otherwise preserves contracts and generated clients.
 
 ## Developer commands
 
