@@ -6,6 +6,16 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Breaking changes
 
+- `RpcTestError` is now a mutable, unhashable dataclass exception, allowing normal
+  traceback propagation through application lifespans and other context managers.
+  Its constructor and public fields remain unchanged; stop relying on frozen
+  instance behavior or using these exceptions as hash keys.
+
+- `RpcTestClient` and `RpcTestStream` also accept a public application router or
+  ASGI application. Configure auth, DI and connection options on the application
+  and enter its lifespan explicitly; in-memory dependency overrides apply only
+  to specialized routers. The expanded public signatures target Canon 0.18.0.
+
 - The SSE IR builder accepts operation selection, and v2 SSE targets accept
   strict diagnostic policy, report paths and exact allowances. These public
   signature additions are prepared for Canon 0.18.0. Existing calls keep their
