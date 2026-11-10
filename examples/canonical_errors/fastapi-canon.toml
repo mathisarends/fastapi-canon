@@ -7,6 +7,10 @@ contracts = "contracts"
 generator = "sse"
 language = "typescript"
 output = "dist/streams/typescript"
+include-operations = ["projects.events"]
+diagnostics = "dist/reports/typescript-sse.json"
+strict = true
+allow-diagnostics = "streams-typescript-allowances.json"
 
 [codegen.targets.rpc]
 generator = "websockets"
@@ -18,6 +22,11 @@ client-name = "ProjectsClient"
 generator = "sse"
 language = "python"
 output = "dist/streams/python"
+python-http-client = "httpx2"
+include-operations = ["projects.events"]
+diagnostics = "dist/reports/python-sse.json"
+strict = true
+allow-diagnostics = "streams-python-allowances.json"
 
 [codegen.targets.python_rpc]
 generator = "websockets"

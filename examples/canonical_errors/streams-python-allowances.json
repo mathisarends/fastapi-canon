@@ -1,0 +1,28 @@
+{
+  "allow": [
+    {
+      "id": "unsupported-constraint:70469009f8990cbf3a4b",
+      "reason": "Reviewed /components/schemas/InternalServerProblem/properties/instance/format: uri-reference is not enforced by the python client. Server validation is authoritative."
+    },
+    {
+      "id": "unsupported-constraint:7e4e8180a0348ec42c60",
+      "reason": "Reviewed /components/schemas/InternalServerProblem/properties/type/format: uri-reference is not enforced by the python client. Server validation is authoritative."
+    },
+    {
+      "id": "unsupported-constraint:19346510e9e81c928869",
+      "reason": "Reviewed /components/schemas/ProjectMissingProblem/properties/instance/format: uri-reference is not enforced by the python client. Server validation is authoritative."
+    },
+    {
+      "id": "unsupported-constraint:ada90139fa63999de2d0",
+      "reason": "Reviewed /components/schemas/ProjectMissingProblem/properties/type/format: uri-reference is not enforced by the python client. Server validation is authoritative."
+    },
+    {
+      "id": "unsupported-constraint:7897e8e435c851d93abf",
+      "reason": "Reviewed /components/schemas/RequestValidationProblem/properties/instance/format: uri-reference is not enforced by the python client. Server validation is authoritative."
+    },
+    {
+      "id": "unsupported-constraint:a930f256575a13d9e329",
+      "reason": "Reviewed /components/schemas/RequestValidationProblem/properties/type/format: uri-reference is not enforced by the python client. Server validation is authoritative."
+    }
+  ]
+}
