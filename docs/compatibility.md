@@ -1,5 +1,19 @@
 # Compatibility
 
+## Canon 0.19.0
+
+The published source passed exact-commit CI on Linux/Python 3.12–3.14 and
+Windows/Python 3.14, including PostgreSQL and Chromium/WebRTC contracts. Both
+20-combination installed-wheel matrices passed on the actual publication
+artifacts: current dependencies on Python 3.14 and minimum direct dependencies
+on Python 3.12. Installed SSE CLI checks cover core, HTTPX and HTTPX2; the
+installed WebRTC client compiles.
+
+All 15 public-index installation combinations passed after the original
+publication run's stale index cache was invalidated. PyPI hashes, downloaded
+GitHub wheel/sdist files, the attached manifest and release tag agree with the
+verified source. See the [publication record](releases.md#current-versions).
+
 ## Canon 0.18.0
 
 The published source passed exact-commit CI on Linux/Python 3.12–3.14 and

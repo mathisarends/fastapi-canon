@@ -6,17 +6,11 @@ version; the reference service is an example. `release.toml` and
 
 ## Current versions
 
-**Published: 0.18.0 (2026-11-10).**
+**Published: 0.19.0 (2026-11-10).**
 
-**Prepared source: 0.19.0 (unpublished).** The stricter RPC subclass source check
-requires the next minor version. Follow the [migration](package-migration.md#upgrade-to-0190)
-and [prepared changelog](../CHANGELOG.md#0190---2026-11-10). Publication still
-requires exact-source CI and a verified release preparation run.
-
-Published 0.18.0 adds native SSE target options, application-router testing and an
-executable v2 consumer migration. Follow the
-[0.18.0 migration](package-migration.md#upgrade-to-0180) and
-[changelog](../CHANGELOG.md#0180---2026-11-10).
+This release includes RPC channel subclasses in source error-contract checking.
+Follow the [migration](package-migration.md#upgrade-to-0190) and
+[changelog](../CHANGELOG.md#0190---2026-11-10) before updating CI.
 
 Published artifacts, manifests and run results are linked below. They record
 verified publications; prepared source versions are not publication evidence.
@@ -24,6 +18,7 @@ Historical links retain their original repositories.
 
 | Version | Source | CI | Dry run | Publication | Wheel, sdist and manifest |
 | --- | --- | --- | --- | --- | --- |
+| 0.19.0 (2026-11-10) | [Source](https://github.com/mathisarends/fastapi-canon/commit/f40ed640c99822abf2f7709ede1e16e0ea6fa8b2) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/42853226604) | [Preparatory dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/42850938534) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/42855022556) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.19.0) |
 | 0.18.0 (2026-11-10) | [Source](https://github.com/mathisarends/fastapi-canon/commit/f4fa6096ff9c18c2fe5df32c2cae40ee0d9ec969) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/42785593526) | [Dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/42787033263) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/42788045597) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.18.0) |
 | 0.17.0 (2026-11-10) | [Source](https://github.com/mathisarends/fastapi-canon/commit/9745a85fe6f16852a7eee16161be73d6a3703fbd) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/42719244150) | [Earlier dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/42717728251) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/42721013782) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.17.0) |
 | 0.16.0 (2026-11-07) | [Source](https://github.com/mathisarends/fastapi-canon/commit/5b36111a1b5750424052a9af96e8bbbed07bc0cc) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/42382306017) | [Dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/42383067506) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/42383550071) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.16.0) |
@@ -34,12 +29,13 @@ Historical links retain their original repositories.
 | 0.11.0 (2026-11-01) | [Source](https://github.com/mathisarends/fastapi_canon/commit/2773b56498fad05ac9e1f1163ee33241b6d70eff) | [CI](https://github.com/mathisarends/fastapi_canon/actions/runs/41346976457) | [Dry run](https://github.com/mathisarends/fastapi_canon/actions/runs/41347623801) | [Publish](https://github.com/mathisarends/fastapi_canon/actions/runs/41348067349) | [Assets](https://github.com/mathisarends/fastapi_canon/releases/tag/fastapi-canon-v0.11.0) |
 | 0.10.0 (2026-11-01) | [Source](https://github.com/mathisarends/fastapi_canon/commit/4d9ce1842b350a9bf867d512cc89aafc4b44d53b) | [CI](https://github.com/mathisarends/fastapi_canon/actions/runs/41311732023) | [Dry run](https://github.com/mathisarends/fastapi_canon/actions/runs/41312304534) | [Publish](https://github.com/mathisarends/fastapi_canon/actions/runs/41312590718) | [Assets](https://github.com/mathisarends/fastapi_canon/releases/tag/fastapi-canon-v0.10.0) |
 
-The 0.17.0 preparatory dry run predates changelog finalization. Publication
-revalidated the final dated source; its public installs and attached artifacts
+The 0.19.0 and 0.17.0 preparatory dry runs predate changelog finalization. Publication
+revalidated each final dated source; its public installs and attached artifacts
 are verified.
 
-Recovery notes: 0.18.0, 0.15.0 and 0.14.0 needed public-index verification after
-stale index results; 0.11.0 needed GitHub finalization retried after incomplete PyPI
+Recovery notes: 0.19.0, 0.18.0, 0.15.0 and 0.14.0 needed public-index verification after
+stale index results. The 0.19.0 retry invalidated the stale uv cache and reused
+the original verified artifacts; 0.11.0 needed GitHub finalization retried after incomplete PyPI
 metadata. Version 0.10.0 required publisher configuration and local public-index
 verification before finalization. All recoveries retained the original artifact
 bytes and source. Version 0.10.0 includes the unpublished 0.9.0 migrations.
