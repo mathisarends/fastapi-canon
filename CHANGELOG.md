@@ -6,6 +6,11 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Breaking changes
 
+- `RpcTestClient` and `RpcTestStream` also accept a public application router or
+  ASGI application. Configure auth, DI and connection options on the application
+  and enter its lifespan explicitly; in-memory dependency overrides apply only
+  to specialized routers. The expanded public signatures target Canon 0.18.0.
+
 - The SSE IR builder accepts operation selection, and v2 SSE targets accept
   strict diagnostic policy, report paths and exact allowances. These public
   signature additions are prepared for Canon 0.18.0. Existing calls keep their

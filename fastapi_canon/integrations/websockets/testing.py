@@ -7,6 +7,12 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import unquote, urlsplit
 
+from fastapi import APIRouter as FastAPIRouter
+from fastapi import FastAPI
+from starlette.routing import compile_path
+from starlette.types import ASGIApp, Message, Scope
+
+from fastapi_canon.contract_routes import RPC_ENDPOINT_ATTRIBUTE, iter_contract_routes
 from fastapi_canon.error import Problem
 from fastapi_canon.integrations.websockets.adapters.fastapi import CanonWebSocketRouter
 from fastapi_canon.integrations.websockets.connection import (
@@ -18,6 +24,8 @@ from fastapi_canon.integrations.websockets.connection import (
     RpcRejections,
 )
 from fastapi_canon.integrations.websockets.definition import (
+    RpcAnyEndpoint,
+    RpcDefinition,
     RpcSocketEndpoint,
     RpcStreamEndpoint,
 )
@@ -424,7 +432,7 @@ class RpcTestConnectionClosed(Exception):
 class RpcTestClient:
     def __init__(
         self,
-        service: CanonWebSocketRouter,
+        service: CanonWebSocketRouter | RpcDefinition | ASGIApp,
         path: str,
         *,
         headers: Mapping[str, str] | None = None,
@@ -435,7 +443,19 @@ class RpcTestClient:
         limits: RpcLimits | None = None,
         rejections: RpcRejections | None = None,
     ) -> None:
-        self.service = service
+        self.service: CanonWebSocketRouter | RpcDefinition | _ASGIService
+        if isinstance(service, CanonWebSocketRouter | RpcDefinition):
+            self.service = service
+        else:
+            if any(
+                value is not None
+                for value in (resolver, context, error_mapper, limits, rejections)
+            ):
+                raise ValueError(
+                    "Configure dependencies and connection options "
+                    "on the ASGI application"
+                )
+            self.service = _ASGIService(service)
         self.socket = InMemorySocket(path, headers=headers, subprotocols=subprotocols)
         self.resolver = resolver
         self.context = context
@@ -447,7 +467,7 @@ class RpcTestClient:
         self._id = 0
         self._notifications: asyncio.Queue[object] = asyncio.Queue()
         self._pending: dict[int, asyncio.Future[dict[str, Any]]] = {}
-        matched = service.match(path)
+        matched = self.service.match(urlsplit(path).path)
         endpoint = None if matched is None else matched[0]
         self._socket = isinstance(endpoint, RpcSocketEndpoint)
         self._stream = self._socket or isinstance(endpoint, RpcStreamEndpoint)
@@ -473,12 +493,14 @@ class RpcTestClient:
 
     async def __aexit__(self, *exc: object) -> None:
         await self.socket.client_disconnect()
-        if self._task is not None:
-            with suppress(asyncio.CancelledError):
-                await self._task
-        if self._reader is not None:
-            self._reader.cancel()
-            await asyncio.gather(self._reader, return_exceptions=True)
+        try:
+            if self._task is not None:
+                with suppress(asyncio.CancelledError):
+                    await self._task
+        finally:
+            if self._reader is not None:
+                self._reader.cancel()
+                await asyncio.gather(self._reader, return_exceptions=True)
 
     async def request(
         self, method: str, params: Mapping[str, Any] | None = None
@@ -608,7 +630,123 @@ class RpcTestClient:
 
 
 class RpcTestStream(RpcTestClient):
-    def __init__(self, service: CanonWebSocketRouter, path: str, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        service: CanonWebSocketRouter | RpcDefinition | ASGIApp,
+        path: str,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(service, path, **kwargs)
         if not self._stream:
             raise TypeError(f"{path!r} is not a binary stream endpoint")
+
+
+class _ASGIService:
+    def __init__(self, app: ASGIApp) -> None:
+        if isinstance(app, FastAPIRouter):
+            application = FastAPI()
+            application.include_router(app)
+            self.app: ASGIApp = application
+        else:
+            self.app = app
+
+    def match(self, path: str) -> tuple[RpcAnyEndpoint, dict[str, str]] | None:
+        for effective_path, route in iter_contract_routes(
+            getattr(self.app, "routes", ())
+        ):
+            endpoint = getattr(
+                getattr(route, "endpoint", None), RPC_ENDPOINT_ATTRIBUTE, None
+            )
+            matched = compile_path(effective_path)[0].fullmatch(path)
+            if endpoint is not None and matched is not None:
+                return endpoint, matched.groupdict()
+        return None
+
+    async def serve(self, socket: InMemorySocket, **options: Any) -> None:
+        connection = _ASGIConnection(socket)
+        try:
+            await self.app(connection.scope, connection.receive, connection.send)
+        finally:
+            if socket.disconnect_error is None:
+                await socket.close(
+                    RpcConnectionClose.INTERNAL_ERROR,
+                    "ASGI application ended without closing the connection",
+                )
+
+
+class _ASGIConnection:
+    def __init__(self, socket: InMemorySocket) -> None:
+        self.socket = socket
+        self._connecting = True
+        self._status: int | None = None
+        self._body = bytearray()
+        url = urlsplit(socket.handshake.path)
+        self.scope: Scope = {
+            "type": "websocket",
+            "asgi": {"version": "3.0", "spec_version": "2.5"},
+            "scheme": "ws",
+            "path": unquote(url.path),
+            "raw_path": url.path.encode("utf-8"),
+            "query_string": url.query.encode("utf-8"),
+            "root_path": "",
+            "headers": [
+                (key.lower().encode("latin-1"), value.encode("latin-1"))
+                for key, value in socket.handshake.headers.items()
+            ],
+            "client": ("127.0.0.1", 12345),
+            "server": ("testserver", 80),
+            "subprotocols": list(socket.handshake.subprotocols),
+            "state": {},
+            "extensions": {"websocket.http.response": {}},
+        }
+
+    async def receive(self) -> Message:
+        if self._connecting:
+            self._connecting = False
+            return {"type": "websocket.connect"}
+        try:
+            frame = await self.socket.receive()
+        except RpcDisconnect as error:
+            return {
+                "type": "websocket.disconnect",
+                "code": error.raw_close_code or CLOSE_CODES[error.code],
+                "reason": error.reason,
+            }
+        return {
+            "type": "websocket.receive",
+            "text" if isinstance(frame, str) else "bytes": frame,
+        }
+
+    async def send(self, message: Message) -> None:
+        match message["type"]:
+            case "websocket.accept":
+                await self.socket.accept(message.get("subprotocol"))
+            case "websocket.send":
+                if message.get("bytes") is not None:
+                    await self.socket.send_bytes(message["bytes"])
+                else:
+                    await self.socket.send(message["text"])
+            case "websocket.close":
+                error = RpcDisconnect(
+                    message.get("code", 1000), message.get("reason", "")
+                )
+                self.socket.closed = (error.code, error.reason)
+                self.socket._disconnect(error)
+            case "websocket.http.response.start":
+                self._status = message["status"]
+            case "websocket.http.response.body":
+                self._body.extend(message.get("body", b""))
+                if not message.get("more_body", False):
+                    rejection = {
+                        401: RpcRejection.UNAUTHORIZED,
+                        403: RpcRejection.FORBIDDEN,
+                        404: RpcRejection.NOT_FOUND,
+                        503: RpcRejection.UNAVAILABLE,
+                    }.get(self._status or 500, RpcRejection.INTERNAL_ERROR)
+                    await self.socket.reject(
+                        rejection, self._body.decode("utf-8", errors="replace")
+                    )
+            case _:
+                raise ValueError(
+                    f"Unsupported ASGI WebSocket message: {message['type']}"
+                )

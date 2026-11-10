@@ -154,6 +154,44 @@ Python WebSocket clients, using the same incoming and outgoing queues. Both view
 preserve close code and reason; the client exposes `close_code` and `close_reason`.
 `RpcTestClient` remains the convenience client for ordinary service tests.
 
+### Test the application router
+
+Prepared for 0.18.0 (unpublished): pass your public router or composed FastAPI
+application directly to `RpcTestClient` or `RpcTestStream`. Connections run through
+the ASGI routes, including authentication, hooks, middleware and Dishka scopes.
+
+```python
+from fastapi_canon import APIRouter
+from fastapi_canon.integrations.websockets.testing import RpcTestClient
+
+router = APIRouter(prefix="/api")
+channel = router.channel("/rpc", namespace="system")
+
+
+@channel.method
+async def ping() -> str:
+    return "pong"
+
+
+async def check_ping() -> None:
+    async with RpcTestClient(router, "/api/rpc") as rpc:
+        assert await rpc.request("system.ping") == "pong"
+```
+
+Configure dependencies, context and connection policies on the application.
+The client's `resolver`, `context`, `error_mapper`, `limits` and `rejections`
+overrides are reserved for specialized in-memory routers and are rejected for
+ASGI targets. Headers, query strings and subprotocols use the real admission path.
+Binary streams and typed/raw Canon sockets retain `next_frame`, `send_frame`,
+`next_message` and `send_message`.
+
+The caller owns application startup and shutdown. For a composed app, place the
+client inside `async with app.router.lifespan_context(app):`; share that lifespan
+when testing several connections. Router-only tests use a temporary FastAPI app
+without automatically installing a Composition or a DI container. Unhandled ASGI
+exceptions propagate on context exit, and disconnect closes the connection's
+resources. This in-process transport does not establish network or browser behavior.
+
 Each socket has independent `client_to_server` and `server_to_client`
 `SocketFaults` controllers. Pass them to the constructor or configure the existing
 controllers before sending frames:
