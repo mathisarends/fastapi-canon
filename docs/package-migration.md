@@ -13,7 +13,7 @@ PyPI project or add further Python import changes.
 
 ## Upgrade to 0.19.0
 
-Prepared, unpublished. The source checker now includes methods declared on
+Canon 0.19.0 includes source checking for methods declared on
 statically resolved `RpcChannel` subclasses. Existing application declarations,
 `Error` mappings and channel/method `raises=` remain the developer-facing API.
 
@@ -25,7 +25,7 @@ without excluding operations, dependencies or ORM calls to restore a passing che
 See the [supported subclass forms](error-checking.md#rpc-channel-subclasses).
 
 This stricter check requires a minor release. Server wire behavior and generated
-client APIs are unchanged. Regenerate committed clients with the prepared version
+client APIs are unchanged. Regenerate committed clients with the chosen version
 to update generator provenance, and retain runtime tests for dynamic providers,
 branch feasibility and persisted invariants.
 
