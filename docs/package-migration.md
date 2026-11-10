@@ -11,6 +11,32 @@ The [repository migration](repository-migration.md) records the
 source history and publishing setup. The repository move does not rename the
 PyPI project or add further Python import changes.
 
+## Upgrade to 0.18.0
+
+Prepared source only; 0.18.0 is not published. The public SSE generator and
+WebSocket testing signatures expand, so this release follows the pre-1.0 minor
+version policy. Existing call defaults remain unchanged.
+
+For native v2 SSE targets, optionally add `include-operations`, `strict`,
+`diagnostics` and `allow-diagnostics`. Review new diagnostic IDs before adding
+exact allowances. Regenerate and review contracts and clients together; selecting
+operations does not narrow live contract checks. See [generation](codegen.md).
+
+Tests may pass the public `APIRouter` or composed application directly to
+`RpcTestClient` and `RpcTestStream`. Configure authentication and DI on that
+application and enter its lifespan explicitly. Remove duplicated specialized
+test-router wiring when moving those scenarios; ASGI targets reject the
+specialized client's dependency/connection overrides. See
+[router testing](integrations/websockets/transports.md#test-the-application-router).
+
+The checker recognizes statically resolved `contextlib.suppress` exception types.
+Keep `--strict` and `--require-complete` independent; unresolved paths remain
+visible and stored aggregate validity is not assumed.
+
+When upgrading from 0.16 or earlier, also apply the 0.17 SDK migration below.
+The [executable consumer example](../examples/canonical_errors/README.md#replace-a-version-1-sdk-consumer)
+shows separate clients, problem normalization and resource ownership.
+
 ## Upgrade to 0.17.0
 
 Canon 0.17.0 replaces domain SDK generation with a version-2 workflow.

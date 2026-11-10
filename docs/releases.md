@@ -7,6 +7,14 @@ version; the reference service is an example. `release.toml` and
 ## Current versions
 
 **Published: 0.17.0 (2026-11-10).**
+
+**Prepared: 0.18.0 (unpublished).** The
+[source branch](https://github.com/mathisarends/fastapi-canon/tree/codex/prepare-0.18.0)
+prepares SSE target options, application-router testing and the executable v2
+consumer migration. Follow the [0.18.0 migration](package-migration.md#upgrade-to-0180).
+Finalize the changelog date after review, pass CI on the final merged source,
+then run the documented dry run. Real publication still requires explicit
+authorization. The current published-version record below remains 0.17.0.
 This release replaces the combined SDK and expands error-checker coverage.
 Follow the [0.17.0 migration](package-migration.md#upgrade-to-0170) and
 [changelog](../CHANGELOG.md#0170---2026-11-10).

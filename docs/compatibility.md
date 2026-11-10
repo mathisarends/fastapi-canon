@@ -1,5 +1,12 @@
 # Compatibility
 
+## Canon 0.18.0 (prepared, unpublished)
+
+The prepared [source branch](https://github.com/mathisarends/fastapi-canon/tree/codex/prepare-0.18.0)
+retains the documented Python/dependency ranges. Publication and final-source CI
+are pending; historical published-version evidence below does not establish
+0.18.0 compatibility. See the [release preparation status](releases.md#current-versions).
+
 ## Canon 0.17.0
 
 The published source passed full CI on Linux/Python 3.12–3.14 and Windows/Python
