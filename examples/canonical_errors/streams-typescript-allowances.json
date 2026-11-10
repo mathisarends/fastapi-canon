@@ -1,0 +1,28 @@
+{
+  "allow": [
+    {
+      "id": "unsupported-constraint:46b7833351f0ac39134b",
+      "reason": "Reviewed /components/schemas/InternalServerProblem/properties/instance/format: uri-reference is not enforced by the typescript client. Server validation is authoritative."
+    },
+    {
+      "id": "unsupported-constraint:8c572d8db8ec110c2a19",
+      "reason": "Reviewed /components/schemas/InternalServerProblem/properties/type/format: uri-reference is not enforced by the typescript client. Server validation is authoritative."
+    },
+    {
+      "id": "unsupported-constraint:309d7113f8101e8d86b5",
+      "reason": "Reviewed /components/schemas/ProjectMissingProblem/properties/instance/format: uri-reference is not enforced by the typescript client. Server validation is authoritative."
+    },
+    {
+      "id": "unsupported-constraint:7bfbf5d65dcca8ae01d8",
+      "reason": "Reviewed /components/schemas/ProjectMissingProblem/properties/type/format: uri-reference is not enforced by the typescript client. Server validation is authoritative."
+    },
+    {
+      "id": "unsupported-constraint:ad3995befdecbe009538",
+      "reason": "Reviewed /components/schemas/RequestValidationProblem/properties/instance/format: uri-reference is not enforced by the typescript client. Server validation is authoritative."
+    },
+    {
+      "id": "unsupported-constraint:acaa0587dcdaacac6645",
+      "reason": "Reviewed /components/schemas/RequestValidationProblem/properties/type/format: uri-reference is not enforced by the typescript client. Server validation is authoritative."
+    }
+  ]
+}

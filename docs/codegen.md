@@ -159,3 +159,11 @@ The [shared-error example](../examples/canonical_errors/README.md) demonstrates
 separate native clients. Standalone [SSE](integrations/sse/codegen.md),
 [WebSocket](integrations/websockets/clients.md) and
 [WebRTC](integrations/webrtc/README.md) workflows remain available.
+
+For an executable consumer migration, follow the example's
+[Python and TypeScript adapters](../examples/canonical_errors/README.md#replace-a-version-1-sdk-consumer).
+It covers a borrowed HTTPX2 pool, SSE admission and terminal problems, error
+normalization across generated classes, and separately owned RPC connections with
+session renewal. Supply your application's authentication policy; the public demo
+does not implement session management. Keep connection cancellation, reconnect and
+pool ownership explicit when replacing version-1 bindings.

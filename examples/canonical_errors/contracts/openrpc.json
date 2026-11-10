@@ -2,15 +2,14 @@
   "components": {
     "schemas": {
       "CancelProject": {
-        "additionalProperties": false,
         "properties": {
-          "projectId": {
-            "title": "Projectid",
+          "project_id": {
+            "title": "Project Id",
             "type": "integer"
           }
         },
         "required": [
-          "projectId"
+          "project_id"
         ],
         "title": "CancelProject",
         "type": "object"
@@ -43,7 +42,6 @@
             "title": "Replacement"
           },
           "title": {
-            "const": "Project not found",
             "type": "string"
           },
           "type": {
@@ -138,10 +136,10 @@
       "paramStructure": "by-name",
       "params": [
         {
-          "name": "projectId",
+          "name": "project_id",
           "required": true,
           "schema": {
-            "title": "Projectid",
+            "title": "Project Id",
             "type": "integer"
           }
         }

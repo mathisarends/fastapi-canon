@@ -4,6 +4,13 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## Unreleased
 
+### Added
+
+- Executable Python/TypeScript v2 consumer examples demonstrate strict SSE
+  operation selection, separate problem classes, session renewal and explicit
+  connection/pool ownership. The Python example uses HTTPX2; regenerate its clients
+  before running it. Live integration checks exercise both consumer languages.
+
 ### Breaking changes
 
 - `RpcTestError` is now a mutable, unhashable dataclass exception, allowing normal
