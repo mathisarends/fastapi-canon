@@ -11,6 +11,24 @@ The [repository migration](repository-migration.md) records the
 source history and publishing setup. The repository move does not rename the
 PyPI project or add further Python import changes.
 
+## Upgrade to 0.19.0
+
+Prepared, unpublished. The source checker now includes methods declared on
+statically resolved `RpcChannel` subclasses. Existing application declarations,
+`Error` mappings and channel/method `raises=` remain the developer-facing API.
+
+Before upgrading CI, run `fastapi-canon check errors src --strict --require-complete`
+over all relevant import roots. Map and declare newly discovered escaping
+application errors. Simple subclass chains use their existing contracts;
+customized subclass declarations remain visible with CAN003. Review those paths
+without excluding operations, dependencies or ORM calls to restore a passing check.
+See the [supported subclass forms](error-checking.md#rpc-channel-subclasses).
+
+This stricter check requires a minor release. Server wire behavior and generated
+client APIs are unchanged. Regenerate committed clients with the prepared version
+to update generator provenance, and retain runtime tests for dynamic providers,
+branch feasibility and persisted invariants.
+
 ## Upgrade to 0.18.0
 
 Published on 2026-11-10. The public SSE generator and
