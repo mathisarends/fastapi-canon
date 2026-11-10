@@ -148,6 +148,100 @@ def test_old_configuration_fails_before_writing(project: Path) -> None:
     assert not (project / "contracts").exists()
 
 
+def test_strict_sse_diagnostics_can_be_reviewed_before_any_generation(
+    project: Path,
+) -> None:
+    config = project / "fastapi-canon.toml"
+    config.write_text(
+        config.read_text().replace(
+            "[codegen.targets.rpc]",
+            'strict = true\ndiagnostics = "diagnostics.json"\n[codegen.targets.rpc]',
+        ),
+        encoding="utf-8",
+    )
+    failed = _run(project)
+    assert failed.returncode == 2, failed.stdout + failed.stderr
+    assert not (project / "contracts").exists()
+    assert not (project / "streams").exists()
+    diagnostics = json.loads((project / "diagnostics.json").read_text())["diagnostics"]
+    assert diagnostics and all(not item["accepted"] for item in diagnostics)
+    (project / "allowances.json").write_text(
+        json.dumps(
+            {
+                "allow": [
+                    {
+                        "id": item["id"],
+                        "reason": "Reviewed URI format; server validation is authoritative.",
+                    }
+                    for item in diagnostics
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    config.write_text(
+        config.read_text().replace(
+            "strict = true", 'strict = true\nallow-diagnostics = "allowances.json"'
+        ),
+        encoding="utf-8",
+    )
+    assert _run(project).returncode == 0
+    accepted = json.loads((project / "diagnostics.json").read_text())["diagnostics"]
+    assert accepted and all(item["accepted"] for item in accepted)
+    before = _artifacts(project)
+    assert _run(project, "--check").returncode == 0
+    assert _artifacts(project) == before
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        'strict = "yes"',
+        "include-operations = []",
+        'include-operations = ["events", "events"]',
+        "include-operations = [7]",
+        'diagnostics = "contracts/openapi.json"',
+        'diagnostics = "streams/models.py"',
+        'diagnostics = "fastapi-canon.toml"',
+        'diagnostics = "allowances.json"\nallow-diagnostics = "allowances.json"',
+    ],
+)
+def test_invalid_sse_options_fail_without_writes(project: Path, options: str) -> None:
+    config = project / "fastapi-canon.toml"
+    config.write_text(
+        config.read_text().replace(
+            "[codegen.targets.rpc]", options + "\n[codegen.targets.rpc]"
+        ),
+        encoding="utf-8",
+    )
+    before = _artifacts(project)
+    result = _run(project)
+    assert result.returncode == 2
+    assert _artifacts(project) == before
+
+
+def test_sse_selection_never_hides_live_contract_drift(project: Path) -> None:
+    assert _run(project).returncode == 0
+    schema = json.loads((project / "contracts/openapi.json").read_text())
+    operation = schema["paths"]["/projects/{project_id}/events"]["get"]["operationId"]
+    config = project / "fastapi-canon.toml"
+    config.write_text(
+        config.read_text().replace(
+            "[codegen.targets.rpc]",
+            f"include-operations = [{json.dumps(operation)}]\n[codegen.targets.rpc]",
+        ),
+        encoding="utf-8",
+    )
+    assert _run(project).returncode == 0
+    app = project / "application.py"
+    app.write_text(
+        app.read_text().replace('title="Projects"', 'title="Changed"'), encoding="utf-8"
+    )
+    checked = _run(project, "--check", "--target", "streams")
+    assert checked.returncode == 1
+    assert json.loads(checked.stdout)["steps"][-1]["status"] == "blocked"
+
+
 def test_native_preflight_failure_leaves_contracts_and_clients_unwritten(
     project: Path,
 ) -> None:

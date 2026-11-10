@@ -27,6 +27,26 @@ allow-diagnostics = "{ALLOWED}"
 """
 
 
+def test_standalone_operation_selection_generates_and_checks_one_stream(tmp_path):
+    schema = Path(__file__).parents[5] / "tests/fixtures/sse/agent_runs.openapi.json"
+    output = tmp_path / "client"
+    arguments = [
+        "--schema",
+        str(schema),
+        "--language",
+        "python",
+        "--output",
+        str(output),
+        "--include-operation",
+        "stream_run_events",
+    ]
+    assert main(["generate", *arguments]) == 0
+    client = (output / "agent_runs/api.py").read_text()
+    assert "stream_run_events" in client and "stream_prompt" not in client
+    assert main(["check", *arguments]) == 0
+    assert main(["check", *arguments, "--include-operation", "missing"]) == 2
+
+
 def test_sync_writes_schema_and_every_client_then_checks_clean(tmp_path, capsys):
     config = tmp_path / "pyproject.toml"
     config.write_text(CONFIG, encoding="utf-8")

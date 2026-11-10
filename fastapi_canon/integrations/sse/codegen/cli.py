@@ -33,6 +33,7 @@ _CLIENT_KEYS = {
     "strict",
     "allow-diagnostics",
     "diagnostics",
+    "include-operations",
 }
 
 
@@ -56,6 +57,12 @@ def main(argv: list[str] | None = None) -> int:
             "--language", choices=["typescript", "python"], default="typescript"
         )
         command.add_argument("--output", required=True, type=Path)
+        command.add_argument(
+            "--include-operation",
+            action="append",
+            dest="include_operations",
+            help="Select an SSE operation ID; repeat for multiple operations",
+        )
         command.add_argument("--diagnostics", type=Path, help="Write JSON diagnostics")
         command.add_argument(
             "--strict", action="store_true", help="Fail on unaccepted diagnostics"
@@ -128,6 +135,7 @@ def main(argv: list[str] | None = None) -> int:
             from fastapi_canon.integrations.sse.codegen.diagnostics import (
                 accepted_diagnostics,
                 emit_diagnostics,
+                write_diagnostics,
             )
             from fastapi_canon.integrations.sse.codegen.ir import build_ir
             from fastapi_canon.integrations.sse.codegen.python import generate_python
@@ -157,10 +165,17 @@ def main(argv: list[str] | None = None) -> int:
                         )
                     return 1
             diagnostics: list[GenerationDiagnostic] = []
-            contract = build_ir(document, target=args.language, diagnostics=diagnostics)
+            contract = build_ir(
+                document,
+                target=args.language,
+                diagnostics=diagnostics,
+                include_operations=tuple(args.include_operations)
+                if args.include_operations is not None
+                else None,
+            )
             # Reports precede strict-policy failures, so CI can review new IDs.
             if args.diagnostics:
-                _write_diagnostics(
+                write_diagnostics(
                     args.diagnostics,
                     diagnostics,
                     set(),
@@ -174,7 +189,7 @@ def main(argv: list[str] | None = None) -> int:
                 else set()
             )
             if args.diagnostics:
-                _write_diagnostics(
+                write_diagnostics(
                     args.diagnostics,
                     diagnostics,
                     accepted,
@@ -249,6 +264,8 @@ def _sync(config_path: Path, *, check: bool, diff: bool) -> int:
         ]
         if "python-http-client" in client:
             step += ["--python-http-client", client["python-http-client"]]
+        for operation in client.get("include-operations", []):
+            step += ["--include-operation", operation]
         if client.get("strict"):
             step.append("--strict")
         for option in ("allow-diagnostics", "diagnostics"):
@@ -314,6 +331,16 @@ def _load_config(path: Path) -> dict[str, Any]:
                 raise ContractError(f"{where}.{key} must be a string")
         if "output" not in client:
             raise ContractError(f"{where} requires output = '<directory>'")
+        include: object = client.get("include-operations")
+        selections = cast(list[Any], include) if isinstance(include, list) else []
+        if "include-operations" in client and (
+            not selections
+            or any(not isinstance(item, str) or not item for item in selections)
+            or len(set(selections)) != len(selections)
+        ):
+            raise ContractError(
+                f"{where}.include-operations requires unique nonempty IDs"
+            )
         if not isinstance(client.get("strict", False), bool):
             raise ContractError(f"{where}.strict must be a boolean")
     if not clients and "app" not in config:
@@ -374,59 +401,6 @@ def _generation_metadata(
         "target": target,
         "python_http_client": http_client if target == "python" else None,
     }
-
-
-def _write_diagnostics(
-    path: Path,
-    diagnostics: list[GenerationDiagnostic],
-    accepted: set[str],
-    generation: dict[str, str | None],
-) -> None:
-    python = generation["target"] == "python"
-    request_phase = "method_call" if python else "not_performed"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(
-            {
-                "version": 1,
-                "generation": generation,
-                "validation": {
-                    "full_json_schema": False,
-                    "runtime_scope": (
-                        "generated_types_and_supported_constraints"
-                        if python
-                        else "json_decoding_only"
-                    ),
-                    "parameters": {
-                        "phase": request_phase,
-                        "schema_validation": python,
-                    },
-                    "request_body": {
-                        "phase": request_phase,
-                        "schema_validation": python,
-                    },
-                    "events": {
-                        "phase": "iteration",
-                        "schema_validation": python,
-                        "json_decoding": True,
-                    },
-                    "http_error_bodies": {
-                        "phase": "consumer_controlled",
-                        "schema_validation": False,
-                    },
-                },
-                "diagnostics": [
-                    item.to_dict(accepted=item.id in accepted) for item in diagnostics
-                ],
-            },
-            indent=2,
-            sort_keys=True,
-            ensure_ascii=False,
-        )
-        + "\n",
-        encoding="utf-8",
-        newline="\n",
-    )
 
 
 if __name__ == "__main__":

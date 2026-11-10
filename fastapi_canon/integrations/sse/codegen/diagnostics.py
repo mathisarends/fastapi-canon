@@ -4,6 +4,7 @@ import hashlib
 import json
 import warnings
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any, Literal, cast
 from urllib.parse import unquote
 
@@ -131,6 +132,59 @@ def collect_diagnostics(
                     event=media == "text/event-stream" and status.startswith("2"),
                 )
     return sorted(result.values(), key=lambda item: (item.pointer, item.id))
+
+
+def write_diagnostics(
+    path: Path,
+    diagnostics: list[GenerationDiagnostic],
+    accepted: set[str],
+    generation: Document,
+) -> None:
+    python = generation["target"] == "python"
+    request_phase = "method_call" if python else "not_performed"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "generation": generation,
+                "validation": {
+                    "full_json_schema": False,
+                    "runtime_scope": (
+                        "generated_types_and_supported_constraints"
+                        if python
+                        else "json_decoding_only"
+                    ),
+                    "parameters": {
+                        "phase": request_phase,
+                        "schema_validation": python,
+                    },
+                    "request_body": {
+                        "phase": request_phase,
+                        "schema_validation": python,
+                    },
+                    "events": {
+                        "phase": "iteration",
+                        "schema_validation": python,
+                        "json_decoding": True,
+                    },
+                    "http_error_bodies": {
+                        "phase": "consumer_controlled",
+                        "schema_validation": False,
+                    },
+                },
+                "diagnostics": [
+                    item.to_dict(accepted=item.id in accepted) for item in diagnostics
+                ],
+            },
+            indent=2,
+            sort_keys=True,
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
 
 
 def emit_diagnostics(diagnostics: list[GenerationDiagnostic]) -> None:

@@ -19,6 +19,10 @@ class TargetConfig:
     generate_command: tuple[str, ...] = ()
     check_command: tuple[str, ...] = ()
     timeout: int = 120
+    strict: bool = False
+    diagnostics: Path | None = None
+    allow_diagnostics: Path | None = None
+    include_operations: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -65,6 +69,25 @@ def load_config(path: Path) -> Configuration:
                 raise ValueError(
                     "Contract and native client output directories must not overlap"
                 )
+    reports = [
+        target.diagnostics for target in targets if target.diagnostics is not None
+    ]
+    inputs = {
+        path,
+        *(target.allow_diagnostics for target in targets if target.allow_diagnostics),
+    }
+    for report in reports:
+        if (
+            report in inputs
+            or reports.count(report) > 1
+            or any(
+                report == directory or report.is_relative_to(directory)
+                for directory in (contracts, *outputs)
+            )
+        ):
+            raise ValueError(
+                "Diagnostics reports must be distinct and outside inputs and generated outputs"
+            )
     return Configuration(path, app, contracts, targets)
 
 
@@ -104,10 +127,32 @@ def _target(root: Path, name: str, value: object) -> TargetConfig:
             "package",
             "client-name",
             "python-http-client",
+            "strict",
+            "diagnostics",
+            "allow-diagnostics",
+            "include-operations",
         },
         name,
     )
     language = value.get("language", "typescript")
+    sse_keys = {"strict", "diagnostics", "allow-diagnostics", "include-operations"}
+    if generator != "sse" and value.keys() & sse_keys:
+        raise ValueError(
+            "SSE diagnostic and operation options apply only to SSE targets"
+        )
+    strict = value.get("strict", False)
+    if type(strict) is not bool:
+        raise ValueError(f"Target {name} strict must be a boolean")
+    include = value.get("include-operations")
+    if "include-operations" in value and (
+        not isinstance(include, list)
+        or not include
+        or any(not isinstance(item, str) or not item for item in include)
+        or len(set(include)) != len(include)
+    ):
+        raise ValueError(
+            f"Target {name} include-operations must contain unique nonempty IDs"
+        )
     if language not in {"python", "typescript"} or (
         generator == "webrtc" and language != "typescript"
     ):
@@ -140,6 +185,14 @@ def _target(root: Path, name: str, value: object) -> TargetConfig:
         package,
         client,
         cast(Literal["httpx", "httpx2"], http),
+        strict=strict,
+        diagnostics=_path(root, value["diagnostics"])
+        if "diagnostics" in value
+        else None,
+        allow_diagnostics=_path(root, value["allow-diagnostics"])
+        if "allow-diagnostics" in value
+        else None,
+        include_operations=tuple(include) if include is not None else None,
     )
 
 
