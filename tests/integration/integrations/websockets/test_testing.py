@@ -152,6 +152,31 @@ async def test_http_handshake_denial_keeps_the_production_status_and_body() -> N
         )
 
 
+async def test_rpc_error_propagates_through_the_application_lifespan() -> None:
+    channel = RpcChannel("items")
+    missing = Error(Missing, status=404, code="missing", title="Missing")
+
+    @channel.method(raises=[missing])
+    async def read() -> str:
+        raise Missing()
+
+    router = APIRouter()
+    router.include_channel(channel, path="/rpc")
+    app = Composition(features=[Feature(name="items", routers=[router])]).build(
+        FastAPI()
+    )
+    with pytest.raises(RpcTestError) as caught:
+        async with (
+            asyncio.timeout(5),
+            app.router.lifespan_context(app),
+            RpcTestClient(app, "/rpc") as client,
+        ):
+            await client.request("items.read")
+    assert caught.value.code == "missing"
+    assert caught.value.problem is not None
+    assert caught.value.problem.status is None
+
+
 async def test_asgi_application_failure_unblocks_pending_requests() -> None:
     channel = RpcChannel("items")
 
