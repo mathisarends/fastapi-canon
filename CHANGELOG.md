@@ -4,6 +4,12 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## Unreleased
 
+### Fixed
+
+- Error-contract checking recognizes synchronous `contextlib.suppress` with
+  statically resolved exception classes, including aliases and inheritance.
+  Unmatched errors and dynamic suppression remain visible.
+
 ## 0.17.0 - 2026-11-10
 
 ### Breaking changes
