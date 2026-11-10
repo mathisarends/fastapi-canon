@@ -26,7 +26,9 @@ Tests may pass the public `APIRouter` or composed application directly to
 `RpcTestClient` and `RpcTestStream`. Configure authentication and DI on that
 application and enter its lifespan explicitly. Remove duplicated specialized
 test-router wiring when moving those scenarios; ASGI targets reject the
-specialized client's dependency/connection overrides. See
+specialized client's dependency/connection overrides. `RpcTestError` now allows
+normal traceback updates and is mutable/unhashable; use problem identities or
+immutable field tuples instead of exceptions as hash keys. See
 [router testing](integrations/websockets/transports.md#test-the-application-router).
 
 The checker recognizes statically resolved `contextlib.suppress` exception types.
