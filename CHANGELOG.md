@@ -4,6 +4,18 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## Unreleased
 
+### Breaking changes
+
+- Error-contract checking includes statically resolved `RpcChannel` subclasses
+  that previously disappeared from reports. Empty single-base subclass chains
+  use the channel and method `raises` contracts; customized subclasses remain
+  visible with CAN003. Existing `--strict` or `--require-complete` checks can now
+  exit 1. Before upgrading, scan all application roots, map and declare newly
+  discovered errors, and review incomplete subclass declarations without
+  excluding them. See the [subclass guide](docs/error-checking.md#rpc-channel-subclasses).
+  This stricter check requires the next minor release, 0.19.0; it must not ship
+  as a 0.18.x patch.
+
 ## 0.18.0 - 2026-11-10
 
 ### Added

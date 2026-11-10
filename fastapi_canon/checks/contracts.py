@@ -19,12 +19,6 @@ _API_ROUTERS = frozenset(
     {"fastapi_canon.APIRouter", "fastapi_canon.api_router.APIRouter"}
 )
 _CANON_ROUTERS = frozenset({"fastapi_canon.router.CanonRouter", *_API_ROUTERS})
-_RPC_CHANNELS = frozenset(
-    {
-        "fastapi_canon.integrations.websockets.RpcChannel",
-        "fastapi_canon.integrations.websockets.channel.RpcChannel",
-    }
-)
 _ERROR = "fastapi_canon.Error"
 _ERRORS = frozenset(
     {_ERROR, "fastapi_canon.error.Error", "fastapi_canon.error.error.Error"}
@@ -169,11 +163,14 @@ class _Checker:
         nested: set[int],
     ) -> _Operation | None:
         # `method` is a common attribute name: only resolved RpcChannels count.
+        self.source.touched = {function.module}
         module, channel = self.source.value(owner, function.module)
-        if not isinstance(channel, ast.Call) or (
-            self.source.resolve(channel.func, module) not in _RPC_CHANNELS
-        ):
+        if not isinstance(channel, ast.Call):
             return None
+        declaration = self.source.rpc_channel(self.source.resolve(channel.func, module))
+        if declaration is None:
+            return None
+        declaration_modules = frozenset(self.source.touched)
         operation = _Operation(
             function.name,
             str(self.source.paths[function.module]),
@@ -185,8 +182,21 @@ class _Checker:
                 operation, "nested RPC declarations require runtime factory execution"
             )
             return operation
+        if declaration == "incomplete":
+            self._unknown(
+                operation,
+                "RPC channel subclass contracts require runtime class or constructor execution",
+            )
+            return operation
         call = decorator if isinstance(decorator, ast.Call) else None
-        self._operation(operation, function, call, module, channel)
+        self._operation(
+            operation,
+            function,
+            call,
+            module,
+            channel,
+            declaration_modules=declaration_modules,
+        )
         return operation
 
     def _unknown(
@@ -405,8 +415,10 @@ class _Checker:
         decorator: ast.Call | None,
         module: str,
         router: ast.Call,
+        *,
+        declaration_modules: frozenset[str] = frozenset(),
     ) -> None:
-        self.source.touched = {function.module, module}
+        self.source.touched = {function.module, module, *declaration_modules}
         layers = [(module, router)]
         policy_node = (
             _keyword(router, "policy") if operation.transport != "rpc" else None
