@@ -55,7 +55,7 @@ contracts directory and other native outputs. For additional transport-specific
 options or bindings, configure an external command pair
 that invokes the existing standalone transport CLI.
 
-Prepared for 0.18.0 (unpublished): native SSE targets also accept `strict`,
+In Canon 0.18.0 and later, native SSE targets also accept `strict`,
 `diagnostics`, `allow-diagnostics` and `include-operations`:
 
 ```toml

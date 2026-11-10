@@ -6,18 +6,12 @@ version; the reference service is an example. `release.toml` and
 
 ## Current versions
 
-**Published: 0.17.0 (2026-11-10).**
+**Published: 0.18.0 (2026-11-10).**
 
-**Prepared: 0.18.0 (unpublished).** The
-[source branch](https://github.com/mathisarends/fastapi-canon/tree/codex/prepare-0.18.0)
-prepares SSE target options, application-router testing and the executable v2
-consumer migration. Follow the [0.18.0 migration](package-migration.md#upgrade-to-0180).
-Finalize the changelog date after review, pass CI on the final merged source,
-then run the documented dry run. Real publication still requires explicit
-authorization. The current published-version record below remains 0.17.0.
-This release replaces the combined SDK and expands error-checker coverage.
-Follow the [0.17.0 migration](package-migration.md#upgrade-to-0170) and
-[changelog](../CHANGELOG.md#0170---2026-11-10).
+This release adds native SSE target options, application-router testing and an
+executable v2 consumer migration. Follow the
+[0.18.0 migration](package-migration.md#upgrade-to-0180) and
+[changelog](../CHANGELOG.md#0180---2026-11-10).
 
 Published artifacts, manifests and run results are linked below. They record
 verified publications; prepared source versions are not publication evidence.
@@ -25,6 +19,7 @@ Historical links retain their original repositories.
 
 | Version | Source | CI | Dry run | Publication | Wheel, sdist and manifest |
 | --- | --- | --- | --- | --- | --- |
+| 0.18.0 (2026-11-10) | [Source](https://github.com/mathisarends/fastapi-canon/commit/f4fa6096ff9c18c2fe5df32c2cae40ee0d9ec969) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/42785593526) | [Dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/42787033263) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/42788045597) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.18.0) |
 | 0.17.0 (2026-11-10) | [Source](https://github.com/mathisarends/fastapi-canon/commit/9745a85fe6f16852a7eee16161be73d6a3703fbd) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/42719244150) | [Earlier dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/42717728251) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/42721013782) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.17.0) |
 | 0.16.0 (2026-11-07) | [Source](https://github.com/mathisarends/fastapi-canon/commit/5b36111a1b5750424052a9af96e8bbbed07bc0cc) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/42382306017) | [Dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/42383067506) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/42383550071) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.16.0) |
 | 0.15.0 (2026-11-04) | [Source](https://github.com/mathisarends/fastapi_canon/commit/e4abb2c54706854d9ec7b0c4cb668b9cbfa23545) | [CI](https://github.com/mathisarends/fastapi_canon/actions/runs/41883371046) | [Dry run](https://github.com/mathisarends/fastapi_canon/actions/runs/41884977604) | [Publish](https://github.com/mathisarends/fastapi_canon/actions/runs/41886079014) | [Assets](https://github.com/mathisarends/fastapi_canon/releases/tag/fastapi-canon-v0.15.0) |
@@ -38,8 +33,8 @@ The 0.17.0 preparatory dry run predates changelog finalization. Publication
 revalidated the final dated source; its public installs and attached artifacts
 are verified.
 
-Recovery notes: 0.15.0 and 0.14.0 needed public-index verification after stale
-index results; 0.11.0 needed GitHub finalization retried after incomplete PyPI
+Recovery notes: 0.18.0, 0.15.0 and 0.14.0 needed public-index verification after
+stale index results; 0.11.0 needed GitHub finalization retried after incomplete PyPI
 metadata. Version 0.10.0 required publisher configuration and local public-index
 verification before finalization. All recoveries retained the original artifact
 bytes and source. Version 0.10.0 includes the unpublished 0.9.0 migrations.

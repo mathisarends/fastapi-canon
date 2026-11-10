@@ -33,7 +33,7 @@ The generator extracts application data from
 reachable from their parameters, bodies, events and error responses are emitted.
 Operations use the first tag as their group, defaulting to `streams`.
 
-Prepared for 0.18.0 (unpublished): pass `--include-operation OPERATION_ID` to
+In Canon 0.18.0 and later, pass `--include-operation OPERATION_ID` to
 `generate` or `check`, repeating the option for multiple SSE operations. The
 standalone sync client table accepts `include-operations = ["operation_id"]`.
 Omitting selection generates all streams; empty, duplicate or unknown selections

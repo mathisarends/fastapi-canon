@@ -13,10 +13,10 @@ uv add fastapi-canon
 Python 3.12–3.14 is supported. Add extras for the features you use, for example
 `fastapi-canon[sse,websockets]` or `fastapi-canon[codegen]`.
 
-**Published: 0.17.0 (2026-11-10).**
-These docs follow the checkout. Version 0.17.0 replaces the combined SDK with
-separate client generators; follow the [migration guide](docs/package-migration.md#upgrade-to-0170).
-See the [release and verified artifacts](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.17.0).
+**Published: 0.18.0 (2026-11-10).**
+These docs follow the checkout. Follow the
+[migration guide](docs/package-migration.md#upgrade-to-0180) when upgrading.
+See the [release and verified artifacts](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.18.0).
 
 ## Shared error handling
 
@@ -73,7 +73,7 @@ Reuse `project_missing` in SSE and RPC declarations. See the
 
 ## Generate and check clients
 
-The 0.17.0 workflow exports contracts and runs specialized SSE,
+The generation workflow exports contracts and runs specialized SSE,
 WebSocket and WebRTC generators. Add your HTTP generator through external
 commands. Configure it with the [generation guide](docs/codegen.md), then run:
 
