@@ -185,7 +185,7 @@ other channels do not propagate, like router contracts.
 
 ### RPC channel subclasses
 
-Unreleased: the next minor release (0.19.0) also checks methods declared on
+Prepared for Canon 0.19.0 (unpublished): the checker also reads methods declared on
 statically resolved `RpcChannel` subclasses. Existing CLI flags and `raises=`
 declarations apply:
 

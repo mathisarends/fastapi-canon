@@ -4,6 +4,15 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## Unreleased
 
+## 0.19.0 - Unreleased
+
+### TL;DR
+
+- Source checking includes methods declared on simple `RpcChannel` subclasses.
+  Existing `raises=` declarations and CLI flags apply.
+- Customized subclasses remain visible with CAN003. Review newly discovered
+  error paths before upgrading CI; runtime and client APIs are unchanged.
+
 ### Breaking changes
 
 - Error-contract checking includes statically resolved `RpcChannel` subclasses
@@ -13,8 +22,6 @@ All notable changes to `fastapi-canon` are documented in this file.
   exit 1. Before upgrading, scan all application roots, map and declare newly
   discovered errors, and review incomplete subclass declarations without
   excluding them. See the [subclass guide](docs/error-checking.md#rpc-channel-subclasses).
-  This stricter check requires the next minor release, 0.19.0; it must not ship
-  as a 0.18.x patch.
 
 ## 0.18.0 - 2026-11-10
 

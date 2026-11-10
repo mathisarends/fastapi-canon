@@ -8,7 +8,12 @@ version; the reference service is an example. `release.toml` and
 
 **Published: 0.18.0 (2026-11-10).**
 
-This release adds native SSE target options, application-router testing and an
+**Prepared source: 0.19.0 (unpublished).** The stricter RPC subclass source check
+requires the next minor version. Follow the [migration](package-migration.md#upgrade-to-0190)
+and [prepared changelog](../CHANGELOG.md#0190---unreleased). Publication still
+requires exact-source CI and a verified release preparation run.
+
+Published 0.18.0 adds native SSE target options, application-router testing and an
 executable v2 consumer migration. Follow the
 [0.18.0 migration](package-migration.md#upgrade-to-0180) and
 [changelog](../CHANGELOG.md#0180---2026-11-10).
