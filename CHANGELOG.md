@@ -4,6 +4,8 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## Unreleased
 
+## 0.18.0 - 2026-11-10
+
 ### Added
 
 - Executable Python/TypeScript v2 consumer examples demonstrate strict SSE

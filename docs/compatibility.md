@@ -1,5 +1,16 @@
 # Compatibility
 
+## Canon 0.18.0 (prepared, unpublished)
+
+The prepared [source branch](https://github.com/mathisarends/fastapi-canon/tree/codex/prepare-0.18.0)
+retains the documented Python/dependency ranges. Local Windows checks passed both
+20-combination installed-wheel matrices: current dependencies on Python 3.14 and
+minimum direct dependencies on Python 3.12. Installed SSE CLI checks cover core,
+HTTPX and HTTPX2; the installed WebRTC client compiles. Four Chromium/WebRTC
+scenarios passed. Dependency inventories remain build artifacts under `dist/`.
+Publication and final merged-source CI are pending; these checks do not establish
+public-index installation. See the [release preparation status](releases.md#current-versions).
+
 ## Canon 0.17.0
 
 The published source passed full CI on Linux/Python 3.12–3.14 and Windows/Python
