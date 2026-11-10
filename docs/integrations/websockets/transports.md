@@ -156,7 +156,7 @@ preserve close code and reason; the client exposes `close_code` and `close_reaso
 
 ### Test the application router
 
-Prepared for 0.18.0 (unpublished): pass your public router or composed FastAPI
+In Canon 0.18.0 and later, pass your public router or composed FastAPI
 application directly to `RpcTestClient` or `RpcTestStream`. Connections run through
 the ASGI routes, including authentication, hooks, middleware and Dishka scopes.
 

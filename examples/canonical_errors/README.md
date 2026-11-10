@@ -34,7 +34,7 @@ Do not edit generated files; change the Python declarations and regenerate.
 
 ## Replace a version-1 SDK consumer
 
-Prepared for Canon 0.18.0 (unpublished): the configuration selects `projects.events`
+In Canon 0.18.0 and later, the configuration selects `projects.events`
 and uses strict SSE diagnostics. The checked-in allowances accept only reviewed
 `uri-reference` format limitations. Reports go under `dist/reports`; new diagnostics
 fail generation until reviewed. TypeScript event types do not validate incoming

@@ -1,15 +1,22 @@
 # Compatibility
 
-## Canon 0.18.0 (prepared, unpublished)
+## Canon 0.18.0
 
-The prepared [source branch](https://github.com/mathisarends/fastapi-canon/tree/codex/prepare-0.18.0)
-retains the documented Python/dependency ranges. Local Windows checks passed both
-20-combination installed-wheel matrices: current dependencies on Python 3.14 and
-minimum direct dependencies on Python 3.12. Installed SSE CLI checks cover core,
-HTTPX and HTTPX2; the installed WebRTC client compiles. Four Chromium/WebRTC
-scenarios passed. Dependency inventories remain build artifacts under `dist/`.
-Publication and final merged-source CI are pending; these checks do not establish
-public-index installation. See the [release preparation status](releases.md#current-versions).
+The published source passed exact-commit CI on Linux/Python 3.12–3.14 and
+Windows/Python 3.14, including PostgreSQL and Chromium/WebRTC contracts. Both
+20-combination installed-wheel matrices passed: current dependencies on Python
+3.14 and minimum direct dependencies on Python 3.12. Installed SSE CLI checks
+cover core, HTTPX and HTTPX2; the installed WebRTC client compiles. All 15
+public-index installation combinations passed after stale index results were
+retried on the original publication run.
+
+A fresh Windows/Python 3.12 public-index installation passed the combined
+transport, telemetry, MCP and upload smoke, including application-router RPC
+testing and error propagation through lifespan cleanup. The application-router
+test helper also passed a separate installed-wheel check with FastAPI 0.121.0
+and Pydantic 2.11.0 on Python 3.12. PyPI file hashes, downloaded GitHub assets,
+release notes, manifest and tag agree. See the
+[publication record](releases.md#current-versions).
 
 ## Canon 0.17.0
 

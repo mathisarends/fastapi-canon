@@ -13,7 +13,7 @@ PyPI project or add further Python import changes.
 
 ## Upgrade to 0.18.0
 
-Prepared source only; 0.18.0 is not published. The public SSE generator and
+Published on 2026-11-10. The public SSE generator and
 WebSocket testing signatures expand, so this release follows the pre-1.0 minor
 version policy. Existing call defaults remain unchanged.
 
