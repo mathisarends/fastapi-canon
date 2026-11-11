@@ -264,6 +264,29 @@ including `Annotated` aliases, nested dependencies and router/operation dependen
 lists. Dependencies supplied later while mounting an application are outside this
 source-declaration check.
 
+### Package re-exports
+
+Keep normal package facades when checking an application. For example, a package
+may expose its router from `app/__init__.py`:
+
+```python
+from .router import router
+```
+
+The module `app.router` and the package's exported `router` are distinct names.
+The checker follows the module's operations and the exported object without
+importing either file. The same rule applies to re-exported helpers and classes.
+
+**Unpublished fix, planned for 0.20.0:** Canon 0.19.0 can confuse these names when
+an export has the same name as its source module. A router can then report CAN003,
+or an RPC method can disappear from the report, hiding CAN001/CAN002 findings
+from `--strict`. The fix retains the existing declarations and CLI flags. Before
+upgrading CI, scan each application's import roots again and review newly found
+error paths. `--require-complete` remains necessary when incomplete analysis
+must fail CI; resolving a re-export does not establish complete runtime coverage.
+
+### Calls and return types
+
 Callable application instances follow their resolved `__call__` method rather than
 their constructor. Bound classmethods bind their first parameter to the class
 used at the call site, including inherited factories; `cls(...)` follows that
@@ -289,23 +312,64 @@ these bindings without constructing a container:
 
 ```python
 class TaskProvider(Provider):
-    # The return annotation names the port; the returned constructor names
-    # the implementation. Iterator[T] and AsyncIterator[T] factories provide T.
+    implementation = provide(SqlTaskRepository, scope=Scope.REQUEST)
+
+    # The registered dependency identifies the implementation behind the port.
     @provide(scope=Scope.REQUEST)
-    def task_repository(self, session: AsyncSession) -> TaskRepository:
-        return SqlTaskRepository(session)
+    def task_repository(self, implementation: SqlTaskRepository) -> TaskRepository:
+        return implementation
 
     # provides= names the port; the first argument or source= names the class.
     verifier = provide(LocalTokenVerifier, provides=TokenVerifier, scope=Scope.APP)
 ```
 
 `@provide(provides=Port)` and `alias(source=Impl, provides=Port)` are read the
-same way. When several providers bind the same port, including `override=True`
+same way. Factories returning constructors such as `SqlTaskRepository(session)`
+are also supported. `Iterator[T]` and `AsyncIterator[T]` factories provide `T`.
+
+**Unpublished, planned for 0.20.0:** provider parameters with a single source-class
+annotation can be returned or yielded directly, through local aliases or through
+other registered providers. This requires a binding for the forwarded dependency;
+its annotation alone is not evidence that a particular implementation is active.
+Quoted class annotations are supported. Optional, union, component-qualified and
+external parameter annotations, missing registrations and dependency cycles remain
+incomplete. Conditional annotation origins remain incomplete for every affected
+operation. Existing reassignment and conditional-return rules still apply.
+
+When several providers bind the same port, including `override=True`
 providers and test providers within the roots, the call contributes the union
 of their errors. A port without a binding, or a factory whose returned class is
 not statically known, keeps the operation incomplete (`CAN003`). Abstract calls
 on `self` without a binding follow the concrete subclasses in the roots, such as
 `to_domain` hooks of a generic repository base class.
+
+### Establish a consumer CI gate
+
+Scan each independently configured application with all its relevant import
+roots. Inspect operation-level `complete` values as well as the total counts:
+one unresolved shared dependency can affect many routes. A resolved provider
+may expose further errors or unresolved paths in its implementation.
+
+For a supported application slice, run both policies:
+
+```console
+fastapi-canon check errors src --strict --require-complete --format json
+```
+
+Verify the gate with a negative control: remove a known error from one operation's
+`raises` while retaining its mapping elsewhere in the application catalog. The
+check must report CAN001 and exit one. Removing the mapping as well produces
+CAN002. Restore the contract and require zero gaps and complete analysis for
+that slice. Keep larger application scans visible while their remaining paths
+are investigated; a passing slice does not establish whole-application coverage.
+
+Exercise the same boundary with a real request. For example, a repository can
+translate an expected file-library exception into `DocumentMissing`; its public
+mapping should produce the declared 404 Problem Details response. A missing
+`raises` declaration can still return that 404 when the mapping is registered
+elsewhere. An unmapped application exception reaches the generic server-error
+handling. Runtime scenarios validate the exercised behavior, not every possible
+library failure. Source `complete` remains limited by [analysis boundaries](#analysis-boundaries).
 
 Explicit `raise` statements propagate through supported function calls and simple
 branches. `try`/`except` removes caught exceptions, preserves bare re-raises and

@@ -4,6 +4,27 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## Unreleased
 
+### Breaking changes
+
+- Error-contract checking preserves source-module boundaries when resolving
+  package re-exports such as `from .router import router`. Previously hidden
+  HTTP, SSE, WebRTC and RPC error paths can now produce CAN001/CAN002 and fail
+  `check errors --strict`. This change requires the next minor release, 0.20.0.
+  Before upgrading CI, scan each application's import roots, review the new
+  paths, map escaping application exceptions with `Error`, and declare them in
+  the operation or router `raises`. Remaining CAN003 findings still require
+  `--require-complete` to fail the check; do not rename exports or exclude source
+  to recover a passing result.
+
+- Error-contract checking follows registered dependencies returned or yielded by
+  Dishka provider methods, including local aliases and transitive forwarding.
+  Previously hidden application exceptions can now fail `--strict`; this also
+  belongs to the next minor release, 0.20.0. Review new error paths and update
+  their `Error` mappings and operation/router `raises` before upgrading CI.
+  Missing registrations, cycles and unsupported annotations remain CAN003;
+  keep `--require-complete` enabled wherever unresolved paths must block CI.
+  Conditional annotation origins remain visible on every affected operation.
+
 ## 0.19.0 - 2026-11-10
 
 ### TL;DR

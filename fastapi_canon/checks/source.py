@@ -10,7 +10,8 @@ from typing import Literal, Self
 
 type _FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 type _Environment = dict[str, _Value]
-type _FactoryEnvironment = dict[str, tuple[str | None, ...]]
+type _FactoryValue = str | _ForwardedDependency | None
+type _FactoryEnvironment = dict[str, tuple[_FactoryValue, ...]]
 
 # Builtins whose result or effect depends on application objects at runtime.
 _DYNAMIC = frozenset(
@@ -134,6 +135,11 @@ def _walk_error(error: OSError) -> None:
     raise error
 
 
+@dataclass(frozen=True)
+class _ForwardedDependency:
+    name: str
+
+
 @dataclass
 class _Definition:
     name: str
@@ -167,8 +173,8 @@ class _Source:
     _mros: dict[str, tuple[tuple[str, ...] | None, frozenset[str]]] = field(
         default_factory=dict
     )
-    # Port -> (implementation, or None when unresolved; provider module).
-    _ports: dict[str, list[tuple[str | None, str]]] | None = None
+    # Port -> (constructed class, forwarded dependency or unknown; source modules).
+    _ports: dict[str, list[tuple[_FactoryValue, frozenset[str]]]] | None = None
 
     @classmethod
     def read(cls, roots: list[Path]) -> Self:
@@ -548,9 +554,16 @@ class _Source:
             return self.canonical(binding, seen | {name})
         if binding is not None and isinstance(binding[1], ast.Name | ast.Attribute):
             return self.resolve(binding[1], binding[0], seen=seen | {name}) or name
-        # Resolve module aliases and re-exported classes in dotted references.
+        # Resolve aliases within a namespace, never across a source module boundary.
+        # A package can export `router` from `router.py`: that package attribute
+        # must not rewrite the module prefix of `package.router.endpoint`.
         prefix, separator, member = name.rpartition(".")
-        if separator and prefix in self.bindings and prefix not in seen:
+        if (
+            separator
+            and prefix not in self.paths
+            and prefix in self.bindings
+            and prefix not in seen
+        ):
             resolved = self.canonical(prefix, seen | {name})
             if resolved != prefix:
                 return self.canonical(f"{resolved}.{member}", seen | {name})
@@ -1023,6 +1036,7 @@ class _Source:
         """
         if self._ports is None:
             previous = self.touched
+            self.touched = set()
             self._ports = {}
             try:
                 for definition in list(self.definitions.values()):
@@ -1032,9 +1046,24 @@ class _Source:
                         self._bind(definition.module, definition.node)
             finally:
                 self.touched = previous
-        bound = self._ports.get(port, [])
-        self.touched.update(module for _, module in bound)
-        return tuple(dict.fromkeys(implementation for implementation, _ in bound))
+        if port not in self._ports:
+            return ()
+        implementations: list[str | None] = []
+        pending: list[tuple[str, frozenset[str]]] = [(port, frozenset())]
+        while pending:
+            dependency, seen = pending.pop()
+            bound = self._ports.get(dependency, [])
+            for _, modules in bound:
+                self.touched.update(modules)
+            if dependency in seen or not bound:
+                implementations.append(None)
+                continue
+            for implementation, _ in bound:
+                if isinstance(implementation, _ForwardedDependency):
+                    pending.append((implementation.name, seen | {dependency}))
+                else:
+                    implementations.append(implementation)
+        return tuple(dict.fromkeys(implementations))
 
     def subclasses(self, owner: str) -> list[str]:
         """Classes in the source that inherit from *owner*."""
@@ -1063,41 +1092,56 @@ class _Source:
     def _bind(self, module: str, provider: ast.ClassDef) -> None:
         assert self._ports is not None
         for member in provider.body:
-            provides: ast.expr | None = None
-            implementations: list[str | None] = []
-            if isinstance(member, ast.Assign | ast.AnnAssign) and isinstance(
-                member.value, ast.Call
-            ):
-                call = member.value
-                if self.resolve(call.func, module) not in _PROVIDE:
-                    continue
-                provides = _keyword(call, "provides")
-                source = call.args[0] if call.args else _keyword(call, "source")
-                if source is not None:
-                    implementations.append(self._class(source, module))
-            elif isinstance(member, ast.FunctionDef | ast.AsyncFunctionDef):
-                decorator = next(
-                    (
-                        item
-                        for item in member.decorator_list
-                        if self.resolve(
-                            item.func if isinstance(item, ast.Call) else item, module
-                        )
-                        in _PROVIDE
-                    ),
-                    None,
-                )
-                if decorator is None:
-                    continue
-                if isinstance(decorator, ast.Call):
-                    provides = _keyword(decorator, "provides")
-                provides = provides or self._provided(member.returns, module)
-                implementations.extend(self._constructed(member, module))
-            port = self.annotation(provides, module) if provides else None
-            if port:
-                self._ports.setdefault(port, []).extend(
-                    (implementation, module) for implementation in implementations
-                )
+            previous = self.touched
+            self.touched = {module}
+            try:
+                port, implementations = self._provider_binding(member, module)
+                if port:
+                    modules = frozenset(self.touched)
+                    self._ports.setdefault(port, []).extend(
+                        (implementation, modules) for implementation in implementations
+                    )
+            finally:
+                self.touched = previous
+
+    def _provider_binding(
+        self, member: ast.stmt, module: str
+    ) -> tuple[str | None, list[_FactoryValue]]:
+        provides: ast.expr | None = None
+        implementations: list[_FactoryValue] = []
+        if isinstance(member, ast.Assign | ast.AnnAssign) and isinstance(
+            member.value, ast.Call
+        ):
+            call = member.value
+            if self.resolve(call.func, module) not in _PROVIDE:
+                return None, []
+            provides = _keyword(call, "provides")
+            source = call.args[0] if call.args else _keyword(call, "source")
+            if source is not None:
+                implementation = self._class(source, module)
+                implementations.append(implementation)
+                if provides is None and implementation is not None:
+                    provides = source
+        elif isinstance(member, ast.FunctionDef | ast.AsyncFunctionDef):
+            decorator = next(
+                (
+                    item
+                    for item in member.decorator_list
+                    if self.resolve(
+                        item.func if isinstance(item, ast.Call) else item, module
+                    )
+                    in _PROVIDE
+                ),
+                None,
+            )
+            if decorator is None:
+                return None, []
+            if isinstance(decorator, ast.Call):
+                provides = _keyword(decorator, "provides")
+            provides = provides or self._provided(member.returns, module)
+            implementations.extend(self._constructed(member, module))
+        port = self.annotation(provides, module) if provides else None
+        return port, implementations
 
     def _provided(self, node: ast.expr | None, module: str) -> ast.expr | None:
         # Generator factories annotate Iterator[T] and similar; they provide T.
@@ -1109,7 +1153,7 @@ class _Source:
             return node.slice
         return node
 
-    def _constructed(self, factory: _FunctionNode, module: str) -> list[str | None]:
+    def _constructed(self, factory: _FunctionNode, module: str) -> list[_FactoryValue]:
         # Follow values at each exit, rather than resolving all names after a walk.
         pending: list[ast.AST] = list(factory.body)
         yielding = False
@@ -1124,8 +1168,21 @@ class _Source:
                 break
             pending.extend(ast.iter_child_nodes(node))
         arguments = factory.args
+        positional = [*arguments.posonlyargs, *arguments.args]
+        bound = (
+            positional[:1]
+            if not any(
+                self.resolve(decorator, module) == "builtins.staticmethod"
+                for decorator in factory.decorator_list
+            )
+            else []
+        )
         assigned: _FactoryEnvironment = {
-            arg.arg: (None,)
+            arg.arg: (
+                None
+                if arg in bound
+                else self._factory_dependency(arg.annotation, module),
+            )
             for arg in [*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs]
         }
         result, remaining = self._factory_block(factory.body, module, assigned)
@@ -1133,11 +1190,27 @@ class _Source:
             result.append(None)
         return result or [None]
 
+    def _factory_dependency(
+        self, annotation: ast.expr | None, module: str
+    ) -> _ForwardedDependency | None:
+        if annotation is None:
+            return None
+        module, annotation = self.value(annotation, module)
+        if isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
+            try:
+                annotation = ast.parse(annotation.value, mode="eval").body
+            except SyntaxError:
+                return None
+        # Only a single source class supplies a dependency key. Optional, union,
+        # component-qualified and external annotations remain unresolved.
+        name = self._class(annotation, module)
+        return _ForwardedDependency(name) if name is not None else None
+
     def _factory_block(
         self, statements: list[ast.stmt], module: str, assigned: _FactoryEnvironment
-    ) -> tuple[list[str | None], _FactoryEnvironment | None]:
+    ) -> tuple[list[_FactoryValue], _FactoryEnvironment | None]:
         assigned = dict(assigned)
-        result: list[str | None] = []
+        result: list[_FactoryValue] = []
         for statement in statements:
             match statement:
                 case ast.Assign(targets=targets, value=value):
@@ -1200,7 +1273,7 @@ class _Source:
 
     def _factory_value(
         self, value: ast.expr | None, module: str, assigned: _FactoryEnvironment
-    ) -> tuple[str | None, ...]:
+    ) -> tuple[_FactoryValue, ...]:
         match value:
             case ast.Name(id=name):
                 return assigned.get(name, (None,))
