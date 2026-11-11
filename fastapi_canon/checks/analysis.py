@@ -14,6 +14,23 @@ _PLAIN_DECORATORS = frozenset(
         "functools.cached_property",
     }
 )
+_STACK_EFFECTS = frozenset(
+    f"contextlib.{owner}.{method}"
+    for owner in ("ExitStack", "AsyncExitStack")
+    for method in (
+        "close",
+        "aclose",
+        "__exit__",
+        "__aexit__",
+        "pop_all",
+        "enter_context",
+        "enter_async_context",
+        "callback",
+        "push",
+        "push_async_callback",
+        "push_async_exit",
+    )
+)
 
 
 @dataclass(frozen=True)
@@ -272,7 +289,9 @@ class _Analyzer:
                         receiver=target.receiver,
                     )
                 )
-            elif self.source.origin(node.func, function.module, env) is not None:
+            elif (
+                origin := self.source.origin(node.func, function.module, env)
+            ) is not None:
                 # Library code raises no application exceptions of its own; it
                 # reaches them only through receivers and callables it is given.
                 if isinstance(node.func, ast.Attribute | ast.Call):
@@ -282,6 +301,14 @@ class _Analyzer:
                         else node.func
                     )
                     flow.extend(self.expression(evaluated, function, env, stack))
+                if origin in _STACK_EFFECTS:
+                    flow.unknowns.append(
+                        _Unknown(
+                            "exit stack callbacks require resource ownership analysis",
+                            function.name,
+                            node.lineno,
+                        )
+                    )
                 for argument in [*node.args, *(kw.value for kw in node.keywords)]:
                     flow.extend(self._callback(argument, function, env, stack))
             else:
@@ -457,6 +484,26 @@ class _Analyzer:
             return flow
         manager = self._context_type(item.context_expr, function, env)
         asynchronous = isinstance(node, ast.AsyncWith)
+        # These managers neither invoke application hooks nor suppress their errors.
+        manager_type = self.source.infer(item.context_expr, function.module, env).name
+        if (
+            asynchronous
+            and manager_type
+            in {
+                "asyncio.Lock",
+                "asyncio.locks.Lock",
+                "asyncio.Timeout",
+                "asyncio.timeouts.Timeout",
+            }
+            and self.source.external(manager_type)
+        ):
+            local = env.copy()
+            if item.optional_vars is not None:
+                self._invalidate(item.optional_vars, local)
+            flow.extend(
+                self._context_manager(node, function, local, stack, reraised, index + 1)
+            )
+            return flow
         enter = (
             self.source.method(manager, "__aenter__" if asynchronous else "__enter__")
             if manager
@@ -936,9 +983,20 @@ class _Analyzer:
                             instance=True,
                         )
                     # Implicit failures (e.g. int(value)) can reach handlers too.
+                    implicit = [
+                        _Escape(name, (function.name,), handler.lineno)
+                        for name in names
+                        if name
+                        and name.startswith("builtins.")
+                        and self.source.mro(name)
+                    ]
                     flow.extend(
                         self.block(
-                            handler.body, function, handler_env, stack, tuple(caught)
+                            handler.body,
+                            function,
+                            handler_env,
+                            stack,
+                            tuple([*caught, *implicit]),
                         )
                     )
                 flow.escapes.extend(remaining)

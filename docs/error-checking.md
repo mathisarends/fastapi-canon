@@ -287,6 +287,13 @@ must fail CI; resolving a re-export does not establish complete runtime coverage
 
 ### Calls and return types
 
+**Unpublished, planned for 0.20.0:** `Any`, `object`, callable annotations and
+unbound class types do not establish an external implementation. Calls through
+them retain CAN003. A callable parameter with a standard-library default can
+still be replaced by its caller; concrete argument provenance through
+constructors and provider calls remains unresolved. Unknown constructor
+parameters also shadow same-named module functions instead of falling back to them.
+
 Callable application instances follow their resolved `__call__` method rather than
 their constructor. Bound classmethods bind their first parameter to the class
 used at the call site, including inherited factories; `cls(...)` follows that
@@ -335,6 +342,12 @@ Quoted class annotations are supported. Optional, union, component-qualified and
 external parameter annotations, missing registrations and dependency cycles remain
 incomplete. Conditional annotation origins remain incomplete for every affected
 operation. Existing reassignment and conditional-return rules still apply.
+
+Resource providers can yield a statically resolved implementation inside a
+`try/finally` with ordinary cleanup. Cleanup that returns or yields another value,
+unsupported cleanup control flow and exception handlers remain unresolved. This
+resolves the provided value only; it does not add provider startup or shutdown
+exceptions to the operation's HTTP error contract.
 
 When several providers bind the same port, including `override=True`
 providers and test providers within the roots, the call contributes the union
@@ -474,6 +487,13 @@ remain explicit boundaries. Its strict/require-complete command still exits 1;
 this change does not claim a fully validated reference application.
 
 ## Local context managers
+
+**Unpublished, planned for 0.20.0:** `asyncio.Lock` and `asyncio.timeout` have
+bounded standard-library summaries. The checker follows their `async with` body
+and preserves its application exceptions. Other library managers are not assumed
+to have the same behavior. Stored exit-stack registration, transfer and cleanup
+retain CAN003 because they can execute application callbacks. Annotating an exit
+stack does not establish ownership or its registered effects.
 
 Source checking follows explicit calls in local sync `__enter__`/`__exit__`
 methods and async `__aenter__`/`__aexit__` methods, as well as the `with` body.

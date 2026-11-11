@@ -52,6 +52,19 @@ _ITERATORS = frozenset(
     for module in ("collections.abc", "typing")
     for name in ("Iterator", "AsyncIterator", "Generator", "AsyncGenerator")
 )
+_OPAQUE_ANNOTATIONS = frozenset(
+    {
+        "builtins.object",
+        "builtins.type",
+        "collections.abc.Callable",
+        "typing.Any",
+        "typing_extensions.Any",
+        "typing.Callable",
+        "typing.Type",
+        "typing_extensions.Callable",
+        "typing_extensions.Type",
+    }
+)
 _RPC_CHANNELS = frozenset(
     {
         "fastapi_canon.integrations.websockets.RpcChannel",
@@ -129,6 +142,21 @@ _EXTERNAL_RETURNS = {
         ("stream_scalars", "sqlalchemy.ext.asyncio.AsyncScalarResult"),
     )
 }
+_EXTERNAL_RETURNS.update(
+    {
+        name: (returned, False)
+        for name, returned in {
+            "asyncio.Lock": "asyncio.locks.Lock",
+            "asyncio.locks.Lock": "asyncio.locks.Lock",
+            "asyncio.Event": "asyncio.locks.Event",
+            "asyncio.locks.Event": "asyncio.locks.Event",
+            "asyncio.timeout": "asyncio.timeouts.Timeout",
+            "asyncio.timeouts.timeout": "asyncio.timeouts.Timeout",
+            "pathlib.Path": "pathlib.Path",
+            "tempfile.TemporaryDirectory": "tempfile.TemporaryDirectory",
+        }.items()
+    }
+)
 
 
 def _walk_error(error: OSError) -> None:
@@ -657,7 +685,8 @@ class _Source:
                 return self.annotation(node.left, module, seen)
             if isinstance(node.left, ast.Constant) and node.left.value is None:
                 return self.annotation(node.right, module, seen)
-        return self.resolve(node, module)
+        name = self.resolve(node, module)
+        return None if name in _OPAQUE_ANNOTATIONS else name
 
     def rpc_channel(
         self, name: str | None
@@ -1222,6 +1251,23 @@ class _Source:
                 case ast.AnnAssign(target=ast.Name(id=name), value=value):
                     if value is not None:
                         assigned[name] = self._factory_value(value, module, assigned)
+                case ast.Try(body=body, handlers=[], orelse=[], finalbody=cleanup):
+                    # Resource providers yield an implementation before cleanup.
+                    if any(
+                        isinstance(node, ast.Return | ast.Yield | ast.YieldFrom)
+                        for node in ast.walk(ast.Module(body=cleanup, type_ignores=[]))
+                    ):
+                        return [*result, None], None
+                    values, remaining = self._factory_block(body, module, assigned)
+                    result.extend(values)
+                    _, cleaned = self._factory_block(
+                        cleanup, module, remaining or assigned
+                    )
+                    if remaining is None:
+                        return result, None
+                    if cleaned is None:
+                        return [*result, None], None
+                    assigned = cleaned
                 case ast.Return(value=value):
                     result.extend(self._factory_value(value, module, assigned))
                     return result, None
@@ -1349,6 +1395,7 @@ class _Source:
                     + constructor.node.args.args
                     + constructor.node.args.kwonlyargs
                 ):
+                    constructor_env.setdefault(arg.arg, _Value())
                     if arg.annotation:
                         resolved = self.annotation(arg.annotation, constructor.module)
                         if resolved:

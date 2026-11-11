@@ -25,6 +25,16 @@ All notable changes to `fastapi-canon` are documented in this file.
   keep `--require-complete` enabled wherever unresolved paths must block CI.
   Conditional annotation origins remain visible on every affected operation.
 
+- Error-contract checking resolves resource-provider yields inside supported
+  `try/finally` blocks and preserves body errors through `asyncio.Lock` and
+  `asyncio.timeout`. Newly visible application errors can fail `--strict`.
+  Stored exit-stack effects and opaque `Any`/`object`/callable annotations now
+  report CAN003 instead of treating application callbacks as ordinary library
+  calls. These changes target unpublished 0.20.0. Scan all application and shared
+  library roots, review mappings and `raises`, and retain `--require-complete`.
+  Constructor defaults do not establish callback provenance. Full argument,
+  container and resource-effect propagation remain outside the supported model.
+
 ## 0.19.0 - 2026-11-10
 
 ### TL;DR

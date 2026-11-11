@@ -82,8 +82,19 @@ def scan(
             "def repository(self, local: 'LocalRepository') -> Repository:",
             "alias = local\nreturn alias",
         ),
+        (
+            "async def repository(self, local: LocalRepository) -> AsyncIterator[Repository]:",
+            "try:\n    yield local\nfinally:\n    cleanup()",
+        ),
     ],
-    ids=["sync", "async", "generator", "async-generator", "forward-reference-alias"],
+    ids=[
+        "sync",
+        "async",
+        "generator",
+        "async-generator",
+        "forward-reference-alias",
+        "resource-cleanup",
+    ],
 )
 @pytest.mark.parametrize("declared", [False, True], ids=["missing-contract", "covered"])
 def test_registered_forwarded_dependencies_preserve_error_contracts(

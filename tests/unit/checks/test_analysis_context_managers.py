@@ -25,6 +25,79 @@ router = APIRouter()
 """
 
 
+@pytest.mark.parametrize("manager", ["asyncio.Lock()", "asyncio.timeout(1)"])
+@pytest.mark.parametrize("mapping", ["registered", "declared"])
+def test_asyncio_managers_preserve_body_errors(
+    analyze: Callable[..., tuple[int, dict[str, Any]]], manager: str, mapping: str
+) -> None:
+    status, report = analyze(
+        f"""
+import asyncio
+@router.get('/')
+async def endpoint():
+    async with {manager}:
+        require_item(-1)
+""",
+        mapping=mapping,
+    )
+    (operation,) = report["operations"]
+    assert operation["complete"]
+    assert status == int(mapping != "declared")
+    assert [d["code"] for d in operation["diagnostics"]] == (
+        [] if mapping == "declared" else ["CAN001"]
+    )
+
+
+@pytest.mark.parametrize(
+    "owner,method,awaited,arguments",
+    [
+        ("ExitStack", "close", "", ""),
+        ("AsyncExitStack", "aclose", "await ", ""),
+        ("ExitStack", "__exit__", "", "None, None, None"),
+        ("AsyncExitStack", "__aexit__", "await ", "None, None, None"),
+        ("ExitStack", "pop_all", "", ""),
+    ],
+)
+def test_stored_exit_stack_cannot_hide_application_cleanup(
+    analyze: Callable[..., tuple[int, dict[str, Any]]],
+    owner: str,
+    method: str,
+    awaited: str,
+    arguments: str,
+) -> None:
+    status, report = analyze(f"""
+from contextlib import {owner}
+class Resource:
+    stack: {owner}
+@router.get('/')
+async def endpoint(resource: Resource):
+    {awaited}resource.stack.{method}({arguments})
+""")
+    (operation,) = report["operations"]
+    assert status == 1 and not operation["complete"]
+    assert any("resource ownership" in d["message"] for d in operation["diagnostics"])
+
+
+def test_implicit_builtin_reraise_preserves_caught_application_subclasses(
+    analyze: Callable[..., tuple[int, dict[str, Any]]],
+) -> None:
+    status, report = analyze("""
+class StorageFailure(OSError): pass
+def save():
+    raise StorageFailure()
+@router.get('/')
+def endpoint():
+    try:
+        save()
+    except OSError:
+        raise
+""")
+    (operation,) = report["operations"]
+    assert status == 1 and operation["complete"]
+    assert [d["code"] for d in operation["diagnostics"]] == ["CAN002"]
+    assert "api.StorageFailure" in operation["diagnostics"][0]["message"]
+
+
 @pytest.mark.parametrize(
     "imports,manager",
     [
