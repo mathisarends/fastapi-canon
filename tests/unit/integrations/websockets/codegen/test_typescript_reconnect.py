@@ -1,13 +1,9 @@
 import subprocess
 from textwrap import dedent
 
-from tests.unit.integrations.websockets.codegen.test_typescript_cancellation import (
-    cancellation_sdk as cancellation_sdk,
-)
 
-
-def test_reconnect_policy_state_and_cleanup_in_node(cancellation_sdk):
-    root, node = cancellation_sdk
+def test_reconnect_policy_state_and_cleanup_in_node(compiled_typescript_sdk):
+    root, node = compiled_typescript_sdk
     runner = root / "reconnect.js"
     runner.write_text(
         dedent("""

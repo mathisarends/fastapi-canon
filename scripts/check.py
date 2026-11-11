@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import shutil
 import subprocess
@@ -6,6 +7,7 @@ import sys
 import tempfile
 import tomllib
 from pathlib import Path
+from time import perf_counter
 
 _ROOT = Path(__file__).resolve().parents[1]
 _REFERENCE = _ROOT / "examples/reference-service"
@@ -18,15 +20,18 @@ def _main() -> None:
         "gate",
         choices=("all", "architecture", "lint", "types", "test", "clients", "browser"),
     )
+    parser.add_argument("--report-dir", type=Path)
     args = parser.parse_args()
+    runner = _Runner(args.report_dir)
     gates = (
         ("architecture", "lint", "types", "test", "clients")
         if args.gate == "all"
         else (args.gate,)
     )
     for gate in gates:
+        runner.gate = gate
         if gate == "architecture":
-            _run(
+            runner.run(
                 _ROOT,
                 "uv",
                 "run",
@@ -40,18 +45,18 @@ def _main() -> None:
                 python=False,
             )
         elif gate == "lint":
-            _run(_ROOT, "scripts/check_documentation.py")
+            runner.run(_ROOT, "scripts/check_documentation.py")
             # Moving configs can leave stale import classifications in Ruff's cache.
-            _run(_ROOT, "-m", "ruff", "check", "--no-cache", ".")
-            _run(_ROOT, "-m", "ruff", "format", "--no-cache", "--check", ".")
+            runner.run(_ROOT, "-m", "ruff", "check", "--no-cache", ".")
+            runner.run(_ROOT, "-m", "ruff", "format", "--no-cache", "--check", ".")
             for transport in _TRANSPORTS:
                 source = f"fastapi_canon/integrations/{transport}"
                 config = (
                     "--config",
                     f"fastapi_canon/integrations/{transport}/.ruff.toml",
                 )
-                _run(_ROOT, "-m", "ruff", "check", "--no-cache", *config, source)
-                _run(
+                runner.run(_ROOT, "-m", "ruff", "check", "--no-cache", *config, source)
+                runner.run(
                     _ROOT,
                     "-m",
                     "ruff",
@@ -66,7 +71,7 @@ def _main() -> None:
             # Materialize them from saved contracts without rewriting those inputs,
             # then verify live drift before checking the consumer's types.
             example = "examples/canonical_errors/fastapi-canon.toml"
-            _run(
+            runner.run(
                 _ROOT,
                 "-m",
                 "fastapi_canon",
@@ -75,11 +80,11 @@ def _main() -> None:
                 example,
                 "--offline",
             )
-            _run(
+            runner.run(
                 _ROOT, "-m", "fastapi_canon", "generate", "--config", example, "--check"
             )
-            _run(_ROOT, "-m", "mypy")
-            _run(
+            runner.run(_ROOT, "-m", "mypy")
+            runner.run(
                 _ROOT,
                 "-m",
                 "pyright",
@@ -88,7 +93,7 @@ def _main() -> None:
                 "--pythonpath",
                 sys.executable,
             )
-            _run(
+            runner.run(
                 _ROOT,
                 "-m",
                 "pylint",
@@ -96,11 +101,13 @@ def _main() -> None:
                 "pyproject.toml",
                 "fastapi_canon/integrations/sse",
             )
-            _run(_ROOT, "uv", "build", "--out-dir", "dist/typecheck", python=False)
+            runner.run(
+                _ROOT, "uv", "build", "--out-dir", "dist/typecheck", python=False
+            )
             metadata = tomllib.loads((_ROOT / "pyproject.toml").read_text("utf-8"))
             version = metadata["project"]["version"]
             (wheel,) = (_ROOT / "dist/typecheck").glob(f"fastapi_canon-{version}-*.whl")
-            _run(
+            runner.run(
                 _ROOT / "dist/typecheck",
                 "uv",
                 "run",
@@ -117,10 +124,15 @@ def _main() -> None:
                 str(_ROOT / "scripts/websockets/verify_types.py"),
                 python=False,
             )
-            _run(_REFERENCE, "-m", "mypy", "src", "tests")
-            _check_webrtc_types()
+            runner.run(_REFERENCE, "-m", "mypy", "src", "tests")
+            _check_webrtc_types(runner)
         elif gate == "test":
-            _run(
+            reports = (
+                ("--junitxml", str(runner.directory / "python.xml"))
+                if runner.directory
+                else ()
+            )
+            runner.run(
                 _ROOT,
                 "-m",
                 "pytest",
@@ -128,11 +140,18 @@ def _main() -> None:
                 "--cov=fastapi_canon.integrations.webrtc",
                 "--cov-branch",
                 "--cov-fail-under=85",
+                "--durations=30",
+                *reports,
             )
-            _run(_REFERENCE, "-m", "pytest", "-q")
+            reference_reports = (
+                ("--junitxml", str(runner.directory / "reference.xml"))
+                if runner.directory
+                else ()
+            )
+            runner.run(_REFERENCE, "-m", "pytest", "-q", *reference_reports)
         elif gate == "clients":
             for name in ("generated_clients", "socket_protocol", "typed_socket"):
-                _run(
+                runner.run(
                     _ROOT,
                     "-m",
                     "fastapi_canon.integrations.websockets.codegen.cli",
@@ -141,10 +160,10 @@ def _main() -> None:
                     f"examples/websockets/{name}/rpcgen.toml",
                     "--check",
                 )
-            _run(_ROOT, "scripts/sse/codegen.py", "--check")
+            runner.run(_ROOT, "scripts/sse/codegen.py", "--check")
             cli = ("-m", "fastapi_canon.integrations.webrtc.codegen.cli")
             contract = "examples/webrtc/practice/contract.json"
-            _run(
+            runner.run(
                 _ROOT,
                 *cli,
                 "contract",
@@ -154,7 +173,7 @@ def _main() -> None:
                 contract,
                 "--check",
             )
-            _run(
+            runner.run(
                 _ROOT,
                 *cli,
                 "generate",
@@ -167,13 +186,15 @@ def _main() -> None:
                 "--check",
             )
             for task in ("typecheck", "test:coverage"):
-                _run(_ROOT, _pnpm(), "run", task, python=False)
+                runner.run(_ROOT, _pnpm(), "run", task, python=False)
         elif gate == "browser":
             environment = {**os.environ, "FASTAPI_WEBRTC_PYTHON": sys.executable}
-            _run(_ROOT, _pnpm(), "run", "test:browser", python=False, env=environment)
+            runner.run(
+                _ROOT, _pnpm(), "run", "test:browser", python=False, env=environment
+            )
 
 
-def _check_webrtc_types() -> None:
+def _check_webrtc_types(runner: "_Runner") -> None:
     # The root mypy profile excludes transport code; this profile checks it.
     config = """[tool.mypy]
 python_version = "3.12"
@@ -191,7 +212,7 @@ ignore_missing_imports = true
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / "webrtc.toml"
         path.write_text(config, encoding="utf-8")
-        _run(
+        runner.run(
             _ROOT,
             "-m",
             "mypy",
@@ -214,12 +235,52 @@ def _pnpm() -> str:
     return pnpm
 
 
-def _run(
-    root: Path, *arguments: str, python: bool = True, env: dict[str, str] | None = None
-) -> None:
-    command = [sys.executable, *arguments] if python else list(arguments)
-    print(f"[{root.relative_to(_ROOT)}] {' '.join(command)}", flush=True)
-    subprocess.run(command, cwd=root, check=True, env=env)
+class _Runner:
+    def __init__(self, directory: Path | None) -> None:
+        self.directory = directory.resolve() if directory else None
+        self.gate = ""
+        self.commands: list[dict[str, object]] = []
+        if self.directory:
+            self.directory.mkdir(parents=True, exist_ok=True)
+
+    def run(
+        self,
+        root: Path,
+        *arguments: str,
+        python: bool = True,
+        env: dict[str, str] | None = None,
+    ) -> None:
+        command = [sys.executable, *arguments] if python else list(arguments)
+        print(f"[{root.relative_to(_ROOT)}] {' '.join(command)}", flush=True)
+        started = perf_counter()
+        completed = subprocess.run(command, cwd=root, check=False, env=env)
+        elapsed = perf_counter() - started
+        print(f"[{self.gate}] {elapsed:.2f}s; exit {completed.returncode}", flush=True)
+        self.commands.append(
+            {
+                "gate": self.gate,
+                "cwd": str(root.relative_to(_ROOT)),
+                "command": command,
+                "seconds": elapsed,
+                "returncode": completed.returncode,
+            }
+        )
+        if self.directory:
+            (self.directory / f"{self.gate}.json").write_text(
+                json.dumps(
+                    {
+                        "python": sys.version,
+                        "platform": sys.platform,
+                        "commands": [
+                            item for item in self.commands if item["gate"] == self.gate
+                        ],
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+        completed.check_returncode()
 
 
 if __name__ == "__main__":

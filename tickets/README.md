@@ -12,7 +12,7 @@ their PRs.
 
 The removed tickets no longer require active tracking:
 
-- DX-018 is implemented by common SDK [multipart uploads and binary transfers](../docs/unified-canon-concept.md#multipart-uploads-and-binary-transfers).
+- DX-018 is covered by [multipart uploads and binary transfers](../docs/integrations/uploads.md).
 - DX-017 and DX-019 are superseded by the [quickstart](../docs/quickstart.md)
   and [runnable example](../examples/canonical_errors/README.md). DX-017's
   remaining proposal to commit a combined generated SDK is dropped; generation
@@ -22,7 +22,7 @@ The removed tickets no longer require active tracking:
   [#102](https://github.com/mathisarends/fastapi-canon/pull/102). The still-open
   WebSocket facade proposal is retained in DX-031.
 - DX-025 is implemented by [#124](https://github.com/mathisarends/fastapi-canon/pull/124);
-  see [single-app generation](../docs/unified-canon-concept.md#configuration).
+  see [single-app generation](../docs/codegen.md#configuration).
 - DX-030 and DX-032 are implemented by
   [#105](https://github.com/mathisarends/fastapi-canon/pull/105) and
   [#115](https://github.com/mathisarends/fastapi-canon/pull/115);
