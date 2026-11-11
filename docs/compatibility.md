@@ -145,7 +145,7 @@ integration implementations, which share Canon's version.
 
 | Package | Published |
 | --- | --- |
-| `fastapi-canon` | 0.17.0 |
+| `fastapi-canon` | 0.19.0 |
 | `fastapi-streams` | 0.5.0 |
 | `fastapi-rpckit` | 0.4.1 |
 | `fastapi-webrtc` | 0.3.0 |
@@ -307,9 +307,9 @@ minimum dependencies are checked separately. See the
 [telemetry guide](telemetry.md) for native FastAPI
 bridging, instrumentation ownership, and operation-span limits.
 
-CI runs package-specific lint/type checks, separate Python suites and generated
-client drift/TypeScript tests on Linux with Python 3.12–3.14 and Windows with
-Python 3.14. Linux/Python 3.14 also runs Chromium/aiortc browser tests and installed
+CI runs the root Python suite and reference-service suite on Linux with Python
+3.12–3.14 and Windows with Python 3.14. Linux/Python 3.14 also runs
+Chromium/aiortc browser tests and installed
 artifact checks. A separate job resolves the lowest direct dependencies the
 declared ranges allow (`uv lock --resolution lowest-direct`) and runs the full
 Python suite on Python 3.12. Because the development environment installs every
@@ -318,9 +318,11 @@ extra together, it exercises their jointly lowest versions, for example FastAPI
 covers each combination at its own bounds.
 
 Pushes to `main`, manual runs and pull requests labeled `full-ci` run all of these
-checks. Other pull requests run the static gates once and the suite on Python 3.12
-and 3.14; documentation-only changes skip the suite, and dependency, browser and
-artifact checks run when their inputs change. See the
+checks. Architecture, lint, types, client drift and the standalone TypeScript
+suites run once on Linux/Python 3.12. Python and generated-client runtime tests
+run across the selected Python/platform matrix. Other pull requests select Python
+3.12 and 3.14; documentation-only changes skip the suite, and dependency, browser
+and artifact checks run when their inputs change. See the
 [active CI workflow](../.github/workflows/ci.yml).
 
 The installed-wheel matrix covers:

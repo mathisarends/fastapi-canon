@@ -4,6 +4,14 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## Unreleased
 
+### Development
+
+- Add reproducible pytest timing reports with fixture and subprocess counts,
+  command timings and CI JUnit artifacts.
+- Share compiled WebSocket TypeScript test artifacts across the session while
+  retaining fresh Node processes for each scenario.
+- Run static CI gates once while preserving the Python/platform runtime matrix.
+
 ## 0.19.0 - 2026-11-10
 
 ### TL;DR

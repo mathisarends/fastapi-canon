@@ -3,10 +3,6 @@ from textwrap import dedent
 
 from fastapi_canon.integrations.websockets.codegen.ir import build_ir
 
-from tests.unit.integrations.websockets.codegen.test_typescript_cancellation import (
-    cancellation_sdk as cancellation_sdk,
-)
-
 
 def test_heartbeat_capability_requires_exact_wire_contract(document):
     assert build_ir(document).heartbeat
@@ -16,8 +12,8 @@ def test_heartbeat_capability_requires_exact_wire_contract(document):
     ).heartbeat
 
 
-def test_heartbeat_breaker_recovery_and_suspended_timers(cancellation_sdk):
-    root, node = cancellation_sdk
+def test_heartbeat_breaker_recovery_and_suspended_timers(compiled_typescript_sdk):
+    root, node = compiled_typescript_sdk
     runner = root / "heartbeat.js"
     runner.write_text(
         dedent("""

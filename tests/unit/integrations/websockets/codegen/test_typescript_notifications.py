@@ -1,13 +1,11 @@
 import subprocess
 from textwrap import dedent
 
-from tests.unit.integrations.websockets.codegen.test_typescript_cancellation import (
-    cancellation_sdk as cancellation_sdk,
-)
 
-
-def test_notification_recovery_overflow_and_iterator_cleanup_in_node(cancellation_sdk):
-    root, node = cancellation_sdk
+def test_notification_recovery_overflow_and_iterator_cleanup_in_node(
+    compiled_typescript_sdk,
+):
+    root, node = compiled_typescript_sdk
     runner = root / "notifications.js"
     runner.write_text(
         dedent("""

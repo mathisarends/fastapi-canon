@@ -283,6 +283,8 @@ tests:
     tests/contract/integrations/**, tests/integration/test_opentelemetry.py,
     tests/integration/test_optional_streams.py, tests/integration/codegen/**,
     tests/integration/test_stack.py, tests/unit/test_release.py,
+    # The benchmark CLI tests maintainer tooling rather than a library module.
+    tests/integration/scripts/test_benchmark_tests.py,
     examples/reference-service/tests/**]
 rules:
   import-cycle: error
