@@ -19,6 +19,7 @@ from fastapi_canon.checks.generator_phases import (
 )
 from fastapi_canon.checks.library_types import _LibraryTypes
 from fastapi_canon.checks.model_values import _Models
+from fastapi_canon.checks.sql_values import _SqlValues
 from fastapi_canon.checks.symbols import (
     _Definition,
     _import_condition,
@@ -179,7 +180,7 @@ _RESULT_TYPES = frozenset(
     for name in names
 )
 # Bounded external summaries: an awaited buffered execute returns a sync Result.
-# Values extracted from those results may be application objects and stay unknown.
+# Extracted values stay unknown unless an ORM entity/query summary supplies them.
 _EXTERNAL_RETURNS = {
     f"{owner}.{method}": (returned, True)
     for owner in (
@@ -331,6 +332,10 @@ class _Source:
     @property
     def models(self) -> _Models:
         return _Models(self)
+
+    @property
+    def sql(self) -> _SqlValues:
+        return _SqlValues(self)
 
     def expand(self, value: _Value, seen: frozenset[str] = frozenset()) -> _Value:
         values = []
@@ -2240,6 +2245,12 @@ class _Source:
                 )
             if model_method == "model_dump_json":
                 return _Value("builtins.str", instance=True, exact=True)
+        sql_return = self.sql.called(node, target, module, env, awaited=awaited)
+        if sql_return is not None:
+            return replace(
+                sql_return.value,
+                unresolved=sql_return.uncertain or sql_return.value.unresolved,
+            )
         external_return = _EXTERNAL_RETURNS.get(target.name)
         if (
             external_return

@@ -10,6 +10,8 @@ from pathlib import Path
 from fastapi_canon.checks.value_flow import _join, _Value
 
 _PUBLIC_TYPES = {
+    "typing.Self": "typing.Self",
+    "typing_extensions.Self": "typing.Self",
     "pydantic.BaseModel": "pydantic.main.BaseModel",
     "pydantic.RootModel": "pydantic.root_model.RootModel",
     "pydantic.TypeAdapter": "pydantic.type_adapter.TypeAdapter",
@@ -266,7 +268,12 @@ class _LibraryTypes:
                         and isinstance(positional[0].annotation, ast.Name)
                         and positional[0].annotation.id == node.returns.id
                     ):
-                        return _Value(target.bound.name, instance=True)
+                        return _Value(
+                            target.bound.name,
+                            instance=True,
+                            arguments=target.bound.arguments,
+                            unresolved=target.bound.unresolved,
+                        )
                     return (
                         self.annotation(node.returns, cls[0], target.bound)
                         if node.returns
@@ -335,7 +342,16 @@ class _LibraryTypes:
         if isinstance(node, ast.Name) and module and node.id in module.type_variables:
             return _Value()
         if name in {"typing.Self", "typing_extensions.Self"}:
-            return _Value(receiver.name, instance=True) if receiver else _Value()
+            return (
+                _Value(
+                    receiver.name,
+                    instance=True,
+                    arguments=receiver.arguments,
+                    unresolved=receiver.unresolved,
+                )
+                if receiver
+                else _Value()
+            )
         if name in {"typing.Any", "typing_extensions.Any", "builtins.object"}:
             return _Value()
         return _Value(name or "", instance=True)
@@ -429,6 +445,12 @@ class _LibraryTypes:
                     else frozenset()
                 )
         for node in pending:
+            if (
+                isinstance(node, ast.If)
+                and isinstance(node.test, ast.Constant)
+                and isinstance(node.test.value, bool)
+            ):
+                pending.extend(node.body if node.test.value else node.orelse)
             if isinstance(node, ast.If) and ast.unparse(node.test) in {
                 "TYPE_CHECKING",
                 "typing.TYPE_CHECKING",

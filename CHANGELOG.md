@@ -37,7 +37,7 @@ All notable changes to `fastapi-canon` are documented in this file.
   container values and shared-object mutations through application call chains.
   It follows converging recursive summaries, dependency construction, generator
   resource entry, owned exit-stack cleanup, awaited tasks and supported Pydantic
-  value shapes. Opaque values and unsupported effects remain CAN003. Newly found
+  and ORM value shapes. Opaque values and unsupported effects remain CAN003. Newly found
   application exceptions can fail `--strict`; this targets unpublished 0.20.0.
   Scan every application and shared-library import root, review new mappings and
   `raises`, and use `--strict --require-complete` for the intended CI scope.

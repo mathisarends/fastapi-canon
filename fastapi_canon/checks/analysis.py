@@ -1167,6 +1167,17 @@ class _Analyzer:
             origin := self.source.call_origin(target)
             or self.source.origin(node.func, function.module, env)
         ) is not None:
+            sql_return = self.source.sql.called(
+                node, target, function.module, env, awaited=awaited
+            )
+            if sql_return is not None and sql_return.uncertain:
+                flow.unknowns.append(
+                    _Unknown(
+                        "unresolved custom ORM value transformation",
+                        function.name,
+                        node.lineno,
+                    )
+                )
             if target.bound and self.source.model(target.bound.name):
                 model_method = origin.rsplit(".", 1)[-1]
                 definition = self.source.definitions.get(target.bound.name)

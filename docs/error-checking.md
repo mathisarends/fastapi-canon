@@ -205,7 +205,13 @@ protocols and global callback registries remain outside this model.
 
 Bounded return-shape summaries cover standard containers, supported SQLAlchemy
 result wrappers and Pydantic models. They describe values, not library error
-inventories. Pydantic `Any` remains opaque; it is not treated as JSON. Validated
+inventories. Known ORM entities passed to `Session.get`, SQLModel `exec` and
+SQLAlchemy `execute`/`scalars` retain their row types through supported select,
+result and scalar-result operations. Generic `Self` return types preserve their
+type arguments. Free SQL, unknown entity arguments and custom application column
+converters remain incomplete; their database internals are not scanned.
+
+Pydantic `Any` remains opaque; it is not treated as JSON. Validated
 `JsonValue` and successful JSON-mode dumps have JSON value shapes. Model validation,
 after validators, copies and actual field values preserve application objects;
 unvalidated `model_copy(update=...)` updates are not assumed validated.
