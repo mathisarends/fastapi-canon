@@ -1796,7 +1796,22 @@ class _Analyzer:
                 None,
             )
             if member is not None:
-                bindings = None
+                assert isinstance(member.node, ast.FunctionDef | ast.AsyncFunctionDef)
+                parameters = [
+                    *member.node.args.posonlyargs,
+                    *member.node.args.args,
+                    *member.node.args.kwonlyargs,
+                    *filter(None, [member.node.args.vararg, member.node.args.kwarg]),
+                ]
+                # A class passed as a library callback has no known invocation
+                # arguments. Its annotations cannot supply those runtime values.
+                bindings = {parameter.arg: _Value() for parameter in parameters}
+                if parameters:
+                    bindings[parameters[0].arg] = (
+                        _Value(definition.name, exact=True)
+                        if hook == "__new__"
+                        else instance or _Value(definition.name, instance=True)
+                    )
                 if instance is not None and call is not None:
                     bound = (
                         _Value(definition.name, exact=True)
@@ -1804,9 +1819,19 @@ class _Analyzer:
                         else instance
                     )
                     if hook in {"__new__", "__init__"}:
-                        bindings = self.source.call_environment(
+                        call_bindings = self.source.call_environment(
                             member, call, function.module, env or {}, bound
                         )
+                        if call_bindings is None:
+                            flow.unknowns.append(
+                                _Unknown(
+                                    "unresolved constructor arguments",
+                                    function.name,
+                                    line,
+                                )
+                            )
+                        else:
+                            bindings = call_bindings
                     else:
                         assert isinstance(
                             member.node, ast.FunctionDef | ast.AsyncFunctionDef

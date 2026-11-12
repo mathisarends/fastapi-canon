@@ -101,6 +101,22 @@ def route(): adapter()
     )
 
 
+def test_library_constructor_callbacks_do_not_trust_parameter_annotations(
+    scan: Callable[[str], dict[str, Any]],
+) -> None:
+    report = scan("""
+class Risky:
+    def strip(self): raise Missing()
+class Constructor:
+    def __init__(self, value: str): value.strip()
+@router.get('/callback')
+def route(): list(map(Constructor, [Risky()]))
+""")
+    [operation] = report["operations"]
+    assert not operation["complete"]
+    assert any(d["code"] == "CAN003" for d in operation["diagnostics"])
+
+
 def test_thread_call_follows_every_possible_bound_receiver(
     scan: Callable[[str], dict[str, Any]],
 ) -> None:
