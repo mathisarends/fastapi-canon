@@ -3187,6 +3187,32 @@ class _Source:
                     fields[node.target.id] = self.infer(node.value, scope, {})
                 else:
                     fields[node.target.id] = self.typed(node.annotation, scope)
+            if (
+                not call.args
+                and not call.keywords
+                and self.models.standard_settings(owner)
+            ):
+                raw_fields["$settings-input"] = _Value(
+                    "builtins.bool", instance=True, literal=True
+                )
+                for node, scope in declared:
+                    assert isinstance(node.target, ast.Name)
+                    field = node.target.id
+                    annotation = self.typed(node.annotation, scope)
+                    raw = self.models.environment_value(
+                        annotation, site + ":environment:" + field
+                    )
+                    if node.value is not None:
+                        raw = _join(raw, fields[field])
+                    raw_fields["$input:" + field] = raw
+                    validated = self.models.normalize(
+                        annotation, raw, site + ":validated:" + field
+                    )
+                    fields[field] = (
+                        _join(validated, fields[field])
+                        if node.value is not None
+                        else validated
+                    )
         result = self.store(
             _Value(
                 owner,

@@ -2003,6 +2003,16 @@ class _Analyzer:
                 )
         if external:
             if self.source.model(definition.name):
+                if self.source.models.settings(definition.name) and (
+                    instance is None
+                    or "$settings-input"
+                    not in dict(self.source.object(instance).fields)
+                ):
+                    flow.unknowns.append(
+                        _Unknown(
+                            "unresolved settings input sources", function.name, line
+                        )
+                    )
                 if self.source.models.opaque(definition.name):
                     flow.unknowns.append(
                         _Unknown(

@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from dataclasses import replace
 from typing import Protocol
 
+from fastapi_canon.checks.library_types import _LibraryTypes
 from fastapi_canon.checks.symbols import _Definition
 from fastapi_canon.checks.value_flow import _join, _Value
 
@@ -16,11 +17,14 @@ class _ModelSource(Protocol):
 
     heap: dict[str, _Value]
     revision: int
+    libraries: _LibraryTypes
 
     @property
     def definitions(self) -> Mapping[str, _Definition]: ...
 
     def lineage(self, name: str) -> tuple[list[str], bool] | None: ...
+    def mro(self, name: str) -> tuple[str, ...] | None: ...
+    def external_bases(self, owner: str) -> tuple[str, ...]: ...
     def method(self, owner: str, attribute: str) -> _Definition | None: ...
     def value(self, node: ast.expr, module: str) -> tuple[str, ast.expr]: ...
     def resolve(self, node: ast.expr, module: str) -> str | None: ...
@@ -64,6 +68,63 @@ class _Models:
             )
             source.revision += 1
         return root
+
+    def settings(self, owner: str) -> bool:
+        return any(
+            self.source.libraries.canonical(name)
+            == "pydantic_settings.main.BaseSettings"
+            for name in (self.source.mro(owner) or self.source.external_bases(owner))
+        )
+
+    def standard_settings(self, owner: str) -> bool:
+        if not self.settings(owner):
+            return False
+        hooks = {"settings_customise_sources", "_settings_build_values"}
+        for name in (self.source.lineage(owner) or ([owner], False))[0]:
+            definition = self.source.definitions[name]
+            assert isinstance(definition.node, ast.ClassDef)
+            for node in definition.node.body:
+                if (
+                    isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+                    and node.name in hooks
+                ):
+                    return False
+                if isinstance(node, ast.Assign | ast.AnnAssign):
+                    targets = (
+                        node.targets if isinstance(node, ast.Assign) else [node.target]
+                    )
+                    if any(
+                        isinstance(target, ast.Name) and target.id in hooks
+                        for target in targets
+                    ):
+                        return False
+        return True
+
+    def environment_value(self, annotation: _Value, site: str) -> _Value:
+        scalars = {
+            "builtins.str",
+            "builtins.bytes",
+            "builtins.int",
+            "builtins.float",
+            "builtins.bool",
+            "builtins.NoneType",
+            "uuid.UUID",
+            "pathlib.Path",
+            "datetime.datetime",
+            "datetime.date",
+            "datetime.time",
+            "decimal.Decimal",
+            "pydantic.SecretStr",
+            "pydantic.SecretBytes",
+            "pydantic.types.SecretStr",
+            "pydantic.types.SecretBytes",
+        }
+        if all(value.name in scalars for value in annotation.variants):
+            return _join(
+                _Value("builtins.str", instance=True, exact=True),
+                _Value("builtins.NoneType", instance=True, exact=True),
+            )
+        return self.json(site)
 
     def fields(self, owner: str) -> list[tuple[str, _Value]]:
         result = {}
@@ -219,6 +280,12 @@ class _Models:
             "pydantic.SecretBytes",
             "pydantic.types.SecretStr",
             "pydantic.types.SecretBytes",
+            "uuid.UUID",
+            "pathlib.Path",
+            "datetime.datetime",
+            "datetime.date",
+            "datetime.time",
+            "decimal.Decimal",
         }
         for _, decorator in self.hooks(owner):
             mode = _mode(decorator)
