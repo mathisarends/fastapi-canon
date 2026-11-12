@@ -321,6 +321,17 @@ class _LibraryTypes:
 
     def returned(self, target: _Value, *, awaited: bool) -> _Value | None:
         name = self.canonical(target.name)
+        if (
+            name == "pydantic.types._SecretBase.get_secret_value"
+            and target.bound
+            and not awaited
+        ):
+            native = {
+                "pydantic.types.SecretStr": "builtins.str",
+                "pydantic.types.SecretBytes": "builtins.bytes",
+            }.get(self.canonical(target.bound.name))
+            if native is not None:
+                return _Value(native, instance=True, exact=True)
         scope, _, member = name.rpartition(".")
         cls = self.definition(scope)
         if cls and isinstance(cls[1], ast.ClassDef):

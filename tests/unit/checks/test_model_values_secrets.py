@@ -130,3 +130,30 @@ def route(): Body(token=UnsafeSecret('safe')).token.get_secret_value()
     assert (
         operation["diagnostics"][0]["trace"][-1] == "api.UnsafeSecret.get_secret_value"
     )
+
+
+def test_abstract_secret_parameters_follow_their_declared_public_payload_type(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "api.py").write_text(
+        PRELUDE
+        + """
+@router.get('/')
+def route(secret: SecretStr): secret.get_secret_value().strip()
+""",
+        encoding="utf8",
+    )
+    main(
+        [
+            "check",
+            "errors",
+            str(tmp_path),
+            "--strict",
+            "--require-complete",
+            "--format",
+            "json",
+        ]
+    )
+    [operation] = json.loads(capsys.readouterr().out)["operations"]
+    assert operation["complete"], operation["diagnostics"]
+    assert operation["diagnostics"] == []

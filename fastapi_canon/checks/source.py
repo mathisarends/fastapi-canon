@@ -2265,7 +2265,13 @@ class _Source:
             and self.libraries.canonical(target.name)
             == "pydantic.types._SecretBase.get_secret_value"
         ):
-            return dict(self.object(target.bound).fields).get("_secret_value", _Value())
+            receiver = self.object(target.bound)
+            payload = dict(receiver.fields).get("_secret_value")
+            if payload is not None:
+                return payload
+            if not receiver.site and not receiver.fields:
+                return self.libraries.returned(target, awaited=awaited) or _Value()
+            return _Value()
         if (
             target.bound
             and self.libraries.canonical(target.bound.name)
