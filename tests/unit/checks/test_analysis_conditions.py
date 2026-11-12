@@ -178,3 +178,88 @@ def route():
     [operation] = json.loads(capsys.readouterr().out)["operations"]
     assert operation["complete"], operation["diagnostics"]
     assert [d["code"] for d in operation["diagnostics"]] == ["CAN002"]
+
+
+def test_nominal_exception_guard_unwraps_a_caught_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "api.py").write_text(
+        PRELUDE
+        + """
+class Wrapped(Exception):
+    error: Missing
+    def __init__(self, error: Missing): self.error = error
+@router.get('/')
+def route():
+    try:
+        raise Wrapped(Missing())
+    except Wrapped as failure:
+        error = failure.error if isinstance(failure, Wrapped) else failure
+        raise error
+""",
+        encoding="utf8",
+    )
+    main(
+        [
+            "check",
+            "errors",
+            str(tmp_path),
+            "--strict",
+            "--require-complete",
+            "--format",
+            "json",
+        ]
+    )
+    [operation] = json.loads(capsys.readouterr().out)["operations"]
+    assert operation["complete"], operation["diagnostics"]
+    assert [d["message"] for d in operation["diagnostics"]] == [
+        "api.Missing: no Error mapping in raises or the application catalog"
+    ]
+
+
+@pytest.mark.parametrize(
+    "classes",
+    [
+        """
+class MarkerMeta(type):
+    def __instancecheck__(cls, instance): return True
+class Marker(Exception, metaclass=MarkerMeta): pass
+class Other(Exception): pass
+""",
+        """
+class Marker(Exception): pass
+class Other(Exception):
+    @property
+    def __class__(self): return Marker
+""",
+    ],
+)
+def test_custom_instance_checks_do_not_establish_a_nominal_guard(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], classes: str
+) -> None:
+    (tmp_path / "api.py").write_text(
+        PRELUDE
+        + classes
+        + """
+@router.get('/')
+def route(value: Other):
+    return fail() if isinstance(value, Marker) else None
+""",
+        encoding="utf8",
+    )
+    main(
+        [
+            "check",
+            "errors",
+            str(tmp_path),
+            "--strict",
+            "--require-complete",
+            "--format",
+            "json",
+        ]
+    )
+    [operation] = json.loads(capsys.readouterr().out)["operations"]
+    assert any(
+        d["code"] == "CAN002" and "api.Missing:" in d["message"]
+        for d in operation["diagnostics"]
+    )

@@ -1448,7 +1448,9 @@ class _Source:
             "collections.abc.Mapping",
             "collections.abc.Sequence",
         }
-        if not all(name in nominal for name in targets):
+        if not all(
+            name in nominal or self._nominal_exception(name or "") for name in targets
+        ):
             return None
         answers = []
         if not value.exact and any(
@@ -1459,6 +1461,8 @@ class _Source:
         ):
             return None
         for name in [value.name, *([] if value.exact else self.subclasses(value.name))]:
+            if self.exception(name) and not self._nominal_exception(name):
+                return None
             order = self.mro(name)
             if order is None:
                 return None
@@ -4679,6 +4683,42 @@ class _Source:
             return _join(*checked)
         finally:
             self._providing.remove(port)
+
+    def _nominal_exception(self, owner: str) -> bool:
+        if not self.exception(owner):
+            return False
+        for base in self.mro(owner) or ():
+            if base.startswith("builtins."):
+                continue
+            definition = self.definitions.get(base)
+            if (
+                definition is None
+                or not isinstance(definition.node, ast.ClassDef)
+                or definition.node.decorator_list
+                or definition.node.keywords
+            ):
+                return False
+            for statement in definition.node.body:
+                targets = (
+                    statement.targets
+                    if isinstance(statement, ast.Assign)
+                    else [statement.target]
+                    if isinstance(statement, ast.AnnAssign)
+                    else []
+                )
+                names = {t.id for t in targets if isinstance(t, ast.Name)}
+                if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef):
+                    names.add(statement.name)
+                if names & {
+                    "__class__",
+                    "__getattribute__",
+                    "__getattr__",
+                    "__instancecheck__",
+                    "__subclasscheck__",
+                    "__subclasshook__",
+                }:
+                    return False
+        return True
 
     def _field(self, owner: str, attribute: str) -> str | None:
         lineage = self.lineage(owner) if owner in self.definitions else None

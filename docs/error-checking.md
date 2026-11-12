@@ -155,9 +155,11 @@ Inherited methods, classmethods, properties, `Self` and statically resolved
 operators and conditional expressions follow their evaluation order and narrow
 guarded values. Known own `__bool__` and `__len__` methods contribute their errors
 when conditions evaluate them. Unexecuted branches add no error paths.
-Recursive
-call chains are supported when their value and error summaries converge. Growing
-or unresolved recursion produces CAN003 rather than a complete result.
+Nominal `isinstance` guards narrow ordinary exception hierarchies; custom
+metaclasses, decorated classes and overridden class/instance checks remain
+unproved. Recursive call chains are supported when their value and error summaries
+converge. Growing or unresolved recursion produces CAN003 rather than a complete
+result.
 
 `Any`, `object`, unknown callable inputs and unbound `type[Service]` values do not
 establish a safe implementation. Unknown locals shadow same-named globals.
