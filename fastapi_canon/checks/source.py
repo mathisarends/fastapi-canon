@@ -353,6 +353,11 @@ class _Source:
         results = []
         for variant in value.variants:
             actual = self.object(variant)
+            if actual.name in {"<generator>", "<async-generator>"} and actual.bound:
+                function = self.definitions.get(actual.bound.name)
+                if function and not actual.unresolved:
+                    results.append(self.returned(function, dict(actual.fields)))
+                    continue
             element = actual.element()
             results.append(
                 actual.hint.element()
@@ -2052,6 +2057,19 @@ class _Source:
                     bound=target,
                     fields=tuple(sorted((actual or {}).items())),
                     site=self.site(node, module, env, "contextmanager"),
+                )
+            if any(_has_yield(statement) for statement in definition.node.body):
+                if awaited:
+                    return _Value()
+                return _Value(
+                    "<async-generator>"
+                    if isinstance(definition.node, ast.AsyncFunctionDef)
+                    else "<generator>",
+                    instance=True,
+                    bound=target,
+                    fields=tuple(sorted((actual or {}).items())),
+                    site=self.site(node, module, env, "deferred"),
+                    unresolved=actual is None,
                 )
             if isinstance(definition.node, ast.AsyncFunctionDef) and not awaited:
                 return _Value(

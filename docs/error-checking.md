@@ -216,7 +216,10 @@ a hook raised them. Python-mode custom serializer results remain opaque.
 Eager list, set and dict comprehensions follow their iterables, filters and
 results with local target bindings. Directly resolved generator iteration and
 supported eager consumers follow generator bodies. Unsupported iteration
-protocols, unresolved element methods and stored generator aliases retain CAN003.
+protocols and unresolved element methods retain CAN003. Resolved generator-function
+aliases preserve bound arguments until iteration, including with `closing` and
+`aclosing`. Closing an unstarted generator does not execute its body. Unknown
+unpacked arguments and stored generator-expression aliases remain incomplete.
 
 Creating a generator expression runs its outer iterable expression, not its
 result helpers. Unconsumed generators and unawaited coroutines retain deferred

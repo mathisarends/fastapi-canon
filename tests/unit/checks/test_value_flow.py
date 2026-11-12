@@ -439,6 +439,56 @@ def route():
     assert report["contract_gaps"] == gaps
 
 
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("use", ["unused", "iterate", "close", "iterate_and_close"])
+def test_generator_aliases_preserve_creation_iteration_and_cleanup(
+    scan: Callable[[str], dict[str, Any]], asynchronous: bool, use: str
+) -> None:
+    prefix = "async " if asynchronous else ""
+    manager = "aclosing" if asynchronous else "closing"
+    loop = f"{prefix}for value in items: pass"
+    body = (
+        f"{prefix}with {manager}(items) as owned:\n        {loop.replace('items', 'owned')}"
+        if use == "iterate_and_close"
+        else f"{prefix}with {manager}(items): pass"
+        if use == "close"
+        else loop
+        if use == "iterate"
+        else "pass"
+    )
+    report = scan(f"""
+from contextlib import closing, aclosing
+{prefix}def values():
+    try: yield 'item'
+    finally: risky()
+@router.get('/generator')
+async def route():
+    items = values()
+    {body}
+""")
+    [operation] = report["operations"]
+    assert operation["complete"] == (use != "unused")
+    assert report["contract_gaps"] == int(use in {"iterate", "iterate_and_close"})
+
+
+def test_generator_iteration_does_not_replace_unknown_unpacking_with_annotations(
+    scan: Callable[[str], dict[str, Any]],
+) -> None:
+    report = scan("""
+class Safe:
+    def run(self): pass
+def values(service: Safe): yield service.run()
+@router.get('/opaque')
+def route(arguments): list(values(*arguments))
+""")
+    [operation] = report["operations"]
+    assert not operation["complete"]
+    assert any(
+        d["message"] == "unresolved generator arguments"
+        for d in operation["diagnostics"]
+    )
+
+
 def test_custom_allocation_does_not_claim_a_fixed_receiver(
     scan: Callable[[str], dict[str, Any]],
 ) -> None:

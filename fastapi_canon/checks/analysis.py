@@ -350,7 +350,10 @@ class _Analyzer:
             for unknown in flow.unknowns
             if not (
                 unknown.deferred
-                and env.get(f"$awaited:{unknown.deferred}") == _Value("awaited")
+                and (
+                    env.get(f"$awaited:{unknown.deferred}") == _Value("awaited")
+                    or env.get(f"$iterated:{unknown.deferred}") == _Value("iterated")
+                )
             )
         ]
         return flow
@@ -506,8 +509,29 @@ class _Analyzer:
             return self.expression(
                 node.value, function, env, stack, awaited=True, iterated=iterated
             )
-        if isinstance(node, ast.Lambda):
-            return flow
+        if iterated and not isinstance(node, ast.GeneratorExp):
+            values = self.source.infer(node, function.module, env).variants
+            if all(
+                value.name in {"<generator>", "<async-generator>"} for value in values
+            ):
+                if any(value.unresolved for value in values):
+                    flow.unknowns.append(
+                        _Unknown(
+                            "unresolved generator arguments", function.name, node.lineno
+                        )
+                    )
+                direct = self.source.definitions.get(
+                    self.source.infer(node.func, function.module, env).name
+                    if isinstance(node, ast.Call)
+                    else ""
+                )
+                if direct is None or not _generator(direct.node):
+                    flow.extend(self.expression(node, function, env, stack))
+                    for value in values:
+                        flow.extend(
+                            self._iterate(value, function, env, stack, node.lineno)
+                        )
+                    return flow
         if isinstance(node, ast.GeneratorExp) and not iterated:
             # Creation evaluates the outer iterable expression, but neither the
             # filters nor the result until a consumer advances the generator.
@@ -648,6 +672,10 @@ class _Analyzer:
                         iterated=iterated,
                     )
                 )
+            if iterated:
+                for value in self.source.infer(node, function.module, env).variants:
+                    if value.name in {"<generator>", "<async-generator>"}:
+                        env[f"$iterated:{value.site}"] = _Value("iterated")
             return flow
         for child in ast.iter_child_nodes(node):
             if isinstance(child, ast.expr):
@@ -877,6 +905,31 @@ class _Analyzer:
                 _Unknown("unresolved owned context manager entry", function.name, line)
             ]
         ), _Value("<unknown-cleanup>")
+
+    def _iterate(
+        self,
+        value: _Value,
+        function: _Definition,
+        env: _Environment,
+        stack: tuple[str, ...],
+        line: int,
+    ) -> _Flow:
+        definition = (
+            self.source.definitions.get(value.bound.name) if value.bound else None
+        )
+        if value.unresolved or definition is None:
+            return _Flow(
+                unknowns=[
+                    _Unknown("unresolved generator iteration", function.name, line)
+                ]
+            )
+        env[f"$iterated:{value.site}"] = _Value("iterated")
+        return self._traced(
+            function,
+            self.function(
+                definition, stack, iterated=True, bindings=dict(value.fields)
+            ),
+        )
 
     def _resume(
         self,
@@ -1395,7 +1448,7 @@ class _Analyzer:
         if (
             isinstance(item.context_expr, ast.Call)
             and self.source.resolve(item.context_expr.func, function.module, env)
-            == "contextlib.closing"
+            == ("contextlib.aclosing" if asynchronous else "contextlib.closing")
             and len(item.context_expr.args) == 1
         ):
             resource = self.source.infer(
@@ -1412,7 +1465,7 @@ class _Analyzer:
                 ast.Call(
                     func=ast.Attribute(
                         value=ast.Name(id="$closed", ctx=ast.Load()),
-                        attr="close",
+                        attr="aclose" if asynchronous else "close",
                         ctx=ast.Load(),
                     ),
                     args=[],
@@ -1421,14 +1474,23 @@ class _Analyzer:
                 item.context_expr,
             )
             for value in resource.variants:
+                if (
+                    value.name
+                    == ("<async-generator>" if asynchronous else "<generator>")
+                    and not value.unresolved
+                ):
+                    local[f"$iterated:{value.site}"] = _Value("iterated")
+                    continue
                 flow.extend(
                     self._invoke(
                         invocation,
-                        self.source.member(value, "close"),
+                        self.source.member(
+                            value, "aclose" if asynchronous else "close"
+                        ),
                         function,
                         {**env, "$closed": value},
                         stack,
-                        awaited=False,
+                        awaited=asynchronous,
                         iterated=False,
                     )
                 )
@@ -2133,6 +2195,16 @@ class _Analyzer:
             {"contextlib.contextmanager"},
             {"contextlib.asynccontextmanager"},
         ):
+            return flow
+        if _generator(definition.node) and not iterated:
+            flow.unknowns.append(
+                _Unknown(
+                    "generator execution is deferred until iterated",
+                    function.name,
+                    node.lineno,
+                    deferred,
+                )
+            )
             return flow
         if (
             isinstance(definition.node, ast.AsyncFunctionDef)
