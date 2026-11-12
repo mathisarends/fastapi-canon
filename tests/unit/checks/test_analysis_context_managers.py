@@ -25,7 +25,15 @@ router = APIRouter()
 """
 
 
-@pytest.mark.parametrize("manager", ["asyncio.Lock()", "asyncio.timeout(1)"])
+@pytest.mark.parametrize(
+    "manager",
+    [
+        "asyncio.Lock()",
+        "asyncio.timeout(1)",
+        "asyncio.Semaphore(2)",
+        "asyncio.BoundedSemaphore(2)",
+    ],
+)
 @pytest.mark.parametrize("mapping", ["registered", "declared"])
 def test_asyncio_managers_preserve_body_errors(
     analyze: Callable[..., tuple[int, dict[str, Any]]], manager: str, mapping: str
@@ -46,6 +54,22 @@ async def endpoint():
     assert [d["code"] for d in operation["diagnostics"]] == (
         [] if mapping == "declared" else ["CAN001"]
     )
+
+
+def test_application_semaphore_subclasses_remain_an_application_protocol(
+    analyze: Callable[..., tuple[int, dict[str, Any]]],
+) -> None:
+    status, report = analyze("""
+import asyncio
+class Owned(asyncio.Semaphore):
+    async def __aenter__(self): raise EnterFailure()
+@router.get('/')
+async def endpoint():
+    async with Owned(): pass
+""")
+    [operation] = report["operations"]
+    assert status == 1 and not operation["complete"]
+    assert any(d["code"] == "CAN003" for d in operation["diagnostics"])
 
 
 @pytest.mark.parametrize(

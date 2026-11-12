@@ -67,6 +67,7 @@ _PLAIN_CONTEXTS = frozenset(
         "filelock.FileLock",
     }
 )
+_SEMAPHORES = frozenset({"asyncio.locks.Semaphore", "asyncio.locks.BoundedSemaphore"})
 
 
 class _Analyzer:
@@ -1004,14 +1005,21 @@ class _Analyzer:
                     )
                     return self._traced(function, entry), cleanup
         if (
-            resource.name == "<external-contextmanager>" and not resource.unresolved
-        ) or (
-            resource.exact
-            and dict(resource.fields).get("$resource-defaults", _Value()).literal
-            is True
-            and self.source.external(resource.name)
-            and self.source.libraries.canonical(resource.name)
-            in {"cdpify.client.CdpClient", "httpx2._client.AsyncClient"}
+            (resource.name == "<external-contextmanager>" and not resource.unresolved)
+            or (
+                resource.exact
+                and not resource.unresolved
+                and self.source.external(resource.name)
+                and self.source.libraries.canonical(resource.name) in _SEMAPHORES
+            )
+            or (
+                resource.exact
+                and dict(resource.fields).get("$resource-defaults", _Value()).literal
+                is True
+                and self.source.external(resource.name)
+                and self.source.libraries.canonical(resource.name)
+                in {"cdpify.client.CdpClient", "httpx2._client.AsyncClient"}
+            )
         ):
             return _Flow(), _Value("<external-cleanup>")
         return _Flow(
@@ -1724,6 +1732,13 @@ class _Analyzer:
         asynchronous = isinstance(node, ast.AsyncWith)
         if all(
             (value.name in _PLAIN_CONTEXTS and self.source.external(value.name))
+            or (
+                asynchronous
+                and value.exact
+                and not value.unresolved
+                and self.source.external(value.name)
+                and self.source.libraries.canonical(value.name) in _SEMAPHORES
+            )
             or (
                 value.name == "<external-contextmanager>"
                 and not value.unresolved
