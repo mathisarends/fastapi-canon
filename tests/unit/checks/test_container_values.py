@@ -43,6 +43,9 @@ def scan(
         ("set()", "callbacks.update([risky])", "callbacks"),
         ("{}", "callbacks.setdefault('group', set()).add(risky)", "callbacks['group']"),
         ("{}", "callbacks.update({'key': risky})", "callbacks.values()"),
+        ("{}", "callbacks.update(key=risky)", "callbacks.values()"),
+        ("{}", "callbacks.update({}, key=risky)", "callbacks.values()"),
+        ("{}", "callbacks.update(**{'key': risky})", "callbacks.values()"),
     ],
 )
 def test_native_mutations_retain_callables_without_executing_them(

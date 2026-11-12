@@ -78,6 +78,8 @@ def _mutate(value: _Value, method: str, args: tuple[_Value, ...]) -> _Mutation |
             return _Mutation(value, value.element())
     if value.name == "builtins.dict":
         if method == "update":
+            if not args:
+                return _Mutation(value, none)
             if len(args) != 1 or args[0].name != "builtins.dict":
                 return _Mutation(
                     replace(value, arguments=(_Value(), _Value()), keys_known=False),

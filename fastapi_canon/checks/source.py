@@ -2514,11 +2514,49 @@ class _Source:
             return None
         # Expanded calls need binding/iteration knowledge; retain an explicit
         # boundary while contaminating stored values with an unknown alternative.
-        opaque = bool(node.keywords) or any(
-            isinstance(arg, ast.Starred) for arg in node.args
-        )
+        opaque = any(isinstance(arg, ast.Starred) for arg in node.args)
         args = tuple(self.object(self.infer(arg, module, env)) for arg in node.args)
         receiver = self.object(target.bound)
+        if node.keywords:
+            if receiver.name == "builtins.dict" and method == "update":
+                keyword_fields = {}
+                for keyword in node.keywords:
+                    value = self.object(self.infer(keyword.value, module, env))
+                    if keyword.arg is not None:
+                        keyword_fields[keyword.arg] = value
+                    elif value.name == "builtins.dict" and value.keys_known:
+                        keyword_fields.update(value.fields)
+                    else:
+                        opaque = True
+                keyword_mapping = _Value(
+                    "builtins.dict",
+                    instance=True,
+                    exact=True,
+                    keys_known=True,
+                    fields=tuple(keyword_fields.items()),
+                    arguments=(
+                        _join(
+                            *(
+                                _Value(
+                                    "builtins.str",
+                                    instance=True,
+                                    exact=True,
+                                    literal=key,
+                                )
+                                for key in keyword_fields
+                            )
+                        ),
+                        _join(*keyword_fields.values()),
+                    ),
+                )
+                if not args:
+                    args = (keyword_mapping,)
+                elif len(args) == 1 and args[0].name == "builtins.dict":
+                    args = (_dictionary_union(args[0], keyword_mapping),)
+                else:
+                    opaque = True
+            else:
+                opaque = True
         mutation = _mutate(receiver, method, args)
         if mutation is None:
             return None
