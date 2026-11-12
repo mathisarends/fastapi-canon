@@ -266,6 +266,9 @@ class _Source:
     _mros: dict[str, tuple[tuple[str, ...] | None, frozenset[str]]] = field(
         default_factory=dict
     )
+    _field_metadata: dict[str, tuple[dict[str, ast.expr], frozenset[str]]] = field(
+        default_factory=dict
+    )
     # Port -> (constructed class, forwarded dependency or unknown; source modules).
     _ports: dict[str, list[tuple[_FactoryValue, frozenset[str]]]] | None = None
     _provider_factories: dict[str, list[str | _ForwardedDependency]] = field(
@@ -2644,38 +2647,38 @@ class _Source:
             definition = self.definitions.get(name)
             if not definition or not isinstance(definition.node, ast.ClassDef):
                 continue
-            annotation = None
-            written = False
-            for statement in definition.node.body:
-                if (
-                    isinstance(statement, ast.AnnAssign)
-                    and isinstance(statement.target, ast.Name)
-                    and statement.target.id == attribute
-                ):
-                    annotation = statement.annotation
-                if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef):
-                    positional = [*statement.args.posonlyargs, *statement.args.args]
-                    if not positional:
-                        continue
-                    for child in ast.walk(statement):
-                        if (
-                            isinstance(child, ast.Attribute)
-                            and isinstance(child.ctx, ast.Store | ast.Del)
-                            and isinstance(child.value, ast.Name)
-                            and child.value.id == positional[0].arg
-                            and child.attr == attribute
-                            and statement.name != "__init__"
-                        ):
-                            written = True
-                        if (
-                            isinstance(child, ast.AnnAssign)
-                            and isinstance(child.target, ast.Attribute)
-                            and isinstance(child.target.value, ast.Name)
-                            and child.target.value.id == positional[0].arg
-                            and child.target.attr == attribute
-                        ):
-                            annotation = child.annotation
-            if annotation is not None and (not mutable or written):
+            if name not in self._field_metadata:
+                annotations: dict[str, ast.expr] = {}
+                written: set[str] = set()
+                for statement in definition.node.body:
+                    if isinstance(statement, ast.AnnAssign) and isinstance(
+                        statement.target, ast.Name
+                    ):
+                        annotations[statement.target.id] = statement.annotation
+                    if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef):
+                        positional = [*statement.args.posonlyargs, *statement.args.args]
+                        if not positional:
+                            continue
+                        for child in ast.walk(statement):
+                            if (
+                                isinstance(child, ast.Attribute)
+                                and isinstance(child.ctx, ast.Store | ast.Del)
+                                and isinstance(child.value, ast.Name)
+                                and child.value.id == positional[0].arg
+                                and statement.name != "__init__"
+                            ):
+                                written.add(child.attr)
+                            if (
+                                isinstance(child, ast.AnnAssign)
+                                and isinstance(child.target, ast.Attribute)
+                                and isinstance(child.target.value, ast.Name)
+                                and child.target.value.id == positional[0].arg
+                            ):
+                                annotations[child.target.attr] = child.annotation
+                self._field_metadata[name] = annotations, frozenset(written)
+            annotations, writes = self._field_metadata[name]
+            annotation = annotations.get(attribute)
+            if annotation is not None and (not mutable or attribute in writes):
                 return self.typed(annotation, definition.module)
         return None
 
