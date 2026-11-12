@@ -2607,6 +2607,24 @@ class _Source:
         self.store(mutation.container)
         return mutation
 
+    def dependency_key(self, value: _Value) -> str | None:
+        """Keep nominal generic ports distinct without interpreting key strings."""
+        if value.alternatives or not value.name or value.unresolved:
+            return None
+        if value.literal is not None or value.name.startswith("<"):
+            return None
+        if not value.arguments:
+            return value.name
+        arguments = [self.dependency_key(arg) for arg in value.arguments]
+        if any(argument is None for argument in arguments):
+            return None
+        return (
+            value.name
+            + "["
+            + ",".join(arg for arg in arguments if arg is not None)
+            + "]"
+        )
+
     def typed(self, node: ast.expr, module: str) -> _Value:
         scope, value = self.value(node, module)
         key = scope, id(value)
@@ -2714,6 +2732,23 @@ class _Source:
                         for arg in args
                         if not (isinstance(arg, ast.Constant) and arg.value is Ellipsis)
                     ),
+                )
+            definition = self.definitions.get(wrapper)
+            if (
+                definition is not None
+                and isinstance(definition.node, ast.ClassDef)
+                and definition.node.type_params
+                and all(
+                    isinstance(parameter, ast.TypeVar)
+                    for parameter in definition.node.type_params
+                )
+                and len(args) == len(definition.node.type_params)
+                and self.method(wrapper, "__class_getitem__") is None
+            ):
+                return _Value(
+                    wrapper,
+                    instance=True,
+                    arguments=tuple(self.typed(arg, module) for arg in args),
                 )
             return _Value()
         name = self.annotation(node, module) or ""
@@ -4030,7 +4065,7 @@ class _Source:
                 provides = _keyword(decorator, "provides")
             provides = provides or self._provided(member.returns, module)
             implementations.extend(self._constructed(member, module))
-        port = self.annotation(provides, module) if provides else None
+        port = self.dependency_key(self.typed(provides, module)) if provides else None
         return port, implementations
 
     def _provided(self, node: ast.expr | None, module: str) -> ast.expr | None:
@@ -4082,7 +4117,13 @@ class _Source:
                 return None
         # Only a single source class supplies a dependency key. Optional, union,
         # component-qualified and external annotations remain unresolved.
-        name = self._class(annotation, module)
+        value = self.typed(annotation, module)
+        definition = self.definitions.get(value.name)
+        name = (
+            self.dependency_key(value)
+            if definition is not None and isinstance(definition.node, ast.ClassDef)
+            else None
+        )
         return _ForwardedDependency(name) if name is not None else None
 
     def _factory_block(
@@ -4224,7 +4265,9 @@ class _Source:
             env[arg.arg] = _Value()
             if arg.annotation is not None:
                 value = self.typed(arg.annotation, function.module)
-                resolved = value.name
+                resolved = (
+                    self.dependency_key(value) if value.dependency else value.name
+                )
                 if resolved or value.alternatives:
                     if resolved in _CONNECTIONS and dependency_transport in {
                         "http",
@@ -4410,8 +4453,8 @@ class _Source:
                         ][1:]
                         for arg in args:
                             if arg.annotation:
-                                dependency = self.annotation(
-                                    arg.annotation, constructor.module
+                                dependency = self.dependency_key(
+                                    self.typed(arg.annotation, constructor.module)
                                 )
                                 if dependency:
                                     dependencies.append(dependency)

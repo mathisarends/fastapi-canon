@@ -56,8 +56,7 @@ def endpoint(service: Inject[Service[str]]): pass
     [operation] = json.loads(capsys.readouterr().out)["operations"]
     assert not operation["complete"]
     assert any(
-        "unresolved Dishka dependency type" in d["message"]
-        for d in operation["diagnostics"]
+        "unresolved Dishka dependency" in d["message"] for d in operation["diagnostics"]
     )
 
 

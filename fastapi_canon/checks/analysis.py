@@ -343,8 +343,9 @@ class _Analyzer:
                     continue
                 value = self.source.typed(argument.annotation, function.module)
                 if value.dependency:
-                    if value.name:
-                        flow.extend(self._dependency(value.name, function, stack))
+                    key = self.source.dependency_key(value)
+                    if key:
+                        flow.extend(self._dependency(key, function, stack))
                     else:
                         flow.unknowns.append(
                             _Unknown(
@@ -382,7 +383,18 @@ class _Analyzer:
                 )
             )
             return flow
-        self.source.provided(port, implicit=True)
+        value = self.source.provided(port, implicit=True)
+        if not self.source.creations.get(port) and any(
+            not variant.name or variant.unresolved
+            for variant in self.source.expand(value).variants
+        ):
+            flow.unknowns.append(
+                _Unknown(
+                    "unresolved Dishka dependency construction",
+                    function.name,
+                    function.node.lineno,
+                )
+            )
         for creation in self.source.creations.get(port, []):
             for dependency in creation.dependencies:
                 flow.extend(

@@ -170,6 +170,13 @@ narrowed to `Request` on HTTP/SSE/WebRTC operations. Known framework
 
 ### Dishka ports
 
+Typed provider factories retain distinct nominal PEP 695 generic keys such as
+`Port[First]` and `Port[Second]`, including in transitive constructor dependencies.
+Unknown type arguments, missing factories, custom class subscription and generic
+class-constructor registrations remain incomplete. Type arguments are not erased
+to recover a binding. Unresolved construction is reported even for unused
+injected parameters.
+
 Abstract methods and protocol members follow implementations registered by
 `Provider` classes in the scanned roots. Supported registrations include
 `provide(Impl, provides=Port)`, `@provide`, `alias(source=Impl, provides=Port)`,

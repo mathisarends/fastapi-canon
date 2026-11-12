@@ -204,6 +204,8 @@ def test_unresolved_ports_stay_incomplete(
     expected = [("CAN003", message)]
     if provider:
         expected.insert(0, ("CAN003", "unresolved call: unknown_factory"))
+    else:
+        expected.insert(0, ("CAN003", "unresolved Dishka dependency construction"))
     assert [(item["code"], item["message"]) for item in diagnostics(report)] == expected
     assert not report["operations"][0]["complete"]
 
