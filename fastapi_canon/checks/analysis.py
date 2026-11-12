@@ -1219,6 +1219,15 @@ class _Analyzer:
             origin := self.source.call_origin(target)
             or self.source.origin(node.func, function.module, env)
         ) is not None:
+            if self.source.libraries.canonical(
+                origin
+            ) == "pydantic.types._SecretBase.get_secret_value" and any(
+                not value.name or value.unresolved
+                for value in self.source.infer(node, function.module, env).variants
+            ):
+                flow.unknowns.append(
+                    _Unknown("unresolved secret payload", function.name, node.lineno)
+                )
             adapter_constructor = (
                 self.source.libraries.canonical(origin)
                 == "pydantic.type_adapter.TypeAdapter"

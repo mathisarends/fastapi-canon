@@ -250,6 +250,9 @@ replacement value. Nested and chained before transformations remain CAN003.
 input shapes and possible overrides of defaults. Explicit model fields override
 only those fields. Custom sources, custom initialization, opaque unpacking and
 source-control arguments such as `_env_file` remain CAN003.
+Validated `SecretStr` and `SecretBytes` retain their native payload shapes.
+Direct wrappers, existing instances, subclass dispatch and later payload writes
+retain actual values; an unresolved payload remains CAN003.
 External `contextmanager` and `asynccontextmanager` signatures preserve their
 yielded types, including type parameters bound to actual arguments. Their bodies
 are outside the error scope. Own objects, unknown arguments and application

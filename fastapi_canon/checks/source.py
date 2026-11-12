@@ -2206,6 +2206,12 @@ class _Source:
                 return replace(value, unresolved=True)
         if (
             target.bound
+            and self.libraries.canonical(target.name)
+            == "pydantic.types._SecretBase.get_secret_value"
+        ):
+            return dict(self.object(target.bound).fields).get("_secret_value", _Value())
+        if (
+            target.bound
             and self.libraries.canonical(target.bound.name)
             == "pydantic.type_adapter.TypeAdapter"
         ):
@@ -2471,6 +2477,34 @@ class _Source:
             signature = self.libraries.returned(target, awaited=awaited)
             if signature is not None:
                 resource_name = self.libraries.canonical(signature.name)
+                if (
+                    resource_name
+                    in {"pydantic.types.SecretStr", "pydantic.types.SecretBytes"}
+                    and signature.exact
+                ):
+                    secret_argument = (
+                        node.args[0]
+                        if len(node.args) == 1 and not node.keywords
+                        else node.keywords[0].value
+                        if not node.args
+                        and len(node.keywords) == 1
+                        and node.keywords[0].arg == "secret_value"
+                        else None
+                    )
+                    return self.store(
+                        replace(
+                            signature,
+                            fields=(
+                                (
+                                    "_secret_value",
+                                    self.infer(secret_argument, module, env)
+                                    if secret_argument is not None
+                                    else _Value(),
+                                ),
+                            ),
+                            site=self.site(node, module, env, resource_name),
+                        )
+                    )
                 if (
                     resource_name == "pydantic.type_adapter.TypeAdapter"
                     and signature.exact

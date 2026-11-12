@@ -312,6 +312,54 @@ class _Models:
             return value
         if annotation.name == "<json>":
             return self.json(site)
+        if annotation.name in {
+            "pydantic.SecretStr",
+            "pydantic.types.SecretStr",
+            "pydantic.SecretBytes",
+            "pydantic.types.SecretBytes",
+        }:
+            owner = self.source.libraries.canonical(annotation.name)
+            results = []
+            for secret_input in self.source.expand(value).variants:
+                actual = self.source.object(secret_input)
+                if self.source.libraries.canonical(actual.name) == owner or any(
+                    self.source.libraries.canonical(base) == owner
+                    for base in self.source.mro(actual.name) or ()
+                ):
+                    results.append(actual)
+                else:
+                    native = actual.name in {
+                        "builtins.str",
+                        "builtins.bytes",
+                        "builtins.int",
+                        "builtins.float",
+                        "builtins.bool",
+                        "builtins.NoneType",
+                        "<empty>",
+                    }
+                    payload = (
+                        _Value(
+                            "builtins.str"
+                            if owner.endswith("SecretStr")
+                            else "builtins.bytes",
+                            instance=True,
+                            exact=True,
+                        )
+                        if native
+                        else _Value()
+                    )
+                    results.append(
+                        self.source.store(
+                            _Value(
+                                owner,
+                                instance=True,
+                                exact=True,
+                                fields=(("_secret_value", payload),),
+                                site=site,
+                            )
+                        )
+                    )
+            return _join(*results)
         if (
             annotation.name
             in {
