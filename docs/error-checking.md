@@ -122,6 +122,10 @@ failure points. Literal and type guards can exclude branches; arbitrary business
 conditions and persisted invariants are not proved. A finding describes a possible
 source path, not proof that a particular request reaches it.
 
+Unshadowed module-name guards such as `if __name__ == '__main__'` follow import
+semantics. Script-only startup calls do not make imported route contracts
+uncertain. Reassigned module names and other runtime conditions remain unresolved.
+
 ### Calls and return types
 
 The checker follows actual positional and keyword arguments, defaults and known

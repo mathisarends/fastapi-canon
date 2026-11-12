@@ -4,7 +4,7 @@ import ast
 from dataclasses import dataclass
 
 from fastapi_canon.checks.source import _Source
-from fastapi_canon.checks.symbols import _Definition
+from fastapi_canon.checks.symbols import _Definition, _import_condition
 
 _ROUTERS = frozenset(
     {
@@ -116,6 +116,19 @@ class _Registrations:
                 case ast.Expr() if isinstance(node.value, ast.Call):
                     self._call(node.value, module, env, uncertain)
                 case ast.If():
+                    condition = (
+                        _import_condition(node.test, module)
+                        if "__name__" not in env
+                        else None
+                    )
+                    if condition is not None:
+                        self._block(
+                            node.body if condition else node.orelse,
+                            module,
+                            env,
+                            uncertain,
+                        )
+                        continue
                     left, right = dict(env), dict(env)
                     self._block(node.body, module, left, True)
                     self._block(node.orelse, module, right, True)

@@ -11,7 +11,12 @@ from typing import Literal, Self
 from fastapi_canon.checks.generator_phases import _has_yield, _phases
 from fastapi_canon.checks.library_types import _LibraryTypes
 from fastapi_canon.checks.model_values import _Models
-from fastapi_canon.checks.symbols import _Definition, _LexicalScope, _scopes
+from fastapi_canon.checks.symbols import (
+    _Definition,
+    _import_condition,
+    _LexicalScope,
+    _scopes,
+)
 from fastapi_canon.checks.value_flow import (
     _bind,
     _contexts,
@@ -875,6 +880,19 @@ class _Source:
                                 )
                                 names.add(key)
                 case ast.If():
+                    condition = (
+                        _import_condition(node.test, module)
+                        if f"{module}.__name__" not in self.bindings
+                        else None
+                    )
+                    if condition is not None:
+                        self._index(
+                            module,
+                            node.body if condition else node.orelse,
+                            package=package,
+                            names=names,
+                        )
+                        continue
                     # In particular, imports guarded by TYPE_CHECKING remain available.
                     self._index(module, node.body, package=package, names=names)
                     self._index(module, node.orelse, package=package, names=names)

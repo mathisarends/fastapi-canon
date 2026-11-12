@@ -20,6 +20,30 @@ class _LexicalScope:
     assigned_names: frozenset[str]
 
 
+def _import_condition(node: ast.expr, module: str) -> bool | None:
+    """Evaluate only unshadowed module-name guards under source import semantics."""
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        inner = _import_condition(node.operand, module)
+        return not inner if inner is not None else None
+    if not isinstance(node, ast.Compare) or len(node.ops) != 1:
+        return None
+    first, second = node.left, node.comparators[0]
+    if isinstance(second, ast.Name) and second.id == "__name__":
+        first, second = second, first
+    if not (
+        isinstance(first, ast.Name)
+        and first.id == "__name__"
+        and isinstance(second, ast.Constant)
+        and isinstance(second.value, str)
+    ):
+        return None
+    if isinstance(node.ops[0], ast.Eq):
+        return module == second.value
+    if isinstance(node.ops[0], ast.NotEq):
+        return module != second.value
+    return None
+
+
 def _scopes(tree: ast.Module, source: str, filename: str) -> dict[int, _LexicalScope]:
     tables = [symtable.symtable(source, filename, "exec")]
     functions = {}
