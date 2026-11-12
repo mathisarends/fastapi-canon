@@ -7,7 +7,7 @@ import sys
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from fastapi_canon.checks.value_flow import _join, _Value
+from fastapi_canon.checks.value_flow import _bind, _join, _Value
 
 _PUBLIC_TYPES = {
     "typing.Self": "typing.Self",
@@ -244,6 +244,80 @@ class _LibraryTypes:
                         else value
                     )
         return None
+
+    def context(
+        self,
+        target: _Value,
+        positional: tuple[_Value, ...],
+        keywords: tuple[tuple[str, _Value], ...],
+    ) -> _Value | None:
+        definition = self.definition(self.canonical(target.name))
+        if definition is None or not isinstance(
+            definition[1], ast.FunctionDef | ast.AsyncFunctionDef
+        ):
+            return None
+        scope, node = definition
+        assert isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+        decorators = {self.expression(item, scope) for item in node.decorator_list}
+        asynchronous = isinstance(node, ast.AsyncFunctionDef)
+        expected = (
+            "contextlib.asynccontextmanager"
+            if asynchronous
+            else "contextlib.contextmanager"
+        )
+        if decorators != {expected} or not isinstance(node.returns, ast.Subscript):
+            return None
+        if (self.expression(node.returns.value, scope) or "") not in {
+            "collections.abc.AsyncIterator"
+            if asynchronous
+            else "collections.abc.Iterator",
+            "typing.AsyncIterator" if asynchronous else "typing.Iterator",
+        }:
+            return None
+        actual = _bind(
+            node.args,
+            positional,
+            keywords,
+            tuple(_Value() for _ in node.args.defaults),
+            tuple(
+                _Value() if item is not None else None for item in node.args.kw_defaults
+            ),
+        )
+        element = node.returns.slice
+        module = self.module(scope)
+        variables = (module.type_variables if module else set()) | {
+            parameter.name
+            for parameter in node.type_params
+            if isinstance(parameter, ast.TypeVar)
+        }
+        if isinstance(element, ast.Name) and element.id in variables:
+            yielded = _join(
+                *(
+                    actual.get(parameter.arg, _Value())
+                    for parameter in (
+                        *node.args.posonlyargs,
+                        *node.args.args,
+                        *node.args.kwonlyargs,
+                    )
+                    if actual is not None
+                    and isinstance(parameter.annotation, ast.Name)
+                    and parameter.annotation.id == element.id
+                )
+            )
+        else:
+            yielded = self.annotation(element, scope, target.bound)
+        return _Value(
+            "<external-contextmanager>",
+            instance=True,
+            bound=yielded,
+            fields=(
+                (
+                    "$async",
+                    _Value("builtins.bool", instance=True, literal=asynchronous),
+                ),
+            ),
+            unresolved=actual is None or not yielded.name or yielded.name == "<empty>",
+        )
 
     def returned(self, target: _Value, *, awaited: bool) -> _Value | None:
         name = self.canonical(target.name)

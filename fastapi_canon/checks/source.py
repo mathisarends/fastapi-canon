@@ -2417,6 +2417,33 @@ class _Source:
                 if node.func.attr == "mappings":
                     return _Value(f"{prefix}MappingResult", instance=True)
         if self.call_origin(target):
+            if not any(isinstance(arg, ast.Starred) for arg in node.args) and all(
+                kw.arg is not None for kw in node.keywords
+            ):
+                context_args = tuple(self.infer(arg, module, env) for arg in node.args)
+                context_keywords = tuple(
+                    (kw.arg, self.infer(kw.value, module, env))
+                    for kw in node.keywords
+                    if kw.arg is not None
+                )
+                context = self.libraries.context(target, context_args, context_keywords)
+                if context is not None:
+                    pending = [*context_args, *(value for _, value in context_keywords)]
+                    context_seen: set[_Value] = set()
+                    uncertain = context.unresolved
+                    while pending:
+                        context_value = self.object(pending.pop())
+                        if context_value in context_seen:
+                            continue
+                        context_seen.add(context_value)
+                        uncertain |= (
+                            not context_value.name
+                            or context_value.name in self.definitions
+                        )
+                        pending.extend(context_value.arguments)
+                        pending.extend(value for _, value in context_value.fields)
+                        pending.extend(context_value.alternatives)
+                    return replace(context, unresolved=uncertain)
             signature = self.libraries.returned(target, awaited=awaited)
             if signature is not None:
                 resource_name = self.libraries.canonical(signature.name)

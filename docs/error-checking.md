@@ -236,6 +236,12 @@ implementations remain incomplete instead of being erased by a container type.
 No-argument `BaseSettings` construction with standard sources retains native
 environment input shapes and possible overrides of defaults. Custom settings
 sources, custom initialization and explicit source/input arguments remain CAN003.
+External `contextmanager` and `asynccontextmanager` signatures preserve their
+yielded types, including type parameters bound to actual arguments. Their bodies
+are outside the error scope. Own objects, unknown arguments and application
+callbacks that could affect the external protocol retain CAN003. Native HTTP
+clients with default transports preserve their value through provider entry;
+custom authentication, event hooks, mounts and transports remain boundaries.
 
 ## Comprehensions and deferred generators
 

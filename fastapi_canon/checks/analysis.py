@@ -901,6 +901,8 @@ class _Analyzer:
                     )
                     return self._traced(function, entry), cleanup
         if (
+            resource.name == "<external-contextmanager>" and not resource.unresolved
+        ) or (
             resource.exact
             and dict(resource.fields).get("$resource-defaults", _Value()).literal
             is True
@@ -1431,7 +1433,9 @@ class _Analyzer:
                     "__aenter__" if isinstance(node, ast.AsyncWith) else "__enter__",
                 )
                 entered.append(
-                    self.source.libraries.returned(
+                    variant.bound or _Value()
+                    if variant.name == "<external-contextmanager>"
+                    else self.source.libraries.returned(
                         entry_method, awaited=isinstance(node, ast.AsyncWith)
                     )
                     or _Value()
@@ -1517,12 +1521,37 @@ class _Analyzer:
         asynchronous = isinstance(node, ast.AsyncWith)
         manager_value = self.source.infer(item.context_expr, function.module, env)
         if all(
-            value.name in _PLAIN_CONTEXTS and self.source.external(value.name)
+            (value.name in _PLAIN_CONTEXTS and self.source.external(value.name))
+            or (
+                value.name == "<external-contextmanager>"
+                and not value.unresolved
+                and dict(value.fields).get("$async", _Value()).literal is asynchronous
+            )
+            or (
+                asynchronous
+                and value.exact
+                and self.source.external(value.name)
+                and self.source.libraries.canonical(value.name)
+                in {"cdpify.client.CdpClient", "httpx2._client.AsyncClient"}
+                and dict(value.fields).get("$resource-defaults", _Value()).literal
+                is True
+            )
             for value in manager_value.variants
         ):
             local = env.copy()
             if item.optional_vars is not None:
-                self.source.assign(item.optional_vars, manager_value, local)
+                self.source.assign(
+                    item.optional_vars,
+                    _join(
+                        *(
+                            value.bound
+                            if value.name == "<external-contextmanager>" and value.bound
+                            else value
+                            for value in manager_value.variants
+                        )
+                    ),
+                    local,
+                )
             flow.extend(
                 self._context_manager(
                     node, function, local, stack, reraised, index + 1, states=states
