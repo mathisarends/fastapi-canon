@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import ast
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from typing import Protocol
 
@@ -33,6 +33,9 @@ class _ModelSource(Protocol):
     def object(self, value: _Value) -> _Value: ...
     def expand(self, value: _Value) -> _Value: ...
     def store(self, value: _Value) -> _Value: ...
+    def cached_model_structure[ResultT](
+        self, kind: str, owner: str, build: Callable[[], ResultT]
+    ) -> ResultT: ...
     def returned(
         self, function: _Definition, bindings: dict[str, _Value] | None
     ) -> _Value: ...
@@ -280,25 +283,11 @@ class _Models:
         return self.json(site)
 
     def fields(self, owner: str) -> list[tuple[str, _Value]]:
-        result = {}
-        for name in reversed((self.source.lineage(owner) or ([owner], False))[0]):
-            definition = self.source.definitions[name]
-            assert isinstance(definition.node, ast.ClassDef)
-            for node in definition.node.body:
-                if (
-                    not isinstance(node, ast.AnnAssign)
-                    or not isinstance(node.target, ast.Name)
-                    or node.target.id.startswith("_")
-                ):
-                    continue
-                if isinstance(node.annotation, ast.Subscript) and self.source.resolve(
-                    node.annotation.value, definition.module
-                ) in {"typing.ClassVar", "typing_extensions.ClassVar"}:
-                    continue
-                result[node.target.id] = self.source.typed(
-                    node.annotation, definition.module
-                )
-        return list(result.items())
+        return list(
+            self.source.cached_model_structure(
+                "fields", owner, lambda: tuple(self._fields(owner))
+            )
+        )
 
     def normalize(self, annotation: _Value, value: _Value, site: str) -> _Value:
         if annotation.alternatives:
@@ -512,54 +501,9 @@ class _Models:
         return result
 
     def opaque(self, owner: str) -> bool:
-        if self._custom_schema(owner):
-            return True
-        fields = dict(self.fields(owner))
-        scalars = {
-            "builtins.str",
-            "builtins.bytes",
-            "builtins.int",
-            "builtins.float",
-            "builtins.bool",
-            "builtins.NoneType",
-            "pydantic.SecretStr",
-            "pydantic.SecretBytes",
-            "pydantic.types.SecretStr",
-            "pydantic.types.SecretBytes",
-            "uuid.UUID",
-            "pathlib.Path",
-            "datetime.datetime",
-            "datetime.date",
-            "datetime.time",
-            "decimal.Decimal",
-        }
-        before_counts: dict[str, int] = {}
-        for _, decorator in self.hooks(owner):
-            mode = _mode(decorator)
-            if mode == "after":
-                continue
-            if mode != "before" or not decorator.args:
-                return True
-            targets = [
-                node.value
-                for node in decorator.args
-                if isinstance(node, ast.Constant) and isinstance(node.value, str)
-            ]
-            if len(targets) != len(decorator.args):
-                return True
-            if targets == ["*"]:
-                targets = list(fields)
-            for target in targets:
-                before_counts[target] = before_counts.get(target, 0) + 1
-                if before_counts[target] > 1:
-                    return True
-            if any(
-                value.name not in scalars
-                for name in targets
-                for value in fields.get(name, _Value()).variants
-            ):
-                return True
-        return False
+        return self.source.cached_model_structure(
+            "opaque", owner, lambda: self._opaque(owner)
+        )
 
     def hook_arguments(
         self,
@@ -719,6 +663,77 @@ class _Models:
         return self.source.store(
             replace(original, fields=tuple(fields.items()), site=site)
         )
+
+    def _fields(self, owner: str) -> list[tuple[str, _Value]]:
+        result = {}
+        for name in reversed((self.source.lineage(owner) or ([owner], False))[0]):
+            definition = self.source.definitions[name]
+            assert isinstance(definition.node, ast.ClassDef)
+            for node in definition.node.body:
+                if (
+                    not isinstance(node, ast.AnnAssign)
+                    or not isinstance(node.target, ast.Name)
+                    or node.target.id.startswith("_")
+                ):
+                    continue
+                if isinstance(node.annotation, ast.Subscript) and self.source.resolve(
+                    node.annotation.value, definition.module
+                ) in {"typing.ClassVar", "typing_extensions.ClassVar"}:
+                    continue
+                result[node.target.id] = self.source.typed(
+                    node.annotation, definition.module
+                )
+        return list(result.items())
+
+    def _opaque(self, owner: str) -> bool:
+        if self._custom_schema(owner):
+            return True
+        fields = dict(self.fields(owner))
+        scalars = {
+            "builtins.str",
+            "builtins.bytes",
+            "builtins.int",
+            "builtins.float",
+            "builtins.bool",
+            "builtins.NoneType",
+            "pydantic.SecretStr",
+            "pydantic.SecretBytes",
+            "pydantic.types.SecretStr",
+            "pydantic.types.SecretBytes",
+            "uuid.UUID",
+            "pathlib.Path",
+            "datetime.datetime",
+            "datetime.date",
+            "datetime.time",
+            "decimal.Decimal",
+        }
+        before_counts: dict[str, int] = {}
+        for _, decorator in self.hooks(owner):
+            mode = _mode(decorator)
+            if mode == "after":
+                continue
+            if mode != "before" or not decorator.args:
+                return True
+            targets = [
+                node.value
+                for node in decorator.args
+                if isinstance(node, ast.Constant) and isinstance(node.value, str)
+            ]
+            if len(targets) != len(decorator.args):
+                return True
+            if targets == ["*"]:
+                targets = list(fields)
+            for target in targets:
+                before_counts[target] = before_counts.get(target, 0) + 1
+                if before_counts[target] > 1:
+                    return True
+            if any(
+                value.name not in scalars
+                for name in targets
+                for value in fields.get(name, _Value()).variants
+            ):
+                return True
+        return False
 
     def _functional(self, node: ast.expr, scope: str) -> tuple[str, str] | None:
         if not isinstance(node, ast.Call) or len(node.args) != 1 or node.keywords:

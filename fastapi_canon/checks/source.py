@@ -4,11 +4,11 @@ import ast
 import builtins
 import importlib.util
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Literal, Self
+from typing import Literal, Self, cast
 
 from fastapi_canon.checks.container_values import _MUTATORS, _mutate, _Mutation
 from fastapi_canon.checks.generator_phases import (
@@ -291,6 +291,9 @@ class _Source:
     _field_metadata: dict[str, tuple[dict[str, ast.expr], frozenset[str]]] = field(
         default_factory=dict
     )
+    _model_metadata: dict[tuple[str, str], tuple[object, _ValueSummary]] = field(
+        default_factory=dict
+    )
     # Port -> (constructed class, forwarded dependency or unknown; source modules).
     _ports: dict[str, list[tuple[_FactoryValue, frozenset[str]]]] | None = None
     _provider_factories: dict[str, list[str | _ForwardedDependency]] = field(
@@ -399,6 +402,19 @@ class _Source:
         for site, _ in summary.reads:
             self.observe(site)
         return True
+
+    def cached_model_structure[ResultT](
+        self, kind: str, owner: str, build: Callable[[], ResultT]
+    ) -> ResultT:
+        key = kind, owner
+        cached = self._model_metadata.get(key)
+        if cached and self.reuse(cached[1]):
+            return cast(ResultT, cached[0])
+        with self.observations() as observed:
+            result = build()
+        if observed.summary is not None:
+            self._model_metadata[key] = result, observed.summary
+        return result
 
     @contextmanager
     def observations(self) -> Iterator[_Observations]:
@@ -525,6 +541,8 @@ class _Source:
             arguments=tuple(v.reference() for v in value.arguments),
         )
         old = self.heap.get(value.site)
+        if old == value:
+            return value.reference()
         if old:
             first, second = dict(old.fields), dict(value.fields)
             fields = tuple(
