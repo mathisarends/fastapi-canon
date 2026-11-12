@@ -2693,7 +2693,15 @@ class _Source:
                     )
                 return _join(*values)
             if wrapper in {"typing.Literal", "typing_extensions.Literal"}:
-                return _join(*(self.infer(arg, module, {}) for arg in args))
+                values = []
+                for arg in args:
+                    value = self.infer(arg, module, {})
+                    if isinstance(arg, ast.Attribute):
+                        owner = self.resolve(arg.value, module) or ""
+                        if "enum.Enum" in (self.mro(owner) or ()):
+                            value = _Value(owner, instance=True, exact=True)
+                    values.append(value)
+                return _join(*values)
             if wrapper in {"typing.Callable", "collections.abc.Callable"}:
                 return _Value(
                     "<callable>",

@@ -238,7 +238,11 @@ Constructing a `TypeAdapter` does not run model validation; validating through a
 resolved model adapter follows its application hooks and actual input values.
 Adapters for native containers of models and model unions follow nested model
 hooks and preserve their validated values. `Any` preserves the input; `JsonValue`
-supplies recursive JSON shapes. Functional `Annotated` metadata and custom schema
+supplies recursive JSON shapes. Standard dataclass adapters retain fields,
+enum literal types and application `__post_init__` effects. Dataclass inheritance,
+custom construction, factories, init-only fields and validator metadata remain
+incomplete. Pydantic-wrapped validation failures do not escape as domain errors.
+Functional `Annotated` metadata and custom schema
 implementations remain incomplete unless explicitly supported. A single scalar
 `BeforeValidator` function follows its raw input; `AfterValidator` preserves its
 replacement value. Nested and chained before transformations remain CAN003.

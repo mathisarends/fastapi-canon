@@ -126,7 +126,7 @@ class _Models:
         for value in schema.variants:
             if value.unresolved:
                 return False
-            if self.source.model(value.name):
+            if self._record(value.name):
                 if self._custom_schema(value.name):
                     return False
             elif value.name in {
@@ -168,7 +168,7 @@ class _Models:
                 if key in seen:
                     continue
                 visited = seen | {key}
-                if self.source.model(variant.name):
+                if self._record(variant.name):
                     if actual.name != variant.name:
                         continue
                     result.append(actual)
@@ -328,7 +328,7 @@ class _Models:
             and (annotation.literal is None or annotation.literal == value.literal)
         ):
             return value
-        if self.source.model(annotation.name):
+        if self._record(annotation.name):
             existing = [v for v in value.variants if v.name == annotation.name]
             if len(existing) == len(value.variants):
                 return _join(*existing)
@@ -705,11 +705,80 @@ class _Models:
             return None
         return function.name, modes[factory]
 
+    def _record(self, owner: str) -> bool:
+        if self.source.model(owner):
+            return True
+        definition = self.source.definitions.get(owner)
+        if definition is None or not isinstance(definition.node, ast.ClassDef):
+            return False
+        node = definition.node
+        if (
+            node.bases
+            or node.keywords
+            or node.type_params
+            or len(node.decorator_list) != 1
+        ):
+            return False
+        decorator = node.decorator_list[0]
+        if (
+            self.source.resolve(
+                decorator.func if isinstance(decorator, ast.Call) else decorator,
+                definition.module,
+            )
+            != "dataclasses.dataclass"
+        ):
+            return False
+        if isinstance(decorator, ast.Call) and (
+            decorator.args
+            or any(
+                kw.arg is None
+                or not isinstance(kw.value, ast.Constant)
+                or not isinstance(kw.value.value, bool)
+                for kw in decorator.keywords
+            )
+        ):
+            return False
+        if any(
+            self.source.method(owner, name)
+            for name in (
+                "__init__",
+                "__new__",
+                "__getattribute__",
+                "__getattr__",
+                "__setattr__",
+            )
+        ):
+            return False
+        if self.hooks(owner):
+            return False
+        for field in node.body:
+            if not isinstance(field, ast.AnnAssign):
+                continue
+            if (
+                isinstance(field.annotation, ast.Subscript)
+                and self.source.resolve(field.annotation.value, definition.module)
+                == "dataclasses.InitVar"
+            ):
+                return False
+            if field.value is None:
+                continue
+            scope, default = self.source.value(field.value, definition.module)
+            if isinstance(default, ast.Constant):
+                continue
+            if isinstance(default, ast.Attribute):
+                enum = self.source.resolve(default.value, scope) or ""
+                if "enum.Enum" in (self.source.mro(enum) or ()):
+                    continue
+            return False
+        return True
+
     def _custom_schema(self, owner: str, seen: frozenset[str] = frozenset()) -> bool:
         definition = self.source.definitions.get(owner)
         if definition is None:
             return False
         if not isinstance(definition.node, ast.ClassDef):
+            return True
+        if any(keyword.arg == "metaclass" for keyword in definition.node.keywords):
             return True
         if owner in seen:
             return False

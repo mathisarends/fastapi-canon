@@ -1245,15 +1245,23 @@ class _Analyzer:
                     for model in self.source.models.validated_models(
                         schema, self.source.infer(node, function.module, env)
                     ):
-                        flow.extend(
-                            self._construct(
-                                self.source.definitions[model.name],
-                                function,
-                                stack,
-                                node.lineno,
-                                constructed=model,
-                            )
+                        validated = self._construct(
+                            self.source.definitions[model.name],
+                            function,
+                            stack,
+                            node.lineno,
+                            constructed=model,
                         )
+                        validated.escapes = [
+                            escape
+                            for escape in validated.escapes
+                            if not any(
+                                base
+                                in {"builtins.ValueError", "builtins.AssertionError"}
+                                for base in self.source.mro(escape.exception) or ()
+                            )
+                        ]
+                        flow.extend(validated)
                 else:
                     flow.unknowns.append(
                         _Unknown(
