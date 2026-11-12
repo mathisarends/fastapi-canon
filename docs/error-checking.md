@@ -1,197 +1,23 @@
-# Optional error-contract checking
+# Check application error contracts
 
-Run the source checker to find application exceptions missing from the
-`raises=` declarations of `APIRouter` operations, SSE streams and WebRTC
-sessions, and of `RpcChannel` methods:
+Run the source checker over your application and shared application libraries:
 
 ```console
-fastapi-canon check errors src
+fastapi-canon check errors src libs/orders/src --strict --require-complete
 ```
 
 Pass Python import roots: for `src/app/features/...`, use `src`, not `src/app`.
-The equivalent module command is
-`python -m fastapi_canon.check_error_contracts src`.
-Multiple roots are accepted when they contain different modules. In this
-workspace, run:
+Each root must contain distinct module names. Run in the application's Python
+environment so installed dependencies can be located. The equivalent module
+command is `python -m fastapi_canon.check_error_contracts`.
 
-```console
-uv run --frozen fastapi-canon check errors examples/reference-service/src --strict
-```
-
-The checker is included in Canon and needs no extra dependencies or annotations
-on application services. It parses source without importing the inspected
-application, constructing a Dishka container, or opening application resources.
-It is optional development tooling; normal route registration, runtime exception
-mapping and OpenAPI validation keep their existing behavior.
-
-## How the check works
-
-The checker compares two sets for each operation: application exceptions escaping
-the supported source paths, and errors declared by that operation and its router.
-It reads both from source; it does not execute the application.
-
-```mermaid
-flowchart TD
-    CLI["check_error_contracts src"] --> AST["Parse Python files into an AST"]
-    AST --> INDEX["Resolve imports, aliases, types and definitions"]
-    INDEX --> CONTRACT["Combine policy + router + operation raises; catalog from raises= and errors="]
-    INDEX --> CALLS["Follow endpoint, service, helper and dependency calls"]
-    CALLS --> HANDLING["Remove caught exceptions and include translated exceptions"]
-    CALLS -->|Library call| CALLBACKS["Follow application callables and construction hooks it receives"]
-    CALLBACKS --> HANDLING
-    HANDLING --> MATCH{"Error mapping found through inheritance?"}
-    CONTRACT --> MATCH
-    MATCH -->|Yes| COMPARE{"Mapped error declared?"}
-    COMPARE -->|Yes| COVERED["Supported error path covered"]
-    COMPARE -->|No| MISSING["CAN001: missing raises entry"]
-    MATCH -->|No| UNMAPPED["CAN002: missing Error mapping"]
-    INDEX -.->|Unresolved declaration| UNKNOWN["CAN003: incomplete analysis"]
-    CONTRACT -.->|Dynamic contract| UNKNOWN
-    CALLS -->|Abstract port| BINDING["Dishka provider bindings in the source"]
-    BINDING -->|Bound implementations| CALLS
-    BINDING -.->|No binding| UNKNOWN
-    CALLS -.->|Unresolved call| UNKNOWN
-    COVERED --> REPORT["Text or JSON report + optional CI exit status"]
-    MISSING --> REPORT
-    UNMAPPED --> REPORT
-    UNKNOWN --> REPORT
-```
-
-For example, `complete_task` calls `TaskService.complete`, which can explicitly
-raise `TaskNotFound`. A `raises=[task_not_found]` declaration supplies both its
-mapping and its operation contract. Removing that declaration produces `CAN002`
-with the call path; listing the error only in `Feature(errors=[...])` produces
-`CAN001`. If the same service calls an abstract repository method, the checker
-follows the implementation that a Dishka provider in the scanned roots binds to
-that port. Without such a binding the call produces `CAN003`: a known gap and an
-incomplete analysis can appear together.
-
-The command is the supported entry point. The `checks` implementation modules,
-their types and constants, and the report objects are private implementation details;
-the documented JSON fields are the machine-readable interface.
-
-## Findings and CI
-
-The [quickstart](quickstart.md#check-the-contract-in-ci)
-provides a minimal example: `get_project` calls `require_project`, which raises
-`ProjectMissing`. Remove the operation's `raises=[project_missing]` and run
-`fastapi-canon check errors src --strict --require-complete`: it reports `CAN002`
-and exits one. Restore the declaration to obtain zero gaps for that supported
-HTTP path. Listing the error only in `Feature(errors=[...])` produces `CAN001`.
-
-A successful check covers the supported source paths of the transports listed
-under [Transports](#transports), not arbitrary runtime exceptions.
-
-Given a service method that raises `TaskNotFound`, an endpoint calling that method
-must declare its mapped `task_not_found` error, either locally or on its router.
-The checker reports the source location and resolved call path when it is missing:
-
-```text
-service.py:24: CAN001 [app.router.complete_task] app.service.TaskNotFound: app.errors.task_not_found is missing from raises
-  app.router.complete_task -> app.service.TaskService.complete
-```
-
-| Code | Meaning |
-| --- | --- |
-| `CAN001` | An explicit application exception is mapped in the application catalog but missing from the operation's combined `raises`. |
-| `CAN002` | An explicit application exception has no mapping in `raises` or the application catalog. |
-| `CAN003` | A declaration or execution path could not be fully analyzed. |
-
-Default mode prints findings and exits zero. Use `--strict` to exit one for
-contract gaps. Use `fastapi-canon explain CAN003` for a code's meaning, example,
-repair and guide, including [JSON explanations](diagnostics.md#json-explanation-contract).
-Incomplete analysis remains visible and does not fail strict mode by itself.
-Add `--require-complete` to fail for incomplete operations or a scan containing no
-supported operations. Use both flags when both conditions should fail CI:
-
-```console
-fastapi-canon check errors src --strict --require-complete
-fastapi-canon check errors src --strict --format json
-```
-
-Invalid roots, duplicate module names, unreadable files and syntax errors exit
-two. JSON output includes each operation's `transport` (`http`, `sse`, `webrtc`
-or `rpc`), its diagnostics, a `complete` flag,
-`contract_gaps` and `incomplete_operations`. An operation can be fully analyzed
-and still contain a contract gap. An empty result does not establish coverage.
-
-`--strict` and `--require-complete` are independent: the former checks
-CAN001/CAN002 contract gaps; the latter checks CAN003 or an empty supported scan.
-Run `fastapi-canon check errors --help` for these defaults and exit codes. The
-module entry point `python -m fastapi_canon.check_error_contracts` remains
-supported. Application code is never imported by source analysis, and a complete
-result covers its supported explicit paths rather than all runtime exceptions.
-
-When an error catalog or `raises` sequence cannot be resolved, the checker reports
-incomplete analysis instead of guessing which errors are missing.
-
-## Performance in CI
-
-The checker reads each source file once and reuses function summaries and
-inheritance results within that invocation. Summaries retain the first error path
-per exception, matching the report's existing behavior. Cached summaries also
-retain dependencies on modules with uncertain declarations; recursive call paths
-remain incomplete. All caches are discarded when the check finishes, so each new
-invocation reads the current source.
-
-Local Windows/Python 3.14 measurements with dependencies installed and a warm
-filesystem cache:
-
-| Workload | Source processing | Full CLI invocation |
-| --- | --- | --- |
-| Reference service: 43 files, 4 operations | 18–39 ms | 1.0–1.9 s |
-| Synthetic shared helper graph: 102 files, 1,000 operations | 0.26 s | 1.32 s |
-| Synthetic shared helper graph: 1,002 files, 10,000 operations | 4.93 s | 6.63 s |
-
-The 1,000-operation case improved from 7.70 s to 1.32 s for the full command,
-using five-run medians. Before/after reports have identical fingerprints,
-including source locations, error paths and incomplete-analysis diagnostics.
-The 10,000-operation case uses a three-run median. These synthetic workloads
-exercise shared services and repeated helper calls; they are measurements, not CI
-time limits or guarantees for other projects. Python and Canon's existing
-FastAPI/Dishka imports account for most of a small project's command time.
-
-Pass all relevant import roots in one invocation to pay interpreter startup once.
-Measure on your CI runner before setting a time budget. From this repository, use:
-
-```console
-uv run --locked python scripts/benchmark_error_contracts.py --output dist/checker-benchmark.json
-```
-
-The benchmark generates its workload under `dist/`, measures source processing
-and fresh CLI processes separately, and records Python/platform metadata. Use
-`--compare dist/previous-benchmark.json` to verify unchanged report fingerprints;
-`--profile dist/checker.prof` records a cProfile capture. CI regression tests
-verify that shared helpers are analyzed once and cached results preserve
-completeness, rather than asserting machine-dependent wall-clock thresholds.
-
-## Transports
-
-| Declaration | Compared with |
-| --- | --- |
-| `@router.get(...)` and other HTTP methods | Endpoint and dependency failures against policy, router and operation `raises=`. |
-| `@router.sse(...)` | Dependency and stream body failures, including iterated service generators, against router and stream `raises=`. |
-| `@router.webrtc(...)` | Session factory and dependency failures against router and session `raises=`. |
-| `@channel.method` on an `RpcChannel` | Method failures against the channel and method `raises=`. |
-
-One SSE `raises=` declaration covers both phases: dependency failures become
-HTTP problem responses, stream body failures terminal `canon.problem` events.
-
-For RPC, the checker reads `RpcChannel(raises=[...])` and `Error`
-declarations. `RpcError` subclasses and `RpcErrorBinding` declarations are
-reported as unresolved contracts (`CAN003`). Contracts of channels included into
-other channels do not propagate, like router contracts.
-`.method` decorators on other objects are ignored.
-
-### RPC channel subclasses
-
-In Canon 0.19.0 and later, the checker also reads methods declared on
-statically resolved `RpcChannel` subclasses. Existing CLI flags and `raises=`
-declarations apply:
+The checker finds **application-defined exceptions escaping an operation** and
+compares them with that operation's `raises=` contract. It parses source without
+importing the inspected application, constructing a Dishka container, opening a
+database or starting a browser. It needs no annotations specific to the checker.
 
 ```python
-from fastapi_canon import Error
-from fastapi_canon.integrations.websockets import RpcChannel
+from fastapi_canon import APIRouter, Error
 
 
 class ProjectMissing(Exception):
@@ -201,413 +27,271 @@ class ProjectMissing(Exception):
 project_missing = Error(
     ProjectMissing, status=404, code="project_missing", title="Project missing"
 )
+router = APIRouter()
 
 
-class ProjectChannel(RpcChannel):
-    """A named application channel with the standard Canon contract."""
-
-
-channel = ProjectChannel("projects", raises=[project_missing])
-
-
-@channel.method
-async def find_project() -> None:
+def require_project() -> None:
     raise ProjectMissing()
+
+
+@router.get("/project", raises=[project_missing])
+def get_project() -> None:
+    require_project()
 ```
 
-Run `fastapi-canon check errors src --strict --require-complete` with this file
-under `src`. Removing the channel's `raises` produces CAN002; registering that
-error elsewhere in the scanned catalog produces CAN001 instead. A method-level
-`raises` can also cover it.
+Save this as `src/app.py`. The command above with just `src` passes. Removing
+`raises=[project_missing]` produces CAN002. Registering the error only in
+`Feature(errors=[project_missing])` supplies a mapping but leaves the operation's
+contract missing: CAN001. Both findings include the resolved call path.
 
-Supported subclass chains have one base per class, without type arguments,
-class decorators, metaclass keywords or class type parameters. Class bodies
-contain only `pass` or string docstrings. Imported bases, explicit re-exports and aliases are followed within
-the scanned roots. These same channel declarations work inside supported
-[local route factories](#direct-local-route-factories).
+A declaration describes an allowed error; it does not catch an exception by
+itself. Canon's runtime error mapping converts registered application exceptions
+to Problem Details. Source checking checks those contracts separately from
+runtime registration and application composition.
 
-A recognized RPC subclass with custom class logic, including constructors,
-method overrides or assignments, remains in the report with CAN003. Its effective
-contracts cannot be established without executing application code. Multiple
-inheritance and unresolved declarations retain the same incomplete status when a
-Canon ancestor is statically visible. Arbitrary dynamic channel factories still
-fall outside these supported declaration forms.
+## What completeness means
 
-The existing channel identity and error declarations provide the source contract;
-applications need no checker-specific annotation. The checker never constructs
-the class or imports its module. `--strict` rejects discovered contract gaps;
-`--require-complete` independently rejects incomplete analysis. Before upgrading,
-run both flags over all application roots and map/declare newly discovered errors.
-Review CAN003 findings without excluding channels, dependencies or ORM calls to
-obtain a passing check. This change does not prove provider activation, branch
-feasibility, persisted invariants or full runtime exception coverage.
+The scope is explicit exceptions defined in the scanned application roots,
+including your shared libraries. Include every relevant application library root:
+a library you own must not become an external dependency merely because it is
+installed separately.
 
-## Supported source patterns
+Third-party and built-in exceptions do not need application `Error` mappings.
+An unexpected SQL, browser, filesystem or interpreter failure can still produce
+500. You do not need to inventory those libraries' internal exceptions. If your
+adapter catches such a failure and raises `ProjectMissing`, the checker follows
+that translation and checks `ProjectMissing`.
 
-The checker follows direct `APIRouter` declarations with ordinary route
-decorators, including `api_route`. It reads named `Error` definitions. The
-application catalog is every `Error` referenced in a `raises=` or `errors=`
-keyword in the scanned source, such as `Feature(errors=[...])`: a mapped
-exception that an operation does not declare is a contract gap (`CAN001`), an
-exception outside that catalog is unmapped (`CAN002`). A direct, statically
-resolved `RouterPolicy` supplies its dependencies and shared errors. Policy, router and operation `raises`
-combine; supported
-sequences include named lists/tuples, unpacking and concatenation. Router contracts
-do not propagate to separately included child routers.
+`complete: true` means no unresolved path remains within the supported source
+model for that operation. It does not establish that every runtime failure is
+handled, that every possible Python protocol was modeled, or that the operation
+has no contract gaps. A fully analyzed operation can still have CAN001/CAN002.
+See [analysis boundaries](#analysis-boundaries) for unsupported behavior.
 
-Analysis follows imports, aliases and explicit re-exports within the supplied
-roots; typed service methods, including `Inject[Service]` and
-`FromDishka[Service]`; direct helper calls; simple constructor-injected `self`
-attributes; and annotated return values.
-It also follows function dependencies declared with `Depends` or `Security`,
-including `Annotated` aliases, nested dependencies and router/operation dependency
-lists. Dependencies supplied later while mounting an application are outside this
-source-declaration check.
+The command is the supported entry point. Modules under `checks` and their types
+are private implementation details; documented JSON fields are the machine
+interface. The expanded value, dependency and resource analysis described below
+is **unpublished and planned for 0.20.0**. Re-scan all application roots before
+upgrading CI: newly visible application exceptions can fail `--strict`.
 
-### Package re-exports
+## Findings and CI
 
-Keep normal package facades when checking an application. For example, a package
-may expose its router from `app/__init__.py`:
+| Code | Meaning |
+| --- | --- |
+| `CAN001` | An escaping application exception has a catalog mapping missing from the operation's combined `raises`. |
+| `CAN002` | An escaping application exception has no mapping in `raises` or the scanned application catalog. |
+| `CAN003` | A declaration, value or execution path cannot be resolved within the supported model. |
 
-```python
-from .router import router
+Default mode prints findings and exits zero. `--strict` exits one for CAN001 and
+CAN002. `--require-complete` independently exits one for CAN003 or a scan with no
+supported operations. Use both for a CI gate:
+
+```console
+fastapi-canon check errors src libs/orders/src --strict --require-complete --format json
 ```
 
-The module `app.router` and the package's exported `router` are distinct names.
-The checker follows the module's operations and the exported object without
-importing either file. The same rule applies to re-exported helpers and classes.
+Invalid roots, duplicate module names, unreadable files and syntax errors exit
+two. Use `fastapi-canon explain CAN003` for diagnostic help, or
+`fastapi-canon check errors --help` for flags and defaults.
 
-**Unpublished fix, planned for 0.20.0:** Canon 0.19.0 can confuse these names when
-an export has the same name as its source module. A router can then report CAN003,
-or an RPC method can disappear from the report, hiding CAN001/CAN002 findings
-from `--strict`. The fix retains the existing declarations and CLI flags. Before
-upgrading CI, scan each application's import roots again and review newly found
-error paths. `--require-complete` remains necessary when incomplete analysis
-must fail CI; resolving a re-export does not establish complete runtime coverage.
+JSON contains `operations`, `contract_gaps` and `incomplete_operations`. Each
+operation includes its `function`, source `path` and `line`, `transport`,
+`diagnostics`, `complete` and `scheduled_executions`. Diagnostics include a code,
+message, location and call trace. `scheduled_executions` lists resolved coroutine
+functions scheduled as tasks; it does not certify their background execution.
+An awaited task contributes its application exceptions to the awaiting operation.
+
+Establish a gate over a coherent application slice and all its shared calls.
+Check the operation count as well as completeness: an empty scan establishes no
+coverage. Remove a known `raises` entry as a negative control, require CAN001 or
+CAN002 and exit one, then restore it and require zero gaps. Retain runtime tests
+for intended Problem Details responses and transport behavior.
+
+## How the check works
+
+The checker resolves source imports, explicit re-exports, aliases, classes and
+calls. It combines policy, router and operation `raises`. Named `Error` values
+referenced by `raises=` or `errors=` form the scanned application catalog.
+Exception matching follows resolved inheritance order, preferring the most
+specific mapping. Contracts do not propagate through separately included routers
+or channels.
+
+Supported `try`/`except` removes caught exceptions and includes translated errors
+and bare re-raises. Handler state conservatively combines values at possible
+failure points. Literal and type guards can exclude branches; arbitrary business
+conditions and persisted invariants are not proved. A finding describes a possible
+source path, not proof that a particular request reaches it.
 
 ### Calls and return types
 
-**Unpublished, planned for 0.20.0:** `Any`, `object`, callable annotations and
-unbound class types do not establish an external implementation. Calls through
-them retain CAN003. A callable parameter with a standard-library default can
-still be replaced by its caller; concrete argument provenance through
-constructors and provider calls remains unresolved. Unknown constructor
-parameters also shadow same-named module functions instead of falling back to them.
+The checker follows actual positional and keyword arguments, defaults and known
+`*args`/`**kwargs` values into helpers and constructors. It preserves bound
+receivers, constructor fields, aliases, supported container contents and stable
+local-function captures. Reassigning an aliased object's fields remains visible
+to later calls. Annotation-only statements do not replace an existing value.
 
-Callable application instances follow their resolved `__call__` method rather than
-their constructor. Bound classmethods bind their first parameter to the class
-used at the call site, including inherited factories; `cls(...)` follows that
-class's supported constructor path. A method's `Self` return resolves to that
-receiver, preserving subsequent application-method analysis. Unknown class
-dispatch, such as an unbound `type[Service]` parameter, remains CAN003.
+Inherited methods, classmethods, properties, `Self` and statically resolved
+`super()` dispatch follow the application's method resolution order. Recursive
+call chains are supported when their value and error summaries converge. Growing
+or unresolved recursion produces CAN003 rather than a complete result.
 
-For HTTP/SSE/WebRTC endpoint and dependency parameters supplied by FastAPI, an
-`HTTPConnection` binding is known to be an HTTP `Request`. Direct `isinstance`
-checks against `Request` or `WebSocket`, including `not`, can exclude the other
-transport's branch. Ordinary helper calls do not inherit that injection fact:
-argument-sensitive cross-function narrowing remains unsupported. A possible
-`WebSocketException` escaping an HTTP operation retains an explicit CAN003.
-Known FastAPI/Starlette `HTTPException` and `WebSocketException` aliases are
-framework failures and do not require application `Error` mappings. Unrecognized
-external exception hierarchies remain unresolved.
+`Any`, `object`, unknown callable inputs and unbound `type[Service]` values do not
+establish a safe implementation. Unknown locals shadow same-named globals.
+Dynamic decorators, custom allocation and custom attribute lookup remain explicit
+boundaries rather than being assumed harmless.
+
+For FastAPI-supplied endpoint and dependency parameters, `HTTPConnection` is
+narrowed to `Request` on HTTP/SSE/WebRTC operations. Known framework
+`HTTPException` aliases need no application mapping. A possible
+`WebSocketException` escaping an HTTP operation retains CAN003.
 
 ### Dishka ports
 
-Calls to an abstract method or a `Protocol` member follow the implementations
-that `Provider` classes in the scanned roots bind to that port. The checker reads
-these bindings without constructing a container:
+Abstract methods and protocol members follow implementations registered by
+`Provider` classes in the scanned roots. Supported registrations include
+`provide(Impl, provides=Port)`, `@provide`, `alias(source=Impl, provides=Port)`,
+constructor-returning factories and transitive providers returning a registered
+parameter through local aliases. Quoted class annotations are supported.
 
-```python
-class TaskProvider(Provider):
-    implementation = provide(SqlTaskRepository, scope=Scope.REQUEST)
+The provided value carries its actual constructor arguments. An explicit
+`Service(RiskyRepository())` is not replaced by a different registered default.
+Multiple bindings contribute their possible errors. Missing registrations,
+unsupported component-qualified bindings, ambiguous annotations and dependency
+cycles retain CAN003. Providers are read, never executed: instance-level runtime
+registrations and `dependency_overrides` are not inferred.
 
-    # The registered dependency identifies the implementation behind the port.
-    @provide(scope=Scope.REQUEST)
-    def task_repository(self, implementation: SqlTaskRepository) -> TaskRepository:
-        return implementation
-
-    # provides= names the port; the first argument or source= names the class.
-    verifier = provide(LocalTokenVerifier, provides=TokenVerifier, scope=Scope.APP)
-```
-
-`@provide(provides=Port)` and `alias(source=Impl, provides=Port)` are read the
-same way. Factories returning constructors such as `SqlTaskRepository(session)`
-are also supported. `Iterator[T]` and `AsyncIterator[T]` factories provide `T`.
-
-**Unpublished, planned for 0.20.0:** provider parameters with a single source-class
-annotation can be returned or yielded directly, through local aliases or through
-other registered providers. This requires a binding for the forwarded dependency;
-its annotation alone is not evidence that a particular implementation is active.
-Quoted class annotations are supported. Optional, union, component-qualified and
-external parameter annotations, missing registrations and dependency cycles remain
-incomplete. Conditional annotation origins remain incomplete for every affected
-operation. Existing reassignment and conditional-return rules still apply.
-
-Resource providers can yield a statically resolved implementation inside a
-`try/finally` with ordinary cleanup. Cleanup that returns or yields another value,
-unsupported cleanup control flow and exception handlers remain unresolved. This
-resolves the provided value only; it does not add provider startup or shutdown
-exceptions to the operation's HTTP error contract.
-
-When several providers bind the same port, including `override=True`
-providers and test providers within the roots, the call contributes the union
-of their errors. A port without a binding, or a factory whose returned class is
-not statically known, keeps the operation incomplete (`CAN003`). Abstract calls
-on `self` without a binding follow the concrete subclasses in the roots, such as
-`to_domain` hooks of a generic repository base class.
-
-### Establish a consumer CI gate
-
-Scan each independently configured application with all its relevant import
-roots. Inspect operation-level `complete` values as well as the total counts:
-one unresolved shared dependency can affect many routes. A resolved provider
-may expose further errors or unresolved paths in its implementation.
-
-For a supported application slice, run both policies:
-
-```console
-fastapi-canon check errors src --strict --require-complete --format json
-```
-
-Verify the gate with a negative control: remove a known error from one operation's
-`raises` while retaining its mapping elsewhere in the application catalog. The
-check must report CAN001 and exit one. Removing the mapping as well produces
-CAN002. Restore the contract and require zero gaps and complete analysis for
-that slice. Keep larger application scans visible while their remaining paths
-are investigated; a passing slice does not establish whole-application coverage.
-
-Exercise the same boundary with a real request. For example, a repository can
-translate an expected file-library exception into `DocumentMissing`; its public
-mapping should produce the declared 404 Problem Details response. A missing
-`raises` declaration can still return that 404 when the mapping is registered
-elsewhere. An unmapped application exception reaches the generic server-error
-handling. Runtime scenarios validate the exercised behavior, not every possible
-library failure. Source `complete` remains limited by [analysis boundaries](#analysis-boundaries).
-
-Explicit `raise` statements propagate through supported function calls and simple
-branches. `try`/`except` removes caught exceptions, preserves bare re-raises and
-includes translated exceptions from handlers. Exception matching and catalog
-selection follow statically resolvable Python inheritance order, so a more
-specific registered error takes precedence over a base mapping. Apart from the
-known transport guards above, conditions are not proved feasible: a finding
-describes a possible source path, not a guarantee
-that a particular request reaches it.
+Dependency construction and resource-provider execution **before the yield**
+contribute errors to the operation. The yielded implementation is followed through
+ordinary `try/finally` resource factories. Post-yield shutdown is a different
+lifecycle boundary and does not enter the HTTP operation's `raises` contract.
+Application startup and whether a provider has already been initialized are not
+proved by this source scan.
 
 ### Library calls
 
-Mapped errors are application exceptions, so a call into code outside the
-scanned roots, such as the standard library, Pydantic or SQLAlchemy, contributes
-no escaping errors of its own. The checker treats a call as a library call when
-its target resolves to a package that the import path can locate outside the
-scanned roots. Locating a package does not import or execute it. Run the checker
-in the application's environment so that its dependencies are found.
+The checker locates dependencies without importing them. External source
+signatures can supply return shapes; external exception-raising bodies are not
+traversed. Packages overlapping a scanned application root are not accepted as
+external implementations. Missing packages and unresolved method receivers
+retain CAN003.
 
-```python
-class TaskRepository:
-    def __init__(self, session: AsyncSession) -> None:
-        self._session = session
+Application callbacks passed to library calls are followed conservatively.
+Supported library-generated constructors follow application hooks such as
+`__post_init__` and `model_post_init`, along with application field factories.
+Opaque callback inputs do not acquire concrete values from their annotations.
+Methods invoked indirectly on stored non-callable objects, arbitrary library
+protocols and global callback registries remain outside this model.
 
-    async def list_recent(self, user_id: UUID) -> list[Task]:
-        # select(...) and the typed session are library calls.
-        statement = select(TaskModel).where(TaskModel.user_id == user_id).limit(20)
-        rows = await self._session.scalars(statement)
-        return list(map(self.to_domain, rows))  # to_domain is followed
-```
-
-Receivers are recognized through parameter, constructor and field annotations,
-module-level library objects such as `bearer = HTTPBearer()`, literals and
-chained calls on library results. A FastAPI dependency on such an object, for
-example `Depends(bearer)`, is a library dependency.
-
-Known SQLAlchemy `AsyncSession` and `AsyncConnection` `execute`, `scalars`,
-`stream` and `stream_scalars` results retain their wrapper types after `await`,
-local assignments and aliases. `execute` returns a buffered synchronous `Result`;
-the streaming methods return asynchronous result wrappers. Result `scalars`,
-`mappings`, `unique` and `yield_per` transformations and explicit `Result[T]`
-family annotations preserve wrapper provenance. This is a bounded source summary,
-not a SQLAlchemy import or a database connection. Arbitrary external call results
-and application/model values extracted from a result are not inferred from that
-provenance. Their unresolved method calls remain CAN003; explicit application
-callbacks passed to result methods are still followed.
-
-Library code reaches application code only through what it receives, and the
-checker follows that code:
-
-- An application function, method or lambda passed as an argument is analyzed
-  as if the library called it.
-- Constructing a class with a library base class or a library class decorator
-  (Pydantic models, SQLModel tables, `@dataclass`) follows its `__new__`,
-  `__init__`, `__post_init__`, `__attrs_post_init__` and `model_post_init`
-  methods. Other decorated methods on such classes, such as Pydantic validators,
-  keep the operation incomplete (`CAN003`).
-
-Calls stay unresolved (`CAN003`) when their package cannot be located, when the
-package contains a scanned root (for example the installed application during a
-partial scan), for dynamic builtins such as `getattr`, `super` and `next`, and
-when a method on an untyped library result has the name of an application
-method.
+Bounded return-shape summaries cover standard containers, supported SQLAlchemy
+result wrappers and Pydantic models. They describe values, not library error
+inventories. Pydantic `Any` remains opaque; it is not treated as JSON. Validated
+`JsonValue` and successful JSON-mode dumps have JSON value shapes. Model validation,
+after validators, copies and actual field values preserve application objects;
+unvalidated `model_copy(update=...)` updates are not assumed validated.
+Before/plain/wrap transformations remain incomplete. Pydantic's wrapped validation
+and serializer failures do not become escaping domain exceptions merely because
+a hook raised them. Python-mode custom serializer results remain opaque.
 
 ## Comprehensions and deferred generators
 
-List, set and dict comprehensions follow supported explicit calls in their
-iterable expressions, filters and results (both keys and values for dicts).
-Multiple clauses and nested eager comprehensions are supported. The first
-iterable uses its enclosing environment; target names are local to the
-comprehension, including names introduced by later clauses. They do not replace
-outer bindings. As with ordinary loops/branches, analysis conservatively follows
-possible paths without proving cardinality or filter feasibility.
+Eager list, set and dict comprehensions follow their iterables, filters and
+results with local target bindings. Directly resolved generator iteration and
+supported eager consumers follow generator bodies. Unsupported iteration
+protocols, unresolved element methods and stored generator aliases retain CAN003.
 
-Async eager comprehensions support awaited application helpers and directly
-resolved async-generator iterables. Recognized custom iteration protocols,
-unresolved async iterators, unresolved element-method dispatch, mutating
-attribute/subscript targets and assignment expressions retain CAN003. Container
-annotations do not establish the concrete implementation of each element;
-implicit Python iteration, hashing and operator behavior remain outside the
-explicit-call model.
-
-Creating a generator expression evaluates its outermost iterable expression but
-does not execute result/filter helpers. The checker records deferred CAN003 and
-does not invent executed-body gaps. Direct `for`/`async for` iteration or an eager
-comprehension consuming that expression follows its body. Stored generator
-aliases and arbitrary library consumers are not proven by this bounded model.
-An unawaited coroutine result also remains deferred/incomplete.
-
-For example, `[require_item(item_id) for item_id in item_ids]` now follows
-`require_item` with the same CAN001/CAN002 mapping/declaration distinction and
-call trace as an ordinary call. An enclosing `try/except Missing` catches its
-explicit Missing path. Declaring the corresponding Error in `raises` covers it.
-
-The reference service's `list_tasks` path includes comprehensions in the
-[repository](../examples/reference-service/src/app/features/tasks/infrastructure/repository.py)
-and [presentation mapper](../examples/reference-service/src/app/features/tasks/presentation/mapper.py).
-Its two `unsupported expression: ListComp` diagnostics disappear. The full scan
-still reports six operations, zero contract gaps and five incomplete operations:
-unresolved `super().__init__`, inherited dispatch and nested route factories
-remain explicit boundaries. Its strict/require-complete command still exits 1;
-this change does not claim a fully validated reference application.
+Creating a generator expression runs its outer iterable expression, not its
+result helpers. Unconsumed generators and unawaited coroutines retain deferred
+CAN003. `asyncio.create_task` records a separate scheduled execution; awaiting a
+resolved task follows its body. Supported `gather` handling preserves exceptions
+from evaluating arguments even with `return_exceptions=True`. Background work is
+not certified by a complete HTTP operation.
 
 ## Local context managers
 
-**Unpublished, planned for 0.20.0:** `asyncio.Lock` and `asyncio.timeout` have
-bounded standard-library summaries. The checker follows their `async with` body
-and preserves its application exceptions. Other library managers are not assumed
-to have the same behavior. Stored exit-stack registration, transfer and cleanup
-retain CAN003 because they can execute application callbacks. Annotating an exit
-stack does not establish ownership or its registered effects.
+Supported local sync/async context methods and single-yield
+`contextmanager`/`asynccontextmanager` factories contribute entry, body and cleanup
+errors. Managers enter left to right and exit in reverse order. Known suppression
+removes caught body errors; uncertain suppression retains possible errors and
+CAN003. Exception-group splitting is not modeled.
 
-Source checking follows explicit calls in local sync `__enter__`/`__exit__`
-methods and async `__aenter__`/`__aexit__` methods, as well as the `with` body.
-Methods must be ordinary, undecorated, nongenerator definitions on the resolved
-class itself. Direct construction, typed local/parameter instances and local
-factories with a class return annotation are supported; coroutine factories must
-be awaited. A simple `as name` binding uses the enter return annotation, including
-`Self`. Destructured or mutating bindings remain incomplete.
+Known standard-library resource shapes include `suppress`, `closing`,
+`aclosing`, `asyncio.Lock` and `asyncio.timeout`. Owned `ExitStack` and
+`AsyncExitStack` registrations retain callback/context effects until explicit
+close or scope exit, including when the stack is stored in application fields.
+Conditional registration does not establish definite suppression. Opaque stacks,
+unsupported `push` registrations and ownership transfer remain CAN003. A type
+annotation alone does not establish a stack's registered effects.
 
-Exit methods with implicit None, bare `return`, `return None` or `return False`
-do not suppress body exceptions. A single top-level literal `return True`
-suppresses body exceptions, while errors in that exit method still escape.
-Multiple managers enter left to right and exit in reverse order; outer
-suppression also applies to errors entering an inner manager. A straight-line
-unconditional enter raise skips that manager's body and exit; a straight-line
-unconditional exit raise replaces inner errors. Other branching/call paths use
-the existing conservative union of possible explicit escapes.
+## Transports
 
-Unknown, computed or conditional suppression retains CAN003 and possible body
-gaps. Exception argument values are not simulated. Inherited/decorated methods,
-generator-based protocols, protocol kind mismatches and unresolved/external
-managers retain CAN003; body helpers are still inspected. In particular,
-SQLAlchemy and arbitrary library managers are not assumed harmless. This is
-explicit exception analysis, not a model of every implicit Python protocol error.
+| Declaration | Compared with |
+| --- | --- |
+| `@router.get(...)` and other HTTP methods | Endpoint and dependency errors against policy, router and operation `raises`. |
+| `@router.sse(...)` | Dependency and iterated stream errors against router and stream `raises`. |
+| `@router.webrtc(...)` | Session factory and dependency errors against router and session `raises`. |
+| `@channel.method` on `RpcChannel` | Method errors against channel and method `raises`. |
 
-For example, `with Manager(): require_item(item_id)` now follows
-`require_item` when Manager has local nonsuppressing methods, preserving its
-mapping/declaration diagnostics. Enter/exit helper traces include the protocol
-method. An enclosing supported `try/except` can catch these errors normally.
-The source module is never imported.
+For SSE, the same declaration covers dependency failures before response start
+and terminal `canon.problem` events during streaming. Source completeness does
+not validate runtime handling after a response starts.
 
-The reference-service comparison is unchanged by this slice: six operations,
-zero gaps and five incomplete operations, with strict/require-complete exit 1.
-Its remaining findings concern `super`, inherited dispatch and nested route
-factories rather than supported context managers.
+### RPC channel subclasses
+
+Since Canon 0.19.0, simple statically resolved `RpcChannel` subclasses are
+recognized. Supported chains have one base per class and only `pass` or docstrings
+in class bodies, without decorators, metaclass keywords or type parameters.
+Imports, re-exports and aliases are followed. Recognized subclasses with custom
+class logic remain in the report with CAN003.
+
+The checker reads `Error` and channel/method `raises`. `RpcError` subclasses and
+`RpcErrorBinding` contracts remain unresolved. Unrelated `.method` decorators are
+ignored. Included-channel contracts do not propagate.
 
 ## Direct local route factories
 
-A synchronous, undecorated factory without parameters can declare local
-APIRouter instances (or RpcChannels), nested operations and local
-helpers, then return the router/channel or a literal tuple/list of them. The
-checker indexes these declarations without calling the factory. Static Error,
-RouterPolicy declarations, literal values/collections and
-aliases are resolved in that factory's own scope. Straightforward module-level
-helpers and imported declarations remain available. Factory-local class
-construction, imports, arbitrary setup calls and dynamic captures remain outside
-this bounded subset.
+Supported local router/channel declarations and stable helper captures are
+indexed without calling their enclosing factory. Straightforward local contracts,
+aliases and collections are resolved. A declaration independent of an enclosing
+application factory's dynamic setup can also be inspected without executing that
+setup.
 
-Supported nested functions have stable names such as
-`app.create_router.<locals>.endpoint`; path and decorator line remain separate
-report fields. Two factories with a local `endpoint` keep independent symbols,
-registries and helper call paths. Calling a factory twice does not duplicate its
-source declaration. Distinct local routers keep separate contracts, including
-when a factory returns several routers.
+Dynamic captures, reassigned declarations, conditional router selection and
+unsupported factory execution retain CAN003. The scan reports source declarations,
+including uncalled factories. It does not establish mounting, URL prefixes,
+reachability or successful application construction.
 
-Parameters, conditional setup, reassigned local declarations, computed/unresolved
-captures, dynamic router selection and factory decorators retain CAN003. Repeated
-local function names also remain incomplete with source-line-qualified fallback
-names. Arbitrary endpoint decorators retain their ordinary incomplete-flow
-finding. Async/generator factories and general closure execution are not inferred.
+## Performance in CI
 
-This still reports source-owned declarations, including uncalled factories. It
-does not establish mounting, URL prefixes, runtime reachability or successful
-factory execution. Use composition inspection and runtime tests for those claims.
-The reference-service report remains six operations, zero gaps and five incomplete
-operations (strict/require-complete exit 1). Its two telemetry factories return an
-application/Feature and include dynamic setup, so they remain explicitly outside
-this slice; their diagnostic messages do not change.
+Pass relevant roots in one invocation. Parsed modules and summaries are reused
+within that invocation, including dependencies on changing object values.
+Caches are discarded afterward. Measure on your CI runner before setting a time
+budget. Repository maintainers can use:
+
+```console
+uv run --locked python scripts/benchmark_error_contracts.py --output dist/checker-benchmark.json
+```
+
+The benchmark records source processing and fresh CLI invocation separately.
+`--profile dist/checker.prof` captures a profile; `--compare` compares report
+fingerprints with an earlier benchmark.
 
 ## Analysis boundaries
 
-Synchronous `with contextlib.suppress(ErrorType, ...)` catches statically resolved
-exception types and their subclasses, including imported aliases. Other body
-errors, argument-evaluation errors and unresolved calls remain visible. Dynamic
-exception lists retain `CAN003`; exception-group splitting is not modeled.
+This is a bounded static analysis of explicit application error contracts.
+Implicit interpreter failures, arbitrary operator/descriptor/iteration protocols,
+third-party exception internals, startup, resource shutdown and independent
+background executions are outside the operation contract. They can still produce
+500 or fail at their own lifecycle boundary.
 
-`complete` describes analysis of the supported explicit source paths, not proof
-that no other runtime exception can occur. The checker does not model implicit
-interpreter errors, every Python protocol or implicit descriptor invocation,
-framework internals, application startup, transactions or background tasks.
-Explicit built-in exceptions are outside the application-error comparison.
+Unknown call targets, unbound ports, dynamic contracts, unsupported decorators,
+unstable captures, unsupported context ownership and nonconverging value/effect
+summaries produce CAN003. Analysis limits also produce CAN003; they do not silently
+turn an operation complete. `match` and `except*` remain unsupported. Loops combine
+possible paths rather than proving iteration counts. Finally blocks that may
+replace an escaping exception remain incomplete.
 
-Unresolved calls, unbound abstract ports, decorated hooks of library-based
-classes, custom decorators,
-recursive calls, dynamic contracts, unsupported route factories, deferred coroutine
-execution and unsupported control flow produce `CAN003`. `for`, `async for` and
-`while` loops are analyzed like branches that may run; iterating a call to a
-generator follows the generator's body. Supported comprehensions and deferred
-generator expressions and local context managers are described above. `match`
-and `except*` are currently outside the supported flow analysis. Reassigned module declarations and detected contract mutations also
-prevent a complete result, including assignments with type annotations. Dishka providers are
-read, not executed: bindings added to `Provider()` instances at runtime, or
-declared in providers outside the scanned roots, are not
-inferred, and an abstract port without a statically visible binding remains
-incomplete.
-
-Library calls are assumed not to raise application exceptions except through
-the application callables and construction hooks they receive. Methods that a
-library calls later on objects it stored, such as an overridden
-`logging.Handler.emit`, are not followed.
-
-Only source route declarations are inspected; the tool does not establish which
-routers are actually mounted, follow `dependency_overrides`, or validate composed
-registries from other features. Pass all relevant source roots, retain runtime
-contract validation and test the application's intended error paths.
-
-When the scanned source includes routers into a Canon router that declares
-`raises`, `http_statuses` or `policy` (directly or through
-`Composition(router_factory=...)`), the checker marks operations incomplete and
-suppresses guessed contract gaps: determining which operations inherit those
-contracts requires analyzing application mounting.
-
-Plain FastAPI routers are skipped. Supported Canon HTTP, SSE, RPC and WebRTC
-declarations are described above. Analysis follows supported explicit generator
-paths; failures after response start still use their transport's terminal
-problem/protocol handling. Source completeness does not validate that runtime
-error phase or guarantee that every possible exception is declared.
+Plain FastAPI routers are skipped. The checker does not validate composed
+registries, mounting or runtime overrides. Including routers into a Canon parent
+with additional contracts can therefore leave affected operations incomplete and
+suppress guessed gaps. Retain composition validation and runtime tests alongside
+the source gate. A passing result establishes only the documented source scope.

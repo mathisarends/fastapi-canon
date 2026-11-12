@@ -335,7 +335,7 @@ async def endpoint(source: AsyncIterator[int]):
     assert {d["code"] for d in operation["diagnostics"]} == {"CAN003"}
 
 
-def test_named_expression_keeps_unsupported_scope_changes_explicit(
+def test_named_expression_analyzes_the_assigned_expression(
     analyze: Callable[..., tuple[int, dict[str, Any]]],
 ) -> None:
     status, report = analyze("""
@@ -344,8 +344,8 @@ def endpoint(item_ids: list[int]):
     return [(seen := require_item(item)) for item in item_ids]
 """)
     (operation,) = report["operations"]
-    assert status == 1 and not operation["complete"]
-    assert {d["code"] for d in operation["diagnostics"]} == {"CAN002", "CAN003"}
+    assert status == 1 and operation["complete"]
+    assert {d["code"] for d in operation["diagnostics"]} == {"CAN002"}
 
 
 def test_unconsumed_async_generator_expression_keeps_awaits_deferred(
@@ -418,7 +418,7 @@ def endpoint(box: Box, item_ids: list[int]):
     assert any("target" in d["message"] for d in operation["diagnostics"])
 
 
-def test_unresolved_element_method_dispatch_stays_incomplete(
+def test_typed_element_method_dispatch_finds_the_application_error(
     analyze: Callable[..., tuple[int, dict[str, Any]]],
 ) -> None:
     status, report = analyze("""
@@ -430,5 +430,5 @@ def endpoint(items: list[Item]):
     return [item.validate() for item in items]
 """)
     (operation,) = report["operations"]
-    assert status == 1 and not operation["complete"]
-    assert {d["code"] for d in operation["diagnostics"]} == {"CAN003"}
+    assert status == 1 and operation["complete"]
+    assert {d["code"] for d in operation["diagnostics"]} == {"CAN002"}

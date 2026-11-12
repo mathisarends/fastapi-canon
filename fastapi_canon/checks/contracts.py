@@ -10,10 +10,10 @@ from fastapi_canon.checks.analysis import (
     _RPC_METHOD,
     _TRANSPORT_METHODS,
     _Analyzer,
-    _Flow,
-    _Unknown,
 )
-from fastapi_canon.checks.source import _Definition, _Source
+from fastapi_canon.checks.effects import _Flow, _Unknown
+from fastapi_canon.checks.source import _Source
+from fastapi_canon.checks.symbols import _Definition
 
 _API_ROUTERS = frozenset(
     {"fastapi_canon.APIRouter", "fastapi_canon.api_router.APIRouter"}
@@ -47,6 +47,7 @@ class _Operation:
     line: int
     diagnostics: list[_Diagnostic] = field(default_factory=list)
     transport: str = "http"
+    scheduled_executions: list[str] = field(default_factory=list)
 
     @property
     def complete(self) -> bool:
@@ -92,6 +93,18 @@ class _Checker:
         self._analyzer = _Analyzer(source)
 
     def check(self) -> _Report:
+        # Operations share application-scoped objects. A later operation can
+        # populate a container read by an earlier one; report the fixed point.
+        for _ in range(32):
+            heap = dict(self.source.heap)
+            report = self._check_pass()
+            if self.source.heap == heap:
+                return report
+        for operation in report.operations:
+            self._unknown(operation, "shared object flow did not converge")
+        return report
+
+    def _check_pass(self) -> _Report:
         operations: list[_Operation] = []
         nested = {id(function.node) for function in self.source.nested}
         for function in [*self.source.definitions.values(), *self.source.nested]:
@@ -481,6 +494,7 @@ class _Checker:
             self.source.uncertain.get(scope) for scope in self.source.touched
         )
         self._compare(operation, flow, catalog, declared, contracts_known)
+        operation.scheduled_executions = sorted(flow.scheduled)
         for scope in sorted(self.source.touched):
             for message in dict.fromkeys(self.source.uncertain.get(scope, [])):
                 operation.diagnostics.append(
@@ -497,6 +511,8 @@ class _Checker:
     ) -> None:
         seen: set[tuple[str, str]] = set()
         for escape in flow.escapes:
+            if escape.implicit:
+                continue
             if self.source.framework_exception(escape.exception):
                 if self.source.websocket_exception(
                     escape.exception
@@ -514,6 +530,8 @@ class _Checker:
                 continue
             # Only application-defined exceptions are in scope, not implicit runtime failures.
             if escape.exception.startswith("builtins."):
+                continue
+            if escape.exception not in self.source.definitions:
                 continue
             if not contracts_known:
                 continue

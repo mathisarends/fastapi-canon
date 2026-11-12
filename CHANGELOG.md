@@ -25,15 +25,18 @@ All notable changes to `fastapi-canon` are documented in this file.
   keep `--require-complete` enabled wherever unresolved paths must block CI.
   Conditional annotation origins remain visible on every affected operation.
 
-- Error-contract checking resolves resource-provider yields inside supported
-  `try/finally` blocks and preserves body errors through `asyncio.Lock` and
-  `asyncio.timeout`. Newly visible application errors can fail `--strict`.
-  Stored exit-stack effects and opaque `Any`/`object`/callable annotations now
-  report CAN003 instead of treating application callbacks as ordinary library
-  calls. These changes target unpublished 0.20.0. Scan all application and shared
-  library roots, review mappings and `raises`, and retain `--require-complete`.
-  Constructor defaults do not establish callback provenance. Full argument,
-  container and resource-effect propagation remain outside the supported model.
+- Error-contract checking now propagates actual arguments, constructor fields,
+  container values and shared-object mutations through application call chains.
+  It follows converging recursive summaries, dependency construction, generator
+  resource entry, owned exit-stack cleanup, awaited tasks and supported Pydantic
+  value shapes. Opaque values and unsupported effects remain CAN003. Newly found
+  application exceptions can fail `--strict`; this targets unpublished 0.20.0.
+  Scan every application and shared-library import root, review new mappings and
+  `raises`, and use `--strict --require-complete` for the intended CI scope.
+  JSON operations include `scheduled_executions`; background work and provider
+  shutdown are separate from the operation contract. Third-party and built-in
+  exceptions require no application mapping and can still produce 500.
+
 ### Development
 
 - Add reproducible pytest timing reports with fixture and subprocess counts,

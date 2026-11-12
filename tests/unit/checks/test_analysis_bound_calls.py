@@ -174,7 +174,7 @@ async def protected(guard: FromDishka[Guard]) -> None:
 
 
 @pytest.mark.parametrize("first", ["direct", "dependency"])
-def test_only_framework_injected_connections_are_narrowed(
+def test_framework_connection_types_survive_direct_and_dependency_calls(
     scan: Callable[[str], tuple[int, dict[str, Any]]],
     first: str,
 ) -> None:
@@ -194,12 +194,11 @@ async def dependency() -> None: pass
         + (direct + dependency if first == "direct" else dependency + direct)
     )
 
-    assert status == 1
+    assert status == 0
     operations = {item["function"]: item for item in report["operations"]}
     assert operations["api.dependency"]["complete"]
-    [diagnostic] = operations["api.direct"]["diagnostics"]
-    assert diagnostic["code"] == "CAN003"
-    assert "transport narrowing is unresolved" in diagnostic["message"]
+    assert operations["api.direct"]["complete"]
+    assert operations["api.direct"]["diagnostics"] == []
 
 
 @pytest.mark.parametrize(

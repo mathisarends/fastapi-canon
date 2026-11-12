@@ -1,16 +1,13 @@
 import shutil
 from pathlib import Path
 from textwrap import dedent
+from typing import Any
 
 import pytest
 
 from fastapi_canon.check_error_contracts import (
     # static-flow unit seam
     _main,  # smelt: ignore[SMT420] -- unit seam
-)
-from fastapi_canon.checks.analysis import (
-    # static-flow unit seam
-    _Flow,  # smelt: ignore[SMT420] -- unit seam
 )
 from fastapi_canon.checks.contracts import (
     # static-flow unit seam
@@ -20,11 +17,17 @@ from fastapi_canon.checks.contracts import (
     # static-flow unit seam
     _Report,  # smelt: ignore[SMT420] -- unit seam
 )
+from fastapi_canon.checks.effects import (
+    # static-flow unit seam
+    _Flow,  # smelt: ignore[SMT420] -- unit seam
+)
 from fastapi_canon.checks.source import (
     # static-flow unit seam
-    _Definition,  # smelt: ignore[SMT420] -- unit seam
-    # static-flow unit seam
     _Source,  # smelt: ignore[SMT420] -- unit seam
+)
+from fastapi_canon.checks.symbols import (
+    # static-flow unit seam
+    _Definition,  # smelt: ignore[SMT420] -- unit seam
 )
 
 PRELUDE = """
@@ -53,6 +56,45 @@ def codes(report: _Report) -> list[str]:
     return [
         item.code for operation in report.operations for item in operation.diagnostics
     ]
+
+
+@pytest.mark.parametrize("factory", [False, True], ids=["constructor", "provider"])
+def test_dependency_creation_is_checked_even_when_parameter_is_unused(
+    tmp_path: Path, factory: bool
+) -> None:
+    provider = (
+        """
+class Dependencies(Provider):
+    @provide(scope=Scope.REQUEST)
+    def service(self) -> Service:
+        raise Missing()
+"""
+        if factory
+        else """
+class Dependencies(Provider):
+    service = provide(Service, scope=Scope.REQUEST)
+"""
+    )
+    report = analyze(
+        tmp_path,
+        PRELUDE
+        + """
+from dishka import Provider, Scope, provide
+from fastapi_canon import Inject
+class Service:
+    def __init__(self):
+        raise Missing()
+"""
+        + provider
+        + """
+@router.get('/')
+def endpoint(service: Inject[Service]):
+    return None
+""",
+    )
+
+    assert codes(report) == ["CAN001"]
+    assert report.incomplete == 0
 
 
 def test_missing_contract_has_call_path_and_raise_location(tmp_path: Path) -> None:
@@ -370,7 +412,9 @@ def endpoint():
     assert report.incomplete == 1
 
 
-def test_recursion_is_not_reported_as_complete(tmp_path: Path) -> None:
+def test_resolved_recursion_has_a_complete_explicit_exception_effect(
+    tmp_path: Path,
+) -> None:
     report = analyze(
         tmp_path,
         PRELUDE
@@ -383,7 +427,8 @@ def endpoint():
     helper()
 """,
     )
-    assert codes(report) == ["CAN003"]
+    assert codes(report) == []
+    assert report.incomplete == 0
 
 
 def test_nested_function_body_is_not_executed(tmp_path: Path) -> None:
@@ -582,7 +627,9 @@ def endpoint(callback):
     assert codes(report) == ["CAN003"]
 
 
-def test_inherited_method_dispatch_is_incomplete(tmp_path: Path) -> None:
+def test_inherited_method_dispatch_preserves_the_specific_receiver(
+    tmp_path: Path,
+) -> None:
     report = analyze(
         tmp_path,
         PRELUDE
@@ -599,7 +646,9 @@ def endpoint(service: Specific):
     service.run()
 """,
     )
-    assert report.incomplete == 1
+    assert report.incomplete == 0
+    assert codes(report) == ["CAN001"]
+    assert report.operations[0].diagnostics[0].trace[-1] == "api.Specific.fail"
 
 
 def test_constructor_and_property_exceptions(tmp_path: Path) -> None:
@@ -858,6 +907,7 @@ def second(): shared()
         iterated: bool,
         receiver: str | None = None,
         dependency_transport: str | None = None,
+        bindings: dict[str, Any] | None = None,
     ) -> _Flow:
         calls.append(function.name)
         return original(
@@ -866,6 +916,7 @@ def second(): shared()
             iterated=iterated,
             receiver=receiver,
             dependency_transport=dependency_transport,
+            bindings=bindings,
         )
 
     monkeypatch.setattr(analyzer, "_analyze_function", counted)
@@ -956,7 +1007,8 @@ def first(): a()
 def second(): b()
 """,
     )
-    assert report.incomplete == report.gaps == 2
+    assert report.incomplete == 0
+    assert report.gaps == 2
     paths = [
         next(item.trace for item in operation.diagnostics if item.code == "CAN001")
         for operation in report.operations

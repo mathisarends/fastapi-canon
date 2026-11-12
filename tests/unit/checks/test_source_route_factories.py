@@ -208,7 +208,7 @@ def factory():
 @pytest.mark.parametrize(
     "factory",
     [
-        "def factory(flag):\n    router = APIRouter()\n    @router.get('/')\n    def endpoint(): fail()\n    return router",
+        "def factory(flag):\n    router = APIRouter()\n    @router.get('/')\n    def endpoint():\n        if flag: fail()\n    return router",
         "def factory():\n    router = APIRouter()\n    if flag: router = APIRouter()\n    @router.get('/')\n    def endpoint(): fail()\n    return router",
         "def factory():\n    router = APIRouter()\n    router = APIRouter()\n    @router.get('/')\n    def endpoint(): fail()\n    return router",
         "def factory():\n    router = choose_router()\n    @router.get('/')\n    def endpoint(): fail()\n    return router",

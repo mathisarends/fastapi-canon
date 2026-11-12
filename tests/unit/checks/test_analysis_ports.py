@@ -184,7 +184,7 @@ class AppProvider(Provider):
         (
             """
 def build() -> Repository:
-    return SqlRepository()
+    return unknown_factory()
 
 class AppProvider(Provider):
     @provide(scope=Scope.REQUEST)
@@ -201,9 +201,10 @@ def test_unresolved_ports_stay_incomplete(
 ) -> None:
     report = analyze(SQL_REPOSITORY + provider, declaration="raises=[missing]")
 
-    assert [(item["code"], item["message"]) for item in diagnostics(report)] == [
-        ("CAN003", message)
-    ]
+    expected = [("CAN003", message)]
+    if provider:
+        expected.insert(0, ("CAN003", "unresolved call: unknown_factory"))
+    assert [(item["code"], item["message"]) for item in diagnostics(report)] == expected
     assert not report["operations"][0]["complete"]
 
 
@@ -302,8 +303,9 @@ class AppProvider(Provider):
 
     report = analyze(SQL_REPOSITORY + provider)
 
-    [finding] = diagnostics(report)
-    assert finding["code"] == "CAN003"
+    findings = diagnostics(report)
+    assert all(finding["code"] == "CAN003" for finding in findings)
+    assert any(finding["message"] == "unresolved call: unknown" for finding in findings)
     assert not report["operations"][0]["complete"]
 
 

@@ -130,7 +130,7 @@ Composition(
     )
 
 
-def test_stored_cleanup_failure_cannot_receive_a_complete_http_proof(
+def test_stored_cleanup_failure_is_reported_before_http_500(
     tmp_path: Path,
 ) -> None:
     application = tmp_path / "application.py"
@@ -189,10 +189,10 @@ Composition(features=[feature], errors=ErrorOptions(type_base='urn:test:problem'
     report = json.loads(checked.stdout)
     (operation,) = report["operations"]
     assert checked.returncode == 1, checked.stderr
-    assert not operation["complete"]
-    assert report["contract_gaps"] == 0
+    assert operation["complete"]
+    assert report["contract_gaps"] == 1
     assert any(
-        d["code"] == "CAN003" and "resource ownership" in d["message"]
+        d["code"] == "CAN002" and "CleanupFailure" in d["message"]
         for d in operation["diagnostics"]
     )
 
