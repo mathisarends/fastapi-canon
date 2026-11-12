@@ -8,7 +8,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Literal, Self
 
-from fastapi_canon.checks.generator_phases import _has_yield, _phases
+from fastapi_canon.checks.generator_phases import _has_yield, _resource_phases
 from fastapi_canon.checks.library_types import _LibraryTypes
 from fastapi_canon.checks.model_values import _Models
 from fastapi_canon.checks.symbols import (
@@ -3085,16 +3085,20 @@ class _Source:
         try:
             local = self.environment(function, bindings=bindings)
             if yielded:
-                phases = _phases(function.node.body)
-                if phases is None:
+                entries = _resource_phases(function.node.body)
+                if entries is None:
                     values = [_Value()]
                 else:
-                    self.values_block(phases.before, function.module, local)
-                    values = [
-                        self.infer(phases.yielded, function.module, local)
-                        if phases.yielded
-                        else _Value("builtins.NoneType", instance=True)
-                    ]
+                    values = []
+                    for phases in entries:
+                        branch = local.copy()
+                        self.values_block(phases.before, function.module, branch)
+                        if "$terminated" not in branch:
+                            values.append(
+                                self.infer(phases.yielded, function.module, branch)
+                                if phases.yielded
+                                else _Value("builtins.NoneType", instance=True)
+                            )
             else:
                 values = self.values_block(function.node.body, function.module, local)
             pending: list[ast.AST] = list(function.node.body)

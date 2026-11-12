@@ -177,6 +177,9 @@ Dependency construction and resource-provider execution **before the yield**
 contribute errors to the operation. The yielded implementation is followed through
 ordinary `try/finally` resource factories. Post-yield shutdown is a different
 lifecycle boundary and does not enter the HTTP operation's `raises` contract.
+Conditional resource entries with an early yield and return retain each possible
+implementation and its entry effects. Yields inside loops or exception handlers
+still require unsupported continuation analysis.
 Application startup and whether a provider has already been initialized are not
 proved by this source scan.
 

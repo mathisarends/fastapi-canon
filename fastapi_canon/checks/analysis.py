@@ -4,7 +4,7 @@ import ast
 from dataclasses import replace
 
 from fastapi_canon.checks.effects import _Escape, _Flow, _Summary, _SummaryKey, _Unknown
-from fastapi_canon.checks.generator_phases import _has_yield, _phases
+from fastapi_canon.checks.generator_phases import _has_yield, _phases, _resource_phases
 from fastapi_canon.checks.source import _Environment, _Source
 from fastapi_canon.checks.symbols import _Definition
 from fastapi_canon.checks.value_flow import _contexts, _join, _Value
@@ -409,11 +409,10 @@ class _Analyzer:
                             decorator.lineno,
                         )
                     )
-            body = definition.node.body
-            phases = None
+            entries = None
             if _generator(definition.node):
-                phases = _phases(body)
-                if phases is None:
+                entries = _resource_phases(definition.node.body)
+                if entries is None:
                     flow.unknowns.append(
                         _Unknown(
                             "unresolved dependency resource entry",
@@ -422,26 +421,31 @@ class _Analyzer:
                         )
                     )
                     continue
-                body = phases.before
-            local = self.source.environment(
-                definition, bindings=dict(creation.bindings)
-            )
-            if phases:
-                self._entering[definition.name] = frozenset(
-                    (context.lineno, context.col_offset) for context in phases.contexts
+            for phases in entries if entries is not None else (None,):
+                body = phases.before if phases else definition.node.body
+                local = self.source.environment(
+                    definition, bindings=dict(creation.bindings)
                 )
-            try:
-                flow.extend(
-                    self.block(body, definition, local, (*stack, definition.name))
-                )
-                if phases and phases.yielded:
-                    flow.extend(
-                        self.expression(
-                            phases.yielded, definition, local, (*stack, definition.name)
-                        )
+                if phases:
+                    self._entering[definition.name] = frozenset(
+                        (context.lineno, context.col_offset)
+                        for context in phases.contexts
                     )
-            finally:
-                self._entering.pop(definition.name, None)
+                try:
+                    flow.extend(
+                        self.block(body, definition, local, (*stack, definition.name))
+                    )
+                    if phases and phases.yielded and "$terminated" not in local:
+                        flow.extend(
+                            self.expression(
+                                phases.yielded,
+                                definition,
+                                local,
+                                (*stack, definition.name),
+                            )
+                        )
+                finally:
+                    self._entering.pop(definition.name, None)
         return flow
 
     def expression(

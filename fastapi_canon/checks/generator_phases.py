@@ -1,7 +1,7 @@
 """Separate a single-yield generator's entry from its suspended continuation."""
 
 import ast
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 
 @dataclass
@@ -11,6 +11,40 @@ class _Phases:
     setup: list[ast.stmt]
     yielded: ast.expr | None
     contexts: list[ast.With | ast.AsyncWith]
+
+
+def _resource_phases(body: list[ast.stmt]) -> tuple[_Phases, ...] | None:
+    """Separate mutually exclusive resource entries, without resuming shutdown."""
+    direct = _phases(body)
+    if direct is not None:
+        return (direct,)
+    for index, node in enumerate(body):
+        if not _has_yield(node):
+            continue
+        if not isinstance(node, ast.If):
+            return None
+        result = []
+        for branch, truth in ((node.body, True), (node.orelse, False)):
+            entries = _resource_phases([*branch, *body[index + 1 :]])
+            if entries is None:
+                return None
+            for entry in entries:
+                guard = ast.copy_location(
+                    ast.If(
+                        test=node.test,
+                        body=(entry.before or [ast.copy_location(ast.Pass(), node)])
+                        if truth
+                        else [ast.copy_location(ast.Return(value=None), node)],
+                        orelse=[ast.copy_location(ast.Return(value=None), node)]
+                        if truth
+                        else (entry.before or [ast.copy_location(ast.Pass(), node)]),
+                    ),
+                    node,
+                )
+                result.append(replace(entry, before=[*body[:index], guard]))
+        return tuple(result)
+    # A branch that terminates before yielding cannot provide an implementation.
+    return (_Phases(body, [], body, None, []),)
 
 
 def _phases(body: list[ast.stmt]) -> _Phases | None:

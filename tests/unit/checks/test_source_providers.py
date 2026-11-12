@@ -62,6 +62,36 @@ def scan(
     return run
 
 
+@pytest.mark.parametrize("conditional_cleanup", [False, True])
+def test_conditional_resource_entries_preserve_branch_errors_and_exclude_shutdown(
+    scan: Callable[..., tuple[int, dict[str, Any]]], conditional_cleanup: bool
+) -> None:
+    branch = (
+        "try:\n                yield LocalRepository()\n            finally:\n                raise Conflict()"
+        if conditional_cleanup
+        else "yield ConflictingRepository()"
+    )
+    status, report = scan(
+        f"""
+class ConflictingRepository(Repository):
+    async def get(self): raise Conflict()
+class Dependencies(Provider):
+    @provide(scope=Scope.REQUEST)
+    def repository(self, enabled: bool) -> Iterator[Repository]:
+        if enabled:
+            {branch}
+            return
+        yield LocalRepository()
+        raise Conflict()
+""",
+        declaration="",
+    )
+    [operation] = report["operations"]
+    assert operation["complete"]
+    assert report["contract_gaps"] == (1 if conditional_cleanup else 2)
+    assert status == 1
+
+
 @pytest.mark.parametrize(
     ("header", "body"),
     [
