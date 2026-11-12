@@ -6,7 +6,7 @@ import pytest
 from fastapi_canon.cli import main
 
 PRELUDE = """
-from pydantic import BaseModel, SecretStr, SecretBytes, model_validator
+from pydantic import BaseModel, Field, SecretStr, SecretBytes, model_validator
 from pydantic_settings import BaseSettings
 from fastapi_canon import APIRouter, Error, Feature
 class Missing(Exception): pass
@@ -28,7 +28,7 @@ def test_validated_settings_secret_payload_has_native_type(
         PRELUDE
         + f"""
 class Settings(BaseSettings):
-    token: {wrapper}
+    token: {wrapper} = {"Field(min_length=2)" if wrapper == "SecretStr" else "Field(..., min_length=2)"}
     @model_validator(mode='after')
     def validate_token(self):
         self.token.get_secret_value().strip()

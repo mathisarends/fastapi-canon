@@ -1300,6 +1300,17 @@ class _Source:
         )
 
     def condition(self, node: ast.expr, module: str, env: _Environment) -> bool | None:
+        if isinstance(node, ast.BoolOp):
+            continuing = isinstance(node.op, ast.And)
+            unknown = False
+            condition_env = env.copy()
+            for operand in node.values:
+                answer = self.condition(operand, module, condition_env)
+                if answer is not None and answer is not continuing:
+                    return not continuing
+                unknown |= answer is None
+                condition_env = self.narrow(operand, module, condition_env, continuing)
+            return None if unknown else continuing
         if isinstance(node, ast.Constant) and (
             node.value is None or isinstance(node.value, str | int | float | bytes)
         ):
@@ -3332,6 +3343,7 @@ class _Source:
         constructor = self.method(owner, "__init__")
         fields: _Environment = {}
         raw_fields: _Environment = {}
+        default_fields: set[str] = set()
         if constructor and isinstance(constructor.node, ast.FunctionDef):
             bound = self.call_environment(constructor, call, module, env, instance)
             if bound is None:
@@ -3394,17 +3406,28 @@ class _Source:
                     in {"dataclasses.field", "pydantic.Field"}
                 ):
                     factory = _keyword(node.value, "default_factory")
-                    default = _keyword(node.value, "default")
+                    default = _keyword(node.value, "default") or (
+                        node.value.args[0] if node.value.args else None
+                    )
+                    if isinstance(default, ast.Constant) and default.value is Ellipsis:
+                        default = None
                     if factory:
+                        default_fields.add(node.target.id)
                         invocation = ast.copy_location(
                             ast.Call(func=factory, args=[], keywords=[]), node.value
                         )
                         fields[node.target.id] = self.infer(invocation, scope, {})
                     elif default is not None:
+                        default_fields.add(node.target.id)
                         fields[node.target.id] = self.infer(default, scope, {})
                     else:
                         fields[node.target.id] = self.typed(node.annotation, scope)
                 elif node.value is not None:
+                    if not (
+                        isinstance(node.value, ast.Constant)
+                        and node.value.value is Ellipsis
+                    ):
+                        default_fields.add(node.target.id)
                     fields[node.target.id] = self.infer(node.value, scope, {})
                 else:
                     fields[node.target.id] = self.typed(node.annotation, scope)
@@ -3433,7 +3456,7 @@ class _Source:
                     raw = self.models.environment_value(
                         annotation, site + ":environment:" + field
                     )
-                    if node.value is not None:
+                    if field in default_fields:
                         raw = _join(raw, fields[field])
                     raw_fields["$input:" + field] = raw
                     validated = self.models.normalize(
@@ -3441,7 +3464,7 @@ class _Source:
                     )
                     fields[field] = (
                         _join(validated, fields[field])
-                        if node.value is not None
+                        if field in default_fields
                         else validated
                     )
         result = _Value(

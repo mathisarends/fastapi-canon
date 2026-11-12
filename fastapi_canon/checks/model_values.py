@@ -847,6 +847,16 @@ class _Models:
             for statement in definition.node.body:
                 if not isinstance(statement, ast.AnnAssign):
                     continue
+                if (
+                    isinstance(statement.value, ast.Call)
+                    and self.source.libraries.canonical(
+                        self.source.resolve(statement.value.func, definition.module)
+                        or ""
+                    )
+                    == "pydantic.fields.Field"
+                    and any(keyword.arg is None for keyword in statement.value.keywords)
+                ):
+                    return True
                 scope, annotation = self.source.value(
                     statement.annotation, definition.module
                 )
