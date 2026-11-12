@@ -2624,6 +2624,11 @@ class _Source:
                 return _Value(
                     wrapper,
                     instance=True,
+                    variadic=wrapper == "builtins.tuple"
+                    and any(
+                        isinstance(arg, ast.Constant) and arg.value is Ellipsis
+                        for arg in args
+                    ),
                     arguments=tuple(
                         self.typed(arg, module)
                         for arg in args

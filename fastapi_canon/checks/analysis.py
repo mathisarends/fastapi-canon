@@ -342,8 +342,17 @@ class _Analyzer:
                 if argument.annotation is None:
                     continue
                 value = self.source.typed(argument.annotation, function.module)
-                if value.dependency and value.name:
-                    flow.extend(self._dependency(value.name, function, stack))
+                if value.dependency:
+                    if value.name:
+                        flow.extend(self._dependency(value.name, function, stack))
+                    else:
+                        flow.unknowns.append(
+                            _Unknown(
+                                "unresolved Dishka dependency type",
+                                function.name,
+                                argument.lineno,
+                            )
+                        )
         flow.extend(self.block(node.body, function, env, (*stack, function.name)))
         flow.unknowns = [
             unknown
@@ -1102,6 +1111,7 @@ class _Analyzer:
                             awaited=awaited,
                             iterated=iterated,
                             receiver=definition.name,
+                            binding_required=True,
                             bindings=self.source.call_environment(
                                 method, node, function.module, env, target
                             ),
@@ -1152,6 +1162,7 @@ class _Analyzer:
                     awaited=awaited,
                     iterated=iterated,
                     receiver=target.receiver,
+                    binding_required=True,
                     bindings=self.source.call_environment(
                         definition,
                         node,
@@ -2269,10 +2280,23 @@ class _Analyzer:
         receiver: str | None = None,
         bindings: _Environment | None = None,
         deferred: str = "",
+        binding_required: bool = False,
     ) -> _Flow:
         flow = _Flow()
         iterated_generator = iterated and self.source.generator(definition.node)
         assert isinstance(definition.node, ast.FunctionDef | ast.AsyncFunctionDef)
+        if binding_required and bindings is None:
+            flow.unknowns.append(
+                _Unknown("unresolved function arguments", function.name, node.lineno)
+            )
+            bindings = {
+                argument.arg: _Value()
+                for argument in (
+                    *definition.node.args.posonlyargs,
+                    *definition.node.args.args,
+                    *definition.node.args.kwonlyargs,
+                )
+            }
         decorators = {
             self.source.resolve(d, definition.module)
             for d in definition.node.decorator_list

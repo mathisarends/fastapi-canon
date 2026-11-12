@@ -8,6 +8,60 @@ from fastapi_canon.cli import main
 
 
 @pytest.mark.parametrize(
+    ("arguments", "annotation"),
+    [("*values", ""), ("**values", ""), ("*values", ": tuple[Safe, ...]")],
+)
+def test_opaque_arguments_cannot_be_replaced_by_parameter_annotations(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    arguments: str,
+    annotation: str,
+) -> None:
+    (tmp_path / "api.py").write_text(
+        f"""
+from fastapi_canon import APIRouter
+router = APIRouter()
+class Safe:
+    def run(self): pass
+def invoke(service: Safe): service.run()
+@router.get('/')
+def endpoint(values{annotation}): invoke({arguments})
+""",
+        encoding="utf8",
+    )
+    main(["check", "errors", str(tmp_path), "--require-complete", "--format", "json"])
+    [operation] = json.loads(capsys.readouterr().out)["operations"]
+    assert not operation["complete"]
+    assert any(
+        "unresolved function arguments" in d["message"]
+        for d in operation["diagnostics"]
+    )
+
+
+def test_unused_unresolved_generic_dependency_is_not_considered_complete(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "api.py").write_text(
+        """
+from fastapi_canon import APIRouter, Inject
+router = APIRouter()
+class Service[T]:
+    def __init__(self): raise RuntimeError('constructed')
+@router.get('/')
+def endpoint(service: Inject[Service[str]]): pass
+""",
+        encoding="utf8",
+    )
+    main(["check", "errors", str(tmp_path), "--require-complete", "--format", "json"])
+    [operation] = json.loads(capsys.readouterr().out)["operations"]
+    assert not operation["complete"]
+    assert any(
+        "unresolved Dishka dependency type" in d["message"]
+        for d in operation["diagnostics"]
+    )
+
+
+@pytest.mark.parametrize(
     "annotation", ["Any", "object", "type", "Callable", "Callable[[], None]"]
 )
 def test_opaque_annotations_do_not_establish_external_callables(

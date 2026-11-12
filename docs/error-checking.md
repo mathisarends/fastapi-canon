@@ -157,6 +157,9 @@ or unresolved recursion produces CAN003 rather than a complete result.
 
 `Any`, `object`, unknown callable inputs and unbound `type[Service]` values do not
 establish a safe implementation. Unknown locals shadow same-named globals.
+Opaque argument unpacking cannot be replaced by parameter annotations. Unresolved
+injected types remain incomplete even when the endpoint does not use them:
+constructing a dependency can itself raise an application error.
 Dynamic decorators, custom allocation and custom attribute lookup remain explicit
 boundaries rather than being assumed harmless.
 
