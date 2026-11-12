@@ -451,6 +451,48 @@ class _Source:
             self._resource_entries[node] = _resource_phases(node.body)
         return self._resource_entries[node]
 
+    def entered(self, resource: _Value, *, asynchronous: bool) -> _Value:
+        values = []
+        for variant in self.expand(resource).variants:
+            if variant.name == "<contextmanager>" and variant.bound:
+                definition = self.definitions.get(variant.bound.name)
+                expected = (
+                    "contextlib.asynccontextmanager"
+                    if asynchronous
+                    else "contextlib.contextmanager"
+                )
+                if (
+                    definition
+                    and isinstance(
+                        definition.node, ast.FunctionDef | ast.AsyncFunctionDef
+                    )
+                    and not variant.unresolved
+                    and {
+                        self.resolve(d, definition.module)
+                        for d in definition.node.decorator_list
+                    }
+                    == {expected}
+                ):
+                    values.append(
+                        self.returned(definition, dict(variant.fields), yielded=True)
+                    )
+                else:
+                    values.append(_Value())
+            elif (
+                variant.name == "<external-contextmanager>"
+                and not variant.unresolved
+                and dict(variant.fields).get("$async", _Value()).literal is asynchronous
+            ):
+                values.append(variant.bound or _Value())
+            else:
+                method = self.member(
+                    variant, "__aenter__" if asynchronous else "__enter__"
+                )
+                values.append(
+                    self.libraries.returned(method, awaited=asynchronous) or _Value()
+                )
+        return _join(*values)
+
     def context_phases(self, node: _FunctionNode) -> _Phases | None:
         if node not in self._context_entries:
             self._context_entries[node] = _phases(node.body)
@@ -2231,6 +2273,7 @@ class _Source:
                     bound=target,
                     fields=tuple(sorted((actual or {}).items())),
                     site=self.site(node, module, env, "contextmanager"),
+                    unresolved=actual is None,
                 )
             if self.generator(definition.node):
                 if awaited:
@@ -3738,19 +3781,14 @@ class _Source:
                     for item in node.items:
                         if item.optional_vars:
                             manager = self.infer(item.context_expr, module, env)
-                            entered = []
-                            for variant in manager.variants:
-                                method = self.member(
-                                    variant,
-                                    "__aenter__"
-                                    if isinstance(node, ast.AsyncWith)
-                                    else "__enter__",
-                                )
-                                entered_return = self.libraries.returned(
-                                    method, awaited=isinstance(node, ast.AsyncWith)
-                                )
-                                entered.append(entered_return or _Value())
-                            self.assign(item.optional_vars, _join(*entered), env)
+                            self.assign(
+                                item.optional_vars,
+                                self.entered(
+                                    manager,
+                                    asynchronous=isinstance(node, ast.AsyncWith),
+                                ),
+                                env,
+                            )
                     returned.extend(self.values_block(node.body, module, env, states))
                 case ast.For() | ast.AsyncFor() | ast.While():
                     local = env.copy()

@@ -1593,34 +1593,52 @@ class _Analyzer:
                 )
             )
             return flow
-        if isinstance(item.context_expr, ast.Call):
-            target = self.source.infer(item.context_expr.func, function.module, env)
-            definition = self.source.definitions.get(target.name)
-            if definition and isinstance(
-                definition.node, ast.FunctionDef | ast.AsyncFunctionDef
-            ):
-                decorators = {
-                    self.source.resolve(d, definition.module)
-                    for d in definition.node.decorator_list
-                }
-                expected = (
-                    "contextlib.asynccontextmanager"
-                    if isinstance(node, ast.AsyncWith)
-                    else "contextlib.contextmanager"
-                )
-                if decorators == {expected} and self.source.generator(definition.node):
-                    return self._generator_context(
+        flow = self.expression(item.context_expr, function, env, stack)
+        manager_value = self.source.infer(item.context_expr, function.module, env)
+        generators = [
+            value
+            for value in manager_value.variants
+            if value.name == "<contextmanager>" and value.bound
+        ]
+        if generators:
+            branches = []
+            for resource in generators:
+                assert resource.bound is not None
+                definition = self.source.definitions[resource.bound.name]
+                local = env.copy()
+                flow.extend(
+                    self._generator_context(
                         node,
                         function,
-                        env,
+                        local,
                         stack,
                         reraised,
                         index,
                         definition,
-                        target,
+                        resource,
                         states=states,
                     )
-        flow = self.expression(item.context_expr, function, env, stack)
+                )
+                branches.append(local)
+            if len(generators) != len(manager_value.variants):
+                flow.unknowns.append(
+                    _Unknown(
+                        "unresolved context manager alternative",
+                        function.name,
+                        item.context_expr.lineno,
+                    )
+                )
+                local = env.copy()
+                if item.optional_vars:
+                    self._invalidate(item.optional_vars, local)
+                flow.extend(
+                    self._context_manager(
+                        node, function, local, stack, reraised, index + 1, states=states
+                    )
+                )
+                branches.append(local)
+            self.source.merge_environments(env, branches)
+            return flow
         if (
             isinstance(node, ast.With)
             and isinstance(item.context_expr, ast.Call)
@@ -1664,7 +1682,6 @@ class _Analyzer:
             return flow
         manager = self._context_type(item.context_expr, function, env)
         asynchronous = isinstance(node, ast.AsyncWith)
-        manager_value = self.source.infer(item.context_expr, function.module, env)
         if all(
             (value.name in _PLAIN_CONTEXTS and self.source.external(value.name))
             or (
@@ -1872,20 +1889,24 @@ class _Analyzer:
         reraised: tuple[_Escape, ...],
         index: int,
         manager: _Definition,
-        target: _Value,
+        resource: _Value,
         states: list[_Environment] | None = None,
     ) -> _Flow:
         item = node.items[index]
-        assert isinstance(item.context_expr, ast.Call)
         assert isinstance(manager.node, ast.FunctionDef | ast.AsyncFunctionDef)
         flow = _Flow()
-        for argument in [
-            *item.context_expr.args,
-            *(kw.value for kw in item.context_expr.keywords),
-        ]:
-            flow.extend(self.expression(argument, function, env, stack))
-        bindings = self.source.call_environment(
-            manager, item.context_expr, function.module, env, target.bound
+        expected = (
+            "contextlib.asynccontextmanager"
+            if isinstance(node, ast.AsyncWith)
+            else "contextlib.contextmanager"
+        )
+        decorators = {
+            self.source.resolve(d, manager.module) for d in manager.node.decorator_list
+        }
+        bindings = (
+            dict(resource.fields)
+            if not resource.unresolved and decorators == {expected}
+            else None
         )
         yields = [
             child
@@ -1920,13 +1941,17 @@ class _Analyzer:
         local = env.copy()
         if item.optional_vars is not None:
             self.source.assign(
-                item.optional_vars, self.source.returned(manager, bindings), local
+                item.optional_vars,
+                self.source.returned(manager, bindings, yielded=True),
+                local,
             )
         inner = self._context_manager(
             node, function, local, stack, reraised, index + 1, states=states
         )
         manager_env = self.source.environment(
-            manager, target.receiver, bindings=bindings
+            manager,
+            resource.bound.receiver if resource.bound else None,
+            bindings=bindings,
         )
         self._yields[manager.name] = inner
         try:

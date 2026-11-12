@@ -293,6 +293,11 @@ errors. Managers enter left to right and exit in reverse order. Known suppressio
 removes caught body errors; uncertain suppression retains possible errors and
 CAN003. Exception-group splitting is not modeled.
 
+Resolved context values retain their arguments and callable receivers through
+stored aliases, returned factories and decorated `__call__` methods. Nested
+factories retain the yielded service values. Opaque argument unpacking, mixed
+unknown alternatives and sync/async protocol mismatches remain incomplete.
+
 Known standard-library resource shapes include `suppress`, `closing`,
 `aclosing`, `asyncio.Lock` and `asyncio.timeout`. Owned `ExitStack` and
 `AsyncExitStack` registrations retain callback/context effects until explicit
