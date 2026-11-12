@@ -133,6 +133,8 @@ The checker follows actual positional and keyword arguments, defaults and known
 receivers, constructor fields, aliases, supported container contents and stable
 local-function captures. Reassigning an aliased object's fields remains visible
 to later calls. Annotation-only statements do not replace an existing value.
+Dictionary unions retain their contained values and known right-hand key
+overrides. An unresolved operand does not establish safe contents.
 
 Inherited methods, classmethods, properties, `Self` and statically resolved
 `super()` dispatch follow the application's method resolution order. Recursive

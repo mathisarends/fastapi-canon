@@ -20,6 +20,7 @@ from fastapi_canon.checks.symbols import (
 from fastapi_canon.checks.value_flow import (
     _bind,
     _contexts,
+    _dictionary_union,
     _join,
     _Value,
     _ValueSummary,
@@ -1527,7 +1528,23 @@ class _Source:
                 results = []
                 for first in left.variants:
                     for second in right.variants:
-                        if first.name in {
+                        if (
+                            isinstance(node.op, ast.BitOr)
+                            and first.name == second.name == "builtins.dict"
+                            and first.instance
+                            and second.instance
+                        ):
+                            results.append(
+                                self.store(
+                                    replace(
+                                        _dictionary_union(
+                                            self.object(first), self.object(second)
+                                        ),
+                                        site=self.site(node, module, env, "dict-union"),
+                                    )
+                                )
+                            )
+                        elif first.name in {
                             "pathlib.Path",
                             "pathlib.PosixPath",
                             "pathlib.WindowsPath",

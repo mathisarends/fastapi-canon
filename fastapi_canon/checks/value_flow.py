@@ -62,6 +62,44 @@ class _ValueSummary:
     reads: tuple[tuple[str, _Value | None], ...]
 
 
+def _dictionary_union(left: _Value, right: _Value) -> _Value:
+    """Copy dictionary contents, retaining right-hand precedence when known."""
+    fields = dict(left.fields)
+    if not right.keys_known:
+        other = right.arguments[1] if len(right.arguments) == 2 else _Value()
+        fields = {key: _join(value, other) for key, value in fields.items()}
+    fields.update(right.fields)
+    known = left.keys_known and right.keys_known
+    keys = (
+        _join(*(_Value("builtins.str", instance=True, literal=key) for key in fields))
+        if known
+        else _join(
+            *(
+                item.arguments[0] if len(item.arguments) == 2 else _Value()
+                for item in (left, right)
+            )
+        )
+    )
+    values = (
+        _join(*fields.values())
+        if known
+        else _join(
+            *(
+                item.arguments[1] if len(item.arguments) == 2 else _Value()
+                for item in (left, right)
+            )
+        )
+    )
+    return _Value(
+        "builtins.dict",
+        instance=True,
+        exact=True,
+        fields=tuple(fields.items()),
+        arguments=(keys, values),
+        keys_known=known,
+    )
+
+
 def _join(*values: _Value) -> _Value:
     variants = tuple(
         dict.fromkeys(
