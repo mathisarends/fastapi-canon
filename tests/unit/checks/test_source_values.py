@@ -129,3 +129,45 @@ def endpoint(supplied: dict[str, Risky], opaque: Any):
     assert operation["complete"] == complete
     assert bool(report["contract_gaps"]) == gap
     assert status == int(gap or not complete)
+
+
+@pytest.mark.parametrize(
+    ("statement", "gap"),
+    [
+        ("assert fail()", True),
+        ("assert False, fail()", True),
+        ("assert True, fail()", False),
+        ("assert value is None\n    if value is not None: fail()", True),
+    ],
+)
+def test_assertions_follow_application_calls_without_assuming_runtime_optimization(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], statement: str, gap: bool
+) -> None:
+    (tmp_path / "api.py").write_text(
+        f"""
+from fastapi_canon import APIRouter
+class Missing(Exception): pass
+def fail(): raise Missing()
+router = APIRouter()
+@router.get('/')
+def endpoint(value: str | None):
+    {statement}
+""",
+        encoding="utf8",
+    )
+    status = main(
+        [
+            "check",
+            "errors",
+            str(tmp_path),
+            "--strict",
+            "--require-complete",
+            "--format",
+            "json",
+        ]
+    )
+    report = json.loads(capsys.readouterr().out)
+    [operation] = report["operations"]
+    assert operation["complete"]
+    assert bool(report["contract_gaps"]) == gap
+    assert status == int(gap)

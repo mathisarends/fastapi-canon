@@ -2559,6 +2559,21 @@ class _Analyzer:
                             )
                         )
                 continue
+            if isinstance(node, ast.Assert):
+                local = env.copy()
+                flow.extend(self.expression(node.test, function, local, stack))
+                if (
+                    node.msg is not None
+                    and self.source.condition(node.test, function.module, local)
+                    is not True
+                ):
+                    failure = self.source.narrow(
+                        node.test, function.module, local, False
+                    )
+                    flow.extend(self.expression(node.msg, function, failure, stack))
+                # Also retain execution with assertions disabled by Python's -O.
+                self.source.merge_environments(env, [env.copy(), local])
+                continue
             if isinstance(node, ast.Expr):
                 if isinstance(node.value, ast.Yield) and function.name in self._yields:
                     if node.value.value:

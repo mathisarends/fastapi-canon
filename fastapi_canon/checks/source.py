@@ -3167,6 +3167,19 @@ class _Source:
                     )
                 case ast.Expr():
                     self.infer(node.value, module, env)
+                case ast.Assert():
+                    local = env.copy()
+                    self.infer(node.test, module, local)
+                    if (
+                        node.msg is not None
+                        and self.condition(node.test, module, local) is not True
+                    ):
+                        self.infer(
+                            node.msg,
+                            module,
+                            self.narrow(node.test, module, local, False),
+                        )
+                    self.merge_environments(env, [env.copy(), local])
                 case ast.If():
                     for expression in ast.walk(node.test):
                         if isinstance(expression, ast.NamedExpr):

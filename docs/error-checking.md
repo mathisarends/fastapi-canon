@@ -121,6 +121,8 @@ and bare re-raises. Handler state conservatively combines values at possible
 failure points. Literal and type guards can exclude branches; arbitrary business
 conditions and persisted invariants are not proved. A finding describes a possible
 source path, not proof that a particular request reaches it.
+Assertions contribute their test and possible failure-message calls. They do not
+exclude subsequent paths, because Python can disable assertions with `-O`.
 
 Unshadowed module-name guards such as `if __name__ == '__main__'` follow import
 semantics. Script-only startup calls do not make imported route contracts
