@@ -296,6 +296,22 @@ class _Models:
             return value
         if annotation.name == "<json>":
             return self.json(site)
+        if (
+            annotation.name
+            in {
+                "builtins.str",
+                "builtins.bytes",
+                "builtins.int",
+                "builtins.float",
+                "builtins.bool",
+                "builtins.NoneType",
+            }
+            and value.name == annotation.name
+            and value.instance
+            and value.exact
+            and (annotation.literal is None or annotation.literal == value.literal)
+        ):
+            return value
         if self.source.model(annotation.name):
             existing = [v for v in value.variants if v.name == annotation.name]
             if len(existing) == len(value.variants):
@@ -371,15 +387,13 @@ class _Models:
                     (name, self.normalize(annotation, actual, site + ":" + name))
                 )
                 fields.append(("$input:" + name, actual))
-            instance = self.source.store(
-                _Value(
-                    owner,
-                    instance=True,
-                    exact=True,
-                    initialized=True,
-                    fields=tuple(fields),
-                    site=site,
-                )
+            instance = _Value(
+                owner,
+                instance=True,
+                exact=True,
+                initialized=True,
+                fields=tuple(fields),
+                site=site,
             )
             return self.after(instance)
         finally:
@@ -391,6 +405,45 @@ class _Models:
             definition = self.source.definitions[name]
             assert isinstance(definition.node, ast.ClassDef)
             for node in definition.node.body:
+                if isinstance(node, ast.AnnAssign) and isinstance(
+                    node.target, ast.Name
+                ):
+                    scope, annotation = self.source.value(
+                        node.annotation, definition.module
+                    )
+                    if isinstance(annotation, ast.Constant) and isinstance(
+                        annotation.value, str
+                    ):
+                        try:
+                            annotation = ast.parse(annotation.value, mode="eval").body
+                        except SyntaxError:
+                            continue
+                    if (
+                        isinstance(annotation, ast.Subscript)
+                        and self.source.resolve(annotation.value, scope)
+                        in {"typing.Annotated", "typing_extensions.Annotated"}
+                        and isinstance(annotation.slice, ast.Tuple)
+                    ):
+                        for metadata in annotation.slice.elts[1:]:
+                            validator = self._functional(metadata, scope)
+                            if validator is not None:
+                                validator_name, mode = validator
+                                metadata_decorator = ast.copy_location(
+                                    ast.Call(
+                                        func=ast.Name(
+                                            id="field_validator", ctx=ast.Load()
+                                        ),
+                                        args=[ast.Constant(value=node.target.id)],
+                                        keywords=[
+                                            ast.keyword(
+                                                arg="mode",
+                                                value=ast.Constant(value=mode),
+                                            )
+                                        ],
+                                    ),
+                                    node,
+                                )
+                                result.append((validator_name, metadata_decorator))
                 if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
                     continue
                 for decorator in node.decorator_list:
@@ -427,6 +480,7 @@ class _Models:
             "datetime.time",
             "decimal.Decimal",
         }
+        before_counts: dict[str, int] = {}
         for _, decorator in self.hooks(owner):
             mode = _mode(decorator)
             if mode == "after":
@@ -442,6 +496,10 @@ class _Models:
                 return True
             if targets == ["*"]:
                 targets = list(fields)
+            for target in targets:
+                before_counts[target] = before_counts.get(target, 0) + 1
+                if before_counts[target] > 1:
+                    return True
             if any(
                 value.name not in scalars
                 for name in targets
@@ -451,7 +509,12 @@ class _Models:
         return False
 
     def hook_arguments(
-        self, instance: _Value, name: str, decorator: ast.Call
+        self,
+        instance: _Value,
+        name: str,
+        decorator: ast.Call,
+        *,
+        values: Mapping[str, _Value] | None = None,
     ) -> list[tuple[str | None, dict[str, _Value]]]:
         function = self.source.definitions[name]
         assert isinstance(function.node, ast.FunctionDef | ast.AsyncFunctionDef)
@@ -470,9 +533,23 @@ class _Models:
         result = []
         for target in targets:
             value = (
-                dict(self.source.object(instance).fields).get(
-                    ("$input:" if _mode(decorator) != "after" else "") + target,
-                    _Value(),
+                (
+                    values
+                    if values is not None
+                    else dict(self.source.object(instance).fields)
+                ).get(
+                    (
+                        "$input:"
+                        if _mode(decorator) != "after"
+                        else ""
+                        if values is not None
+                        else "$validator-input:" + name + ":"
+                    )
+                    + target,
+                    dict(self.source.object(instance).fields).get(
+                        "$validated:" + target,
+                        dict(self.source.object(instance).fields).get(target, _Value()),
+                    ),
                 )
                 if target
                 else instance
@@ -490,23 +567,35 @@ class _Models:
         return result
 
     def after(self, instance: _Value) -> _Value:
-        results = [instance]
         if self.opaque(instance.name):
-            return instance
+            return self.source.store(instance)
+        fields = dict(instance.fields)
+        if not fields:
+            fields = dict(self.source.object(instance).fields)
+        for field, annotation in self.fields(instance.name):
+            fields["$validated:" + field] = fields.get(field, annotation)
+        results = []
         for name, decorator in self.hooks(instance.name):
             if _mode(decorator) != "after":
                 continue
             function = self.source.definitions[name]
-            for target, bindings in self.hook_arguments(instance, name, decorator):
+            if not decorator.args:
+                self.source.store(replace(instance, fields=tuple(fields.items())))
+            for target, bindings in self.hook_arguments(
+                instance, name, decorator, values=fields
+            ):
+                if target:
+                    fields["$validator-input:" + name + ":" + target] = fields.get(
+                        target, _Value()
+                    )
                 returned = self.source.returned(function, bindings)
                 if target:
-                    actual = self.source.object(instance)
-                    fields = dict(actual.fields)
                     fields[target] = returned
-                    self.source.store(replace(actual, fields=tuple(fields.items())))
                 else:
                     results.append(returned)
-        return _join(*results)
+        return _join(
+            self.source.store(replace(instance, fields=tuple(fields.items()))), *results
+        )
 
     def dump(self, instance: _Value, *, json: bool, site: str) -> _Value:
         if json:
@@ -578,6 +667,28 @@ class _Models:
             replace(original, fields=tuple(fields.items()), site=site)
         )
 
+    def _functional(self, node: ast.expr, scope: str) -> tuple[str, str] | None:
+        if not isinstance(node, ast.Call) or len(node.args) != 1 or node.keywords:
+            return None
+        factory = self.source.libraries.canonical(
+            self.source.resolve(node.func, scope) or ""
+        )
+        modes = {
+            "pydantic.functional_validators.BeforeValidator": "before",
+            "pydantic.functional_validators.AfterValidator": "after",
+        }
+        function = self.source.definitions.get(
+            self.source.resolve(node.args[0], scope) or ""
+        )
+        if factory not in modes or function is None or function.owner is not None:
+            return None
+        if (
+            not isinstance(function.node, ast.FunctionDef)
+            or function.node.decorator_list
+        ):
+            return None
+        return function.name, modes[factory]
+
     def _custom_schema(self, owner: str, seen: frozenset[str] = frozenset()) -> bool:
         definition = self.source.definitions.get(owner)
         if definition is None:
@@ -641,6 +752,15 @@ class _Models:
                                 }
                             )
                             for value in metadata
+                            if not (
+                                node is annotation
+                                and self._functional(value, scope) is not None
+                                and sum(
+                                    self._functional(item, scope) is not None
+                                    for item in metadata
+                                )
+                                == 1
+                            )
                             for child in ast.walk(value)
                         ):
                             return True

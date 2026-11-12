@@ -1022,14 +1022,14 @@ def test_summary_retains_first_error_paths_and_order(tmp_path: Path) -> None:
         PRELUDE
         + """
 class Conflict(Exception): pass
-def shared(flag: bool):
+def shared(flag: bool, other: bool):
     if flag:
         raise Missing()
-    if flag:
+    if other:
         raise Conflict()
     raise Missing()
 @router.get('/')
-def endpoint(): shared(True)
+def endpoint(flag: bool, other: bool): shared(flag, other)
 """,
     )
     assert codes(report) == ["CAN001", "CAN002"]

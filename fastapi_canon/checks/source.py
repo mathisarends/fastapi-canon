@@ -1299,6 +1299,16 @@ class _Source:
     def condition(self, node: ast.expr, module: str, env: _Environment) -> bool | None:
         if isinstance(node, ast.Constant) and isinstance(node.value, bool):
             return node.value
+        if isinstance(node, ast.Name | ast.Attribute | ast.Subscript):
+            values = self.expand(self.infer(node, module, env)).variants
+            if all(
+                value.name == "builtins.bool" and isinstance(value.literal, bool)
+                for value in values
+            ):
+                if all(value.literal is True for value in values):
+                    return True
+                if all(value.literal is False for value in values):
+                    return False
         if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
             result = self.condition(node.operand, module, env)
             return not result if result is not None else None
@@ -3221,7 +3231,15 @@ class _Source:
                     fields[node.target.id] = self.typed(node.annotation, scope)
             if (
                 not call.args
-                and not call.keywords
+                and all(
+                    kw.arg
+                    in {
+                        field.target.id
+                        for field, _ in declared
+                        if isinstance(field.target, ast.Name)
+                    }
+                    for kw in call.keywords
+                )
                 and self.models.standard_settings(owner)
             ):
                 raw_fields["$settings-input"] = _Value(
@@ -3230,6 +3248,8 @@ class _Source:
                 for node, scope in declared:
                     assert isinstance(node.target, ast.Name)
                     field = node.target.id
+                    if field in keywords:
+                        continue
                     annotation = self.typed(node.annotation, scope)
                     raw = self.models.environment_value(
                         annotation, site + ":environment:" + field
@@ -3245,19 +3265,18 @@ class _Source:
                         if node.value is not None
                         else validated
                     )
-        result = self.store(
-            _Value(
-                owner,
-                instance=True,
-                exact=True,
-                initialized=True,
-                fields=tuple(sorted((fields | raw_fields).items())),
-                site=site,
-            )
+        result = _Value(
+            owner,
+            instance=True,
+            exact=True,
+            initialized=True,
+            fields=tuple(sorted((fields | raw_fields).items())),
+            site=site,
         )
         if self.model(owner):
             self.models.after(result)
-        return result
+            return result.reference()
+        return self.store(result)
 
     def returned(
         self,

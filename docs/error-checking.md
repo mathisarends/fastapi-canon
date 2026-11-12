@@ -232,10 +232,13 @@ resolved model adapter follows its application hooks and actual input values.
 Adapters for native containers of models and model unions follow nested model
 hooks and preserve their validated values. `Any` preserves the input; `JsonValue`
 supplies recursive JSON shapes. Functional `Annotated` metadata and custom schema
-implementations remain incomplete instead of being erased by a container type.
-No-argument `BaseSettings` construction with standard sources retains native
-environment input shapes and possible overrides of defaults. Custom settings
-sources, custom initialization and explicit source/input arguments remain CAN003.
+implementations remain incomplete unless explicitly supported. A single scalar
+`BeforeValidator` function follows its raw input; `AfterValidator` preserves its
+replacement value. Nested and chained before transformations remain CAN003.
+`BaseSettings` construction with standard sources retains native environment
+input shapes and possible overrides of defaults. Explicit model fields override
+only those fields. Custom sources, custom initialization, opaque unpacking and
+source-control arguments such as `_env_file` remain CAN003.
 External `contextmanager` and `asynccontextmanager` signatures preserve their
 yielded types, including type parameters bound to actual arguments. Their bodies
 are outside the error scope. Own objects, unknown arguments and application

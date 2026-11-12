@@ -20,6 +20,95 @@ class Risky:
 """
 
 
+@pytest.mark.parametrize("risky", [False, True])
+def test_annotated_scalar_before_validator_follows_actual_raw_input(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], risky: bool
+) -> None:
+    (tmp_path / "api.py").write_text(
+        PRELUDE
+        + f"""
+from typing import Annotated
+from pydantic import BeforeValidator
+def convert(value):
+    if isinstance(value, Risky): value.run()
+    return 'validated'
+class Body(BaseModel): payload: Annotated[str, BeforeValidator(convert)]
+@router.get('/')
+def route(): Body(payload={"Risky()" if risky else "'safe'"}).payload.strip()
+""",
+        encoding="utf8",
+    )
+    main(["check", "errors", str(tmp_path), "--require-complete", "--format", "json"])
+    [operation] = json.loads(capsys.readouterr().out)["operations"]
+    assert operation["complete"]
+    assert [d["code"] for d in operation["diagnostics"]] == (
+        ["CAN001"] if risky else []
+    )
+
+
+@pytest.mark.parametrize(
+    "annotation",
+    [
+        "Annotated[list[str], BeforeValidator(convert)]",
+        "Annotated[str, BeforeValidator(convert), BeforeValidator(convert)]",
+    ],
+)
+def test_unsupported_functional_validator_chains_remain_incomplete(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], annotation: str
+) -> None:
+    (tmp_path / "api.py").write_text(
+        PRELUDE
+        + f"""
+from typing import Annotated
+from pydantic import BeforeValidator
+def convert(value): return Risky()
+class Body(BaseModel): payload: {annotation}
+@router.get('/')
+def route(): Body(payload='value')
+""",
+        encoding="utf8",
+    )
+    main(["check", "errors", str(tmp_path), "--require-complete", "--format", "json"])
+    [operation] = json.loads(capsys.readouterr().out)["operations"]
+    assert not operation["complete"]
+
+
+@pytest.mark.parametrize(
+    "followup",
+    [
+        "",
+        """
+    @field_validator('payload')
+    @classmethod
+    def inspect(cls, value):
+        value.run()
+        return value
+""",
+    ],
+)
+def test_annotated_after_validator_preserves_its_replacement_object(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], followup: str
+) -> None:
+    (tmp_path / "api.py").write_text(
+        PRELUDE
+        + f"""
+from typing import Annotated
+from pydantic import AfterValidator
+def replace(value): return Risky()
+class Body(BaseModel):
+    payload: Annotated[str, AfterValidator(replace)]
+{followup}
+@router.get('/')
+def route(): Body(payload='value').payload.run()
+""",
+        encoding="utf8",
+    )
+    main(["check", "errors", str(tmp_path), "--require-complete", "--format", "json"])
+    [operation] = json.loads(capsys.readouterr().out)["operations"]
+    assert operation["complete"]
+    assert [d["code"] for d in operation["diagnostics"]] == ["CAN001"]
+
+
 @pytest.mark.parametrize("validate", [False, True])
 def test_type_adapter_checks_model_hooks_when_validation_executes(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], validate: bool

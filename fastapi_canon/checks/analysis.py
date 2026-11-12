@@ -2171,6 +2171,25 @@ class _Analyzer:
                         for escape in effects.escapes
                     ]
                 flow.extend(self._traced(function, effects))
+        if decorators == _VALIDATORS:
+            for name, decorator in self.source.models.hooks(owner):
+                hook = self.source.definitions[name]
+                if hook.owner is not None:
+                    continue
+                effects = _Flow()
+                for _, arguments in self.source.models.hook_arguments(
+                    instance or _Value(owner, instance=True), name, decorator
+                ):
+                    effects.extend(self.function(hook, stack, bindings=arguments))
+                effects.escapes = [
+                    escape
+                    for escape in effects.escapes
+                    if not any(
+                        base in {"builtins.ValueError", "builtins.AssertionError"}
+                        for base in self.source.mro(escape.exception) or ()
+                    )
+                ]
+                flow.extend(self._traced(function, effects))
         return flow
 
     def _callback(
