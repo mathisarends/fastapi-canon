@@ -124,7 +124,7 @@ select = ["B", "E4", "E7", "E9", "F", "I", "RUF", "SIM", "UP"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["fastapi_canon", "tests/unit", "tests/integration/error", "tests/contract/error", "tests/integration/test_opentelemetry.py", "tests/integration/test_feature_telemetry.py", "tests/integration/test_feature_telemetry_resources.py", "tests/integration/test_optional_streams.py", "tests/integration/integrations", "examples/canonical_errors"]
+files = ["fastapi_canon", "tests/unit", "tests/integration/error", "tests/contract/error", "tests/integration/test_opentelemetry.py", "tests/integration/test_feature_telemetry.py", "tests/integration/test_feature_telemetry_resources.py", "tests/integration/test_optional_streams.py", "tests/integration/integrations", "tests/integration/scripts", "examples/canonical_errors", "scripts/check.py", "scripts/benchmark_tests.py"]
 # Transport suites retain their own focused type checks in scripts/check.py.
 exclude = ["fastapi_canon/integrations/(sse|websockets|webrtc)/", "tests/(unit|integration)/integrations/(sse|websockets|webrtc)/", "tests/unit/test_release.py", "examples/canonical_errors/(dist|generated)/"]
 pretty = true

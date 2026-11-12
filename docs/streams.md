@@ -160,8 +160,8 @@ for Dishka's own markers and dependency injection details.
 
 ### HTTP methods
 
-`HTTPMethod` is available from `fastapi_canon`. It re-exports Python's standard
-`http.HTTPMethod`, a string enum with `GET`, `POST`, `PUT`, `PATCH`, `DELETE`,
+Import `HTTPMethod` from Python's standard `http` module. It is a string enum
+with `GET`, `POST`, `PUT`, `PATCH`, `DELETE`,
 `HEAD`, `OPTIONS`, `TRACE`, and `CONNECT`. It works in normal FastAPI/canon
 `methods=` lists too; strings remain supported.
 

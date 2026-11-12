@@ -38,6 +38,48 @@ uv run --frozen pytest tests/unit/error tests/integration/error tests/contract/e
 The test gate also runs the reference service's application suite. Regenerate
 committed clients through their generators before checking drift.
 
+## Choose tests
+
+Add a test when behavior changes or an existing guarantee lacks coverage. Start
+with one regression for a bug, or a success case and distinct failure/boundary
+cases for new behavior. There is no required number of tests per function or PR.
+Pure documentation, formatting and behavior-preserving refactors normally use
+the existing checks.
+
+Choose the smallest public boundary that exposes the failure. Unit tests cover
+isolated behavior; integration tests cover collaboration and resource lifetimes;
+contract tests cover consumer-visible schemas and APIs. Add a second level only
+when it establishes a different guarantee. Use real collaborators in integration
+and contract tests and at most one object-targeted patch in a unit test.
+
+Parameterize distinct equivalence classes rather than every possible combination.
+Prefer importing, compiling and running generated clients to checking incidental
+source strings. Keep exact checks for public names, wire/schema contracts,
+ownership and drift. Remove or merge tests only after identifying where their
+guarantees remain covered; test count alone is not a reason for deletion.
+
+## Measure check and test times
+
+Record command timings and Python test reports without changing the selected gates:
+
+```console
+uv run --frozen python scripts/check.py all --report-dir dist/checks
+uv run --frozen python scripts/benchmark_tests.py --rounds 3 --output dist/benchmarks/before.json -- --cov=fastapi_canon.integrations.webrtc --cov-branch --cov-fail-under=85
+```
+
+The benchmark runs the real suite in a fresh Python process per round. Its JSON
+records environment and lockfile identity, outcomes, collection time, test phases,
+fixture setup and direct subprocess starts. Extra pytest arguments follow `--`; use the
+same selection, coverage options, environment and cache conditions before and
+after an optimization. Measure focused candidates first, then the complete suite.
+Initial dependency installation is outside the benchmark. Compare warm runs
+separately from the first run and inspect medians, not a single fastest result.
+
+Reuse immutable generated or compiled artifacts when setup dominates. Keep
+mutable application state isolated per test. Distinguish reduced runner time
+from the CI's critical path; independent jobs overlap. Reports stay in ignored
+`dist/`, and CI attaches command timings and JUnit reports to each run.
+
 ## Verify release artifacts
 
 ```console

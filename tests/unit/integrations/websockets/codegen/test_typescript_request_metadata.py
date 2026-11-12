@@ -13,15 +13,11 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-from tests.unit.integrations.websockets.codegen.test_typescript_cancellation import (
-    cancellation_sdk as cancellation_sdk,
-)
-
 
 async def test_typescript_middleware_wire_metadata_server_parent_and_controls(
-    cancellation_sdk, document
+    compiled_typescript_sdk, document
 ):
-    root, node = cancellation_sdk
+    root, node = compiled_typescript_sdk
     runner = root / "metadata.js"
     runner.write_text(
         dedent("""

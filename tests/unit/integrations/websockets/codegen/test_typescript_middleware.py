@@ -2,13 +2,9 @@ import shutil
 import subprocess
 from textwrap import dedent
 
-from tests.unit.integrations.websockets.codegen.test_typescript_cancellation import (
-    cancellation_sdk as cancellation_sdk,
-)
 
-
-def test_middleware_public_types_are_strictly_checked(cancellation_sdk):
-    root, _ = cancellation_sdk
+def test_middleware_public_types_are_strictly_checked(compiled_typescript_sdk):
+    root, _ = compiled_typescript_sdk
     pnpm = shutil.which("pnpm.cmd") or shutil.which("pnpm")
     consumer = root / "middleware_types.ts"
     consumer.write_text(
@@ -70,8 +66,8 @@ def test_middleware_public_types_are_strictly_checked(cancellation_sdk):
     assert checked.returncode == 0, checked.stdout + checked.stderr
 
 
-def test_client_middleware_outcomes_retry_abort_and_cleanup(cancellation_sdk):
-    root, node = cancellation_sdk
+def test_client_middleware_outcomes_retry_abort_and_cleanup(compiled_typescript_sdk):
+    root, node = compiled_typescript_sdk
     runner = root / "middleware.js"
     runner.write_text(
         dedent("""

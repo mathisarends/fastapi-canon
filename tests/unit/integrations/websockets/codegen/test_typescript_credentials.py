@@ -1,13 +1,9 @@
 import subprocess
 from textwrap import dedent
 
-from tests.unit.integrations.websockets.codegen.test_typescript_cancellation import (
-    cancellation_sdk as cancellation_sdk,
-)
 
-
-def test_async_credentials_refresh_rejection_budget_and_close(cancellation_sdk):
-    root, node = cancellation_sdk
+def test_async_credentials_refresh_rejection_budget_and_close(compiled_typescript_sdk):
+    root, node = compiled_typescript_sdk
     runner = root / "credentials.js"
     runner.write_text(
         dedent("""

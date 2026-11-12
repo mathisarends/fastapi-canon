@@ -1,100 +1,15 @@
 import asyncio
 import json
-import shutil
 import subprocess
-from copy import deepcopy
 from textwrap import dedent
 
-import pytest
 from fastapi_canon.integrations.websockets import RpcChannel, RpcDisconnect
-from fastapi_canon.integrations.websockets.codegen import generate_typescript_client
-from fastapi_canon.integrations.websockets.codegen.typescript import (
-    TypeScriptClientOptions,
-)
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.testing import InMemorySocketFactory
 
 
-@pytest.fixture(scope="module")
-def cancellation_sdk(document, tmp_path_factory):
-    pnpm = shutil.which("pnpm.cmd") or shutil.which("pnpm")
-    node = shutil.which("node.exe") or shutil.which("node")
-    if pnpm is None or node is None:
-        pytest.skip("Node.js and pnpm are required")
-    root = tmp_path_factory.mktemp("typescript_cancellation")
-    deployed = deepcopy(document)
-    deployed["servers"] = [
-        {
-            "name": "rpc",
-            "url": "ws://test",
-            "x-rpckit-transport": {"type": "websocket", "messageEncoding": "json"},
-        }
-    ]
-    generate_typescript_client(
-        deployed,
-        root / "generated",
-        TypeScriptClientOptions(
-            with_transport="websocket", client_name="GreetingClient"
-        ),
-    )
-    (root / "types.ts").write_text(
-        dedent("""
-        import { GreetingClient, type RpcRequestOptions } from "./generated";
-        import { RpcClientCore, defineRoute } from "./generated/core";
-        const oldTransport = {
-          async request(_method: string, _params?: object): Promise<unknown> {
-            return {};
-          },
-          async *notifications() {},
-          async close() {},
-        };
-        const client = new GreetingClient(oldTransport);
-        const options: RpcRequestOptions = { signal: new AbortController().signal };
-        void client.greeting.say({ name: "Ada" }, options);
-        void client.greeting.greeted(options);
-        void client.greeting.say({ name: "Ada" });
-        void client.greeting.greeted();
-        const core = new RpcClientCore(oldTransport);
-        void core.request(
-          defineRoute<undefined, string>({ method: "ping" }),
-          undefined,
-          options,
-        );
-        // @ts-expect-error signals are AbortSignal instances
-        void client.greeting.greeted({ signal: "invalid" });
-        // @ts-expect-error required method params are still required
-        void client.greeting.say(options);
-    """),
-        encoding="utf-8",
-    )
-    checked = subprocess.run(
-        [
-            pnpm,
-            "exec",
-            "tsc",
-            "--strict",
-            "--target",
-            "ES2021",
-            "--module",
-            "Node16",
-            "--moduleResolution",
-            "Node16",
-            "--lib",
-            "ES2021,DOM,ESNext.Disposable",
-            "--skipLibCheck",
-            "--outDir",
-            str(root / "compiled"),
-            str(root / "types.ts"),
-        ],
-        capture_output=True,
-        text=True,
-    )
-    assert checked.returncode == 0, checked.stdout + checked.stderr
-    return root, node
-
-
-def test_abort_timeout_response_and_disconnect_races(cancellation_sdk):
-    root, node = cancellation_sdk
+def test_abort_timeout_response_and_disconnect_races(compiled_typescript_sdk):
+    root, node = compiled_typescript_sdk
     runner = root / "races.js"
     runner.write_text(
         dedent("""
@@ -373,9 +288,11 @@ def test_abort_timeout_response_and_disconnect_races(cancellation_sdk):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-async def test_typescript_abort_and_timeout_cancel_a_real_server(cancellation_sdk):
+async def test_typescript_abort_and_timeout_cancel_a_real_server(
+    compiled_typescript_sdk,
+):
     async with asyncio.timeout(10):
-        root, node = cancellation_sdk
+        root, node = compiled_typescript_sdk
         runner = root / "roundtrip.js"
         runner.write_text(
             dedent("""

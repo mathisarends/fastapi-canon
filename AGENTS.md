@@ -38,6 +38,23 @@ Shared errors and common generation are documented in `docs/problems.md` and
 - Integration and contract tests use real collaborators; mocks are forbidden.
   Unit tests may use at most one object-targeted patch. Test observable outcomes
   with finite local deadlines; do not access private production members to pass.
+- Add tests for changed behavior or a demonstrated coverage gap, not for every
+  edit or function. A bug normally needs one focused regression that fails before
+  the fix. New behavior needs a success case and its distinct failure/boundary
+  cases; there is no test-count quota. Documentation, formatting and behavior-
+  preserving refactors normally use existing checks.
+- Choose the smallest public boundary that can expose the regression. Add an
+  integration or contract case when it establishes a different cross-component
+  or consumer guarantee; do not repeat every case at all three levels.
+  Parameterize meaningful equivalence classes, not arbitrary Cartesian products.
+  Before adding a case, identify the regression an existing test cannot detect.
+- Prefer generated-client import, compilation and execution over assertions about
+  incidental emitted source text. Retain exact output checks for intentional
+  public names, wire/schema contracts, ownership manifests and drift.
+- Remove or merge a test only when its guarantee is retired or demonstrably
+  covered elsewhere. Keep distinct cleanup, cancellation, compatibility and
+  security outcomes. Profile before optimizing: reuse immutable generation and
+  compilation fixtures, but keep application state fresh for each test.
 - Put source/style policies in Smelt or Ruff, not AST-based pytest tests. Do not
   weaken rules, add broad exclusions or record a debt baseline to pass checks.
   Necessary inline exceptions need a concrete reason; unused suppressions fail.

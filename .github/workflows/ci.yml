@@ -70,7 +70,6 @@ jobs:
   static:
     name: Architecture, lint, types and clients
     needs: changes
-    if: needs.changes.outputs.full != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -94,12 +93,18 @@ jobs:
           enable-cache: true
       - run: uv sync --locked --all-groups --python 3.12
       - run: pnpm install --frozen-lockfile --ignore-scripts
-      - run: uv run --locked python scripts/check.py architecture
-      - run: uv run --locked python scripts/check.py lint
+      - run: uv run --locked python scripts/check.py architecture --report-dir dist/checks
+      - run: uv run --locked python scripts/check.py lint --report-dir dist/checks
       - if: needs.changes.outputs.code == 'true'
-        run: uv run --locked python scripts/check.py types
+        run: uv run --locked python scripts/check.py types --report-dir dist/checks
       - if: needs.changes.outputs.code == 'true'
-        run: uv run --locked python scripts/check.py clients
+        run: uv run --locked python scripts/check.py clients --report-dir dist/checks
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: checks-static
+          path: dist/checks/
+          if-no-files-found: ignore
 
   database-postgres:
     name: PostgreSQL database and migration contracts
@@ -133,7 +138,13 @@ jobs:
         with:
           version: '0.9.2'
       - run: uv sync --frozen --all-groups
-      - run: uv run --frozen pytest -q tests/integration/integrations/database
+      - run: uv run --frozen pytest -q tests/integration/integrations/database --durations=30 --junitxml=dist/checks/postgres.xml
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: checks-postgres
+          path: dist/checks/
+          if-no-files-found: ignore
 
   verify:
     name: ${{ matrix.os }} / Python ${{ matrix.python }}
@@ -166,9 +177,9 @@ jobs:
           enable-cache: true
       - run: uv sync --locked --all-groups --python ${{ matrix.python }}
       - run: pnpm install --frozen-lockfile --ignore-scripts
-      # Full runs repeat every gate per platform; PRs run the static gates once
-      # in the static job and only the suites here.
-      - run: uv run --locked python scripts/check.py ${{ needs.changes.outputs.full == 'true' && 'all' || 'test' }}
+      # Static gates run once; real Python and generated-client runtime tests
+      # retain the complete supported platform/version matrix.
+      - run: uv run --locked python scripts/check.py test --report-dir dist/checks
       - if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
         name: Native telemetry bridge against minimum and locked FastAPI
         run: uv run --locked python scripts/check_telemetry_compatibility.py --python 3.12
@@ -176,13 +187,19 @@ jobs:
         name: WebRTC sessions in Chromium
         run: |
           pnpm exec playwright install --with-deps chromium
-          uv run --locked python scripts/check.py browser
+          uv run --locked python scripts/check.py browser --report-dir dist/checks
       - if: matrix.os == 'ubuntu-latest' && matrix.python == '3.14' && needs.changes.outputs.dependencies == 'true'
         run: uv run --locked python scripts/check_distributions.py
       - if: matrix.os == 'ubuntu-latest' && matrix.python == '3.14' && needs.changes.outputs.full == 'true'
         run: uv run --locked python scripts/check_streams_artifacts.py
       - if: matrix.os == 'ubuntu-latest' && matrix.python == '3.14' && needs.changes.outputs.full == 'true'
         run: uv run --locked python scripts/check_webrtc_artifacts.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: checks-${{ matrix.os }}-${{ matrix.python }}
+          path: dist/checks/
+          if-no-files-found: ignore
 
   minimum-dependencies:
     name: Minimum dependencies / Python 3.12
@@ -224,4 +241,10 @@ jobs:
         run: >-
           uv pip list --python .venv |
           grep -Ei '^(fastapi|starlette|pydantic|pydantic-core|dishka|anyio|aiortc|fastmcp|opentelemetry-(api|instrumentation)|sqlalchemy|httpx) '
-      - run: uv run --frozen pytest -q
+      - run: uv run --frozen pytest -q --durations=30 --junitxml=dist/checks/minimum.xml
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: checks-minimum
+          path: dist/checks/
+          if-no-files-found: ignore
