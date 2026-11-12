@@ -4,6 +4,8 @@ import ast
 import builtins
 import importlib.util
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Literal, Self
@@ -246,6 +248,18 @@ class _Creation:
 
 
 @dataclass
+class _Observations:
+    summary: _ValueSummary | None = None
+
+
+@dataclass(frozen=True)
+class _Provided:
+    value: _Value
+    creations: tuple[_Creation, ...]
+    summary: _ValueSummary
+
+
+@dataclass
 class _Source:
     paths: dict[str, Path] = field(default_factory=dict)
     bodies: dict[str, list[ast.stmt]] = field(default_factory=dict)
@@ -277,6 +291,7 @@ class _Source:
         default_factory=dict
     )
     _providing: set[str] = field(default_factory=set)
+    _provided_values: dict[tuple[str, bool], _Provided] = field(default_factory=dict)
     creations: dict[str, list[_Creation]] = field(default_factory=dict)
     _constructing: set[tuple[str, tuple[tuple[str, _Value], ...]]] = field(
         default_factory=set
@@ -349,6 +364,45 @@ class _Source:
             self.unstable_reads.add(site)
         else:
             self.read_versions.setdefault(site, value)
+
+    def reuse(self, summary: _ValueSummary) -> bool:
+        if not all(self.heap.get(site) == value for site, value in summary.reads):
+            return False
+        self.touched.update(summary.modules)
+        for site, _ in summary.reads:
+            self.observe(site)
+        return True
+
+    @contextmanager
+    def observations(self) -> Iterator[_Observations]:
+        previous_modules, previous_reads = self.touched, self.reads
+        previous_versions, previous_unstable = self.read_versions, self.unstable_reads
+        self.touched = set()
+        self.reads = set()
+        self.read_versions = {}
+        self.unstable_reads = set()
+        observed = _Observations()
+        try:
+            yield observed
+        finally:
+            if not self.unstable_reads and all(
+                self.heap.get(site) == value
+                for site, value in self.read_versions.items()
+            ):
+                observed.summary = _ValueSummary(
+                    frozenset(self.touched), tuple(sorted(self.read_versions.items()))
+                )
+            previous_modules.update(self.touched)
+            previous_reads.update(self.reads)
+            previous_unstable.update(self.unstable_reads)
+            for site, value in self.read_versions.items():
+                if site in previous_versions and previous_versions[site] != value:
+                    previous_unstable.add(site)
+                previous_versions.setdefault(site, value)
+            self.touched = previous_modules
+            self.reads = previous_reads
+            self.read_versions = previous_versions
+            self.unstable_reads = previous_unstable
 
     def element(self, value: _Value) -> _Value:
         results = []
@@ -3513,152 +3567,20 @@ class _Source:
                     )
 
     def provided(self, port: str, *, implicit: bool = False) -> _Value:
-        self.implementations(port)
         if port in self._providing:
             return _Value()
-        plans = self._provider_factories.get(port, [])
-        if not plans:
-            if self.external(port):
-                return _Value(port, instance=True)
-            definition = self.definitions.get(port)
-            if (
-                not implicit
-                or not definition
-                or not isinstance(definition.node, ast.ClassDef)
-                or any(
-                    definition.name.startswith(port + ".") and self.abstract(definition)
-                    for definition in self.definitions.values()
-                    if definition.owner == port
-                )
-            ):
-                return _Value(port, instance=True, dependency=True, unresolved=True)
-            plans = [port]
-        self._providing.add(port)
-        try:
-            values = []
-            creations = []
-            for name in plans:
-                if isinstance(name, _ForwardedDependency):
-                    values.append(self.provided(name.name))
-                    creations.append(_Creation("", dependencies=(name.name,)))
-                    continue
-                definition = self.definitions.get(name)
-                if definition is None:
-                    values.append(self.provided(name))
-                    creations.append(_Creation("", dependencies=(name,)))
-                    continue
-                dependencies = []
-                if isinstance(definition.node, ast.ClassDef):
-                    constructor = self.method(name, "__init__")
-                    kwargs = []
-                    arguments = {}
-                    if constructor and isinstance(constructor.node, ast.FunctionDef):
-                        args = [
-                            *constructor.node.args.posonlyargs,
-                            *constructor.node.args.args,
-                            *constructor.node.args.kwonlyargs,
-                        ][1:]
-                        for arg in args:
-                            if arg.annotation:
-                                dependency = self.annotation(
-                                    arg.annotation, constructor.module
-                                )
-                                if dependency:
-                                    dependencies.append(dependency)
-                                    arguments[arg.arg] = self.provided(dependency)
-                                    kwargs.append(
-                                        ast.keyword(
-                                            arg=arg.arg, value=ast.Name(id=arg.arg)
-                                        )
-                                    )
-                    call = ast.copy_location(
-                        ast.Call(
-                            func=ast.Name(id=definition.node.name),
-                            args=[],
-                            keywords=kwargs,
-                        ),
-                        definition.node,
-                    )
-                    instance = self.construct(
-                        name, call, definition.module, arguments, injected=True
-                    )
-                    values.append(instance)
-                    creations.append(
-                        _Creation(
-                            name,
-                            tuple(dependencies),
-                            tuple(sorted(arguments.items())),
-                            call,
-                            instance,
-                        )
-                    )
-                else:
-                    arguments = {}
-                    parameters = [
-                        *definition.node.args.posonlyargs,
-                        *definition.node.args.args,
-                        *definition.node.args.kwonlyargs,
-                    ]
-                    for index, arg in enumerate(parameters):
-                        if index == 0 and definition.owner:
-                            arguments[arg.arg] = _Value(definition.owner, instance=True)
-                        elif arg.annotation:
-                            forwarded = self._factory_dependency(
-                                arg.annotation, definition.module
-                            )
-                            if forwarded:
-                                dependencies.append(forwarded.name)
-                            arguments[arg.arg] = (
-                                self.provided(forwarded.name)
-                                if forwarded
-                                else self.typed(arg.annotation, definition.module)
-                            )
-                        else:
-                            arguments[arg.arg] = _Value()
-                    values.append(
-                        self.returned(
-                            definition,
-                            arguments,
-                            yielded=any(
-                                _has_yield(statement)
-                                for statement in definition.node.body
-                            ),
-                        )
-                    )
-                    creations.append(
-                        _Creation(
-                            name, tuple(dependencies), tuple(sorted(arguments.items()))
-                        )
-                    )
-            self.creations[port] = creations
-            checked = []
-            for value in values:
-                for variant in self.expand(value).variants:
-                    if variant.unresolved or (
-                        variant.name
-                        and self._provider(variant.name)
-                        and not variant.exact
-                    ):
-                        checked.append(
-                            _Value(
-                                port, instance=True, dependency=True, unresolved=True
-                            )
-                        )
-                    elif (
-                        variant.instance
-                        and variant.name
-                        and variant.name != "builtins.NoneType"
-                    ):
-                        checked.append(variant)
-                    else:
-                        checked.append(
-                            _Value(
-                                port, instance=True, dependency=True, unresolved=True
-                            )
-                        )
-            return _join(*checked)
-        finally:
-            self._providing.remove(port)
+        key = port, implicit
+        cached = self._provided_values.get(key)
+        if cached and self.reuse(cached.summary):
+            self.creations[port] = list(cached.creations)
+            return cached.value
+        with self.observations() as observed:
+            value = self._provide(port, implicit=implicit)
+        if observed.summary is not None:
+            self._provided_values[key] = _Provided(
+                value, tuple(self.creations.get(port, ())), observed.summary
+            )
+        return value
 
     def external(self, name: str) -> bool:
         """Whether *name* belongs to an importable package outside the roots.
@@ -4304,6 +4226,154 @@ class _Source:
                 if value is not None
             ),
         )
+
+    def _provide(self, port: str, *, implicit: bool) -> _Value:
+        self.implementations(port)
+        if port in self._providing:
+            return _Value()
+        plans = self._provider_factories.get(port, [])
+        if not plans:
+            if self.external(port):
+                return _Value(port, instance=True)
+            definition = self.definitions.get(port)
+            if (
+                not implicit
+                or not definition
+                or not isinstance(definition.node, ast.ClassDef)
+                or any(
+                    definition.name.startswith(port + ".") and self.abstract(definition)
+                    for definition in self.definitions.values()
+                    if definition.owner == port
+                )
+            ):
+                return _Value(port, instance=True, dependency=True, unresolved=True)
+            plans = [port]
+        self._providing.add(port)
+        try:
+            values = []
+            creations = []
+            for name in plans:
+                if isinstance(name, _ForwardedDependency):
+                    values.append(self.provided(name.name))
+                    creations.append(_Creation("", dependencies=(name.name,)))
+                    continue
+                definition = self.definitions.get(name)
+                if definition is None:
+                    values.append(self.provided(name))
+                    creations.append(_Creation("", dependencies=(name,)))
+                    continue
+                dependencies = []
+                if isinstance(definition.node, ast.ClassDef):
+                    constructor = self.method(name, "__init__")
+                    kwargs = []
+                    arguments = {}
+                    if constructor and isinstance(constructor.node, ast.FunctionDef):
+                        args = [
+                            *constructor.node.args.posonlyargs,
+                            *constructor.node.args.args,
+                            *constructor.node.args.kwonlyargs,
+                        ][1:]
+                        for arg in args:
+                            if arg.annotation:
+                                dependency = self.annotation(
+                                    arg.annotation, constructor.module
+                                )
+                                if dependency:
+                                    dependencies.append(dependency)
+                                    arguments[arg.arg] = self.provided(dependency)
+                                    kwargs.append(
+                                        ast.keyword(
+                                            arg=arg.arg, value=ast.Name(id=arg.arg)
+                                        )
+                                    )
+                    call = ast.copy_location(
+                        ast.Call(
+                            func=ast.Name(id=definition.node.name),
+                            args=[],
+                            keywords=kwargs,
+                        ),
+                        definition.node,
+                    )
+                    instance = self.construct(
+                        name, call, definition.module, arguments, injected=True
+                    )
+                    values.append(instance)
+                    creations.append(
+                        _Creation(
+                            name,
+                            tuple(dependencies),
+                            tuple(sorted(arguments.items())),
+                            call,
+                            instance,
+                        )
+                    )
+                else:
+                    arguments = {}
+                    parameters = [
+                        *definition.node.args.posonlyargs,
+                        *definition.node.args.args,
+                        *definition.node.args.kwonlyargs,
+                    ]
+                    for index, arg in enumerate(parameters):
+                        if index == 0 and definition.owner:
+                            arguments[arg.arg] = _Value(definition.owner, instance=True)
+                        elif arg.annotation:
+                            forwarded = self._factory_dependency(
+                                arg.annotation, definition.module
+                            )
+                            if forwarded:
+                                dependencies.append(forwarded.name)
+                            arguments[arg.arg] = (
+                                self.provided(forwarded.name)
+                                if forwarded
+                                else self.typed(arg.annotation, definition.module)
+                            )
+                        else:
+                            arguments[arg.arg] = _Value()
+                    values.append(
+                        self.returned(
+                            definition,
+                            arguments,
+                            yielded=any(
+                                _has_yield(statement)
+                                for statement in definition.node.body
+                            ),
+                        )
+                    )
+                    creations.append(
+                        _Creation(
+                            name, tuple(dependencies), tuple(sorted(arguments.items()))
+                        )
+                    )
+            self.creations[port] = creations
+            checked = []
+            for value in values:
+                for variant in self.expand(value).variants:
+                    if variant.unresolved or (
+                        variant.name
+                        and self._provider(variant.name)
+                        and not variant.exact
+                    ):
+                        checked.append(
+                            _Value(
+                                port, instance=True, dependency=True, unresolved=True
+                            )
+                        )
+                    elif (
+                        variant.instance
+                        and variant.name
+                        and variant.name != "builtins.NoneType"
+                    ):
+                        checked.append(variant)
+                    else:
+                        checked.append(
+                            _Value(
+                                port, instance=True, dependency=True, unresolved=True
+                            )
+                        )
+            return _join(*checked)
+        finally:
+            self._providing.remove(port)
 
     def _field(self, owner: str, attribute: str) -> str | None:
         lineage = self.lineage(owner) if owner in self.definitions else None

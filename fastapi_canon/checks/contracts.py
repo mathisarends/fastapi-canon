@@ -15,6 +15,7 @@ from fastapi_canon.checks.declarations import _Registration, _Registrations
 from fastapi_canon.checks.effects import _Flow, _Unknown
 from fastapi_canon.checks.source import _Source
 from fastapi_canon.checks.symbols import _Definition
+from fastapi_canon.checks.value_flow import _ValueSummary
 
 _API_ROUTERS = frozenset(
     {"fastapi_canon.APIRouter", "fastapi_canon.api_router.APIRouter"}
@@ -33,6 +34,20 @@ _DEPENDENCIES = {
 _RPC_DECLARATIONS = frozenset({_RPC_METHOD, "stream", "socket"})
 _SOCKET_DECLARATIONS = frozenset({"socket", "binary_stream"})
 
+type _OperationKey = tuple[
+    str,
+    int,
+    str,
+    str,
+    str,
+    int,
+    int,
+    tuple[tuple[str, int], ...],
+    bool,
+    str | None,
+    frozenset[str],
+]
+
 
 @dataclass(frozen=True)
 class _Channel:
@@ -47,6 +62,13 @@ class _Diagnostic:
     path: str
     line: int
     trace: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class _OperationSummary:
+    diagnostics: tuple[_Diagnostic, ...]
+    scheduled: tuple[str, ...]
+    observations: _ValueSummary
 
 
 @dataclass
@@ -101,6 +123,7 @@ class _Checker:
         self._catalog_cache: dict[str, str] | None = None
         # flow-analysis unit seam
         self._analyzer = _Analyzer(source)
+        self._operation_summaries: dict[_OperationKey, _OperationSummary] = {}
 
     def check(self) -> _Report:
         # Operations share application-scoped objects. A later operation can
@@ -570,6 +593,56 @@ class _Checker:
         ancestors: tuple[tuple[str, ast.Call], ...] = (),
         iterated: bool = False,
         decorator_module: str | None = None,
+    ) -> None:
+        key = (
+            operation.path,
+            operation.line,
+            operation.function,
+            operation.transport,
+            module,
+            id(decorator),
+            id(router),
+            tuple((scope, id(layer)) for scope, layer in ancestors),
+            iterated,
+            decorator_module,
+            declaration_modules,
+        )
+        cached = self._operation_summaries.get(key)
+        if cached and self.source.reuse(cached.observations):
+            operation.diagnostics = list(cached.diagnostics)
+            operation.scheduled_executions = list(cached.scheduled)
+            return
+        with self.source.observations() as observed:
+            self._analyze_operation(
+                operation,
+                function,
+                decorator,
+                module,
+                router,
+                declaration_modules=declaration_modules,
+                ancestors=ancestors,
+                iterated=iterated,
+                decorator_module=decorator_module,
+            )
+        if observed.summary is not None:
+            self._operation_summaries[key] = _OperationSummary(
+                tuple(operation.diagnostics),
+                tuple(operation.scheduled_executions),
+                observed.summary,
+            )
+
+    def _analyze_operation(
+        self,
+        operation: _Operation,
+        function: _Definition,
+        decorator: ast.Call | None,
+        module: str,
+        router: ast.Call,
+        *,
+        declaration_modules: frozenset[str],
+        ancestors: tuple[tuple[str, ast.Call], ...],
+        iterated: bool,
+        decorator_module: str | None,
     ) -> None:
         self.source.touched = {function.module, module, *declaration_modules}
         layers = [*ancestors, (module, router)]

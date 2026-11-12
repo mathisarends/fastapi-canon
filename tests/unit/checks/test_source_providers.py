@@ -92,6 +92,27 @@ class Dependencies(Provider):
     assert status == 1
 
 
+def test_provider_results_refresh_when_a_later_route_changes_the_factory_input(
+    scan: Callable[..., tuple[int, dict[str, Any]]],
+) -> None:
+    _, report = scan("""
+class SafeRepository(Repository):
+    async def get(self): pass
+implementations = {'active': SafeRepository()}
+class Dependencies(Provider):
+    @provide(scope=Scope.REQUEST)
+    def repository(self) -> Repository:
+        return implementations['active']
+@router.get('/reader')
+async def reader(repository: Inject[Repository]): await repository.get()
+@router.post('/change')
+def change(): implementations['active'] = LocalRepository()
+""")
+    reader = next(o for o in report["operations"] if o["function"] == "api.reader")
+    assert reader["complete"]
+    assert [d["code"] for d in reader["diagnostics"]] == ["CAN001"]
+
+
 @pytest.mark.parametrize(
     ("header", "body"),
     [
