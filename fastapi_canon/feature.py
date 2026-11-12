@@ -25,7 +25,7 @@ from starlette.routing import Match, Route, WebSocketRoute, compile_path
 from starlette.types import ExceptionHandler, Lifespan
 from starlette.types import Scope as ASGIScope
 
-from fastapi_canon.contract_routes import iter_contract_routes
+from fastapi_canon.contract_routes import iter_contract_mounts, iter_contract_routes
 from fastapi_canon.diagnostics import (
     CheckContext,
     CheckIssue,
@@ -360,6 +360,9 @@ class _Installation:
     override_ids: tuple[int, ...]
     container: AsyncContainer | None = field(compare=False)
     description: CompositionInfo | None = field(default=None, compare=False)
+    contract_routes: tuple[tuple[Feature, str, object], ...] = field(
+        default=(), compare=False
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -443,8 +446,20 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
     original_lifespan = app.router.lifespan_context
     if container is not None:
         _install_scopes(app, container)
+    previous_routes = len(tuple(iter_contract_routes(app.routes)))
     for router in installed_routers:
         app.include_router(router)
+    owners = tuple(
+        feature
+        for feature in composition.features
+        for router in feature.routers
+        for _ in iter_contract_routes(router.routes)
+    )
+    registered = tuple(iter_contract_routes(app.routes))[previous_routes:]
+    contract_routes = tuple(
+        (feature, path, getattr(route, "original_route", route))
+        for feature, (path, route) in zip(owners, registered, strict=True)
+    )
     for exception, handler in handlers:
         app.add_exception_handler(exception, handler)
     registry.install(
@@ -488,8 +503,29 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         override_ids=requested.override_ids,
         container=container,
         description=prepared.description,
+        contract_routes=contract_routes,
     )
     setattr(app.state, _INSTALLATION_STATE_KEY, completed)
+
+
+def _contract_ownership(
+    app: FastAPI,
+) -> tuple[tuple[Feature, ...], tuple[tuple[Feature, str, object], ...]]:
+    installed = getattr(app.state, _INSTALLATION_STATE_KEY, None)
+    features = installed.features if isinstance(installed, _Installation) else ()
+    routes = installed.contract_routes if isinstance(installed, _Installation) else ()
+    for prefix, child in iter_contract_mounts(app.routes):
+        if isinstance(child, FastAPI):
+            child_features, child_routes = _contract_ownership(child)
+            features = (*features, *child_features)
+            routes = (
+                *routes,
+                *(
+                    (feature, prefix + path, route)
+                    for feature, path, route in child_routes
+                ),
+            )
+    return features, routes
 
 
 def _prepare_composition(app: FastAPI, composition: Composition) -> _Preparation:

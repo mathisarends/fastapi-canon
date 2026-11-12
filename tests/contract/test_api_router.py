@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 from fastapi import FastAPI
 
 from fastapi_canon import APIRouter, Composition, Feature, export_contracts
+from fastapi_canon.contracts import ContractKind
 from fastapi_canon.integrations.webrtc import Session
 from fastapi_canon.integrations.websockets import RpcChannel
 
@@ -87,7 +88,7 @@ def test_multiple_channel_endpoints_with_the_same_suffix_export_separately() -> 
     router.include_channel(tasks, path="/{project_id}/tasks/session", namespace="tasks")
     app = FastAPI()
     app.include_router(router)
-    contract = export_contracts(app, kinds=["openrpc"]).openrpc
+    contract = export_contracts(app, kinds=[ContractKind.OPENRPC]).openrpc
     assert contract is not None
     assert {server["url"] for server in contract["servers"]} == {
         "{baseUrl}/projects/{project_id}/session",
