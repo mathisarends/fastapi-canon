@@ -287,6 +287,15 @@ not certified by a complete HTTP operation.
 
 ## Local context managers
 
+**Unpublished, planned for 0.20.0:** default-component `ServiceScope` factories
+resolve registered services and check their dependency construction. APP services
+are borrowed; REQUEST values and factory summaries use a separate scope identity.
+Simple generator-provider cleanup is checked after the body, without treating the
+body exception as thrown into the provider. Dishka wraps finalizer failures in
+`ExitError`; those paths remain CAN003 rather than a directly mapped domain error.
+Unknown scopes, custom components, uncached factories and unresolved nested
+cleanup ownership remain incomplete. APP shutdown belongs to its parent lifetime.
+
 Supported local sync/async context methods and single-yield
 `contextmanager`/`asynccontextmanager` factories contribute entry, body and cleanup
 errors. Managers enter left to right and exit in reverse order. Known suppression

@@ -1595,6 +1595,46 @@ class _Analyzer:
             return flow
         flow = self.expression(item.context_expr, function, env, stack)
         manager_value = self.source.infer(item.context_expr, function.module, env)
+        if manager_value.name == "<service-scope>":
+            local = env.copy()
+            port = dict(manager_value.fields).get("$port", _Value()).name
+            if (
+                not isinstance(node, ast.AsyncWith)
+                or manager_value.unresolved
+                or not port
+            ):
+                flow.unknowns.append(
+                    _Unknown(
+                        "unresolved scoped service contract",
+                        function.name,
+                        item.context_expr.lineno,
+                    )
+                )
+            else:
+                with self.source.request_scope(manager_value.site):
+                    flow.extend(self._dependency(port, function, stack))
+            if item.optional_vars:
+                self.source.assign(
+                    item.optional_vars,
+                    self.source.entered(
+                        manager_value, asynchronous=isinstance(node, ast.AsyncWith)
+                    ),
+                    local,
+                )
+            flow.extend(
+                self._context_manager(
+                    node, function, local, stack, reraised, index + 1, states=states
+                )
+            )
+            if (
+                isinstance(node, ast.AsyncWith)
+                and not manager_value.unresolved
+                and port
+            ):
+                with self.source.request_scope(manager_value.site):
+                    flow.extend(self._scope_boundaries(port, function, stack, set()))
+            env.update(local)
+            return flow
         generators = [
             value
             for value in manager_value.variants
@@ -1878,6 +1918,71 @@ class _Analyzer:
         else:
             flow.extend(inner)
             self.source.merge_environments(env, [env.copy(), local])
+        return flow
+
+    def _scope_boundaries(
+        self, port: str, function: _Definition, stack: tuple[str, ...], seen: set[str]
+    ) -> _Flow:
+        flow = _Flow()
+        if port in seen:
+            return flow
+        seen.add(port)
+        self.source.provided(port)
+        for creation in self.source.creations.get(port, []):
+            definition = self.source.definitions.get(creation.name)
+            if not definition:
+                for dependency in reversed(creation.dependencies):
+                    flow.extend(
+                        self._scope_boundaries(dependency, function, stack, seen)
+                    )
+                continue
+            scope = self.source.provider_scope(creation.name)
+            if scope is None:
+                flow.unknowns.append(
+                    _Unknown(
+                        "unresolved Dishka provider scope",
+                        definition.name,
+                        definition.node.lineno,
+                    )
+                )
+            elif (
+                scope == "REQUEST"
+                and isinstance(definition.node, ast.FunctionDef | ast.AsyncFunctionDef)
+                and self.source.generator(definition.node)
+            ):
+                phases = self.source.context_phases(definition.node)
+                if phases is None or phases.contexts or definition.name in self._yields:
+                    flow.unknowns.append(
+                        _Unknown(
+                            "owned request-scoped provider cleanup requires continuation analysis",
+                            definition.name,
+                            definition.node.lineno,
+                        )
+                    )
+                else:
+                    local = self.source.environment(
+                        definition, bindings=dict(creation.bindings)
+                    )
+                    self.source.values_block(phases.setup, definition.module, local)
+                    self._yields[definition.name] = _Flow()
+                    try:
+                        cleanup = self.block(
+                            phases.after, definition, local, (*stack, definition.name)
+                        )
+                    finally:
+                        del self._yields[definition.name]
+                    if cleanup.escapes:
+                        cleanup.unknowns.append(
+                            _Unknown(
+                                "request-scoped provider cleanup errors are wrapped by Dishka ExitError",
+                                definition.name,
+                                definition.node.lineno,
+                            )
+                        )
+                        cleanup.escapes.clear()
+                    flow.extend(cleanup)
+            for dependency in reversed(creation.dependencies):
+                flow.extend(self._scope_boundaries(dependency, function, stack, seen))
         return flow
 
     def _generator_context(

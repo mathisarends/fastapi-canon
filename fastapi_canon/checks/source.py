@@ -296,8 +296,12 @@ class _Source:
     _provider_factories: dict[str, list[str | _ForwardedDependency]] = field(
         default_factory=dict
     )
+    _provider_scopes: dict[str, set[str | None]] = field(default_factory=dict)
+    _request_scope: str = ""
     _providing: set[str] = field(default_factory=set)
-    _provided_values: dict[tuple[str, bool], _Provided] = field(default_factory=dict)
+    _provided_values: dict[tuple[str, bool, str], _Provided] = field(
+        default_factory=dict
+    )
     creations: dict[str, list[_Creation]] = field(default_factory=dict)
     _constructing: set[tuple[str, tuple[tuple[str, _Value], ...]]] = field(
         default_factory=set
@@ -359,7 +363,11 @@ class _Source:
             module,
             getattr(node, "lineno", 0),
             getattr(node, "col_offset", 0),
-            _Value(label, bound=env.get("$context", _Value()).reference()),
+            _Value(
+                label,
+                bound=env.get("$context", _Value()).reference(),
+                literal=self._request_scope,
+            ),
         )
         if key not in self._sites:
             self._sites[key] = f"{module}:{key[1]}:{key[2]}@{len(self._sites)}"
@@ -454,7 +462,13 @@ class _Source:
     def entered(self, resource: _Value, *, asynchronous: bool) -> _Value:
         values = []
         for variant in self.expand(resource).variants:
-            if variant.name == "<contextmanager>" and variant.bound:
+            if (
+                variant.name == "<service-scope>"
+                and asynchronous
+                and not variant.unresolved
+            ):
+                values.append(variant.bound or _Value())
+            elif variant.name == "<contextmanager>" and variant.bound:
                 definition = self.definitions.get(variant.bound.name)
                 expected = (
                     "contextlib.asynccontextmanager"
@@ -1978,6 +1992,9 @@ class _Source:
         *,
         awaited: bool = False,
     ) -> _Value:
+        scoped = self._service_scope_value(node, target, module, env, awaited=awaited)
+        if scoped is not None:
+            return scoped
         mutation = self.mutation(node, target, module, env)
         if mutation is not None:
             return mutation.result
@@ -3558,7 +3575,9 @@ class _Source:
             )
         bindings = variants[0]
         key = (
-            function.name + (":yield" if yielded else ""),
+            function.name
+            + (":yield" if yielded else "")
+            + (f":scope:{self._request_scope}" if self._request_scope else ""),
             tuple(
                 sorted(
                     (name, self.expand(value).reference())
@@ -3922,7 +3941,19 @@ class _Source:
     def provided(self, port: str, *, implicit: bool = False) -> _Value:
         if port in self._providing:
             return _Value()
-        key = port, implicit
+        self.implementations(port)
+        plans = self._provider_factories.get(port, [])
+        if (
+            self._request_scope
+            and plans
+            and all(
+                isinstance(plan, str) and self.provider_scope(plan) == "APP"
+                for plan in plans
+            )
+        ):
+            with self.request_scope(""):
+                return self.provided(port, implicit=implicit)
+        key = port, implicit, self._request_scope
         cached = self._provided_values.get(key)
         if cached and self.reuse(cached.summary):
             self.creations[port] = list(cached.creations)
@@ -3934,6 +3965,19 @@ class _Source:
                 value, tuple(self.creations.get(port, ())), observed.summary
             )
         return value
+
+    @contextmanager
+    def request_scope(self, site: str) -> Iterator[None]:
+        previous = self._request_scope
+        self._request_scope = site
+        try:
+            yield
+        finally:
+            self._request_scope = previous
+
+    def provider_scope(self, name: str) -> str | None:
+        scopes = self._provider_scopes.get(name, set())
+        return next(iter(scopes)) if len(scopes) == 1 else None
 
     def external(self, name: str) -> bool:
         """Whether *name* belongs to an importable package outside the roots.
@@ -4174,6 +4218,7 @@ class _Source:
             try:
                 port, implementations = self._provider_binding(member, module)
                 if port:
+                    plan = None
                     if isinstance(member, ast.FunctionDef | ast.AsyncFunctionDef):
                         plan = f"{module}.{provider.name}.{member.name}"
                         self._provider_factories.setdefault(port, []).append(plan)
@@ -4194,6 +4239,11 @@ class _Source:
                             self._provider_factories.setdefault(port, []).append(
                                 _ForwardedDependency(name) if alias else name
                             )
+                            plan = None if alias else name
+                    if plan:
+                        self._provider_scopes.setdefault(plan, set()).add(
+                            self._binding_scope(module, provider, member)
+                        )
                     modules = frozenset(self.touched)
                     self._ports.setdefault(port, []).extend(
                         (implementation, modules) for implementation in implementations
@@ -4721,6 +4771,162 @@ class _Source:
             return _join(*checked)
         finally:
             self._providing.remove(port)
+
+    def _service_scope_value(
+        self,
+        node: ast.Call,
+        target: _Value,
+        module: str,
+        env: _Environment,
+        *,
+        awaited: bool,
+    ) -> _Value | None:
+        if not target.name.startswith("fastapi_canon."):
+            return None
+        owner = "fastapi_canon.scopes.ServiceScope"
+        name = self.libraries.canonical(target.name)
+        if name not in {owner, owner + ".__call__"} or not self.external(owner):
+            return None
+        if awaited:
+            return _Value()
+        if name == owner and not target.instance:
+            definition = self.libraries.definition(owner)
+            constructor = (
+                next(
+                    (
+                        n
+                        for n in definition[1].body
+                        if isinstance(n, ast.FunctionDef) and n.name == "__init__"
+                    ),
+                    None,
+                )
+                if definition and isinstance(definition[1], ast.ClassDef)
+                else None
+            )
+            actual = None
+            if (
+                definition
+                and constructor is not None
+                and not any(isinstance(arg, ast.Starred) for arg in node.args)
+                and all(kw.arg is not None for kw in node.keywords)
+            ):
+                scope = definition[0]
+                actual = _bind(
+                    constructor.args,
+                    (_Value(), *(self.infer(arg, module, env) for arg in node.args)),
+                    tuple(
+                        (kw.arg, self.infer(kw.value, module, env))
+                        for kw in node.keywords
+                        if kw.arg is not None
+                    ),
+                    tuple(
+                        self.infer(arg, scope, {}) for arg in constructor.args.defaults
+                    ),
+                    tuple(
+                        self.infer(arg, scope, {}) if arg is not None else None
+                        for arg in constructor.args.kw_defaults
+                    ),
+                )
+            return self.store(
+                _Value(
+                    owner,
+                    instance=True,
+                    exact=True,
+                    fields=tuple(sorted((actual or {}).items())),
+                    site=self.site(node, module, env, owner),
+                    unresolved=actual is None,
+                )
+            )
+        receiver = self.object(target.bound or target)
+        values = dict(receiver.fields)
+        service = values.get("service", _Value())
+        container = values.get("container", _Value())
+        component = values.get("component", _Value())
+        valid = (
+            receiver.exact
+            and not receiver.unresolved
+            and not node.args
+            and not node.keywords
+            and not service.instance
+            and service.name in self.definitions
+            and isinstance(self.definitions[service.name].node, ast.ClassDef)
+            and self.libraries.canonical(container.name)
+            == "dishka.async_container.AsyncContainer"
+            and component.name == "builtins.str"
+            and component.literal == ""
+        )
+        site = self.site(node, module, env, "service-scope")
+        value = _Value()
+        if valid:
+            with self.request_scope(site):
+                value = self.provided(service.name)
+        return _Value(
+            "<service-scope>",
+            instance=True,
+            bound=value,
+            fields=(("$port", service),),
+            site=site,
+            unresolved=not valid,
+        )
+
+    def _binding_scope(
+        self, module: str, provider: ast.ClassDef, member: ast.stmt
+    ) -> str | None:
+        call = (
+            member.value
+            if isinstance(member, ast.Assign | ast.AnnAssign)
+            else next(
+                (
+                    d
+                    for d in member.decorator_list
+                    if isinstance(d, ast.Call)
+                    and self.resolve(d.func, module) in _PROVIDE
+                ),
+                None,
+            )
+            if isinstance(member, ast.FunctionDef | ast.AsyncFunctionDef)
+            else None
+        )
+        value = _keyword(call, "scope") if isinstance(call, ast.Call) else None
+        if isinstance(call, ast.Call):
+            if any(kw.arg in {None, "when", "component"} for kw in call.keywords):
+                return None
+            cache = _keyword(call, "cache")
+            if cache is not None and self.infer(cache, module, {}).literal is not True:
+                return None
+        for base in self.mro(f"{module}.{provider.name}") or ():
+            definition = self.definitions.get(base)
+            if not definition or not isinstance(definition.node, ast.ClassDef):
+                continue
+            for statement in definition.node.body:
+                targets = (
+                    statement.targets
+                    if isinstance(statement, ast.Assign)
+                    else [statement.target]
+                    if isinstance(statement, ast.AnnAssign)
+                    else []
+                )
+                if any(
+                    isinstance(t, ast.Name) and t.id == "component" for t in targets
+                ):
+                    return None
+                if value is None and any(
+                    isinstance(t, ast.Name) and t.id == "scope" for t in targets
+                ):
+                    value = (
+                        statement.value
+                        if isinstance(statement, ast.Assign | ast.AnnAssign)
+                        else None
+                    )
+                    module = definition.module
+        resolved = self.resolve(value, module) if value is not None else None
+        if (
+            resolved
+            and resolved.startswith("dishka.")
+            and resolved.rsplit(".", 1)[-1] in {"APP", "REQUEST"}
+        ):
+            return resolved.rsplit(".", 1)[-1]
+        return None
 
     def _nominal_exception(self, owner: str) -> bool:
         if not self.exception(owner):
