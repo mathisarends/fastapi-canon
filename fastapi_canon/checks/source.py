@@ -16,6 +16,7 @@ from fastapi_canon.checks.symbols import (
     _import_condition,
     _LexicalScope,
     _scopes,
+    _stable_captures,
 )
 from fastapi_canon.checks.value_flow import (
     _bind,
@@ -298,6 +299,8 @@ class _Source:
     _sites: dict[tuple[str, int, int, _Value], str] = field(default_factory=dict)
     libraries: _LibraryTypes = field(default_factory=_LibraryTypes)
     lexical: dict[int, _LexicalScope] = field(default_factory=dict)
+    _lambdas: dict[ast.Lambda, ast.FunctionDef] = field(default_factory=dict)
+    _captures: dict[tuple[str, int], bool] = field(default_factory=dict)
 
     @property
     def models(self) -> _Models:
@@ -1450,6 +1453,25 @@ class _Source:
         ):
             return self.expand(env[key])
         match node:
+            case ast.Lambda():
+                scope = self.lexical.get(id(node))
+                if scope is None:
+                    return _Value()
+                if node not in self._lambdas:
+                    function = ast.copy_location(
+                        ast.FunctionDef(
+                            name=f"lambda:{node.col_offset}",
+                            args=node.args,
+                            body=[ast.copy_location(ast.Return(value=node.body), node)],
+                            decorator_list=[],
+                            returns=None,
+                            type_params=[],
+                        ),
+                        node,
+                    )
+                    self._lambdas[node] = function
+                    self.lexical[id(function)] = scope
+                return self.local_definition(self._lambdas[node], module, env)
             case ast.Constant():
                 return _Value(
                     f"builtins.{type(node.value).__name__}",
@@ -4155,9 +4177,18 @@ class _Source:
         if scope is None:
             return _Value()
         captured = scope.free_names
+        context = env.get("$context", _Value()).name
+        key = context, id(node)
+        if key not in self._captures:
+            parent = self.definitions.get(context)
+            self._captures[key] = (
+                _stable_captures(parent.node, node, captured)
+                if parent
+                else not captured
+            )
         if (
             node.decorator_list
-            or captured & set(dict(env.get("$written", _Value()).fields))
+            or not self._captures[key]
             or any(
                 isinstance(child, ast.Nonlocal | ast.Global) for child in ast.walk(node)
             )

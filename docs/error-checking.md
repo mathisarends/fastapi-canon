@@ -139,6 +139,9 @@ Dictionary unions retain their contained values and known right-hand key
 overrides. An unresolved operand does not establish safe contents.
 Raising an exception selected from a supported container checks every possible
 exception class. An unresolved alternative retains CAN003 alongside known gaps.
+Lambda defaults are evaluated at creation; their bodies are followed when called.
+Stable parameter and local captures retain their values. Reassigned cells,
+nonlocal mutation and captures changing across loop iterations remain unresolved.
 
 Inherited methods, classmethods, properties, `Self` and statically resolved
 `super()` dispatch follow the application's method resolution order. Recursive

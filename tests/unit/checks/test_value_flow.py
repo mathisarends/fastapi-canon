@@ -405,6 +405,40 @@ def route(): run({"safe" if modified else "risky"})
     )
 
 
+@pytest.mark.parametrize(
+    ("body", "complete", "gaps"),
+    [
+        ("callback = risky\n    invoke(lambda: callback())", True, 1),
+        ("invoke(lambda callback=risky: callback())", True, 1),
+        ("callback = lambda: risky()", True, 0),
+        ("callback = lambda value=risky(): value", True, 1),
+        (
+            "callback = safe\n    local = lambda: callback()\n    callback = risky\n    invoke(local)",
+            False,
+            0,
+        ),
+        (
+            "for callback in [safe, risky]:\n        local = lambda: callback()\n    invoke(local)",
+            False,
+            0,
+        ),
+        ("invoke(lambda: safe()); invoke(lambda: risky())", True, 1),
+    ],
+)
+def test_lambda_values_preserve_execution_timing_and_stable_captures(
+    scan: Callable[[str], dict[str, Any]], body: str, complete: bool, gaps: int
+) -> None:
+    report = scan(f"""
+def invoke(callback): return callback()
+@router.get('/lambda')
+def route():
+    {body}
+""")
+    [operation] = report["operations"]
+    assert operation["complete"] == complete
+    assert report["contract_gaps"] == gaps
+
+
 def test_custom_allocation_does_not_claim_a_fixed_receiver(
     scan: Callable[[str], dict[str, Any]],
 ) -> None:

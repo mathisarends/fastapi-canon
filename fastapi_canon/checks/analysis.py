@@ -455,6 +455,13 @@ class _Analyzer:
         iterated: bool = False,
     ) -> _Flow:
         flow = _Flow()
+        if isinstance(node, ast.Lambda):
+            for default in [
+                *node.args.defaults,
+                *(value for value in node.args.kw_defaults if value is not None),
+            ]:
+                flow.extend(self.expression(default, function, env, stack))
+            return flow
         if isinstance(node, ast.Await):
             deferred = self.source.coroutine(
                 self.source.infer(node.value, function.module, env)
