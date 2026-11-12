@@ -43,6 +43,143 @@ class _Models:
         self.source = source
         self._validating: set[str] = set()
 
+    def schema(
+        self, node: ast.expr, module: str, seen: frozenset[int] = frozenset()
+    ) -> _Value:
+        """Read supported adapter schemas without losing functional metadata."""
+        module, node = self.source.value(node, module)
+        if id(node) in seen:
+            return _Value(unresolved=True)
+        seen = seen | {id(node)}
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            try:
+                node = ast.parse(node.value, mode="eval").body
+            except SyntaxError:
+                return _Value(unresolved=True)
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+            return _join(
+                self.schema(node.left, module, seen),
+                self.schema(node.right, module, seen),
+            )
+        if isinstance(node, ast.Subscript):
+            wrapper = self.source.resolve(node.value, module)
+            args = (
+                node.slice.elts if isinstance(node.slice, ast.Tuple) else [node.slice]
+            )
+            if wrapper in {"typing.Annotated", "typing_extensions.Annotated"}:
+                safe_metadata = all(
+                    isinstance(value, ast.Call)
+                    and self.source.libraries.canonical(
+                        self.source.resolve(value.func, module) or ""
+                    )
+                    == "pydantic.fields.Field"
+                    and not any(
+                        isinstance(child, ast.Name | ast.Attribute)
+                        and self.source.resolve(child, module)
+                        in self.source.definitions
+                        for child in ast.walk(value)
+                    )
+                    for value in args[1:]
+                )
+                return (
+                    self.schema(args[0], module, seen)
+                    if safe_metadata
+                    else _Value(unresolved=True)
+                )
+            if wrapper in {"typing.Union", "typing.Optional"}:
+                values = [self.schema(arg, module, seen) for arg in args]
+                if wrapper == "typing.Optional":
+                    values.append(
+                        _Value("builtins.NoneType", instance=True, exact=True)
+                    )
+                return _join(*values)
+            value = self.source.typed(node, module)
+            return replace(
+                value,
+                arguments=tuple(
+                    self.schema(arg, module, seen)
+                    for arg in args
+                    if not (isinstance(arg, ast.Constant) and arg.value is Ellipsis)
+                ),
+            )
+        if self.source.resolve(node, module) in {"typing.Any", "typing_extensions.Any"}:
+            return _Value("<any-schema>")
+        return self.source.typed(node, module)
+
+    def supported_schema(self, schema: _Value) -> bool:
+        for value in schema.variants:
+            if value.unresolved:
+                return False
+            if self.source.model(value.name):
+                if self._custom_schema(value.name):
+                    return False
+            elif value.name in {
+                "builtins.list",
+                "builtins.tuple",
+                "builtins.set",
+                "builtins.frozenset",
+                "builtins.dict",
+            }:
+                if not value.arguments or not all(
+                    self.supported_schema(arg) for arg in value.arguments
+                ):
+                    return False
+            elif value.name not in {
+                "<any-schema>",
+                "<json>",
+                "builtins.str",
+                "builtins.bytes",
+                "builtins.int",
+                "builtins.float",
+                "builtins.bool",
+                "builtins.NoneType",
+            }:
+                return False
+        return True
+
+    def validated_models(
+        self,
+        schema: _Value,
+        value: _Value,
+        seen: frozenset[tuple[str, str]] = frozenset(),
+    ) -> list[_Value]:
+        """Visit nested validation hooks as well as the adapter's outer model."""
+        result = []
+        for variant in schema.variants:
+            for actual in self.source.expand(value).variants:
+                actual = self.source.object(actual)
+                key = variant.name, actual.site
+                if key in seen:
+                    continue
+                visited = seen | {key}
+                if self.source.model(variant.name):
+                    if actual.name != variant.name:
+                        continue
+                    result.append(actual)
+                    for name, field in self.fields(variant.name):
+                        result.extend(
+                            self.validated_models(
+                                field, dict(actual.fields).get(name, _Value()), visited
+                            )
+                        )
+                elif variant.name in {
+                    "builtins.list",
+                    "builtins.tuple",
+                    "builtins.set",
+                    "builtins.frozenset",
+                    "builtins.dict",
+                }:
+                    for index, arg in enumerate(variant.arguments):
+                        nested = (
+                            actual.arguments[index]
+                            if variant.name in {"builtins.dict", "builtins.tuple"}
+                            and not variant.variadic
+                            and len(actual.arguments) > index
+                            else actual.element()
+                        )
+                        result.extend(self.validated_models(arg, nested, visited))
+        return result
+
     def json(self, site: str) -> _Value:
         """A recursive JSON graph; later writes remain visible through its references."""
         source = self.source
@@ -155,8 +292,10 @@ class _Models:
                     for i, v in enumerate(annotation.variants)
                 )
             )
-        if not annotation.name:
+        if not annotation.name or annotation.name == "<any-schema>":
             return value
+        if annotation.name == "<json>":
+            return self.json(site)
         if self.source.model(annotation.name):
             existing = [v for v in value.variants if v.name == annotation.name]
             if len(existing) == len(value.variants):
@@ -192,6 +331,7 @@ class _Models:
                         )
                     )
                     if annotation.name in {"builtins.dict", "builtins.tuple"}
+                    and not annotation.variadic
                     else actual_elements,
                     site + f":{index}",
                 )
@@ -266,7 +406,7 @@ class _Models:
         return result
 
     def opaque(self, owner: str) -> bool:
-        if self.custom_schema(owner):
+        if self._custom_schema(owner):
             return True
         fields = dict(self.fields(owner))
         scalars = {
@@ -308,88 +448,6 @@ class _Models:
                 for value in fields.get(name, _Value()).variants
             ):
                 return True
-        return False
-
-    def custom_schema(self, owner: str, seen: frozenset[str] = frozenset()) -> bool:
-        definition = self.source.definitions.get(owner)
-        if definition is None:
-            return False
-        if not isinstance(definition.node, ast.ClassDef):
-            return True
-        if owner in seen:
-            return False
-        seen = seen | {owner}
-        if any(
-            self.source.method(owner, name)
-            for name in (
-                "__get_pydantic_core_schema__",
-                "__get_validators__",
-                "_missing_",
-            )
-        ):
-            return True
-        for name in (self.source.lineage(owner) or ([owner], False))[0]:
-            definition = self.source.definitions.get(name)
-            if definition is None or not isinstance(definition.node, ast.ClassDef):
-                continue
-            for statement in definition.node.body:
-                if not isinstance(statement, ast.AnnAssign):
-                    continue
-                scope, annotation = self.source.value(
-                    statement.annotation, definition.module
-                )
-                if isinstance(annotation, ast.Constant) and isinstance(
-                    annotation.value, str
-                ):
-                    try:
-                        annotation = ast.parse(annotation.value, mode="eval").body
-                    except SyntaxError:
-                        return True
-                for node in ast.walk(annotation):
-                    if isinstance(node, ast.Subscript) and self.source.resolve(
-                        node.value, scope
-                    ) in {"typing.Annotated", "typing_extensions.Annotated"}:
-                        metadata = (
-                            node.slice.elts[1:]
-                            if isinstance(node.slice, ast.Tuple)
-                            else []
-                        )
-                        if any(
-                            isinstance(child, ast.Name | ast.Attribute)
-                            and (
-                                self.source.resolve(child, scope)
-                                in self.source.definitions
-                                or (self.source.resolve(child, scope) or "").rsplit(
-                                    ".", 1
-                                )[-1]
-                                in {
-                                    "BeforeValidator",
-                                    "AfterValidator",
-                                    "PlainValidator",
-                                    "WrapValidator",
-                                    "SkipValidation",
-                                    "ValidateAs",
-                                    "InstanceOf",
-                                }
-                            )
-                            for value in metadata
-                            for child in ast.walk(value)
-                        ):
-                            return True
-                    if (
-                        isinstance(node, ast.Call)
-                        and self.source.resolve(node.func, scope)
-                        in self.source.definitions
-                    ):
-                        return True
-        for _, value in self.fields(owner):
-            pending = list(value.variants)
-            for child in pending:
-                pending.extend(child.arguments)
-                if child.name in self.source.definitions and self.custom_schema(
-                    child.name, seen
-                ):
-                    return True
         return False
 
     def hook_arguments(
@@ -519,6 +577,88 @@ class _Models:
         return self.source.store(
             replace(original, fields=tuple(fields.items()), site=site)
         )
+
+    def _custom_schema(self, owner: str, seen: frozenset[str] = frozenset()) -> bool:
+        definition = self.source.definitions.get(owner)
+        if definition is None:
+            return False
+        if not isinstance(definition.node, ast.ClassDef):
+            return True
+        if owner in seen:
+            return False
+        seen = seen | {owner}
+        if any(
+            self.source.method(owner, name)
+            for name in (
+                "__get_pydantic_core_schema__",
+                "__get_validators__",
+                "_missing_",
+            )
+        ):
+            return True
+        for name in (self.source.lineage(owner) or ([owner], False))[0]:
+            definition = self.source.definitions.get(name)
+            if definition is None or not isinstance(definition.node, ast.ClassDef):
+                continue
+            for statement in definition.node.body:
+                if not isinstance(statement, ast.AnnAssign):
+                    continue
+                scope, annotation = self.source.value(
+                    statement.annotation, definition.module
+                )
+                if isinstance(annotation, ast.Constant) and isinstance(
+                    annotation.value, str
+                ):
+                    try:
+                        annotation = ast.parse(annotation.value, mode="eval").body
+                    except SyntaxError:
+                        return True
+                for node in ast.walk(annotation):
+                    if isinstance(node, ast.Subscript) and self.source.resolve(
+                        node.value, scope
+                    ) in {"typing.Annotated", "typing_extensions.Annotated"}:
+                        metadata = (
+                            node.slice.elts[1:]
+                            if isinstance(node.slice, ast.Tuple)
+                            else []
+                        )
+                        if any(
+                            isinstance(child, ast.Name | ast.Attribute)
+                            and (
+                                self.source.resolve(child, scope)
+                                in self.source.definitions
+                                or (self.source.resolve(child, scope) or "").rsplit(
+                                    ".", 1
+                                )[-1]
+                                in {
+                                    "BeforeValidator",
+                                    "AfterValidator",
+                                    "PlainValidator",
+                                    "WrapValidator",
+                                    "SkipValidation",
+                                    "ValidateAs",
+                                    "InstanceOf",
+                                }
+                            )
+                            for value in metadata
+                            for child in ast.walk(value)
+                        ):
+                            return True
+                    if (
+                        isinstance(node, ast.Call)
+                        and self.source.resolve(node.func, scope)
+                        in self.source.definitions
+                    ):
+                        return True
+        for _, value in self.fields(owner):
+            pending = list(value.variants)
+            for child in pending:
+                pending.extend(child.arguments)
+                if child.name in self.source.definitions and self._custom_schema(
+                    child.name, seen
+                ):
+                    return True
+        return False
 
 
 def _mode(decorator: ast.Call) -> str | None:

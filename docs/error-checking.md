@@ -229,6 +229,10 @@ a hook raised them. Python-mode custom serializer results remain opaque.
 Unmodeled `Annotated` validators and application schema hooks retain CAN003.
 Constructing a `TypeAdapter` does not run model validation; validating through a
 resolved model adapter follows its application hooks and actual input values.
+Adapters for native containers of models and model unions follow nested model
+hooks and preserve their validated values. `Any` preserves the input; `JsonValue`
+supplies recursive JSON shapes. Functional `Annotated` metadata and custom schema
+implementations remain incomplete instead of being erased by a container type.
 No-argument `BaseSettings` construction with standard sources retains native
 environment input shapes and possible overrides of defaults. Custom settings
 sources, custom initialization and explicit source/input arguments remain CAN003.

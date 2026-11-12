@@ -92,16 +92,40 @@ def route(): Body(payload='value').payload.run()
     assert not operation["complete"]
 
 
-def test_adapter_for_an_unmodeled_container_schema_remains_incomplete(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+@pytest.mark.parametrize(
+    ("schema", "data", "use"),
+    [
+        ("list[Body]", "[{'payload':'value'}]", "result[0].payload.strip()"),
+        ("tuple[Body, ...]", "[{'payload':'value'}]", "result[0].payload.strip()"),
+        (
+            "dict[str, Body]",
+            "{'one': {'payload':'value'}}",
+            "result['one'].payload.strip()",
+        ),
+        (
+            "Envelope",
+            "{'items': [{'payload': 'value'}]}",
+            "result.items[0].payload.strip()",
+        ),
+    ],
+)
+def test_adapter_container_schemas_follow_nested_model_hooks_and_values(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], schema: str, data: str, use: str
 ) -> None:
     (tmp_path / "api.py").write_text(
         PRELUDE
-        + """
-class Body(BaseModel): payload: str
-adapter = TypeAdapter(list[Body])
+        + f"""
+class Body(BaseModel):
+    payload: str
+    @field_validator('payload')
+    @classmethod
+    def reject(cls, value): raise Missing()
+class Envelope(BaseModel): items: list[Body]
+adapter = TypeAdapter({schema})
 @router.get('/')
-def route(): adapter.validate_python([{'payload':'value'}])
+def route():
+    result = adapter.validate_python({data})
+    {use}
 """,
         encoding="utf8",
     )
@@ -118,8 +142,52 @@ def route(): adapter.validate_python([{'payload':'value'}])
     )
     report = json.loads(capsys.readouterr().out)
     [operation] = report["operations"]
-    assert not operation["complete"]
+    assert operation["complete"]
+    assert [d["code"] for d in operation["diagnostics"]] == ["CAN001"]
     assert status == 1
+
+
+def test_adapter_functional_metadata_cannot_be_erased_by_native_container_shape(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "api.py").write_text(
+        PRELUDE
+        + """
+from typing import Annotated
+from pydantic import PlainValidator
+def replace(value): return Risky()
+adapter = TypeAdapter(Annotated[list[str], PlainValidator(replace)])
+@router.get('/')
+def route(): adapter.validate_python([]).run()
+""",
+        encoding="utf8",
+    )
+    main(["check", "errors", str(tmp_path), "--require-complete", "--format", "json"])
+    [operation] = json.loads(capsys.readouterr().out)["operations"]
+    assert not operation["complete"]
+
+
+@pytest.mark.parametrize("schema", ["JsonValue", "Any"])
+def test_native_adapter_schemas_preserve_any_inputs_without_running_stored_objects(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], schema: str
+) -> None:
+    (tmp_path / "api.py").write_text(
+        PRELUDE
+        + f"""
+adapter = TypeAdapter({schema})
+@router.get('/')
+def route():
+    result = adapter.validate_python({"Risky()" if schema == "Any" else "{'nested': [1, None]}"})
+    {"result.run()" if schema == "Any" else "pass"}
+""",
+        encoding="utf8",
+    )
+    main(["check", "errors", str(tmp_path), "--require-complete", "--format", "json"])
+    [operation] = json.loads(capsys.readouterr().out)["operations"]
+    assert operation["complete"]
+    assert [d["code"] for d in operation["diagnostics"]] == (
+        ["CAN001"] if schema == "Any" else []
+    )
 
 
 @pytest.mark.parametrize(

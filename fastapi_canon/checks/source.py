@@ -2196,8 +2196,8 @@ class _Source:
             }:
                 if adapter_method == "validate_json":
                     data = self.models.json(adapter_site + ":input")
-                if self.model(schema.name):
-                    return self.models.validate(schema.name, data, adapter_site)
+                if self.models.supported_schema(schema):
+                    return self.models.normalize(schema, data, adapter_site)
                 return _Value()
             if adapter_method == "dump_python":
                 adapter_mode = _keyword(node, "mode")
@@ -2427,7 +2427,7 @@ class _Source:
                 ):
                     signature = replace(
                         signature,
-                        fields=(("$schema", self.infer(node.args[0], module, env)),),
+                        fields=(("$schema", self.models.schema(node.args[0], module)),),
                     )
                 if (
                     resource_name

@@ -1184,11 +1184,11 @@ class _Analyzer:
             )
             if adapter_constructor:
                 schema = (
-                    self.source.infer(node.args[0], function.module, env)
+                    self.source.models.schema(node.args[0], function.module)
                     if node.args
                     else _Value()
                 )
-                if not schema.name or self.source.models.custom_schema(schema.name):
+                if not self.source.models.supported_schema(schema):
                     flow.unknowns.append(
                         _Unknown(
                             "unresolved TypeAdapter schema construction",
@@ -1206,21 +1206,19 @@ class _Analyzer:
                 schema = dict(self.source.object(target.bound).fields).get(
                     "$schema", _Value()
                 )
-                definition = self.source.definitions.get(schema.name)
-                if (
-                    definition is not None
-                    and isinstance(definition.node, ast.ClassDef)
-                    and self.source.model(schema.name)
-                ):
-                    flow.extend(
-                        self._construct(
-                            definition,
-                            function,
-                            stack,
-                            node.lineno,
-                            constructed=self.source.infer(node, function.module, env),
+                if self.source.models.supported_schema(schema):
+                    for model in self.source.models.validated_models(
+                        schema, self.source.infer(node, function.module, env)
+                    ):
+                        flow.extend(
+                            self._construct(
+                                self.source.definitions[model.name],
+                                function,
+                                stack,
+                                node.lineno,
+                                constructed=model,
+                            )
                         )
-                    )
                 else:
                     flow.unknowns.append(
                         _Unknown(
