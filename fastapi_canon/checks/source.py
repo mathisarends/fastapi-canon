@@ -11,7 +11,12 @@ from pathlib import Path
 from typing import Literal, Self
 
 from fastapi_canon.checks.container_values import _MUTATORS, _mutate, _Mutation
-from fastapi_canon.checks.generator_phases import _has_yield, _resource_phases
+from fastapi_canon.checks.generator_phases import (
+    _has_yield,
+    _Phases,
+    _phases,
+    _resource_phases,
+)
 from fastapi_canon.checks.library_types import _LibraryTypes
 from fastapi_canon.checks.model_values import _Models
 from fastapi_canon.checks.symbols import (
@@ -317,6 +322,11 @@ class _Source:
     lexical: dict[int, _LexicalScope] = field(default_factory=dict)
     _lambdas: dict[ast.Lambda, ast.FunctionDef] = field(default_factory=dict)
     _captures: dict[tuple[str, int], bool] = field(default_factory=dict)
+    _generators: dict[ast.AST, bool] = field(default_factory=dict)
+    _resource_entries: dict[_FunctionNode, tuple[_Phases, ...] | None] = field(
+        default_factory=dict
+    )
+    _context_entries: dict[_FunctionNode, _Phases | None] = field(default_factory=dict)
 
     @property
     def models(self) -> _Models:
@@ -420,6 +430,23 @@ class _Source:
                 else element
             )
         return _join(*results)
+
+    def generator(self, node: ast.AST) -> bool:
+        if node not in self._generators:
+            self._generators[node] = isinstance(
+                node, ast.FunctionDef | ast.AsyncFunctionDef
+            ) and any(_has_yield(statement) for statement in node.body)
+        return self._generators[node]
+
+    def resource_entries(self, node: _FunctionNode) -> tuple[_Phases, ...] | None:
+        if node not in self._resource_entries:
+            self._resource_entries[node] = _resource_phases(node.body)
+        return self._resource_entries[node]
+
+    def context_phases(self, node: _FunctionNode) -> _Phases | None:
+        if node not in self._context_entries:
+            self._context_entries[node] = _phases(node.body)
+        return self._context_entries[node]
 
     def store(self, value: _Value) -> _Value:
         if not value.site:
@@ -2116,7 +2143,7 @@ class _Source:
                     fields=tuple(sorted((actual or {}).items())),
                     site=self.site(node, module, env, "contextmanager"),
                 )
-            if any(_has_yield(statement) for statement in definition.node.body):
+            if self.generator(definition.node):
                 if awaited:
                     return _Value()
                 return _Value(
@@ -3227,7 +3254,7 @@ class _Source:
         try:
             local = self.environment(function, bindings=bindings)
             if yielded:
-                entries = _resource_phases(function.node.body)
+                entries = self.resource_entries(function.node)
                 if entries is None:
                     values = [_Value()]
                 else:
@@ -3243,19 +3270,7 @@ class _Source:
                             )
             else:
                 values = self.values_block(function.node.body, function.module, local)
-            pending: list[ast.AST] = list(function.node.body)
-            yielding = False
-            while pending:
-                child = pending.pop()
-                if isinstance(
-                    child,
-                    ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda,
-                ):
-                    continue
-                if isinstance(child, ast.Yield | ast.YieldFrom):
-                    yielding = True
-                    break
-                pending.extend(ast.iter_child_nodes(child))
+            yielding = self.generator(function.node)
             if not yielding and "$terminated" not in local:
                 values.append(_Value("builtins.NoneType", instance=True, exact=True))
             result = (
@@ -3899,18 +3914,7 @@ class _Source:
 
     def _constructed(self, factory: _FunctionNode, module: str) -> list[_FactoryValue]:
         # Follow values at each exit, rather than resolving all names after a walk.
-        pending: list[ast.AST] = list(factory.body)
-        yielding = False
-        while pending:
-            node = pending.pop()
-            if isinstance(
-                node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda
-            ):
-                continue
-            if isinstance(node, ast.Yield | ast.YieldFrom):
-                yielding = True
-                break
-            pending.extend(ast.iter_child_nodes(node))
+        yielding = self.generator(factory)
         arguments = factory.args
         positional = [*arguments.posonlyargs, *arguments.args]
         bound = (
@@ -4334,10 +4338,7 @@ class _Source:
                         self.returned(
                             definition,
                             arguments,
-                            yielded=any(
-                                _has_yield(statement)
-                                for statement in definition.node.body
-                            ),
+                            yielded=self.generator(definition.node),
                         )
                     )
                     creations.append(

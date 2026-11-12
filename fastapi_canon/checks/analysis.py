@@ -4,7 +4,7 @@ import ast
 from dataclasses import replace
 
 from fastapi_canon.checks.effects import _Escape, _Flow, _Summary, _SummaryKey, _Unknown
-from fastapi_canon.checks.generator_phases import _has_yield, _phases, _resource_phases
+from fastapi_canon.checks.generator_phases import _has_yield
 from fastapi_canon.checks.source import _Environment, _Source
 from fastapi_canon.checks.symbols import _Definition
 from fastapi_canon.checks.value_flow import _contexts, _join, _Value
@@ -321,7 +321,7 @@ class _Analyzer:
                 flow.unknowns.append(
                     _Unknown("unresolved decorator", function.name, decorator.lineno)
                 )
-        if not iterated and _generator(node):
+        if not iterated and self.source.generator(node):
             flow.unknowns.append(
                 _Unknown(
                     "generator execution is outside the HTTP response boundary",
@@ -413,8 +413,8 @@ class _Analyzer:
                         )
                     )
             entries = None
-            if _generator(definition.node):
-                entries = _resource_phases(definition.node.body)
+            if self.source.generator(definition.node):
+                entries = self.source.resource_entries(definition.node)
                 if entries is None:
                     flow.unknowns.append(
                         _Unknown(
@@ -525,7 +525,7 @@ class _Analyzer:
                     if isinstance(node, ast.Call)
                     else ""
                 )
-                if direct is None or not _generator(direct.node):
+                if direct is None or not self.source.generator(direct.node):
                     flow.extend(self.expression(node, function, env, stack))
                     for value in values:
                         flow.extend(
@@ -875,7 +875,7 @@ class _Analyzer:
             if manager and isinstance(
                 manager.node, ast.FunctionDef | ast.AsyncFunctionDef
             ):
-                phases = _phases(manager.node.body)
+                phases = self.source.context_phases(manager.node)
                 if phases and not phases.contexts and manager.name not in stack:
                     local = self.source.environment(
                         manager, bindings=dict(resource.fields)
@@ -1315,7 +1315,7 @@ class _Analyzer:
             or (
                 definition
                 and isinstance(definition.node, ast.AsyncFunctionDef)
-                and _generator(definition.node)
+                and self.source.generator(definition.node)
             )
         ):
             flow.unknowns.append(
@@ -1385,7 +1385,7 @@ class _Analyzer:
                     if isinstance(node, ast.AsyncWith)
                     else "contextlib.contextmanager"
                 )
-                if decorators == {expected} and _generator(definition.node):
+                if decorators == {expected} and self.source.generator(definition.node):
                     return self._generator_context(
                         node,
                         function,
@@ -1548,7 +1548,7 @@ class _Analyzer:
             if (
                 not isinstance(method_node, ast.FunctionDef | ast.AsyncFunctionDef)
                 or isinstance(method_node, ast.AsyncFunctionDef) != asynchronous
-                or _generator(method_node)
+                or self.source.generator(method_node)
                 or method_node.decorator_list
                 or method.owner != manager
             ):
@@ -1727,7 +1727,7 @@ class _Analyzer:
             if (
                 isinstance(definition.node, ast.FunctionDef | ast.AsyncFunctionDef)
                 and isinstance(definition.node, ast.AsyncFunctionDef) == awaited
-                and not _generator(definition.node)
+                and not self.source.generator(definition.node)
                 and definition.node.returns
             ):
                 returned = self.source.annotation(
@@ -2166,7 +2166,7 @@ class _Analyzer:
             self.function(
                 definition,
                 stack,
-                iterated=_generator(definition.node),
+                iterated=self.source.generator(definition.node),
                 receiver=inferred.receiver,
                 bindings=bindings,
             ),
@@ -2196,7 +2196,7 @@ class _Analyzer:
         deferred: str = "",
     ) -> _Flow:
         flow = _Flow()
-        iterated_generator = iterated and _generator(definition.node)
+        iterated_generator = iterated and self.source.generator(definition.node)
         assert isinstance(definition.node, ast.FunctionDef | ast.AsyncFunctionDef)
         decorators = {
             self.source.resolve(d, definition.module)
@@ -2207,7 +2207,7 @@ class _Analyzer:
             {"contextlib.asynccontextmanager"},
         ):
             return flow
-        if _generator(definition.node) and not iterated:
+        if self.source.generator(definition.node) and not iterated:
             flow.unknowns.append(
                 _Unknown(
                     "generator execution is deferred until iterated",
@@ -2779,13 +2779,6 @@ def _suppression(node: ast.AST) -> bool | None:
         if value.value is True:
             return True
     return None
-
-
-def _generator(node: ast.AST) -> bool:
-    return isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and any(
-        isinstance(child, ast.Yield | ast.YieldFrom)
-        for child in _executed_nodes(node.body)
-    )
 
 
 def _executed_nodes(body: list[ast.stmt]) -> list[ast.AST]:
