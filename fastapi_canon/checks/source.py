@@ -1300,17 +1300,26 @@ class _Source:
         )
 
     def condition(self, node: ast.expr, module: str, env: _Environment) -> bool | None:
-        if isinstance(node, ast.Constant) and isinstance(node.value, bool):
-            return node.value
+        if isinstance(node, ast.Constant) and (
+            node.value is None or isinstance(node.value, str | int | float | bytes)
+        ):
+            return bool(node.value)
         if isinstance(node, ast.Name | ast.Attribute | ast.Subscript):
             values = self.expand(self.infer(node, module, env)).variants
-            if all(
-                value.name == "builtins.bool" and isinstance(value.literal, bool)
+            answers = [
+                False
+                if value.name == "builtins.NoneType"
+                else bool(value.literal)
+                if value.name
+                in {"builtins.str", "builtins.int", "builtins.float", "builtins.bool"}
+                and value.literal is not None
+                else None
                 for value in values
-            ):
-                if all(value.literal is True for value in values):
+            ]
+            if all(answer is not None for answer in answers):
+                if all(answer is True for answer in answers):
                     return True
-                if all(value.literal is False for value in values):
+                if all(answer is False for answer in answers):
                     return False
         if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
             result = self.condition(node.operand, module, env)
@@ -1467,6 +1476,14 @@ class _Source:
         self, node: ast.expr, module: str, env: _Environment, truth: bool
     ) -> _Environment:
         result = env.copy()
+        if truth and isinstance(node, ast.Name | ast.Attribute | ast.Subscript):
+            variants = [
+                value
+                for value in self.infer(node, module, env).variants
+                if value.name != "builtins.NoneType"
+            ]
+            if variants:
+                result[f"$narrow:{self.key(node)}"] = _join(*variants)
         if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
             return self.narrow(node.operand, module, env, not truth)
         if isinstance(node, ast.BoolOp):
@@ -1715,9 +1732,37 @@ class _Source:
                     )
                 )
             case ast.BoolOp():
-                return _join(
-                    *(self.infer(value, module, env, seen) for value in node.values)
-                )
+                result_values = []
+                branches = []
+                condition_env = env.copy()
+                continuing = isinstance(node.op, ast.And)
+                for index, operand in enumerate(node.values):
+                    operand_value = self.infer(operand, module, condition_env, seen)
+                    if index == len(node.values) - 1:
+                        result_values.append(operand_value)
+                        branches.append(condition_env)
+                        break
+                    condition = self.condition(operand, module, condition_env)
+                    if condition is not continuing:
+                        result_values.append(
+                            _join(
+                                *(
+                                    v
+                                    for v in operand_value.variants
+                                    if continuing or v.name != "builtins.NoneType"
+                                )
+                            )
+                        )
+                        branches.append(
+                            self.narrow(operand, module, condition_env, not continuing)
+                        )
+                    if condition is not None and condition is not continuing:
+                        break
+                    condition_env = self.narrow(
+                        operand, module, condition_env, continuing
+                    )
+                self.merge_environments(env, branches)
+                return _join(*result_values)
             case ast.NamedExpr():
                 value = self.infer(node.value, module, env, seen)
                 self.assign(node.target, value, env)

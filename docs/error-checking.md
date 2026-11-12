@@ -151,7 +151,11 @@ Stable parameter and local captures retain their values. Reassigned cells,
 nonlocal mutation and captures changing across loop iterations remain unresolved.
 
 Inherited methods, classmethods, properties, `Self` and statically resolved
-`super()` dispatch follow the application's method resolution order. Recursive
+`super()` dispatch follow the application's method resolution order. Boolean
+operators and conditional expressions follow their evaluation order and narrow
+guarded values. Known own `__bool__` and `__len__` methods contribute their errors
+when conditions evaluate them. Unexecuted branches add no error paths.
+Recursive
 call chains are supported when their value and error summaries converge. Growing
 or unresolved recursion produces CAN003 rather than a complete result.
 

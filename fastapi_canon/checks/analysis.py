@@ -490,6 +490,50 @@ class _Analyzer:
             ]:
                 flow.extend(self.expression(default, function, env, stack))
             return flow
+        if isinstance(node, ast.IfExp):
+            flow.extend(self.expression(node.test, function, env, stack))
+            flow.extend(self._truthiness(node.test, function, env, stack))
+            condition = self.source.condition(node.test, function.module, env)
+            branches = []
+            for branch, truth in ((node.body, True), (node.orelse, False)):
+                if condition is not None and condition is not truth:
+                    continue
+                local = self.source.narrow(node.test, function.module, env, truth)
+                flow.extend(
+                    self.expression(
+                        branch,
+                        function,
+                        local,
+                        stack,
+                        awaited=awaited,
+                        iterated=iterated,
+                    )
+                )
+                branches.append(local)
+            self.source.merge_environments(env, branches)
+            return flow
+        if isinstance(node, ast.BoolOp):
+            local = env.copy()
+            branches = []
+            continuing = isinstance(node.op, ast.And)
+            for index, operand in enumerate(node.values):
+                flow.extend(self.expression(operand, function, local, stack))
+                if index == len(node.values) - 1:
+                    branches.append(local)
+                    break
+                flow.extend(self._truthiness(operand, function, local, stack))
+                condition = self.source.condition(operand, function.module, local)
+                if condition is not continuing:
+                    branches.append(
+                        self.source.narrow(
+                            operand, function.module, local, not continuing
+                        )
+                    )
+                if condition is not None and condition is not continuing:
+                    break
+                local = self.source.narrow(operand, function.module, local, continuing)
+            self.source.merge_environments(env, branches)
+            return flow
         if isinstance(node, ast.Await):
             deferred = self.source.coroutine(
                 self.source.infer(node.value, function.module, env)
@@ -747,6 +791,45 @@ class _Analyzer:
                             ),
                         )
                     )
+        return flow
+
+    def _truthiness(
+        self,
+        node: ast.expr,
+        function: _Definition,
+        env: _Environment,
+        stack: tuple[str, ...],
+    ) -> _Flow:
+        flow = _Flow()
+        for value in self.source.infer(node, function.module, env).variants:
+            if not value.instance:
+                continue
+            method = self.source.method(value.name, "__bool__") or self.source.method(
+                value.name, "__len__"
+            )
+            if method is None:
+                continue
+            call = ast.copy_location(
+                ast.Call(
+                    func=ast.Attribute(
+                        value=node, attr=method.node.name, ctx=ast.Load()
+                    ),
+                    args=[],
+                    keywords=[],
+                ),
+                node,
+            )
+            flow.extend(
+                self._invoke(
+                    call,
+                    self.source.member(value, method.node.name),
+                    function,
+                    env,
+                    stack,
+                    awaited=False,
+                    iterated=False,
+                )
+            )
         return flow
 
     def _exit_stack(
@@ -1401,6 +1484,10 @@ class _Analyzer:
             )
             for condition in generator.ifs:
                 flow.extend(self.expression(condition, function, local, stack))
+                flow.extend(self._truthiness(condition, function, local, stack))
+                if self.source.condition(condition, function.module, local) is False:
+                    return flow
+                local = self.source.narrow(condition, function.module, local, True)
         values = (
             [node.key, node.value] if isinstance(node, ast.DictComp) else [node.elt]
         )
@@ -2727,6 +2814,7 @@ class _Analyzer:
                 continue
             if isinstance(node, ast.If):
                 flow.extend(self.expression(node.test, function, env, stack))
+                flow.extend(self._truthiness(node.test, function, env, stack))
                 condition = self.source.condition(node.test, function.module, env)
                 left = self.source.narrow(node.test, function.module, env, True)
                 right = self.source.narrow(node.test, function.module, env, False)
@@ -2757,6 +2845,7 @@ class _Analyzer:
                 local = env.copy()
                 if isinstance(node, ast.While):
                     flow.extend(self.expression(node.test, function, env, stack))
+                    flow.extend(self._truthiness(node.test, function, env, stack))
                 else:
                     flow.extend(
                         self.expression(node.iter, function, env, stack, iterated=True)
@@ -2870,6 +2959,7 @@ class _Analyzer:
             if isinstance(node, ast.Assert):
                 local = env.copy()
                 flow.extend(self.expression(node.test, function, local, stack))
+                flow.extend(self._truthiness(node.test, function, local, stack))
                 if (
                     node.msg is not None
                     and self.source.condition(node.test, function.module, local)
