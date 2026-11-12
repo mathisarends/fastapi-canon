@@ -198,6 +198,39 @@ def test_openapi_selection_retains_mounted_application_boundaries() -> None:
         )
 
 
+def test_openapi_selection_preserves_discriminator_mapping_schema_references() -> None:
+    class Animal(BaseModel):
+        kind: str
+
+    app = FastAPI()
+
+    @app.get("/animal")
+    async def animal() -> Animal:
+        return Animal(kind="cat")
+
+    schemas = app.openapi()["components"]["schemas"]
+    schemas["Animal"]["discriminator"] = {
+        "propertyName": "kind",
+        "mapping": {"cat": "#/components/schemas/Cat"},
+    }
+    schemas["Cat"] = {
+        "allOf": [{"$ref": "#/components/schemas/Animal"}],
+        "type": "object",
+        "properties": {"kind": {"const": "cat"}},
+    }
+    schemas["Unused"] = {"type": "string"}
+
+    document = export_contracts(
+        app,
+        kinds=(ContractKind.OPENAPI,),
+        selection=ContractSelection(paths=("/animal",)),
+    ).openapi
+
+    assert document is not None
+    assert set(document["components"]["schemas"]) == {"Animal", "Cat"}
+    assert document["components"]["schemas"]["Cat"] == schemas["Cat"]
+
+
 def test_webrtc_selection_precedes_duplicate_session_name_validation() -> None:
     first_router = WebRtcRouter()
     second_router = WebRtcRouter()

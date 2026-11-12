@@ -222,15 +222,18 @@ def _select_openapi(
     components = document.get("components", {})
     schemas = components.pop("schemas", {})
     reachable: dict[str, Any] = {}
+    prefix = "#/components/schemas/"
     pending: list[Any] = [document]
     while pending:
         value = pending.pop()
-        if isinstance(value, dict):
-            reference = value.get("$ref", "")
-            prefix = "#/components/schemas/"
-            if isinstance(reference, str) and reference.startswith(prefix):
+        match value:
+            case dict():
+                pending.extend(value.values())
+            case list():
+                pending.extend(value)
+            case str() if value.startswith(prefix):
                 name = (
-                    reference[len(prefix) :]
+                    value[len(prefix) :]
                     .split("/")[0]
                     .replace("~1", "/")
                     .replace("~0", "~")
@@ -238,8 +241,5 @@ def _select_openapi(
                 if name in schemas and name not in reachable:
                     reachable[name] = schemas[name]
                     pending.append(schemas[name])
-            pending.extend(value.values())
-        elif isinstance(value, list):
-            pending.extend(value)
     if reachable:
         components["schemas"] = dict(sorted(reachable.items()))
