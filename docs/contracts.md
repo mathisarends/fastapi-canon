@@ -7,9 +7,12 @@ messages and operations, while registered routes determine their effective paths
 
 ## Python API
 
+The typed selection API below is unreleased and requires the next minor release
+(0.20.0). Canon 0.19 uses string format names and has no `selection` argument.
+
 ```python
 from fastapi_canon import export_contracts
-from fastapi_canon.contracts import Contracts
+from fastapi_canon.contracts import ContractKind, Contracts
 
 app = create_app()
 contracts: Contracts = export_contracts(app)
@@ -24,7 +27,9 @@ Each attribute is a JSON document or `None`. Unregistered RPC/WebRTC transports
 and unselected formats are `None`; HTTP/SSE always has an OpenAPI document when
 selected. `contracts.documents` maps the present names to their documents.
 
-Select formats with `export_contracts(app, kinds=("openapi",))`. The Python API
+Select formats with `export_contracts(app, kinds=(ContractKind.OPENAPI,))`.
+`ContractKind` is a `StrEnum` with `OPENAPI`, `OPENRPC` and `WEBRTC` members;
+raw Python strings are rejected. CLI format names remain unchanged. The Python API
 uses FastAPI/Pydantic contract generation; the CLI and SDK pipeline additionally
 validate OpenAPI against its meta-schema and JSON Schema. Those commands require
 `fastapi-canon[codegen]`.
@@ -35,6 +40,69 @@ are converted to WS(S). A public origin may include a proxy's stripped prefix.
 Do not repeat a prefix already registered through `include_router` or `mount`.
 Request-specific ASGI `root_path` values cannot be discovered by an offline export.
 
+### Export an installed feature
+
+Reuse the feature object installed in the application:
+
+```python
+from fastapi import FastAPI
+
+from fastapi_canon import APIRouter, Composition, Feature, export_contracts
+from fastapi_canon.contracts import ContractKind, ContractSelection
+
+router = APIRouter()
+control = router.channel("/rpc", namespace="browser")
+
+
+@control.method()
+async def ping() -> str:
+    return "pong"
+
+
+browser_tunnel = Feature(name="browser_tunnel", routers=(router,))
+app = Composition(features=(browser_tunnel,)).build(FastAPI())
+contracts = export_contracts(
+    app,
+    kinds=(ContractKind.OPENRPC,),
+    selection=ContractSelection(features=(browser_tunnel,)),
+)
+```
+
+`ContractSelection` is immutable. `features` accepts actual `Feature` references,
+not their names. An uninstalled object is rejected even if its name and routers
+match an installed feature. Keep factory-created references with their app rather
+than constructing another feature just for export. No providers or lifespans run
+during export.
+
+Feature ownership is recorded when composition installs routes. Later changes to
+a feature's router do not acquire ownership of additional routes. Selection reads
+the effective registered routes, including composition and mount prefixes.
+
+Without composition, or to narrow repeated mounts, select exact path templates:
+
+```python
+selection = ContractSelection(paths=("/api/projects/{project_id}/rpc",))
+```
+
+Entries in each field use OR; `features` and `paths` together use AND. Empty lists,
+duplicate references/paths, unmatched paths and selections without documented
+routes for the requested formats fail. Omit `selection` for a full export.
+A feature selects every installed occurrence, including mounted subapplications;
+combine it with `paths` to choose one occurrence. Selecting individual RPC methods
+is not supported: a registered endpoint retains its methods, events and streams.
+
+RPC and WebRTC selection happens before their aggregate contract validation.
+Separate selections can reuse names or have different RPC service versions;
+combining incompatible routes still fails. OpenAPI selection preserves each
+selected route's methods, metadata and reachable model schemas without changing
+the application's cached document or runtime routes. Composition validation and
+canonical error identities remain application-wide.
+
+HTTP selection retains FastAPI's OpenAPI boundary. Export a mounted application
+directly for its HTTP document; selecting its prefixed HTTP path on the parent
+reports that separate boundary. RPC/WebRTC mount paths remain selectable. Apps
+with independent error catalogs must still be exported separately.
+
 ## CLI
 
 ```console
@@ -43,12 +111,18 @@ fastapi-canon contracts export --app backend.application:create_app --output-dir
 fastapi-canon contracts export --app backend.application:app --kind openapi --output-dir contracts
 ```
 
+### Application target rules
+
 `--app` accepts an existing FastAPI instance or a synchronous zero-argument factory
 returning one. Instances are used directly; factories are called automatically,
 without an additional flag. Async factories are rejected. `--kind` is repeatable.
 All three formats are selected by default, and absent RPC/WebRTC transports produce
 no file. Explicitly
 selecting a missing transport is an error. `--base-url` supplies the public RPC origin.
+
+References accept dotted attributes such as `backend.application:bootstrap.app`
+or `backend.application:bootstrap.create_app`. Imports and synchronous construction
+execute normally; loading never enters lifespan or resolves runtime dependencies.
 
 The selected filenames `openapi.json`, `openrpc.json` and `webrtc.json` belong to
 the export directory. Default export removes a stale selected file when its last
@@ -79,11 +153,12 @@ HTTP/SSE retains FastAPI's OpenAPI boundary: a mounted subapplication has its ow
 OpenAPI document. Export applications with independent error catalogs separately;
 the combined RPC export uses the selected application's installed catalog.
 
-RPC endpoint and operation names must be unique across the export, and protocol
-versions must agree. The current SDK binds each RPC operation to one server.
+RPC endpoint and operation names must be unique within the export selection, and
+protocol versions must agree. The current SDK binds each RPC operation to one server.
 Registering the same endpoint under multiple paths is therefore rejected with
-both paths; export separate applications or give distinct operations and endpoints
-explicit names. Undeclared ordinary WebSockets are outside the typed contract.
+both paths; select one registered occurrence or give distinct operations and
+endpoints explicit names. Undeclared ordinary WebSockets are outside the typed
+contract.
 
 `projectId` and `sessionId` remain unresolved URL variables, without fabricated
 example IDs. With the current RPC SDK they belong to connection options; they are
@@ -116,53 +191,10 @@ if one exists there. Contract-affecting configuration, such as feature selection
 or error type bases, must remain explicit and equal to the deployed configuration.
 Do not inject placeholder secrets or silently disable authentication for export.
 
-## SDK generation
+## Client generation
 
-### Application target rules
-
-Application commands accept `module:attribute`, including dotted attributes such
-as `backend.application:bootstrap.app` or `bootstrap.create_app`. `inspect`,
-`check composition --app` and `contracts export --app` accept a FastAPI instance
-or call a synchronous factory with no required arguments automatically. A FastAPI
-instance is never invoked as an ASGI callable. `inspect --factory` remains an
-accepted compatibility flag. The positional `check composition` target remains
-a `Composition` instance; it is not an application/factory target.
-
-Common SDK sources keep their explicit `factory = true` selector because they
-also accept standalone contract targets. Factory validation is shared: async or
-generator factories, awaitable/generator results and required arguments are
-rejected. Return a constructed app or a materialized supported contract value.
-Use a typed wrapper if a callable cannot expose an inspectable signature.
-One invocation caches each distinct `(source, factory)` result across formats
-and targets. Relative imports during factory execution use the configuration's
-directory; standalone application commands use the working directory.
-
-Loading executes imports and synchronous factory code, but never enters lifespan
-or resolves runtime dependencies. Invalid references, import failures and factory
-failures report the target, failure phase/type and a corrective hint without
-printing exception contents or a traceback. Composition text/JSON modes follow
-the same rule. Keep runtime configuration in lifespan/dependency code; eager
-imports still fail and no placeholder settings are supplied.
-
-Use the same app reference for each live source in `fastapi-canon.toml`:
-
-```toml
-[codegen.sources.api]
-kind = "openapi"
-source = "backend.application:create_app"
-factory = true
-output = "contracts/openapi.json"
-
-[codegen.sources.control]
-kind = "openrpc"
-source = "backend.application:create_app"
-factory = true
-output = "contracts/openrpc.json"
-```
-
-Keep the existing `[codegen]` version and target tables. One generation invocation
-calls each distinct `(source, factory)` once, sharing that app across formats and
-targets. Application-derived RPC bindings inherit the domain client's base URL;
-connection options can override it and supply resource IDs. `generate --offline`
-reads saved contracts and never imports the app. Standalone `RpcContract` sources
-remain supported for framework-independent services.
+The configured version-2 workflow still exports application-wide contracts;
+Python `ContractSelection` does not add selectors to its TOML targets. Use the
+[current generation workflow](codegen.md) for separate clients and external HTTP
+tools. The remaining target-selection and staging proposal is tracked in
+[issue #154](https://github.com/mathisarends/fastapi-canon/issues/154).

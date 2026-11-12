@@ -14,6 +14,7 @@ from fastapi_canon import (
     Feature,
     export_contracts,
 )
+from fastapi_canon.contracts import ContractKind
 from fastapi_canon.integrations.webrtc import Session
 from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine
 
@@ -40,7 +41,7 @@ app = Composition(
     features=(Feature(name="browser", routers=[router]),),
     errors=ErrorOptions(type_base="https://example.test/problems"),
 ).build(FastAPI())
-contract = export_contracts(app, kinds=("webrtc",)).webrtc
+contract = export_contracts(app, kinds=(ContractKind.WEBRTC,)).webrtc
 ```
 
 The engine extra remains independent: install `fastapi-canon[webrtc,aiortc]` for this

@@ -23,9 +23,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="module:attribute of an app or zero-argument app factory",
     )
     export.add_argument("--output-dir", required=True, type=Path)
-    export.add_argument(
-        "--kind", choices=("openapi", "openrpc", "webrtc"), action="append"
-    )
+    export.add_argument("--kind", choices=tuple(ContractKind), action="append")
     export.add_argument(
         "--base-url", default="{baseUrl}", help="Public RPC origin or template"
     )
@@ -38,8 +36,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         app = _load_application(args.app, root=Path.cwd())
-        kinds: tuple[ContractKind, ...] = tuple(
-            args.kind or ("openapi", "openrpc", "webrtc")
+        kinds = (
+            tuple(ContractKind(kind) for kind in args.kind)
+            if args.kind
+            else tuple(ContractKind)
         )
         contracts = export_contracts(app, kinds=kinds, base_url=args.base_url)
         if contracts.openapi is not None:
