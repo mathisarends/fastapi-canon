@@ -995,6 +995,17 @@ class _Analyzer:
             "contextlib.AsyncExitStack",
         }:
             return self._exit_stack(node, target, function, env, stack)
+        mutation = self.source.mutation(node, target, function.module, env)
+        if mutation is not None:
+            if mutation.uncertain:
+                flow.unknowns.append(
+                    _Unknown(
+                        "unresolved native container mutation",
+                        function.name,
+                        node.lineno,
+                    )
+                )
+            return flow
         name = target.name or self.source.resolve(node.func, function.module, env)
         if name == "<empty>":
             return flow

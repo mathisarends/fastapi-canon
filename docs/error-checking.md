@@ -135,6 +135,11 @@ The checker follows actual positional and keyword arguments, defaults and known
 receivers, constructor fields, aliases, supported container contents and stable
 local-function captures. Reassigning an aliased object's fields remains visible
 to later calls. Annotation-only statements do not replace an existing value.
+Native list/set additions, dictionary updates and `setdefault` preserve stored
+values, including mutations shared between operations. Storing a callable does
+not execute it. Unknown iterable extensions retain CAN003; deletions conservatively
+retain values that another operation may have observed earlier.
+Custom application hashing/equality during native mutations remains CAN003.
 Dictionary unions retain their contained values and known right-hand key
 overrides. An unresolved operand does not establish safe contents.
 Raising an exception selected from a supported container checks every possible

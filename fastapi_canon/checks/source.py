@@ -8,6 +8,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Literal, Self
 
+from fastapi_canon.checks.container_values import _MUTATORS, _mutate, _Mutation
 from fastapi_canon.checks.generator_phases import _has_yield, _resource_phases
 from fastapi_canon.checks.library_types import _LibraryTypes
 from fastapi_canon.checks.model_values import _Models
@@ -1776,6 +1777,9 @@ class _Source:
         *,
         awaited: bool = False,
     ) -> _Value:
+        mutation = self.mutation(node, target, module, env)
+        if mutation is not None:
+            return mutation.result
         if target.name == "builtins.type" and len(node.args) == 1 and not node.keywords:
             return _join(
                 *(
@@ -2366,6 +2370,70 @@ class _Source:
                     )
                 return signature
         return _Value()
+
+    def mutation(
+        self, node: ast.Call, target: _Value, module: str, env: _Environment
+    ) -> _Mutation | None:
+        if target.bound is None or target.bound.name not in {
+            "builtins.list",
+            "builtins.set",
+            "builtins.dict",
+        }:
+            return None
+        method = target.name.rsplit(".", 1)[-1]
+        if method not in _MUTATORS[target.bound.name]:
+            return None
+        # Expanded calls need binding/iteration knowledge; retain an explicit
+        # boundary while contaminating stored values with an unknown alternative.
+        opaque = bool(node.keywords) or any(
+            isinstance(arg, ast.Starred) for arg in node.args
+        )
+        args = tuple(self.object(self.infer(arg, module, env)) for arg in node.args)
+        receiver = self.object(target.bound)
+        mutation = _mutate(receiver, method, args)
+        if mutation is None:
+            return None
+        protocol_values: list[_Value] = []
+        if receiver.name == "builtins.set" and method not in {"clear", "pop"}:
+            protocol_values = [
+                self.element(receiver),
+                *(
+                    args
+                    if method in {"add", "remove", "discard"}
+                    else tuple(self.element(value) for value in args)
+                ),
+            ]
+        elif receiver.name == "builtins.dict" and method != "clear":
+            protocol_values = (
+                [args[0]]
+                if method == "setdefault" and args
+                else [self.element(value) for value in args]
+            )
+        elif receiver.name == "builtins.list" and method == "remove":
+            protocol_values = [self.element(receiver), *args]
+        if any(
+            not value.name
+            or any(self.method(value.name, name) for name in ("__hash__", "__eq__"))
+            for candidate in protocol_values
+            for value in candidate.variants
+            if value.name != "<empty>"
+        ):
+            mutation = replace(mutation, uncertain=True)
+        if opaque:
+            mutation = replace(
+                mutation,
+                container=replace(
+                    receiver,
+                    arguments=(_Value(), _Value())
+                    if receiver.name == "builtins.dict"
+                    else (_Value(),),
+                    keys_known=False,
+                ),
+                result=_Value(),
+                uncertain=True,
+            )
+        self.store(mutation.container)
+        return mutation
 
     def typed(self, node: ast.expr, module: str) -> _Value:
         scope, value = self.value(node, module)
