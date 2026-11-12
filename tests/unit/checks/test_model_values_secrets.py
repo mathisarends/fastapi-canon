@@ -157,3 +157,34 @@ def route(secret: SecretStr): secret.get_secret_value().strip()
     [operation] = json.loads(capsys.readouterr().out)["operations"]
     assert operation["complete"], operation["diagnostics"]
     assert operation["diagnostics"] == []
+
+
+@pytest.mark.parametrize("wrapped", [False, True])
+def test_secret_validation_postconditions_preserve_existing_opaque_instances(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], wrapped: bool
+) -> None:
+    (tmp_path / "api.py").write_text(
+        PRELUDE
+        + f"""
+class Body(BaseModel): token: SecretStr
+@router.get('/')
+def route(value):
+    Body(token={"SecretStr(value)" if wrapped else "value"}).token.get_secret_value().strip()
+""",
+        encoding="utf8",
+    )
+    main(
+        [
+            "check",
+            "errors",
+            str(tmp_path),
+            "--strict",
+            "--require-complete",
+            "--format",
+            "json",
+        ]
+    )
+    [operation] = json.loads(capsys.readouterr().out)["operations"]
+    assert operation["complete"] is not wrapped, operation["diagnostics"]
+    if not wrapped:
+        assert operation["diagnostics"] == []

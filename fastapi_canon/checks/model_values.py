@@ -328,25 +328,14 @@ class _Models:
                 ):
                     results.append(actual)
                 else:
-                    native = actual.name in {
-                        "builtins.str",
-                        "builtins.bytes",
-                        "builtins.int",
-                        "builtins.float",
-                        "builtins.bool",
-                        "builtins.NoneType",
-                        "<empty>",
-                    }
-                    payload = (
-                        _Value(
-                            "builtins.str"
-                            if owner.endswith("SecretStr")
-                            else "builtins.bytes",
-                            instance=True,
-                            exact=True,
-                        )
-                        if native
-                        else _Value()
+                    # Native validation constructs a typed wrapper. Existing
+                    # wrapper instances bypass that validation and stay above.
+                    payload = _Value(
+                        "builtins.str"
+                        if owner.endswith("SecretStr")
+                        else "builtins.bytes",
+                        instance=True,
+                        exact=True,
                     )
                     results.append(
                         self.source.store(
