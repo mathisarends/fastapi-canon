@@ -121,6 +121,8 @@ and bare re-raises. Handler state conservatively combines values at possible
 failure points. Literal and type guards can exclude branches; arbitrary business
 conditions and persisted invariants are not proved. A finding describes a possible
 source path, not proof that a particular request reaches it.
+Optional inputs retain their present and absent paths without enumerating every
+combination of optional parameters.
 Assertions contribute their test and possible failure-message calls. They do not
 exclude subsequent paths, because Python can disable assertions with `-O`.
 

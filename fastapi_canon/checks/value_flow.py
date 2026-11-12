@@ -121,9 +121,19 @@ def _contexts(
     size = 1
     for name, value in bindings.items():
         types: dict[str, list[_Value]] = {}
+        absent = []
         for variant in value.variants:
-            types.setdefault(variant.name, []).append(variant)
-        choices[name] = tuple(_join(*group) for group in types.values())
+            if variant.instance and variant.name == "builtins.NoneType":
+                absent.append(variant)
+            else:
+                types.setdefault(variant.name, []).append(variant)
+        # None cannot dispatch application methods. Retain absence in each
+        # abstract type context; ordinary guards narrow it at the call site.
+        choices[name] = (
+            tuple(_join(*group, *absent) for group in types.values())
+            if types
+            else (_join(*absent),)
+        )
         size *= len(choices[name])
         if size > limit:
             return None

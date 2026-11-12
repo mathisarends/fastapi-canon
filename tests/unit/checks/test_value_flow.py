@@ -598,3 +598,36 @@ def route():
     assert [d["code"] for d in operation["diagnostics"]] == (
         [] if initial == "safe" else ["CAN001"]
     )
+
+
+def test_optional_arguments_do_not_require_a_cartesian_call_context(
+    scan: Callable[[str], dict[str, Any]],
+) -> None:
+    report = scan("""
+class Service:
+    def __init__(self,a:str|None,b:str|None,c:str|None,d:str|None,e:str|None,f:str|None):
+        if a is None: raise Missing()
+@router.get('/optional')
+def route(a:str|None,b:str|None,c:str|None,d:str|None,e:str|None,f:str|None):
+    Service(a,b,c,d,e,f)
+""")
+    [operation] = report["operations"]
+    assert operation["complete"]
+    assert [d["code"] for d in operation["diagnostics"]] == ["CAN001"]
+
+
+def test_optional_application_values_keep_errors_and_none_guards(
+    scan: Callable[[str], dict[str, Any]],
+) -> None:
+    report = scan("""
+class Risky:
+    def run(self): risky()
+def invoke(value):
+    if value is None: return
+    value.run()
+@router.get('/optional-value')
+def route(flag:bool): invoke(Risky() if flag else None)
+""")
+    [operation] = report["operations"]
+    assert operation["complete"]
+    assert [d["code"] for d in operation["diagnostics"]] == ["CAN001"]
