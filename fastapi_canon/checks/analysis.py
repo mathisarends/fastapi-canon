@@ -1112,7 +1112,13 @@ class _Analyzer:
                     "model_validate_strings",
                 }:
                     flow.extend(
-                        self._construct(definition, function, stack, node.lineno)
+                        self._construct(
+                            definition,
+                            function,
+                            stack,
+                            node.lineno,
+                            constructed=self.source.infer(node, function.module, env),
+                        )
                     )
                 if definition and model_method in {"model_dump", "model_dump_json"}:
                     flow.extend(
@@ -1862,7 +1868,7 @@ class _Analyzer:
                 if self.source.models.opaque(definition.name):
                     flow.unknowns.append(
                         _Unknown(
-                            "before, plain or wrap validation requires value transformation analysis",
+                            "unsupported validator value transformation",
                             function.name,
                             line,
                         )

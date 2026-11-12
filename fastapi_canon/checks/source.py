@@ -2932,6 +2932,7 @@ class _Source:
             self.store(instance)
         constructor = self.method(owner, "__init__")
         fields: _Environment = {}
+        raw_fields: _Environment = {}
         if constructor and isinstance(constructor.node, ast.FunctionDef):
             bound = self.call_environment(constructor, call, module, env, instance)
             if bound is None:
@@ -2982,6 +2983,7 @@ class _Source:
                 if actual is not None:
                     fields[node.target.id] = self.infer(actual, module, env)
                     if self.model(owner):
+                        raw_fields["$input:" + node.target.id] = fields[node.target.id]
                         fields[node.target.id] = self.models.normalize(
                             self.typed(node.annotation, scope),
                             fields[node.target.id],
@@ -3013,7 +3015,7 @@ class _Source:
                 instance=True,
                 exact=True,
                 initialized=True,
-                fields=tuple(sorted(fields.items())),
+                fields=tuple(sorted((fields | raw_fields).items())),
                 site=site,
             )
         )

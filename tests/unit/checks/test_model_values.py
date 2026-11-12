@@ -21,6 +21,90 @@ class Risky:
 
 
 @pytest.mark.parametrize(
+    "creation", ["Body(payload=payload)", "Body.model_validate({'payload': payload})"]
+)
+@pytest.mark.parametrize("risky", [False, True])
+def test_before_scalar_validator_checks_the_unvalidated_input(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], creation: str, risky: bool
+) -> None:
+    (tmp_path / "api.py").write_text(
+        PRELUDE
+        + f"""
+class Body(BaseModel):
+    payload: str
+    @field_validator('payload', mode='before')
+    @classmethod
+    def convert(cls, value: Any):
+        if isinstance(value, Risky): value.run()
+        return 'validated'
+@router.get('/')
+def route():
+    payload = {"Risky()" if risky else "'safe'"}
+    body = {creation}
+    body.payload.strip()
+""",
+        encoding="utf8",
+    )
+    main(
+        [
+            "check",
+            "errors",
+            str(tmp_path),
+            "--strict",
+            "--require-complete",
+            "--format",
+            "json",
+        ]
+    )
+    report = json.loads(capsys.readouterr().out)
+    [operation] = report["operations"]
+    assert operation["complete"]
+    assert [d["code"] for d in operation["diagnostics"]] == (
+        ["CAN001"] if risky else []
+    )
+    if risky:
+        assert operation["diagnostics"][0]["trace"][-1] == "api.Risky.run"
+
+
+@pytest.mark.parametrize(
+    ("mode", "annotation"), [("plain", "str"), ("wrap", "str"), ("before", "Any")]
+)
+def test_unsupported_validator_outputs_remain_incomplete_without_hiding_known_errors(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], mode: str, annotation: str
+) -> None:
+    (tmp_path / "api.py").write_text(
+        PRELUDE
+        + f"""
+class Body(BaseModel):
+    payload: {annotation}
+    @field_validator('payload', mode='{mode}')
+    @classmethod
+    def convert(cls, value: Any):
+        value.run()
+        return value
+@router.get('/')
+def route(): Body(payload=Risky())
+""",
+        encoding="utf8",
+    )
+    main(
+        [
+            "check",
+            "errors",
+            str(tmp_path),
+            "--strict",
+            "--require-complete",
+            "--format",
+            "json",
+        ]
+    )
+    report = json.loads(capsys.readouterr().out)
+    [operation] = report["operations"]
+    assert not operation["complete"]
+    assert {d["code"] for d in operation["diagnostics"]} == {"CAN001", "CAN003"}
+
+
+@pytest.mark.parametrize(
     "creation",
     [
         "Body.model_validate({'payload': Risky()})",

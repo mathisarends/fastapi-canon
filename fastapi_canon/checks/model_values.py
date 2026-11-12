@@ -167,6 +167,7 @@ class _Models:
                 fields.append(
                     (name, self.normalize(annotation, actual, site + ":" + name))
                 )
+                fields.append(("$input:" + name, actual))
             instance = self.source.store(
                 _Value(
                     owner,
@@ -202,16 +203,41 @@ class _Models:
         return result
 
     def opaque(self, owner: str) -> bool:
-        return any(
-            any(
-                kw.arg == "mode"
-                and not (
-                    isinstance(kw.value, ast.Constant) and kw.value.value == "after"
-                )
-                for kw in decorator.keywords
-            )
-            for _, decorator in self.hooks(owner)
-        )
+        fields = dict(self.fields(owner))
+        scalars = {
+            "builtins.str",
+            "builtins.bytes",
+            "builtins.int",
+            "builtins.float",
+            "builtins.bool",
+            "builtins.NoneType",
+            "pydantic.SecretStr",
+            "pydantic.SecretBytes",
+            "pydantic.types.SecretStr",
+            "pydantic.types.SecretBytes",
+        }
+        for _, decorator in self.hooks(owner):
+            mode = _mode(decorator)
+            if mode == "after":
+                continue
+            if mode != "before" or not decorator.args:
+                return True
+            targets = [
+                node.value
+                for node in decorator.args
+                if isinstance(node, ast.Constant) and isinstance(node.value, str)
+            ]
+            if len(targets) != len(decorator.args):
+                return True
+            if targets == ["*"]:
+                targets = list(fields)
+            if any(
+                value.name not in scalars
+                for name in targets
+                for value in fields.get(name, _Value()).variants
+            ):
+                return True
+        return False
 
     def hook_arguments(
         self, instance: _Value, name: str, decorator: ast.Call
@@ -233,7 +259,10 @@ class _Models:
         result = []
         for target in targets:
             value = (
-                dict(self.source.object(instance).fields).get(target, _Value())
+                dict(self.source.object(instance).fields).get(
+                    ("$input:" if _mode(decorator) != "after" else "") + target,
+                    _Value(),
+                )
                 if target
                 else instance
             )
@@ -254,6 +283,8 @@ class _Models:
         if self.opaque(instance.name):
             return instance
         for name, decorator in self.hooks(instance.name):
+            if _mode(decorator) != "after":
+                continue
             function = self.source.definitions[name]
             for target, bindings in self.hook_arguments(instance, name, decorator):
                 returned = self.source.returned(function, bindings)
@@ -335,3 +366,16 @@ class _Models:
         return self.source.store(
             replace(original, fields=tuple(fields.items()), site=site)
         )
+
+
+def _mode(decorator: ast.Call) -> str | None:
+    if any(kw.arg is None for kw in decorator.keywords):
+        return None
+    node = next((kw.value for kw in decorator.keywords if kw.arg == "mode"), None)
+    if node is None:
+        return "after"
+    return (
+        node.value
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        else None
+    )

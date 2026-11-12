@@ -204,7 +204,10 @@ inventories. Pydantic `Any` remains opaque; it is not treated as JSON. Validated
 `JsonValue` and successful JSON-mode dumps have JSON value shapes. Model validation,
 after validators, copies and actual field values preserve application objects;
 unvalidated `model_copy(update=...)` updates are not assumed validated.
-Before/plain/wrap transformations remain incomplete. Pydantic's wrapped validation
+Before field validators for scalar values inspect their unvalidated inputs while
+successful native validation supplies the final scalar type. Opaque inputs retain
+CAN003 when their calls cannot be resolved. Model-before, container-before, plain
+and wrap transformations remain incomplete. Pydantic's wrapped validation
 and serializer failures do not become escaping domain exceptions merely because
 a hook raised them. Python-mode custom serializer results remain opaque.
 
