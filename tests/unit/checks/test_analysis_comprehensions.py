@@ -151,6 +151,40 @@ def endpoint(): return list(reversed(Items()))
     )
 
 
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "return next((require_item(item) for item in item_ids), None)",
+        "delimiter = ',' if flag else '|'\n    return delimiter.join(str(require_item(item)) for item in item_ids)",
+    ],
+)
+def test_known_consumers_execute_generator_expressions_across_callable_alternatives(
+    analyze: Callable[..., tuple[int, dict[str, Any]]], statement: str
+) -> None:
+    _, report = analyze(f"""
+@router.get('/')
+def endpoint(item_ids: list[int], flag: bool):
+    {statement}
+""")
+    [operation] = report["operations"]
+    assert operation["complete"], operation["diagnostics"]
+    assert [d["code"] for d in operation["diagnostics"]] == ["CAN002"]
+
+
+def test_next_does_not_claim_full_generator_function_execution(
+    analyze: Callable[..., tuple[int, dict[str, Any]]],
+) -> None:
+    _, report = analyze("""
+def values():
+    yield 1
+    raise Missing()
+@router.get('/')
+def endpoint(): return next(values())
+""")
+    [operation] = report["operations"]
+    assert not operation["complete"]
+
+
 def test_iterable_filters_and_results_keep_independent_traces(
     analyze: Callable[..., tuple[int, dict[str, Any]]],
 ) -> None:

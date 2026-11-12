@@ -678,7 +678,15 @@ class _Analyzer:
                         function,
                         env,
                         stack,
-                        iterated=index == 0 and bool(target.name in consumers),
+                        iterated=index == 0
+                        and all(
+                            variant.name in consumers
+                            or (
+                                variant.name == "builtins.next"
+                                and isinstance(argument, ast.GeneratorExp)
+                            )
+                            for variant in target.variants
+                        ),
                     )
                 )
             for variant in target.variants:
