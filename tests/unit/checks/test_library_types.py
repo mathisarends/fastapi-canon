@@ -94,6 +94,29 @@ def test_unbound_library_type_variables_remain_unknown(
     assert result is not None and not result.name
 
 
+def test_module_paths_take_precedence_over_same_named_package_exports(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package = tmp_path / "shadow_fixture"
+    package.mkdir()
+    (package / "__init__.py").write_text(
+        "from .service import service\n", encoding="utf8"
+    )
+    (package / "service.py").write_text(
+        "class Result: pass\ndef service() -> Result: ...\n", encoding="utf8"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    types = _LibraryTypes()
+    assert (
+        types.canonical("shadow_fixture.service.Result")
+        == "shadow_fixture.service.Result"
+    )
+    assert types.canonical("shadow_fixture.service") == "shadow_fixture.service.service"
+    returned = types.returned(_Value("shadow_fixture.service"), awaited=False)
+    assert returned is not None and returned.name == "shadow_fixture.service.Result"
+    assert "shadow_fixture" not in sys.modules
+
+
 def test_namespace_package_signatures_do_not_require_imported_parents(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

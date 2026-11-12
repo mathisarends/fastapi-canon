@@ -55,21 +55,29 @@ class _LibraryTypes:
     def __init__(self) -> None:
         self._modules: dict[str, _Module | None] = {}
 
-    def canonical(self, name: str, seen: frozenset[str] = frozenset()) -> str:
-        if name in _PUBLIC_TYPES:
-            return _PUBLIC_TYPES[name]
-        if name in seen:
-            return name
-        parts = name.split(".")
-        for length in range(len(parts) - 1, 0, -1):
-            scope = ".".join(parts[:length])
-            module = self.module(scope)
-            if module and parts[length] in module.aliases:
-                alias = module.aliases[parts[length]]
-                return self.canonical(
-                    ".".join([alias, *parts[length + 1 :]]), seen | {name}
-                )
-        return name
+    def canonical(self, name: str) -> str:
+        original = name
+        visited = set()
+        while True:
+            if name in _PUBLIC_TYPES:
+                return _PUBLIC_TYPES[name]
+            parts = name.split(".")
+            for length in range(len(parts) - 1, 0, -1):
+                scope = ".".join(parts[:length])
+                module = self.module(scope)
+                if module is None:
+                    continue
+                local = parts[length]
+                if local in module.definitions or local not in module.aliases:
+                    return name
+                binding = f"{scope}.{local}"
+                if binding in visited:
+                    return original
+                visited.add(binding)
+                name = ".".join([module.aliases[local], *parts[length + 1 :]])
+                break
+            else:
+                return name
 
     def bases(self, name: str) -> tuple[str, ...] | None:
         definition = self.definition(name)
