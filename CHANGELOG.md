@@ -6,6 +6,14 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Breaking changes
 
+- Error-contract checking discovers child RPC channels, RPC streams and direct
+  socket/binary-stream registrations, including imperative factories and aliases.
+  Previously omitted declarations now contribute gaps or CAN003 and can fail
+  `--strict --require-complete`. This targets unpublished 0.20.0. Re-scan all own
+  import roots and inspect operation counts; consumers of JSON must accept the
+  `socket` transport value. Unsupported socket/composition contracts remain
+  explicitly incomplete instead of disappearing from the report.
+
 - Error-contract checking preserves source-module boundaries when resolving
   package re-exports such as `from .router import router`. Previously hidden
   HTTP, SSE, WebRTC and RPC error paths can now produce CAN001/CAN002 and fail

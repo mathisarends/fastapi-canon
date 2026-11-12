@@ -2609,11 +2609,19 @@ _RPC_METHOD = "method"
 
 def _operation_decorator(decorator: ast.expr) -> bool:
     if isinstance(decorator, ast.Attribute):
-        return decorator.attr == _RPC_METHOD
+        return decorator.attr in {_RPC_METHOD, "stream", "socket", "binary_stream"}
     return (
         isinstance(decorator, ast.Call)
         and isinstance(decorator.func, ast.Attribute)
-        and decorator.func.attr in {*_ROUTE_METHODS, *_TRANSPORT_METHODS, _RPC_METHOD}
+        and decorator.func.attr
+        in {
+            *_ROUTE_METHODS,
+            *_TRANSPORT_METHODS,
+            _RPC_METHOD,
+            "stream",
+            "socket",
+            "binary_stream",
+        }
     )
 
 

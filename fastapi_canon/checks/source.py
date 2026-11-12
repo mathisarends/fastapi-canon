@@ -240,6 +240,7 @@ class _Creation:
 @dataclass
 class _Source:
     paths: dict[str, Path] = field(default_factory=dict)
+    bodies: dict[str, list[ast.stmt]] = field(default_factory=dict)
     definitions: dict[str, _Definition] = field(default_factory=dict)
     bindings: dict[str, tuple[str, ast.expr] | str] = field(default_factory=dict)
     uncertain: dict[str, list[str]] = field(default_factory=dict)
@@ -420,6 +421,7 @@ class _Source:
                     source.paths[module] = path
                     text = path.read_text("utf-8-sig")
                     tree = ast.parse(text, filename=str(path))
+                    source.bodies[module] = tree.body
                     source.lexical.update(_scopes(tree, text, str(path)))
                     names: set[str] = set()
                     source._index(module, tree.body, package=package, names=names)

@@ -230,6 +230,8 @@ annotation alone does not establish a stack's registered effects.
 | `@router.sse(...)` | Dependency and iterated stream errors against router and stream `raises`. |
 | `@router.webrtc(...)` | Session factory and dependency errors against router and session `raises`. |
 | `@channel.method` on `RpcChannel` | Method errors against channel and method `raises`. |
+| `@channel.stream(...)` on `RpcChannel` | Iterated stream errors against inherited channel and stream `raises`. |
+| `router.channel(...)`, `router.socket(...)`, `router.binary_stream(...)` | Recognized declarations; unresolved connection, rejection and close contracts produce CAN003. |
 
 For SSE, the same declaration covers dependency failures before response start
 and terminal `canon.problem` events during streaming. Source completeness does
@@ -246,6 +248,15 @@ class logic remain in the report with CAN003.
 The checker reads `Error` and channel/method `raises`. `RpcError` subclasses and
 `RpcErrorBinding` contracts remain unresolved. Unrelated `.method` decorators are
 ignored. Included-channel contracts do not propagate.
+
+**Unpublished, planned for 0.20.0:** child channels created with `channel.child(...)`
+are recognized, including imported aliases, and inherit their parent's `raises`.
+Direct registrations such as `router.socket('/raw')(handler)` and saved decorator
+aliases remain visible, including inside imperative factories. Factory composition
+and socket-specific contracts retain CAN003 until they can be resolved. Creating
+a decorator without applying it does not register an operation. JSON uses
+`transport: "socket"` for standalone sockets and binary streams; RPC methods and
+streams use `transport: "rpc"`.
 
 ## Direct local route factories
 
