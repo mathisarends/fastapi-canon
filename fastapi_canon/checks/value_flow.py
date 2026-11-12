@@ -38,6 +38,15 @@ class _Value:
 
     def reference(self) -> "_Value":
         if self.instance and self.site:
+            if not (
+                self.fields
+                or self.arguments
+                or self.hint
+                or self.initialized
+                or self.keys_known
+                or self.variadic
+            ):
+                return self
             return replace(
                 self,
                 fields=(),
@@ -47,6 +56,8 @@ class _Value:
                 keys_known=False,
                 variadic=False,
             )
+        if not (self.arguments or self.fields or self.bound or self.alternatives):
+            return self
         return replace(
             self,
             arguments=tuple(v.reference() for v in self.arguments),
