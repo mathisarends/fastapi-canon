@@ -2262,12 +2262,17 @@ class _Analyzer:
                     target = (
                         node.exc.func if isinstance(node.exc, ast.Call) else node.exc
                     )
-                    name = self.source.resolve(target, function.module, env)
-                    if name and self.source.exception(name):
-                        flow.escapes.append(
-                            _Escape(name, (function.name,), node.lineno)
-                        )
-                    else:
+                    unresolved = False
+                    for value in self.source.infer(
+                        target, function.module, env
+                    ).variants:
+                        if value.name and self.source.exception(value.name):
+                            flow.escapes.append(
+                                _Escape(value.name, (function.name,), node.lineno)
+                            )
+                        else:
+                            unresolved = True
+                    if unresolved:
                         flow.unknowns.append(
                             _Unknown(
                                 f"unresolved raised exception: {ast.unparse(node.exc)}",

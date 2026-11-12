@@ -137,6 +137,8 @@ local-function captures. Reassigning an aliased object's fields remains visible
 to later calls. Annotation-only statements do not replace an existing value.
 Dictionary unions retain their contained values and known right-hand key
 overrides. An unresolved operand does not establish safe contents.
+Raising an exception selected from a supported container checks every possible
+exception class. An unresolved alternative retains CAN003 alongside known gaps.
 
 Inherited methods, classmethods, properties, `Self` and statically resolved
 `super()` dispatch follow the application's method resolution order. Recursive

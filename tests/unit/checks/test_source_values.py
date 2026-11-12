@@ -171,3 +171,42 @@ def endpoint(value: str | None):
     assert operation["complete"]
     assert bool(report["contract_gaps"]) == gap
     assert status == int(gap)
+
+
+@pytest.mark.parametrize("opaque", [False, True])
+def test_raised_exception_class_choices_preserve_every_domain_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], opaque: bool
+) -> None:
+    other = "unknown" if opaque else "Conflict"
+    (tmp_path / "api.py").write_text(
+        f"""
+from typing import Any
+from fastapi_canon import APIRouter
+class Missing(Exception): pass
+class Conflict(Exception): pass
+router = APIRouter()
+@router.get('/')
+def endpoint(code: str, unknown: Any):
+    errors = {{'missing': Missing, 'conflict': {other}}}
+    raise errors[code]()
+""",
+        encoding="utf8",
+    )
+    status = main(
+        [
+            "check",
+            "errors",
+            str(tmp_path),
+            "--strict",
+            "--require-complete",
+            "--format",
+            "json",
+        ]
+    )
+    report = json.loads(capsys.readouterr().out)
+    [operation] = report["operations"]
+    assert operation["complete"] == (not opaque)
+    gaps = [d for d in operation["diagnostics"] if d["code"] == "CAN002"]
+    assert len(gaps) == (1 if opaque else 2)
+    assert any("api.Missing" in d["message"] for d in gaps)
+    assert status == 1
