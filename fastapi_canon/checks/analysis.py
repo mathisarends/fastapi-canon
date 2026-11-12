@@ -1039,6 +1039,25 @@ class _Analyzer:
         definition = self.source.definitions.get(name or "")
         if name == "builtins.type" and len(node.args) == 1 and not node.keywords:
             return flow
+        if name == "builtins.reversed":
+            values = (
+                self.source.infer(node.args[0], function.module, env)
+                if len(node.args) == 1 and not node.keywords
+                else _Value()
+            )
+            if any(
+                value.name not in {"builtins.list", "builtins.tuple", "builtins.dict"}
+                or (not value.exact and bool(self.source.subclasses(value.name)))
+                for value in values.variants
+            ):
+                flow.unknowns.append(
+                    _Unknown(
+                        "unresolved reversed iteration protocol",
+                        function.name,
+                        node.lineno,
+                    )
+                )
+            return flow
         if (
             name == "builtins.getattr"
             and len(node.args) in {2, 3}

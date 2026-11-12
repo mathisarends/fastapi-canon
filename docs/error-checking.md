@@ -256,7 +256,9 @@ custom authentication, event hooks, mounts and transports remain boundaries.
 ## Comprehensions and deferred generators
 
 Eager list, set and dict comprehensions follow their iterables, filters and
-results with local target bindings. Directly resolved generator iteration and
+results with local target bindings. Native `reversed` views retain element types
+and later container mutations; custom reverse protocols remain incomplete.
+Directly resolved generator iteration and
 supported eager consumers follow generator bodies. Unsupported iteration
 protocols and unresolved element methods retain CAN003. Resolved generator-function
 aliases preserve bound arguments until iteration, including with `closing` and

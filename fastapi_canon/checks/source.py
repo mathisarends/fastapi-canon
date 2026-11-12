@@ -423,6 +423,9 @@ class _Source:
         results = []
         for variant in value.variants:
             actual = self.object(variant)
+            if actual.name == "collections.abc.Iterator" and actual.bound:
+                results.append(self.element(actual.bound))
+                continue
             if actual.name in {"<generator>", "<async-generator>"} and actual.bound:
                 function = self.definitions.get(actual.bound.name)
                 if function and not actual.unresolved:
@@ -1876,6 +1879,17 @@ class _Source:
         mutation = self.mutation(node, target, module, env)
         if mutation is not None:
             return mutation.result
+        if (
+            target.name == "builtins.reversed"
+            and len(node.args) == 1
+            and not node.keywords
+        ):
+            return _Value(
+                "collections.abc.Iterator",
+                instance=True,
+                exact=True,
+                bound=self.infer(node.args[0], module, env).reference(),
+            )
         if target.name == "builtins.type" and len(node.args) == 1 and not node.keywords:
             return _join(
                 *(

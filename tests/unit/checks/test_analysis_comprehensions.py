@@ -97,6 +97,60 @@ def endpoint(item_ids: list[int]):
         assert diagnostic["path"].endswith("api.py")
 
 
+@pytest.mark.parametrize("container", ["[Item()]", "(Item(),)"])
+def test_reversed_native_sequences_keep_application_element_methods(
+    analyze: Callable[..., tuple[int, dict[str, Any]]], container: str
+) -> None:
+    _, report = analyze(f"""
+class Item:
+    def require(self): raise Missing()
+@router.get('/')
+def endpoint(): return [item.require() for item in reversed({container})]
+""")
+    [operation] = report["operations"]
+    assert operation["complete"]
+    assert [d["code"] for d in operation["diagnostics"]] == ["CAN002"]
+    assert operation["diagnostics"][0]["trace"][-1] == "api.Item.require"
+
+
+def test_reversed_iterator_keeps_later_mutations_visible(
+    analyze: Callable[..., tuple[int, dict[str, Any]]],
+) -> None:
+    _, report = analyze("""
+class Safe:
+    def require(self): pass
+class Risky:
+    def require(self): raise Missing()
+@router.get('/')
+def endpoint():
+    items = [Safe()]
+    iterator = reversed(items)
+    items.clear()
+    items.append(Risky())
+    for item in iterator: item.require()
+""")
+    [operation] = report["operations"]
+    assert operation["complete"]
+    assert [d["code"] for d in operation["diagnostics"]] == ["CAN002"]
+
+
+def test_custom_reverse_protocol_remains_explicitly_incomplete(
+    analyze: Callable[..., tuple[int, dict[str, Any]]],
+) -> None:
+    _, report = analyze("""
+class Items:
+    def __reversed__(self): raise Missing()
+@router.get('/')
+def endpoint(): return list(reversed(Items()))
+""")
+    [operation] = report["operations"]
+    assert not operation["complete"]
+    assert any(
+        "unresolved reversed iteration protocol" in d["message"]
+        for d in operation["diagnostics"]
+    )
+
+
 def test_iterable_filters_and_results_keep_independent_traces(
     analyze: Callable[..., tuple[int, dict[str, Any]]],
 ) -> None:
