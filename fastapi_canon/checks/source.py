@@ -2464,7 +2464,12 @@ class _Source:
                 ):
                     signature = replace(
                         signature,
-                        fields=(("$schema", self.models.schema(node.args[0], module)),),
+                        fields=(
+                            (
+                                "$schema",
+                                self.models.schema(node.args[0], module, bindings=env),
+                            ),
+                        ),
                     )
                 if (
                     resource_name

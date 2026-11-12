@@ -44,9 +44,23 @@ class _Models:
         self._validating: set[str] = set()
 
     def schema(
-        self, node: ast.expr, module: str, seen: frozenset[int] = frozenset()
+        self,
+        node: ast.expr,
+        module: str,
+        seen: frozenset[int] = frozenset(),
+        *,
+        bindings: Mapping[str, _Value] | None = None,
     ) -> _Value:
         """Read supported adapter schemas without losing functional metadata."""
+        if isinstance(node, ast.Name) and bindings is not None and node.id in bindings:
+            return _join(
+                *(
+                    replace(value, instance=True)
+                    if value.name and not value.instance
+                    else _Value(unresolved=True)
+                    for value in self.source.expand(bindings[node.id]).variants
+                )
+            )
         module, node = self.source.value(node, module)
         if id(node) in seen:
             return _Value(unresolved=True)
@@ -58,8 +72,8 @@ class _Models:
                 return _Value(unresolved=True)
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
             return _join(
-                self.schema(node.left, module, seen),
-                self.schema(node.right, module, seen),
+                self.schema(node.left, module, seen, bindings=bindings),
+                self.schema(node.right, module, seen, bindings=bindings),
             )
         if isinstance(node, ast.Subscript):
             wrapper = self.source.resolve(node.value, module)
@@ -82,12 +96,14 @@ class _Models:
                     for value in args[1:]
                 )
                 return (
-                    self.schema(args[0], module, seen)
+                    self.schema(args[0], module, seen, bindings=bindings)
                     if safe_metadata
                     else _Value(unresolved=True)
                 )
             if wrapper in {"typing.Union", "typing.Optional"}:
-                values = [self.schema(arg, module, seen) for arg in args]
+                values = [
+                    self.schema(arg, module, seen, bindings=bindings) for arg in args
+                ]
                 if wrapper == "typing.Optional":
                     values.append(
                         _Value("builtins.NoneType", instance=True, exact=True)
@@ -97,7 +113,7 @@ class _Models:
             return replace(
                 value,
                 arguments=tuple(
-                    self.schema(arg, module, seen)
+                    self.schema(arg, module, seen, bindings=bindings)
                     for arg in args
                     if not (isinstance(arg, ast.Constant) and arg.value is Ellipsis)
                 ),

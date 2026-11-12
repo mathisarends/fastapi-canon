@@ -1186,7 +1186,9 @@ class _Analyzer:
             )
             if adapter_constructor:
                 schema = (
-                    self.source.models.schema(node.args[0], function.module)
+                    self.source.models.schema(
+                        node.args[0], function.module, bindings=env
+                    )
                     if node.args
                     else _Value()
                 )

@@ -149,6 +149,33 @@ def route(): {statement}
     assert report["contract_gaps"] == int(validate)
 
 
+@pytest.mark.parametrize("opaque", [False, True])
+def test_adapter_schema_follows_actual_class_arguments_without_trusting_annotations(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], opaque: bool
+) -> None:
+    (tmp_path / "api.py").write_text(
+        PRELUDE
+        + f"""
+class Body(BaseModel):
+    payload: str
+    @field_validator('payload')
+    @classmethod
+    def guard(cls, value): raise Missing()
+def validate(value, annotation: Any):
+    return TypeAdapter(annotation).validate_python(value)
+@router.get('/')
+def route({"annotation" if opaque else ""}):
+    validate({{'payload': 'safe'}}, {"annotation" if opaque else "Body"})
+""",
+        encoding="utf8",
+    )
+    main(["check", "errors", str(tmp_path), "--require-complete", "--format", "json"])
+    [operation] = json.loads(capsys.readouterr().out)["operations"]
+    assert operation["complete"] is not opaque
+    if not opaque:
+        assert [d["code"] for d in operation["diagnostics"]] == ["CAN001"]
+
+
 def test_annotated_validator_outputs_cannot_claim_native_field_types(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
