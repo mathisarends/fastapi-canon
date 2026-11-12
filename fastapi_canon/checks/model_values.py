@@ -21,6 +21,8 @@ class _ModelSource(Protocol):
     def definitions(self) -> Mapping[str, _Definition]: ...
 
     def lineage(self, name: str) -> tuple[list[str], bool] | None: ...
+    def method(self, owner: str, attribute: str) -> _Definition | None: ...
+    def value(self, node: ast.expr, module: str) -> tuple[str, ast.expr]: ...
     def resolve(self, node: ast.expr, module: str) -> str | None: ...
     def typed(self, node: ast.expr, module: str) -> _Value: ...
     def model(self, name: str) -> bool: ...
@@ -203,6 +205,8 @@ class _Models:
         return result
 
     def opaque(self, owner: str) -> bool:
+        if self.custom_schema(owner):
+            return True
         fields = dict(self.fields(owner))
         scalars = {
             "builtins.str",
@@ -237,6 +241,88 @@ class _Models:
                 for value in fields.get(name, _Value()).variants
             ):
                 return True
+        return False
+
+    def custom_schema(self, owner: str, seen: frozenset[str] = frozenset()) -> bool:
+        definition = self.source.definitions.get(owner)
+        if definition is None:
+            return False
+        if not isinstance(definition.node, ast.ClassDef):
+            return True
+        if owner in seen:
+            return False
+        seen = seen | {owner}
+        if any(
+            self.source.method(owner, name)
+            for name in (
+                "__get_pydantic_core_schema__",
+                "__get_validators__",
+                "_missing_",
+            )
+        ):
+            return True
+        for name in (self.source.lineage(owner) or ([owner], False))[0]:
+            definition = self.source.definitions.get(name)
+            if definition is None or not isinstance(definition.node, ast.ClassDef):
+                continue
+            for statement in definition.node.body:
+                if not isinstance(statement, ast.AnnAssign):
+                    continue
+                scope, annotation = self.source.value(
+                    statement.annotation, definition.module
+                )
+                if isinstance(annotation, ast.Constant) and isinstance(
+                    annotation.value, str
+                ):
+                    try:
+                        annotation = ast.parse(annotation.value, mode="eval").body
+                    except SyntaxError:
+                        return True
+                for node in ast.walk(annotation):
+                    if isinstance(node, ast.Subscript) and self.source.resolve(
+                        node.value, scope
+                    ) in {"typing.Annotated", "typing_extensions.Annotated"}:
+                        metadata = (
+                            node.slice.elts[1:]
+                            if isinstance(node.slice, ast.Tuple)
+                            else []
+                        )
+                        if any(
+                            isinstance(child, ast.Name | ast.Attribute)
+                            and (
+                                self.source.resolve(child, scope)
+                                in self.source.definitions
+                                or (self.source.resolve(child, scope) or "").rsplit(
+                                    ".", 1
+                                )[-1]
+                                in {
+                                    "BeforeValidator",
+                                    "AfterValidator",
+                                    "PlainValidator",
+                                    "WrapValidator",
+                                    "SkipValidation",
+                                    "ValidateAs",
+                                    "InstanceOf",
+                                }
+                            )
+                            for value in metadata
+                            for child in ast.walk(value)
+                        ):
+                            return True
+                    if (
+                        isinstance(node, ast.Call)
+                        and self.source.resolve(node.func, scope)
+                        in self.source.definitions
+                    ):
+                        return True
+        for _, value in self.fields(owner):
+            pending = list(value.variants)
+            for child in pending:
+                pending.extend(child.arguments)
+                if child.name in self.source.definitions and self.custom_schema(
+                    child.name, seen
+                ):
+                    return True
         return False
 
     def hook_arguments(

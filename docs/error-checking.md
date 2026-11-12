@@ -223,6 +223,9 @@ CAN003 when their calls cannot be resolved. Model-before, container-before, plai
 and wrap transformations remain incomplete. Pydantic's wrapped validation
 and serializer failures do not become escaping domain exceptions merely because
 a hook raised them. Python-mode custom serializer results remain opaque.
+Unmodeled `Annotated` validators and application schema hooks retain CAN003.
+Constructing a `TypeAdapter` does not run model validation; validating through a
+resolved model adapter follows its application hooks and actual input values.
 
 ## Comprehensions and deferred generators
 

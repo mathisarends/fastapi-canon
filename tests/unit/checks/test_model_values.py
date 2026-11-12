@@ -20,6 +20,108 @@ class Risky:
 """
 
 
+@pytest.mark.parametrize("validate", [False, True])
+def test_type_adapter_checks_model_hooks_when_validation_executes(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], validate: bool
+) -> None:
+    statement = (
+        "adapter.validate_python({'payload': 'value'})"
+        if validate
+        else "TypeAdapter(Body)"
+    )
+    (tmp_path / "api.py").write_text(
+        PRELUDE
+        + f"""
+class Body(BaseModel):
+    payload: str
+    @field_validator('payload')
+    @classmethod
+    def reject(cls,value): raise Missing()
+adapter = TypeAdapter(Body)
+@router.get('/')
+def route(): {statement}
+""",
+        encoding="utf8",
+    )
+    main(
+        [
+            "check",
+            "errors",
+            str(tmp_path),
+            "--strict",
+            "--require-complete",
+            "--format",
+            "json",
+        ]
+    )
+    report = json.loads(capsys.readouterr().out)
+    [operation] = report["operations"]
+    assert operation["complete"]
+    assert report["contract_gaps"] == int(validate)
+
+
+def test_annotated_validator_outputs_cannot_claim_native_field_types(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "api.py").write_text(
+        PRELUDE
+        + """
+from typing import Annotated
+from pydantic import PlainValidator
+def replace(value): return Risky()
+class Body(BaseModel):
+    payload: Annotated[str, PlainValidator(replace)]
+@router.get('/')
+def route(): Body(payload='value').payload.run()
+""",
+        encoding="utf8",
+    )
+    main(
+        [
+            "check",
+            "errors",
+            str(tmp_path),
+            "--strict",
+            "--require-complete",
+            "--format",
+            "json",
+        ]
+    )
+    report = json.loads(capsys.readouterr().out)
+    [operation] = report["operations"]
+    assert not operation["complete"]
+
+
+def test_adapter_for_an_unmodeled_container_schema_remains_incomplete(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "api.py").write_text(
+        PRELUDE
+        + """
+class Body(BaseModel): payload: str
+adapter = TypeAdapter(list[Body])
+@router.get('/')
+def route(): adapter.validate_python([{'payload':'value'}])
+""",
+        encoding="utf8",
+    )
+    status = main(
+        [
+            "check",
+            "errors",
+            str(tmp_path),
+            "--strict",
+            "--require-complete",
+            "--format",
+            "json",
+        ]
+    )
+    report = json.loads(capsys.readouterr().out)
+    [operation] = report["operations"]
+    assert not operation["complete"]
+    assert status == 1
+
+
 @pytest.mark.parametrize(
     "creation", ["Body(payload=payload)", "Body.model_validate({'payload': payload})"]
 )

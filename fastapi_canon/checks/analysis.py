@@ -1167,6 +1167,57 @@ class _Analyzer:
             origin := self.source.call_origin(target)
             or self.source.origin(node.func, function.module, env)
         ) is not None:
+            adapter_constructor = (
+                self.source.libraries.canonical(origin)
+                == "pydantic.type_adapter.TypeAdapter"
+            )
+            if adapter_constructor:
+                schema = (
+                    self.source.infer(node.args[0], function.module, env)
+                    if node.args
+                    else _Value()
+                )
+                if not schema.name or self.source.models.custom_schema(schema.name):
+                    flow.unknowns.append(
+                        _Unknown(
+                            "unresolved TypeAdapter schema construction",
+                            function.name,
+                            node.lineno,
+                        )
+                    )
+            if (
+                target.bound
+                and self.source.libraries.canonical(target.bound.name)
+                == "pydantic.type_adapter.TypeAdapter"
+                and origin.rsplit(".", 1)[-1]
+                in {"validate_python", "validate_json", "validate_strings"}
+            ):
+                schema = dict(self.source.object(target.bound).fields).get(
+                    "$schema", _Value()
+                )
+                definition = self.source.definitions.get(schema.name)
+                if (
+                    definition is not None
+                    and isinstance(definition.node, ast.ClassDef)
+                    and self.source.model(schema.name)
+                ):
+                    flow.extend(
+                        self._construct(
+                            definition,
+                            function,
+                            stack,
+                            node.lineno,
+                            constructed=self.source.infer(node, function.module, env),
+                        )
+                    )
+                else:
+                    flow.unknowns.append(
+                        _Unknown(
+                            "unresolved TypeAdapter validation schema",
+                            function.name,
+                            node.lineno,
+                        )
+                    )
             sql_return = self.source.sql.called(
                 node, target, function.module, env, awaited=awaited
             )
@@ -1217,7 +1268,10 @@ class _Analyzer:
                         node.lineno,
                     )
                 )
-            for argument in [*node.args, *(kw.value for kw in node.keywords)]:
+            for argument in [
+                *(node.args[1:] if adapter_constructor else node.args),
+                *(kw.value for kw in node.keywords),
+            ]:
                 flow.extend(self._callback(argument, function, env, stack))
         else:
             flow.unknowns.append(
