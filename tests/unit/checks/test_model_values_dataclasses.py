@@ -92,7 +92,7 @@ def route(): adapter.validate_python({'kind':'main'})
     assert operation["diagnostics"][0]["trace"][-1] == "api.Kind.guard"
 
 
-@pytest.mark.parametrize("boundary", ["factory", "schema", "validator"])
+@pytest.mark.parametrize("boundary", ["factory", "schema", "validator", "metadata"])
 def test_unmodeled_dataclass_construction_and_schema_effects_remain_incomplete(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], boundary: str
 ) -> None:
@@ -110,6 +110,7 @@ def build(): return Risky()
 def convert(value): raise Missing()
 @dataclass
 class Body:
+    {"__pydantic_config__ = {'alias_generator': convert}" if boundary == "metadata" else ""}
     text: {"Annotated[str, BeforeValidator(convert)]" if boundary == "validator" else "str"} {"= field(default_factory=build)" if boundary == "factory" else ""}
 {schema}
 adapter = TypeAdapter(Body)

@@ -800,6 +800,18 @@ class _Models:
         if self.hooks(owner):
             return False
         for field in node.body:
+            targets = (
+                field.targets
+                if isinstance(field, ast.Assign)
+                else [field.target]
+                if isinstance(field, ast.AnnAssign)
+                else []
+            )
+            if any(
+                isinstance(target, ast.Name) and target.id.startswith("__pydantic_")
+                for target in targets
+            ):
+                return False
             if not isinstance(field, ast.AnnAssign):
                 continue
             if (
