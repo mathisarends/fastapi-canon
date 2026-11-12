@@ -341,6 +341,10 @@ class _Source:
     def sql(self) -> _SqlValues:
         return _SqlValues(self)
 
+    @property
+    def request_scope_identity(self) -> str:
+        return self._request_scope
+
     def expand(self, value: _Value, seen: frozenset[str] = frozenset()) -> _Value:
         values = []
         for variant in value.variants:

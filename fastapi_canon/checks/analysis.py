@@ -132,6 +132,7 @@ class _Analyzer:
             receiver,
             dependency_transport,
             tuple(sorted(bindings.items())) if bindings is not None else None,
+            self.source.request_scope_identity,
         )
         if key in self._active:
             members = set(stack[stack.index(function.name) :]) | {function.name}

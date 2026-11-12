@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from fastapi_canon.checks.value_flow import _Value
 
 type _SummaryKey = tuple[
-    str, bool, str | None, str | None, tuple[tuple[str, _Value], ...] | None
+    str, bool, str | None, str | None, tuple[tuple[str, _Value], ...] | None, str
 ]
 
 
