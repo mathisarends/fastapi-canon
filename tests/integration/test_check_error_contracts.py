@@ -218,3 +218,92 @@ Composition(features=[feature], errors=ErrorOptions(type_base='urn:test:problem'
     response = json.loads(served.stdout)
     assert response["status"] == 500
     assert response["body"]["code"] == "internal_server_error"
+
+
+def test_owned_provider_cleanup_is_not_certified_as_a_direct_error_contract(
+    tmp_path: Path,
+) -> None:
+    application = tmp_path / "application.py"
+    application.write_text(
+        dedent("""
+from collections.abc import Iterator
+from contextlib import asynccontextmanager
+from dishka import AsyncContainer, Provider, Scope, provide
+from fastapi import FastAPI
+from fastapi_canon import APIRouter, Composition, Error, ErrorOptions, Feature, Inject, ServiceScope
+class CleanupFailure(Exception): pass
+cleanup = Error(CleanupFailure, status=409, code='cleanup', title='Cleanup failed')
+class Resource: pass
+class Work:
+    def __init__(self, container: AsyncContainer): self.scope = ServiceScope(container, Resource)
+    @asynccontextmanager
+    async def __call__(self):
+        async with self.scope() as resource:
+            yield resource
+class Resources(Provider):
+    scope = Scope.REQUEST
+    work = provide(Work, scope=Scope.APP)
+    @provide
+    def resource(self) -> Iterator[Resource]:
+        yield Resource()
+        raise CleanupFailure('finalizer failed')
+router = APIRouter()
+@router.get('/close', raises=[cleanup])
+async def close(work: Inject[Work]):
+    async with work():
+        return {'ok': True}
+feature = Feature(name='resources', routers=[router], providers=[Resources()])
+app = FastAPI()
+Composition(features=[feature], errors=ErrorOptions(type_base='urn:test:problem')).build(app)
+"""),
+        encoding="utf8",
+    )
+    checked = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-m",
+            "fastapi_canon",
+            "check",
+            "errors",
+            str(tmp_path),
+            "--strict",
+            "--require-complete",
+            "--format",
+            "json",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert checked.returncode == 1, checked.stderr
+    report = json.loads(checked.stdout)
+    [operation] = report["operations"]
+    assert not operation["complete"] and report["contract_gaps"] == 0
+    assert any(
+        d["code"] == "CAN003" and "Dishka ExitError" in d["message"]
+        for d in operation["diagnostics"]
+    )
+    served = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            "import json, runpy, sys\n"
+            "from fastapi.testclient import TestClient\n"
+            "app = runpy.run_path(sys.argv[1])['app']\n"
+            "with TestClient(app, raise_server_exceptions=False) as client:\n"
+            "    response = client.get('/close')\n"
+            "    print(json.dumps({'status': response.status_code, 'body': response.json()}))\n",
+            str(application),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert served.returncode == 0, served.stderr
+    response = json.loads(served.stdout)
+    assert response["status"] == 500
+    assert response["body"]["code"] == "internal_server_error"

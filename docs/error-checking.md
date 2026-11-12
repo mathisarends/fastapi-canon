@@ -308,7 +308,9 @@ factories retain the yielded service values. Opaque argument unpacking, mixed
 unknown alternatives and sync/async protocol mismatches remain incomplete.
 
 Known standard-library resource shapes include `suppress`, `closing`,
-`aclosing`, `asyncio.Lock` and `asyncio.timeout`. Owned `ExitStack` and
+`aclosing`, `asyncio.Lock` and `asyncio.timeout`. Concrete native `Semaphore` and
+`BoundedSemaphore` instances are supported; own subclasses retain their protocol
+boundary. Owned `ExitStack` and
 `AsyncExitStack` registrations retain callback/context effects until explicit
 close or scope exit, including when the stack is stored in application fields.
 Conditional registration does not establish definite suppression. Opaque stacks,
