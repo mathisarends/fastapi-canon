@@ -59,12 +59,19 @@ class _SchemaGenerator(GenerateJsonSchema):
         return super().field_is_required(field, total)
 
 
-def build_contract(app: FastAPI | Sequence[BaseRoute]) -> dict[str, Any]:
+def build_contract(
+    app: FastAPI | Sequence[BaseRoute],
+    *,
+    registered_routes: Sequence[tuple[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Build the contract of every session declared in ``app``."""
     routes = app.routes if isinstance(app, FastAPI) else app
     sessions: list[tuple[str, SessionDeclaration, Dependant | None]] = []
     seen: set[str] = set()
-    for path, endpoint, dependant in _session_routes(routes):
+    entries = (
+        iter_contract_routes(routes) if registered_routes is None else registered_routes
+    )
+    for path, endpoint, dependant in _session_routes(entries):
         declaration: SessionDeclaration = getattr(endpoint, DECLARATION_ATTRIBUTE)
         if declaration.name in seen:
             raise ValueError(
@@ -194,9 +201,9 @@ def _channel(
 
 
 def _session_routes(
-    routes: Sequence[BaseRoute],
+    routes: Iterable[tuple[str, Any]],
 ) -> Iterator[tuple[str, Any, Dependant | None]]:
-    for path, route in iter_contract_routes(routes):
+    for path, route in routes:
         endpoint = getattr(route, "endpoint", None)
         if endpoint is None or not hasattr(endpoint, DECLARATION_ATTRIBUTE):
             continue

@@ -4,6 +4,17 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## Unreleased
 
+### Breaking changes
+
+- The typed contract-export API requires the next minor release, 0.20.0.
+  Pass `ContractKind.OPENAPI`, `ContractKind.OPENRPC` or `ContractKind.WEBRTC`
+  from `fastapi_canon.contracts` in `export_contracts(kinds=...)`; raw Python
+  strings are rejected. CLI `--kind` values and wire contracts stay unchanged.
+  The new `selection=ContractSelection(...)` accepts installed `Feature` objects
+  and exact registered paths. Reuse the instances passed to `Composition`;
+  feature names and newly constructed equal-looking features are not references
+  to the installed application. See [contract export](docs/contracts.md).
+
 ### Development
 
 - Add reproducible pytest timing reports with fixture and subprocess counts,

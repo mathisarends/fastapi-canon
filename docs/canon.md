@@ -41,7 +41,7 @@ scope.
 | WebSocket JSON-RPC | `APIRouter.channel()`; `APIRouter.include_channel()` with `fastapi_canon.integrations.websockets.RpcChannel` for shared channels | [WebSockets](integrations/websockets/README.md) |
 | Typed or raw WebSocket messages and binary streams | `@APIRouter.socket()`, `@APIRouter.binary_stream()`; `RpcSocket` | [Sockets](integrations/websockets/sockets.md), [binary streams](integrations/websockets/streams.md) |
 | WebRTC with Canon admission errors | `APIRouter.webrtc()`, `fastapi_canon.integrations.webrtc.Session`, `SessionCapacity`; engine adapters in `.webrtc.engines` | [WebRTC admission](webrtc.md) |
-| Contract export | `fastapi_canon.export_contracts`, `fastapi_canon.contracts.Contracts`, `fastapi-canon contracts export` | [Application export](contracts.md) |
+| Contract export | `fastapi_canon.export_contracts`; `fastapi_canon.contracts.Contracts`, `ContractKind`, `ContractSelection`; `fastapi-canon contracts export` | [Application export](contracts.md) |
 | OpenAPI contracts without `Composition` | `fastapi_canon.openapi.install_openapi_contracts`, `validate_openapi_contracts` | [Composition](composition.md) |
 | Startup configuration errors | `fastapi_canon.exceptions.ConfigurationError` and its subclasses | [Problems](problems.md) |
 | Telemetry declarations | `fastapi_canon.integrations.opentelemetry.Telemetry`, `instrument` | [Telemetry](telemetry.md) |

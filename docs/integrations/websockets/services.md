@@ -17,6 +17,7 @@ Pydantic model, and their return annotation describes the result.
 from fastapi import FastAPI
 
 from fastapi_canon import APIRouter, Composition, Feature, export_contracts
+from fastapi_canon.contracts import ContractKind
 from fastapi_canon.integrations.websockets import RpcChannel
 from fastapi_canon.integrations.websockets import RpcModel
 
@@ -48,7 +49,7 @@ router.include_channel(tasks, path="/rpc")
 feature = Feature(name="tasks", routers=[router])
 app = Composition(features=(feature,)).build(FastAPI(title="Tasks"))
 contract = export_contracts(
-    app, kinds=("openrpc",), base_url="wss://api.example.com"
+    app, kinds=(ContractKind.OPENRPC,), base_url="wss://api.example.com"
 ).openrpc
 ```
 

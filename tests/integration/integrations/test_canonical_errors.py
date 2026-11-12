@@ -20,6 +20,7 @@ from fastapi_canon import (
     Feature,
     export_contracts,
 )
+from fastapi_canon.contracts import ContractKind
 from fastapi_canon.error import ErrorRegistry
 from fastapi_canon.integrations.sse.codegen.ir import build_ir as stream_ir
 from fastapi_canon.integrations.sse.codegen.openapi import export_schema
@@ -705,6 +706,6 @@ def _sdk(root: Path, name: str, files: dict[str, str]) -> Iterator[Any]:
 
 
 def _example_openrpc() -> dict[str, Any]:
-    document = export_contracts(create_app(), kinds=("openrpc",)).openrpc
+    document = export_contracts(create_app(), kinds=(ContractKind.OPENRPC,)).openrpc
     assert document is not None
     return document

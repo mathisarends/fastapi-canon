@@ -1,14 +1,15 @@
 # Developer experience tickets
 
-Open work remaining after review against `origin/main` at `452a4b0`
-(2026-11-07). Completed work and decisions are documented in the guides and
-their PRs.
+Existing tickets were reviewed against `origin/main` at `452a4b0`
+(2026-11-07); newer proposals record their own baseline. Completed work and
+decisions are documented in the guides and their PRs.
 
 | Ticket | Kind | Status |
 | --- | --- | --- |
 | [DX-028](DX-028-dependency-version-overview.md) | Documentation | Open |
 | [DX-029](DX-029-transport-diagnostic-profile.md) | Decision | Open |
 | [DX-031](DX-031-websocket-facade-reduction.md) | Feature (breaking) | Open |
+| [DX-033](DX-033-target-contract-generation.md) | API proposal ([#154](https://github.com/mathisarends/fastapi-canon/issues/154)) | Discussion |
 
 The removed tickets no longer require active tracking:
 

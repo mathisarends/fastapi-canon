@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import replace
 from typing import Any
 
@@ -20,18 +21,26 @@ from fastapi_canon.integrations.websockets.protocol import RpcProtocol
 
 
 def export_rpc_contract(
-    app: FastAPI, *, base_url: str = "{baseUrl}"
+    app: FastAPI,
+    *,
+    base_url: str = "{baseUrl}",
+    registered_routes: Sequence[tuple[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
     """Export only mounted RPC endpoints, using their effective registered paths.
 
-    Endpoint names and operation names must be unique across the application.
+    Endpoint and operation names must be unique within the exported selection.
     Mounting one endpoint twice is ambiguous for the current one-server-per-method
     client contract and is rejected with both paths rather than selecting one.
     """
     endpoints: list[RpcAnyEndpoint] = []
     paths: dict[str, str] = {}
     versions: set[int] = set()
-    for path, route in iter_contract_routes(app.routes):
+    routes = (
+        iter_contract_routes(app.routes)
+        if registered_routes is None
+        else registered_routes
+    )
+    for path, route in routes:
         endpoint = getattr(getattr(route, "endpoint", None), ENDPOINT_ATTRIBUTE, None)
         if endpoint is None:
             continue

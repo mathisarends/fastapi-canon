@@ -13,13 +13,7 @@ def iter_contract_routes(
     routes: Sequence[BaseRoute], *, prefix: str = "", include_mounts: bool = True
 ) -> Iterator[tuple[str, Any]]:
     """Include router prefixes and recursively traverse mounted applications."""
-    try:
-        from fastapi.routing import iter_route_contexts
-    except ImportError:  # pragma: no cover - FastAPI < 0.140
-        contexts: Any = routes
-    else:
-        contexts = iter_route_contexts(routes)
-    for route in contexts:
+    for route in _route_contexts(routes):
         original = getattr(route, "original_route", route)
         if isinstance(original, Mount):
             if include_mounts:
@@ -30,3 +24,22 @@ def iter_contract_routes(
         path = getattr(route, "path_format", None) or getattr(route, "path", None)
         if path is not None:
             yield prefix + path, route
+
+
+def iter_contract_mounts(
+    routes: Sequence[BaseRoute],
+) -> Iterator[tuple[str, Any]]:
+    """Read mounted applications without entering their runtime."""
+    for route in _route_contexts(routes):
+        original = getattr(route, "original_route", route)
+        if isinstance(original, Mount):
+            yield route.path, original.app
+
+
+def _route_contexts(routes: Sequence[BaseRoute]) -> Iterator[Any]:
+    try:
+        from fastapi.routing import iter_route_contexts
+    except ImportError:  # pragma: no cover - FastAPI < 0.140
+        yield from routes
+    else:
+        yield from iter_route_contexts(routes)

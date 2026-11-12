@@ -20,6 +20,7 @@ from fastapi_canon import (
     Feature,
     export_contracts,
 )
+from fastapi_canon.contracts import ContractKind
 from fastapi_canon.exceptions import ConfigurationError
 from fastapi_canon.integrations.webrtc import SUBPROTOCOL, Session
 from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine
@@ -312,7 +313,7 @@ def test_mounting_snapshots_and_reuses_a_channel_at_different_paths() -> None:
             assert (await _receive(outgoing))["result"] == "later"
 
     asyncio.run(scenario())
-    document = export_contracts(app, kinds=["openrpc"]).openrpc
+    document = export_contracts(app, kinds=[ContractKind.OPENRPC]).openrpc
     assert document is not None
     assert {method["name"] for method in document["methods"]} == {
         "first.first",
@@ -630,7 +631,7 @@ def test_binary_streams_and_typed_sockets_are_declared_on_the_router() -> None:
         with client.websocket_connect("/projects/7/rename") as socket:
             socket.send_json({"title": "Draft"})
             assert socket.receive_json() == {"title": "Draft (3)"}
-    document = export_contracts(app, kinds=("openrpc",)).documents["openrpc"]
+    document = export_contracts(app, kinds=(ContractKind.OPENRPC,)).documents["openrpc"]
     assert [
         (stream["name"], stream["url"], stream["contentType"])
         for stream in document["x-rpckit-binary-streams"]
