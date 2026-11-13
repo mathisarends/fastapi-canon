@@ -22,6 +22,18 @@ All notable changes to `fastapi-canon` are documented in this file.
   and exact registered paths. Reuse the instances passed to `Composition`;
   feature names and newly constructed equal-looking features are not references
   to the installed application. See [contract export](docs/contracts.md).
+- Generated SSE clients derive groups and methods from the operation ID's
+  namespace, matching generated RPC clients. `projects.events` is now
+  `client.projects.events` instead of `client.<first tag>.projectsEvents` in
+  TypeScript and `client.<first tag>.projects_events` in Python; a dotted
+  namespace such as `projects.members.updates` produces nested groups. Tags no
+  longer select the group of a dotted ID. IDs without a namespace keep their
+  first-tag or `streams` group and method names. Regenerate SSE clients and
+  update call sites from `client.<tag>.<namespaceMethod>(...)` to
+  `client.<namespace>.<method>(...)`. Rename an operation or group if generation
+  now reports a group/method name conflict or a reserved group. Operation IDs,
+  generated type names, URLs and wire contracts are unchanged. The IR field
+  `Operation.group` is now a tuple of raw group segments.
 
 ### Development
 

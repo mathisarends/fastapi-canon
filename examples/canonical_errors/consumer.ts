@@ -28,7 +28,7 @@ export async function readEvents(
 ): Promise<number[]> {
   const streams = createClient({ baseUrl, credentials: "include" });
   const values: number[] = [];
-  for await (const event of streams.projects.projectsEvents({ projectId }, { signal })) {
+  for await (const event of streams.projects.events({ projectId }, { signal })) {
     values.push(event.sequence);
   }
   return values;
