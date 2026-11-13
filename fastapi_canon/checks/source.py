@@ -3965,6 +3965,8 @@ class _Source:
             return _Value()
         self.implementations(port)
         plans = self._provider_factories.get(port, [])
+        # Implicit construction only changes resolution without a registration.
+        implicit = implicit and not plans
         if (
             self._request_scope
             and plans
