@@ -12,7 +12,7 @@ version; the reference service is an example. `release.toml` and
 adds typed contract selection, changes generated SSE namespace access and makes
 package re-exported error paths visible to source checking. Follow the
 [0.20.0 migration](package-migration.md#upgrade-to-0200) and
-[changelog](../CHANGELOG.md#0200---unreleased). Exact-source CI and a release
+[changelog](../CHANGELOG.md#0200---2026-11-13). Exact-source CI and a release
 dry run must pass after preparation is merged to `main`.
 
 Published 0.19.0 includes RPC channel subclasses in source error-contract checking.
