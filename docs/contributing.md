@@ -45,7 +45,11 @@ with one regression for a bug, or a success case and distinct failure/boundary
 cases for new behavior. There is no required number of tests per function or PR.
 Type suppressions must name the diagnostic code and explain the concrete reason
 on the same line (`# type: ignore[code]  # Reason.`). Prefer a typed adapter or cast
-when it expresses the boundary. Ruff rejects blanket type ignores. WebSockets is
+when it expresses the boundary. Ruff rejects blanket type ignores and private
+symbol imports (`PLC2701`, enabled explicitly as a preview rule). Shared
+implementation contracts have descriptive
+names in their owning modules; supported consumer imports remain the documented
+package facades. Keep private helpers local to their module. WebSockets is
 checked by root strict mypy; installed-wheel API completeness is an additional
 consumer check. SSE and WebRTC keep their scoped type profiles.
 

@@ -12,7 +12,7 @@ _LOCK = Lock()
 
 
 @contextmanager
-def _claim(resource: object) -> Iterator[None]:
+def claim_resource(resource: object) -> Iterator[None]:
     with _LOCK:
         if resource in _OWNERS:
             raise FeatureConfigurationError(

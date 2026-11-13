@@ -113,12 +113,12 @@ class SocketFaults:
     def unblock(self) -> None:
         self._send_gate.set()
 
-    def _bind(self) -> None:
+    def bind(self) -> None:
         if self._bound:
             raise ValueError("Use separate SocketFaults instances per socket direction")
         self._bound = True
 
-    def _close(self) -> None:
+    def close(self) -> None:
         self._held.clear()
         self._closed.set()
         self._send_gate.set()
@@ -138,7 +138,7 @@ class SocketFaults:
                     task.cancel()
             await asyncio.gather(waiting, closing, return_exceptions=True)
 
-    async def _send(
+    async def deliver(
         self, socket: "InMemorySocket", queue: asyncio.Queue[Any], frame: str | bytes
     ) -> None:
         socket.ensure_open()
@@ -192,8 +192,8 @@ class InMemorySocket:
         self.disconnect_error: RpcDisconnect | None = None
         self.client_to_server = client_to_server or SocketFaults()
         self.server_to_client = server_to_client or SocketFaults()
-        self.client_to_server._bind()
-        self.server_to_client._bind()
+        self.client_to_server.bind()
+        self.server_to_client.bind()
         self._handshake_complete = asyncio.Event()
         self.client = InMemoryClientSocket(self)
 
@@ -220,11 +220,14 @@ class InMemorySocket:
     async def receive(self) -> str | bytes:
         return await self._receive(self._incoming)
 
+    async def wait_handshake(self) -> None:
+        await self._handshake_complete.wait()
+
     async def send(self, message: str) -> None:
-        await self.server_to_client._send(self, self._outgoing, message)
+        await self.server_to_client.deliver(self, self._outgoing, message)
 
     async def send_bytes(self, data: bytes) -> None:
-        await self.server_to_client._send(self, self._outgoing, data)
+        await self.server_to_client.deliver(self, self._outgoing, data)
 
     async def close(self, close: RpcConnectionClose, reason: str) -> None:
         if self.closed is None:
@@ -232,7 +235,7 @@ class InMemorySocket:
         self.disconnect(RpcDisconnect(close, reason))
 
     async def client_send(self, message: str | bytes) -> None:
-        await self.client_to_server._send(self, self._incoming, message)
+        await self.client_to_server.deliver(self, self._incoming, message)
 
     async def client_receive(self) -> str | bytes:
         return await self._receive(self._outgoing)
@@ -256,8 +259,8 @@ class InMemorySocket:
         if self.disconnect_error is not None:
             return
         self.disconnect_error = error
-        self.client_to_server._close()
-        self.server_to_client._close()
+        self.client_to_server.close()
+        self.server_to_client.close()
         self._incoming.put_nowait(error)
         self._outgoing.put_nowait(error)
         self._handshake_complete.set()
@@ -378,7 +381,7 @@ class InMemorySocketFactory:
             )
         )
         self._tasks.append(serving)
-        handshake = asyncio.create_task(socket._handshake_complete.wait())
+        handshake = asyncio.create_task(socket.wait_handshake())
         try:
             await asyncio.wait(
                 (serving, handshake), return_when=asyncio.FIRST_COMPLETED

@@ -6,14 +6,14 @@ from pathlib import Path
 from typing import Any
 
 from fastapi_canon.checks.analysis import (
-    _ROUTE_METHODS,
-    _RPC_METHOD,
-    _TRANSPORT_METHODS,
-    _Analyzer,
-    _Flow,
-    _Unknown,
+    HTTP_ROUTE_METHODS,
+    RPC_METHOD,
+    TRANSPORT_METHODS,
+    ContractAnalyzer,
+    ExceptionFlow,
+    UnknownValue,
 )
-from fastapi_canon.checks.source import _Definition, _Source
+from fastapi_canon.checks.source import SourceDefinition, SourceIndex
 
 _API_ROUTERS = frozenset(
     {"fastapi_canon.APIRouter", "fastapi_canon.api_router.APIRouter"}
@@ -54,7 +54,7 @@ class _Operation:
 
 
 @dataclass
-class _Report:
+class ContractReport:
     operations: list[_Operation]
 
     @property
@@ -85,13 +85,13 @@ def _keyword(node: ast.Call, name: str) -> ast.expr | None:
 
 
 class _Checker:
-    def __init__(self, source: _Source) -> None:
+    def __init__(self, source: SourceIndex) -> None:
         self.source = source
         self._catalog_cache: dict[str, str] | None = None
         # flow-analysis unit seam
-        self._analyzer = _Analyzer(source)
+        self._analyzer = ContractAnalyzer(source)
 
-    def check(self) -> _Report:
+    def check(self) -> ContractReport:
         operations: list[_Operation] = []
         nested = {id(function.node) for function in self.source.nested}
         for function in [*self.source.definitions.values(), *self.source.nested]:
@@ -106,14 +106,14 @@ class _Checker:
                     method, owner = decorator.attr, decorator.value
                 else:
                     continue
-                if method == _RPC_METHOD:
+                if method == RPC_METHOD:
                     rpc = self._rpc_method(function, decorator, owner, nested)
                     if rpc is not None:
                         operations.append(rpc)
                     continue
                 if not isinstance(decorator, ast.Call) or method not in {
-                    *_ROUTE_METHODS,
-                    *_TRANSPORT_METHODS,
+                    *HTTP_ROUTE_METHODS,
+                    *TRANSPORT_METHODS,
                 }:
                     continue
                 module, router = self.source.value(owner, function.module)
@@ -121,7 +121,7 @@ class _Checker:
                     function.name,
                     str(self.source.paths[function.module]),
                     decorator.lineno,
-                    transport=method if method in _TRANSPORT_METHODS else "http",
+                    transport=method if method in TRANSPORT_METHODS else "http",
                 )
                 if id(function.node) in nested:
                     operations.append(operation)
@@ -136,7 +136,7 @@ class _Checker:
                     else None
                 )
                 supported = (
-                    _API_ROUTERS if method in _TRANSPORT_METHODS else _CANON_ROUTERS
+                    _API_ROUTERS if method in TRANSPORT_METHODS else _CANON_ROUTERS
                 )
                 if constructor not in supported:
                     if constructor in {
@@ -153,11 +153,11 @@ class _Checker:
                 assert isinstance(router, ast.Call)
                 operations.append(operation)
                 self._operation(operation, function, decorator, module, router)
-        return _Report(operations)
+        return ContractReport(operations)
 
     def _rpc_method(
         self,
-        function: _Definition,
+        function: SourceDefinition,
         decorator: ast.expr,
         owner: ast.expr,
         nested: set[int],
@@ -309,15 +309,17 @@ class _Checker:
 
     def _dependencies(
         self,
-        function: _Definition,
+        function: SourceDefinition,
         seen: frozenset[str] = frozenset(),
         *,
         transport: str | None = None,
-    ) -> _Flow:
-        flow = _Flow()
+    ) -> ExceptionFlow:
+        flow = ExceptionFlow()
         if function.name in seen:
             flow.unknowns.append(
-                _Unknown("recursive dependency", function.name, function.node.lineno)
+                UnknownValue(
+                    "recursive dependency", function.name, function.node.lineno
+                )
             )
             return flow
         node = function.node
@@ -334,7 +336,7 @@ class _Checker:
                     expression = ast.parse(expression.value, mode="eval").body
                 except SyntaxError:
                     flow.unknowns.append(
-                        _Unknown(
+                        UnknownValue(
                             "unresolved dependency annotation",
                             function.name,
                             node.lineno,
@@ -371,7 +373,7 @@ class _Checker:
                     continue
                 else:
                     flow.unknowns.append(
-                        _Unknown(
+                        UnknownValue(
                             "unresolved FastAPI dependency", function.name, child.lineno
                         )
                     )
@@ -379,8 +381,8 @@ class _Checker:
 
     def _router_dependencies(
         self, node: ast.Call, module: str, operation: _Operation
-    ) -> _Flow:
-        flow = _Flow()
+    ) -> ExceptionFlow:
+        flow = ExceptionFlow()
         for scope, dependency in self._sequence(
             _keyword(node, "dependencies"), module, operation
         ):
@@ -402,7 +404,7 @@ class _Checker:
             function.lineno = operation.line
             flow.extend(
                 self._dependencies(
-                    _Definition(f"{scope}.dependencies", scope, function),
+                    SourceDefinition(f"{scope}.dependencies", scope, function),
                     transport=operation.transport,
                 )
             )
@@ -411,7 +413,7 @@ class _Checker:
     def _operation(
         self,
         operation: _Operation,
-        function: _Definition,
+        function: SourceDefinition,
         decorator: ast.Call | None,
         module: str,
         router: ast.Call,
@@ -490,7 +492,7 @@ class _Checker:
     def _compare(
         self,
         operation: _Operation,
-        flow: _Flow,
+        flow: ExceptionFlow,
         catalog: dict[str, str],
         declared: dict[str, str],
         contracts_known: bool,
@@ -561,5 +563,5 @@ class _Checker:
                 operation.diagnostics.append(diagnostic)
 
 
-def _check_error_contracts(roots: list[Path]) -> _Report:
-    return _Checker(_Source.read(roots)).check()
+def analyze_error_contracts(roots: list[Path]) -> ContractReport:
+    return _Checker(SourceIndex.read(roots)).check()

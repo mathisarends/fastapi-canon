@@ -29,6 +29,14 @@ class UnrelatedRegistry:
         return "unrelated"
 
 
+class PortWithProxyMethodNames:
+    async def target_method(self) -> str:
+        return "target"
+
+    async def adapter_name(self) -> str:
+        return "adapter"
+
+
 class Token(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -80,3 +88,26 @@ async def test_typed_model_rejects_an_instrumented_unrelated_implementation() ->
             with pytest.raises(ValidationError) as error:
                 Token(registry=resolved)
             assert error.value.errors()[0]["type"] == "is_instance_of"
+
+
+async def test_port_methods_do_not_shadow_proxy_operations() -> None:
+    dependencies = Provider()
+    dependencies.provide(PortWithProxyMethodNames, scope=Scope.APP)
+    feature = Feature(
+        name="proxy-names",
+        providers=[dependencies],
+        instrumentation=instrument(PortWithProxyMethodNames),
+    )
+    with SpanCapture() as capture:
+        app = Composition(
+            features=[feature], telemetry=Telemetry(tracer_provider=capture.provider)
+        ).build(FastAPI())
+        async with asyncio.timeout(5), app.router.lifespan_context(app):
+            resolved = await app.state.dishka_container.get(PortWithProxyMethodNames)
+            assert await resolved.target_method() == "target"
+            assert await resolved.adapter_name() == "adapter"
+
+        for method in ("target_method", "adapter_name"):
+            span = capture.one(f"PortWithProxyMethodNames.{method}")
+            assert span.attributes is not None
+            assert span.attributes["canon.adapter"] == "PortWithProxyMethodNames"

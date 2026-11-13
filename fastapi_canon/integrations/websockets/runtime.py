@@ -5,7 +5,6 @@ import logging
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager, nullcontext, suppress
-from dataclasses import dataclass, field
 from functools import partial
 from typing import Any
 
@@ -13,6 +12,7 @@ from pydantic import BaseModel, ValidationError
 
 from fastapi_canon.integrations.websockets.activity import Activity, notify_activity
 from fastapi_canon.integrations.websockets.adapter import adapter
+from fastapi_canon.integrations.websockets.admission import PendingCall, PendingRequests
 from fastapi_canon.integrations.websockets.codec import RpcCodec
 from fastapi_canon.integrations.websockets.connection import (
     REJECTION_CLOSES,
@@ -389,12 +389,12 @@ class _RpcSession:
         self._outgoing: asyncio.Queue[str] = asyncio.Queue(self.limits.max_queue_size)
         self._slow_consumer_reported = False
         self._pending_rejections = 0
-        self.pending = _PendingRequests(self.limits.max_pending_requests)
+        self.pending = PendingRequests(self.limits.max_pending_requests)
         self._codec = RpcCodec()
         self.connection.set_close_handler(self.request_close)
         self._tasks: set[asyncio.Task[None]] = set()
         self._call_tasks: set[asyncio.Task[RpcSuccess | RpcFailure | None]] = set()
-        self.requests: dict[tuple[type[str] | type[int], str | int], _PendingCall] = {}
+        self.requests: dict[tuple[type[str] | type[int], str | int], PendingCall] = {}
 
     async def run(self) -> None:
         try:
@@ -531,7 +531,7 @@ class _RpcSession:
             logger.exception("RPC writer failed")
             self.request_close(RpcConnectionClose.INTERNAL_ERROR, "Internal error")
 
-    async def _invoke_one(self, call: _PendingCall) -> RpcSuccess | RpcFailure | None:
+    async def _invoke_one(self, call: PendingCall) -> RpcSuccess | RpcFailure | None:
         call.started = True
         message = call.message
         try:
@@ -557,7 +557,7 @@ class _RpcSession:
             if call.reservation is not None:
                 self.pending.release(call.reservation)
 
-    async def _collect_one(self, call: _PendingCall) -> RpcSuccess | RpcFailure | None:
+    async def _collect_one(self, call: PendingCall) -> RpcSuccess | RpcFailure | None:
         try:
             return await call.task
         except asyncio.CancelledError:
@@ -577,7 +577,7 @@ class _RpcSession:
 
     async def _invoke(
         self,
-        items: Sequence[_PendingCall],
+        items: Sequence[PendingCall],
         batch: bool,
         controls: Sequence[RpcSuccess | RpcFailure] = (),
     ) -> None:
@@ -636,7 +636,7 @@ class _RpcSession:
 
     def _call_done(
         self,
-        call: _PendingCall,
+        call: PendingCall,
         key: tuple[type[str] | type[int], str | int] | None,
         task: asyncio.Task[RpcSuccess | RpcFailure | None],
     ) -> None:
@@ -764,7 +764,7 @@ class _RpcSession:
                                 "Duplicate in-flight request id",
                             )
                             return
-                    call = _PendingCall(
+                    call = PendingCall(
                         item,
                         reservation,
                         invalid,
@@ -843,41 +843,6 @@ class _RpcSession:
         )
         await _flush(self._outgoing, self._writer_task, None)
         self.request_close(RpcConnectionClose.SERVICE_RESTART, "Server restarting")
-
-
-@dataclass
-class _PendingCall:
-    message: Any
-    reservation: object | None
-    invalid: bool
-    batch: bool
-    admitted_at: float
-    shutting_down: bool = False
-    # Validated once by the reader and reused for dispatch.
-    envelope: RpcRequestEnvelope | None = None
-    task: asyncio.Task[RpcSuccess | RpcFailure | None] = field(init=False)
-    started: bool = False
-    cancel_requested: bool = False
-
-
-class _PendingRequests:
-    def __init__(self, limit: int) -> None:
-        self.limit = limit
-        self._reservations: set[object] = set()
-
-    @property
-    def count(self) -> int:
-        return len(self._reservations)
-
-    def reserve(self) -> object | None:
-        if self.count >= self.limit:
-            return None
-        reservation = object()
-        self._reservations.add(reservation)
-        return reservation
-
-    def release(self, reservation: object) -> None:
-        self._reservations.discard(reservation)
 
 
 async def _flush(

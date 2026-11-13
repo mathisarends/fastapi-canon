@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi_canon._version import __version__
-from fastapi_canon.application_loading import _load_application
+from fastapi_canon.application_loading import load_application
 from fastapi_canon.codegen.config import Configuration, TargetConfig
 from fastapi_canon.contracts import export_contracts
 
@@ -51,7 +51,7 @@ def generate(
         contracts: dict[Path, str] = {}
     else:
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            app = _load_application(config.app, root=root)
+            app = load_application(config.app, root=root)
             documents = export_contracts(app).documents
         contracts = {
             config.contracts / f"{kind}.json": _json(documents[kind])

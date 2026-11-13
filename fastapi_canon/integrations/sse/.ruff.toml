@@ -2,7 +2,9 @@ target-version = "py312"
 line-length = 88
 extend-exclude = ["../../../examples/sse/agent_runs/generated_python", "../../../tests/fixtures/sse/generated_python"]
 [lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "PGH003", "RUF", "TID251"]
+preview = true
+explicit-preview-rules = true
+select = ["E", "F", "I", "UP", "B", "SIM", "PGH003", "RUF", "TID251", "PLC2701"]
 
 [lint.flake8-tidy-imports.banned-api]
 "fastapi._compat".msg = "Use FastAPI's documented public API."

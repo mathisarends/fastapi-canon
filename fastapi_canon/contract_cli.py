@@ -7,7 +7,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from fastapi_canon.application_loading import _load_application
+from fastapi_canon.application_loading import load_application
 from fastapi_canon.contracts import ContractKind, export_contracts
 
 
@@ -35,7 +35,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     try:
-        app = _load_application(args.app, root=Path.cwd())
+        app = load_application(args.app, root=Path.cwd())
         kinds = (
             tuple(ContractKind(kind) for kind in args.kind)
             if args.kind

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Literal, Self
 
 type _FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
-type _Environment = dict[str, _Value]
+type SymbolEnvironment = dict[str, SymbolValue]
 type _FactoryEnvironment = dict[str, tuple[str | None, ...]]
 
 # Builtins whose result or effect depends on application objects at runtime.
@@ -135,7 +135,7 @@ def _walk_error(error: OSError) -> None:
 
 
 @dataclass
-class _Definition:
+class SourceDefinition:
     name: str
     module: str
     node: _FunctionNode | ast.ClassDef
@@ -143,19 +143,19 @@ class _Definition:
 
 
 @dataclass(frozen=True)
-class _Value:
+class SymbolValue:
     name: str = ""
     instance: bool = False
     receiver: str | None = None
 
 
 @dataclass
-class _Source:
+class SourceIndex:
     paths: dict[str, Path] = field(default_factory=dict)
-    definitions: dict[str, _Definition] = field(default_factory=dict)
+    definitions: dict[str, SourceDefinition] = field(default_factory=dict)
     bindings: dict[str, tuple[str, ast.expr] | str] = field(default_factory=dict)
     uncertain: dict[str, list[str]] = field(default_factory=dict)
-    nested: list[_Definition] = field(default_factory=list)
+    nested: list[SourceDefinition] = field(default_factory=list)
     touched: set[str] = field(default_factory=set)
     inherited_contracts: list[tuple[str, int]] = field(default_factory=list)
     # raises= and errors= arguments; Composition maps the errors they name.
@@ -224,7 +224,7 @@ class _Source:
                             and id(node) not in indexed
                         ):
                             source.nested.append(
-                                _Definition(
+                                SourceDefinition(
                                     f"{module}.<local>.{node.name}:{node.lineno}",
                                     module,
                                     node,
@@ -502,7 +502,7 @@ class _Source:
                     )
                 case ast.FunctionDef() | ast.AsyncFunctionDef() | ast.ClassDef():
                     name = f"{module}.{node.name}"
-                    self.definitions[name] = _Definition(name, module, node)
+                    self.definitions[name] = SourceDefinition(name, module, node)
                     names.add(name)
                     if isinstance(node, ast.ClassDef):
                         for member in node.body:
@@ -510,7 +510,7 @@ class _Source:
                                 member, ast.FunctionDef | ast.AsyncFunctionDef
                             ):
                                 key = f"{name}.{member.name}"
-                                self.definitions[key] = _Definition(
+                                self.definitions[key] = SourceDefinition(
                                     key, module, member, name
                                 )
                                 names.add(key)
@@ -566,7 +566,7 @@ class _Source:
         self,
         node: ast.expr,
         module: str,
-        env: _Environment | None = None,
+        env: SymbolEnvironment | None = None,
         *,
         seen: frozenset[str] = frozenset(),
     ) -> str | None:
@@ -775,7 +775,7 @@ class _Source:
                     sequence.pop(0)
         return result
 
-    def method(self, owner: str, name: str) -> _Definition | None:
+    def method(self, owner: str, name: str) -> SourceDefinition | None:
         # Direct methods can be resolved even when an external base is unknown.
         for base in self.mro(owner) or [owner]:
             definition = self.definitions.get(f"{base}.{name}")
@@ -792,7 +792,7 @@ class _Source:
     def websocket_exception(self, name: str) -> bool:
         return "starlette.exceptions.WebSocketException" in (self.mro(name) or [])
 
-    def classmethod(self, function: _Definition) -> bool:
+    def classmethod(self, function: SourceDefinition) -> bool:
         return isinstance(
             function.node, ast.FunctionDef | ast.AsyncFunctionDef
         ) and any(
@@ -800,7 +800,9 @@ class _Source:
             for decorator in function.node.decorator_list
         )
 
-    def condition(self, node: ast.expr, module: str, env: _Environment) -> bool | None:
+    def condition(
+        self, node: ast.expr, module: str, env: SymbolEnvironment
+    ) -> bool | None:
         if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
             result = self.condition(node.operand, module, env)
             return not result if result is not None else None
@@ -823,11 +825,11 @@ class _Source:
         self,
         node: ast.expr,
         module: str,
-        env: _Environment,
+        env: SymbolEnvironment,
         seen: frozenset[str] = frozenset(),
         *,
         awaited: bool = False,
-    ) -> _Value:
+    ) -> SymbolValue:
         key = self.key(node)
         if key in env:
             return env[key]
@@ -840,24 +842,24 @@ class _Source:
                 definition = self.definitions.get(target.name)
                 if definition and isinstance(definition.node, ast.ClassDef):
                     if not target.instance:
-                        return _Value(definition.name, instance=True)
+                        return SymbolValue(definition.name, instance=True)
                     receiver_type = definition.name
                     definition = self.method(definition.name, "__call__")
                 if definition and isinstance(
                     definition.node, ast.FunctionDef | ast.AsyncFunctionDef
                 ):
                     if isinstance(definition.node, ast.AsyncFunctionDef) != awaited:
-                        return _Value()
+                        return SymbolValue()
                     if definition.node.returns:
                         name = self.annotation(
                             definition.node.returns, definition.module
                         )
                         if name in {"typing.Self", "typing_extensions.Self"}:
                             name = receiver_type
-                        return _Value(name or "", instance=True)
+                        return SymbolValue(name or "", instance=True)
                 returned = _EXTERNAL_RETURNS.get(target.name)
                 if returned and returned[1] == awaited and self.external(target.name):
-                    return _Value(returned[0], instance=True)
+                    return SymbolValue(returned[0], instance=True)
                 if isinstance(node.func, ast.Attribute):
                     receiver = self.infer(node.func.value, module, env, seen)
                     if receiver.name in _RESULT_TYPES and self.external(receiver.name):
@@ -870,21 +872,21 @@ class _Source:
                             else "sqlalchemy.engine."
                         )
                         if node.func.attr == "scalars":
-                            return _Value(f"{prefix}ScalarResult", instance=True)
+                            return SymbolValue(f"{prefix}ScalarResult", instance=True)
                         if node.func.attr == "mappings":
-                            return _Value(f"{prefix}MappingResult", instance=True)
-                return _Value()
+                            return SymbolValue(f"{prefix}MappingResult", instance=True)
+                return SymbolValue()
             case ast.Name() | ast.Attribute():
                 if isinstance(node, ast.Name):
                     local = f"{module}.{node.id}"
                     binding = self.bindings.get(local)
                     if isinstance(binding, tuple):
                         if local in seen:
-                            return _Value()
+                            return SymbolValue()
                         return self.infer(binding[1], binding[0], {}, seen | {local})
                 name = self.resolve(node, module, env)
                 if not name or name in seen:
-                    return _Value()
+                    return SymbolValue()
                 binding = self.bindings.get(name)
                 if isinstance(binding, tuple):
                     return self.infer(binding[1], binding[0], {}, seen | {name})
@@ -892,10 +894,10 @@ class _Source:
                     receiver = self.infer(node.value, module, env, seen)
                     field_type = self._field(receiver.name, node.attr)
                     if field_type:
-                        return _Value(field_type, instance=True)
-                    return _Value(name, receiver=receiver.name or None)
-                return _Value(name)
-        return _Value()
+                        return SymbolValue(field_type, instance=True)
+                    return SymbolValue(name, receiver=receiver.name or None)
+                return SymbolValue(name)
+        return SymbolValue()
 
     def external(self, name: str) -> bool:
         """Whether *name* belongs to an importable package outside the roots.
@@ -913,7 +915,7 @@ class _Source:
         self,
         node: ast.expr,
         module: str,
-        env: _Environment | None = None,
+        env: SymbolEnvironment | None = None,
         seen: frozenset[str] = frozenset(),
     ) -> str | None:
         """The external callable or value that *node* evaluates or derives from."""
@@ -998,7 +1000,7 @@ class _Source:
             )
         return self._methods
 
-    def abstract(self, function: _Definition) -> bool:
+    def abstract(self, function: SourceDefinition) -> bool:
         """Whether *function* is an abstract method or a Protocol member."""
         node = function.node
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
@@ -1236,15 +1238,15 @@ class _Source:
 
     def environment(
         self,
-        function: _Definition,
+        function: SourceDefinition,
         receiver: str | None = None,
         dependency_transport: str | None = None,
-    ) -> _Environment:
+    ) -> SymbolEnvironment:
         assert isinstance(function.node, ast.FunctionDef | ast.AsyncFunctionDef)
-        env: _Environment = {}
+        env: SymbolEnvironment = {}
         arguments = function.node.args
         for arg in [*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs]:
-            env[arg.arg] = _Value()
+            env[arg.arg] = SymbolValue()
             if arg.annotation is not None:
                 resolved = self.annotation(arg.annotation, function.module)
                 if resolved:
@@ -1254,18 +1256,18 @@ class _Source:
                         "webrtc",
                     }:
                         resolved = "starlette.requests.Request"
-                    env[arg.arg] = _Value(resolved, instance=True)
+                    env[arg.arg] = SymbolValue(resolved, instance=True)
         if function.owner:
-            owner_type = receiver or function.owner
+            owner_type = receiver if receiver is not None else function.owner
             positional = [*arguments.posonlyargs, *arguments.args]
             if positional:
                 if self.classmethod(function) or function.node.name == "__new__":
-                    env[positional[0].arg] = _Value(owner_type)
+                    env[positional[0].arg] = SymbolValue(owner_type)
                 elif not any(
                     self.resolve(decorator, function.module) == "builtins.staticmethod"
                     for decorator in function.node.decorator_list
                 ):
-                    env[positional[0].arg] = _Value(owner_type, instance=True)
+                    env[positional[0].arg] = SymbolValue(owner_type, instance=True)
             # Base class constructors assign inherited attributes; subclass
             # assignments override them.
             for owner in reversed(self.mro(owner_type) or [owner_type]):
@@ -1274,8 +1276,8 @@ class _Source:
                     constructor.node, ast.FunctionDef
                 ):
                     continue
-                constructor_env: _Environment = {
-                    "self": _Value(owner_type, instance=True)
+                constructor_env: SymbolEnvironment = {
+                    "self": SymbolValue(owner_type, instance=True)
                 }
                 for arg in (
                     constructor.node.args.posonlyargs
@@ -1285,7 +1287,9 @@ class _Source:
                     if arg.annotation:
                         resolved = self.annotation(arg.annotation, constructor.module)
                         if resolved:
-                            constructor_env[arg.arg] = _Value(resolved, instance=True)
+                            constructor_env[arg.arg] = SymbolValue(
+                                resolved, instance=True
+                            )
                 for statement in constructor.node.body:
                     if isinstance(statement, ast.Assign):
                         inferred = self.infer(

@@ -274,7 +274,7 @@ class RpcServer:
             if (
                 self._strict_errors
                 and method is not None
-                and not mapped._builtin
+                and not mapped.is_builtin
                 and not isinstance(mapped, declared)
             ):
                 logger.error(
@@ -289,7 +289,7 @@ class RpcServer:
 
     def _request_timeout(self, raw_request: object) -> float | None:
         method = self._methods.get(_request_method(raw_request) or "")
-        if method is not None and method._has_timeout:
+        if method is not None and method.has_timeout:
             return method.timeout
         return self._limits.request_timeout
 

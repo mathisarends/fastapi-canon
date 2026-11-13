@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import cast
 
 from fastapi import FastAPI, Request, WebSocket
@@ -13,7 +13,7 @@ from fastapi.exceptions import RequestValidationError, ResponseValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 from starlette.responses import Response
-from starlette.types import ExceptionHandler
+from starlette.types import ExceptionHandler, Scope
 from starlette.websockets import WebSocketState
 
 from fastapi_canon.error.contracts import (
@@ -27,6 +27,14 @@ from fastapi_canon.error.types import JsonValue, http_problem_title
 from fastapi_canon.exceptions import ErrorConfigurationError
 
 logger = logging.getLogger(__name__)
+_PROBLEM_OBSERVER_STATE_KEY = "_canon_problem_telemetry"
+
+type ProblemObserver = Callable[[Scope, str, int], None]
+
+
+def install_problem_observer(app: FastAPI, observer: ProblemObserver) -> None:
+    """Attach an optional observer to problem responses rendered by this adapter."""
+    setattr(app.state, _PROBLEM_OBSERVER_STATE_KEY, observer)
 
 
 def install_handlers(
@@ -308,7 +316,10 @@ def _problem_response(
     )
     request.scope["_canon_problem_code"] = str(payload["code"])
     request.scope["_canon_problem_status"] = status
-    enrich = getattr(request.app.state, "_canon_problem_telemetry", None)
+    enrich = cast(
+        ProblemObserver | None,
+        getattr(request.app.state, _PROBLEM_OBSERVER_STATE_KEY, None),
+    )
     if enrich is not None:
         enrich(request.scope, str(payload["code"]), status)
     return response

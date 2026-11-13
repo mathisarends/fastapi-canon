@@ -135,7 +135,7 @@ _EXPLANATIONS = {
 }
 
 
-def _main(arguments: Sequence[str] | None = None) -> int:
+def main(arguments: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="fastapi-canon explain",
         description="Explain built-in source, composition and generation diagnostic codes without importing application code.",

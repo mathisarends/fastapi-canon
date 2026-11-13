@@ -74,6 +74,11 @@ class RpcRoute:
     _has_timeout: bool = False
     idempotent: bool = False
 
+    @property
+    def has_timeout(self) -> bool:
+        """Whether the declaration overrides the inherited request timeout."""
+        return self._has_timeout
+
 
 class RpcChannel:
     """Methods, events, streams and sockets the server implements."""
@@ -555,7 +560,7 @@ class RpcChannel:
                     server=None,
                     resolver_scope=r.resolver_scope,
                     timeout=r.timeout,
-                    has_timeout=r._has_timeout,
+                    has_timeout=r.has_timeout,
                     idempotent=r.idempotent,
                 )
                 for r in self.routes

@@ -31,6 +31,11 @@ All notable changes to `fastapi-canon` are documented in this file.
 - Include WebSockets implementation in root strict mypy, alongside the installed
   API-completeness check. Split concurrent RPC, stream and socket state into
   sessions, and separate feature declarations, checks and installation.
+- Make shared CLI, source-analysis and telemetry interfaces explicit and reject
+  private symbol imports with Ruff. Keep route provenance in a typed immutable
+  record, request admission in a dedicated component, and engine callbacks and
+  sender cleanup under the WebRTC runtime's ownership. `IncomingTrack.stop()`
+  allows a handler to stop one incoming track before session teardown.
 - Declare composition check prerequisites explicitly. Align transport lint rules
   and document reasons for type suppressions. Regenerate committed clients.
 

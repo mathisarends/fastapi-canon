@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, TypedDict, Unpack
 
@@ -89,6 +90,18 @@ class APIRouteOptions(RouteOptions, total=False):
     """FastAPI options accepted by the general ``api_route()`` decorator."""
 
     methods: list[str] | None
+
+
+@dataclass(frozen=True, slots=True)
+class RouteProvenance:
+    dependency_origins: tuple[tuple[int, str], ...]
+    error_origins: tuple[tuple[str, str], ...]
+    endpoint: Callable[..., object]
+    error_registry: ErrorRegistry | None
+
+
+def route_provenance(value: object) -> RouteProvenance | None:
+    return value.provenance if isinstance(value, _RouteMetadata) else None
 
 
 class CanonRouter(APIRouter):
@@ -436,12 +449,12 @@ class _RouteMetadata(dict[str, Any]):
         registry: ErrorRegistry | None,
     ) -> None:
         super().__init__(values)
-        self._dependency_origins = tuple(
-            (int(key), value) for key, value in dependencies.items()
+        self.provenance = RouteProvenance(
+            tuple((int(key), value) for key, value in dependencies.items()),
+            tuple(errors.items()),
+            getattr(endpoint, "__canon_declared_endpoint__", endpoint),
+            registry,
         )
-        self._error_origins = tuple(errors.items())
-        self._endpoint = getattr(endpoint, "__canon_declared_endpoint__", endpoint)
-        self._error_registry = registry
 
 
 def _normalize_responses(value: object) -> OpenAPIResponses:

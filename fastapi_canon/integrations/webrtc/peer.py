@@ -13,14 +13,13 @@ from fastapi_canon.integrations.webrtc.declarations import (
 )
 from fastapi_canon.integrations.webrtc.engine import (
     ConnectionStats,
-    EngineSender,
     EngineTrack,
     MediaKind,
 )
 from fastapi_canon.integrations.webrtc.errors import ErrorCode
 
 if TYPE_CHECKING:
-    from fastapi_canon.integrations.webrtc.runtime import SessionRuntime, _Channel
+    from fastapi_canon.integrations.webrtc.runtime import SessionChannel, SessionRuntime
 
 _Receive = TypeVar("_Receive")
 _Send = TypeVar("_Send")
@@ -72,6 +71,11 @@ class IncomingTrack:
     async def wait_ended(self) -> None:
         await self._ended.wait()
 
+    def stop(self) -> None:
+        """Stop receiving this track and mark it ended."""
+        self._track.stop()
+        self._ended.set()
+
     async def _frames(self) -> AsyncIterator[Any]:
         while not self._ended.is_set():
             try:
@@ -81,10 +85,6 @@ class IncomingTrack:
                     return
                 raise
             yield frame
-
-    def _stop(self) -> None:
-        self._track.stop()
-        self._ended.set()
 
 
 class OutgoingTrack:
@@ -101,7 +101,6 @@ class OutgoingTrack:
         self.native = native
         self.kind: MediaKind = kind
         self.owned = owned
-        self._sender: EngineSender | None = None
         self.removed = False
 
     def __repr__(self) -> str:
@@ -120,7 +119,7 @@ class Channel(Generic[Receive, Send]):  # noqa: UP046
     types; ``Peer.channel(name)`` returns an untyped handle.
     """
 
-    def __init__(self, runtime: SessionRuntime, state: _Channel) -> None:
+    def __init__(self, runtime: SessionRuntime, state: SessionChannel) -> None:
         self._runtime = runtime
         self._state = state
 

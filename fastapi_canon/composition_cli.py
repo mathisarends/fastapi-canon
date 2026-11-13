@@ -9,12 +9,12 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
-from fastapi_canon.application_loading import _load_application, _load_reference
+from fastapi_canon.application_loading import load_application, load_reference
 from fastapi_canon.diagnostics import CheckReport, CompositionInfo
 from fastapi_canon.feature import Composition, inspect_app
 
 
-def _main(arguments: Sequence[str], *, inspect: bool = False) -> int:
+def main(arguments: Sequence[str], *, inspect: bool = False) -> int:
     command = "inspect" if inspect else "check composition"
     parser = argparse.ArgumentParser(
         prog=f"fastapi-canon {command}",
@@ -72,15 +72,13 @@ def _main(arguments: Sequence[str], *, inspect: bool = False) -> int:
     args = parser.parse_args(arguments)
     try:
         if inspect:
-            target = _load_application(args.target, root=Path.cwd())
+            target = load_application(args.target, root=Path.cwd())
             result: CompositionInfo | CheckReport = inspect_app(target)
         else:
-            target = _load_reference(args.target, root=Path.cwd())
+            target = load_reference(args.target, root=Path.cwd())
             if not isinstance(target, Composition):
                 raise ValueError("check target must be a Composition")
-            app = (
-                _load_application(args.app, root=Path.cwd()) if args.app else FastAPI()
-            )
+            app = load_application(args.app, root=Path.cwd()) if args.app else FastAPI()
             result = target.check(app)
     except (ImportError, AttributeError, ValueError, TypeError) as error:
         if args.format == "json":

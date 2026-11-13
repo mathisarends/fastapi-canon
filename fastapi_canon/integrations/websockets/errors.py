@@ -127,6 +127,10 @@ class RpcError(Exception):
         self.message = message or type(self).message
         super().__init__(self.message)
 
+    @property
+    def is_builtin(self) -> bool:
+        return self._builtin
+
 
 class RpcParseError(RpcError):
     _builtin = True
@@ -303,6 +307,11 @@ class RpcErrorBinding[ExceptionT: Exception]:
     @property
     def code(self) -> str:
         return self.error_type.code
+
+    @property
+    def static_message(self) -> str | None:
+        """The declared reason when it does not require an exception instance."""
+        return None if callable(self._message) else self.error_type.message
 
     def message_for(self, error: ExceptionT) -> str:
         if callable(self._message):

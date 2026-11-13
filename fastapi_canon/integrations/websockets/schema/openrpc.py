@@ -183,7 +183,7 @@ def _method(
     document: dict[str, Any] = {"name": method.name}
     if method.idempotent:
         document["x-rpc-idempotent"] = True
-    if method._has_timeout:
+    if method.has_timeout:
         document["x-rpc-request-timeout"] = method.timeout
     if method.summary is not None:
         document["summary"] = method.summary

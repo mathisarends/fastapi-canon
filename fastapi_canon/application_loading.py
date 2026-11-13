@@ -11,9 +11,9 @@ from typing import Any
 from fastapi import FastAPI
 
 
-def _load_application(reference: str, *, root: Path) -> FastAPI:
+def load_application(reference: str, *, root: Path) -> FastAPI:
     with _application_path(root):
-        value = _load_reference(reference, root=root)
+        value = load_reference(reference, root=root)
         if not isinstance(value, FastAPI) and not callable(value):
             raise TypeError(
                 f"{reference} must resolve to a FastAPI application or a zero-argument factory returning one"
@@ -26,7 +26,7 @@ def _load_application(reference: str, *, root: Path) -> FastAPI:
     return value
 
 
-def _load_reference(reference: str, *, root: Path) -> Any:
+def load_reference(reference: str, *, root: Path) -> Any:
     module, separator, attribute = reference.partition(":")
     if not separator or not all(
         part.isidentifier() for part in (*module.split("."), *attribute.split("."))

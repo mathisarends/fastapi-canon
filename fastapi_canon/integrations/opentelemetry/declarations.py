@@ -46,7 +46,7 @@ class Instrumentation:
     ) -> None:
         if not isinstance(port, type):
             raise FeatureConfigurationError("instrument port must be a class")
-        if not _instrumented_methods(port):
+        if not instrumented_methods(port):
             raise FeatureConfigurationError(
                 f"{port.__name__}: instrument requires public async methods or async __call__"
             )
@@ -148,11 +148,7 @@ class Telemetry:
             meter_provider=self.meter_provider,
         )
 
-    def _prepare(self, app: FastAPI) -> None:
-        if not isinstance(getattr(app, "_telemetry", None), dict):
-            raise FeatureConfigurationError(
-                "Canon telemetry requires the native telemetry configuration of FastAPI >=0.143.1"
-            )
+    def validate_installation(self, app: FastAPI) -> None:
         try:
             # lazy telemetry adapter factory
             from fastapi_canon.integrations.opentelemetry.native import (  # smelt: ignore[SMT104] -- factory cycle
@@ -184,12 +180,14 @@ def instrumentation_providers(
         seen[key] = feature
     if options is None or not registrations:
         return ()
-    from fastapi_canon.integrations.opentelemetry.ports import _providers
+    from fastapi_canon.integrations.opentelemetry.ports import (
+        create_instrumentation_providers,
+    )
 
-    return _providers(registrations, options)
+    return create_instrumentation_providers(registrations, options)
 
 
-def _instrumented_methods(
+def instrumented_methods(
     port: type[Any],
 ) -> tuple[tuple[str, Callable[..., Any]], ...]:
     return tuple(

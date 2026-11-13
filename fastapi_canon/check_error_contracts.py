@@ -5,10 +5,10 @@ import json
 from collections.abc import Sequence
 from pathlib import Path
 
-from fastapi_canon.checks.contracts import _check_error_contracts
+from fastapi_canon.checks.contracts import analyze_error_contracts
 
 
-def _main(
+def main(
     arguments: Sequence[str] | None = None,
     *,
     prog: str = "python -m fastapi_canon.check_error_contracts",
@@ -44,7 +44,7 @@ def _main(
     )
     args = parser.parse_args(arguments)
     try:
-        report = _check_error_contracts(args.roots)
+        report = analyze_error_contracts(args.roots)
     except (OSError, SyntaxError, UnicodeError, ValueError) as error:
         parser.exit(2, f"{prog}: {error}\n")
     if args.format == "json":
@@ -73,4 +73,4 @@ def _main(
 
 
 if __name__ == "__main__":
-    raise SystemExit(_main())
+    raise SystemExit(main())

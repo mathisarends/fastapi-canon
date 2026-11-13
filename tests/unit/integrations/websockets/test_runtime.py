@@ -451,14 +451,14 @@ async def test_shutdown_cancellation_releases_admission_without_cancelled_respon
 
         capacities = []
         # Unit-test admission accounting independently of network scheduling.
-        original = runtime_module._PendingRequests  # smelt: ignore[SMT420] -- unit seam
+        original = runtime_module.PendingRequests
 
         def capture(limit):
             result = original(limit)
             capacities.append(result)
             return result
 
-        monkeypatch.setattr(runtime_module, "_PendingRequests", capture)
+        monkeypatch.setattr(runtime_module, "PendingRequests", capture)
         before = asyncio.all_tasks()
         entered, stopped = asyncio.Event(), asyncio.Event()
         recorder = DeadlineRecorder()
@@ -901,14 +901,14 @@ async def test_item_capacity_is_released_after_every_outcome(ending, monkeypatch
 
         capacities = []
         # Unit-test admission accounting independently of network scheduling.
-        original = runtime_module._PendingRequests  # smelt: ignore[SMT420] -- unit seam
+        original = runtime_module.PendingRequests
 
         def capacity(limit):
             result = original(limit)
             capacities.append(result)
             return result
 
-        monkeypatch.setattr(runtime_module, "_PendingRequests", capacity)
+        monkeypatch.setattr(runtime_module, "PendingRequests", capacity)
         entered, release, finished = asyncio.Event(), asyncio.Event(), asyncio.Event()
         channel = RpcChannel("release")
 
@@ -976,12 +976,9 @@ async def test_item_capacity_is_released_after_every_outcome(ending, monkeypatch
 
 
 def test_reservation_release_is_idempotent_and_never_negative():
-    from fastapi_canon.integrations.websockets.runtime import (
-        # Unit-test admission accounting independently of network scheduling.
-        _PendingRequests,  # smelt: ignore[SMT420] -- unit seam
-    )
+    from fastapi_canon.integrations.websockets.admission import PendingRequests
 
-    capacity = _PendingRequests(1)
+    capacity = PendingRequests(1)
     reservation = capacity.reserve()
     assert reservation is not None
     assert capacity.reserve() is None

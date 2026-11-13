@@ -899,7 +899,7 @@ class RpcDefinition:
             variables=variables,
         )
         return (
-            replace(contract, _error_registry=app_registry(app))
+            contract.with_error_catalog(app_registry(app))
             if app is not None
             else contract
         )

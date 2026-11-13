@@ -49,7 +49,7 @@ from fastapi_canon.openapi import (
     install_openapi_contracts,
     validate_openapi_contracts,
 )
-from fastapi_canon.router import CanonRouter
+from fastapi_canon.router import CanonRouter, route_provenance
 
 if TYPE_CHECKING:
     from fastapi_canon.feature import Composition, Feature
@@ -109,7 +109,7 @@ def validate_runtime_options(app: FastAPI, composition: Composition) -> None:
     if composition.request_logging and app.middleware_stack is not None:
         raise FeatureConfigurationError("install request logging before the app starts")
     if composition.telemetry is not None:
-        composition.telemetry._prepare(app)
+        composition.telemetry.validate_installation(app)
 
 
 def prepare_feature_routers(
@@ -449,7 +449,8 @@ def check_http_dependencies(
             or hasattr(original.endpoint, "__canon_http_dependency_roots__")
         ):
             continue
-        endpoint = getattr(route.openapi_extra, "_endpoint", original.endpoint)
+        provenance = route_provenance(route.openapi_extra)
+        endpoint = provenance.endpoint if provenance is not None else original.endpoint
         try:
             dependencies = endpoint_dependencies(endpoint)
         except Exception:
@@ -715,7 +716,8 @@ def collect_router_errors(
         contributions = list(error_registries(router))
         for _, route in iter_contract_routes(router.routes, include_mounts=False):
             metadata = getattr(route, "openapi_extra", None)
-            registry = getattr(metadata, "_error_registry", None)
+            provenance = route_provenance(metadata)
+            registry = provenance.error_registry if provenance is not None else None
             if registry is not None:
                 contributions.append(registry)
             contributions.extend(error_registries(route.endpoint))

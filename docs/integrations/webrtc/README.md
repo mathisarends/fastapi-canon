@@ -94,7 +94,9 @@ A `Session` is assembled from handlers:
 - `on_start(peer)`: runs once the transport is connected and channels are open.
 - `run(peer)`: the session's main task. When it returns, the session closes normally.
 - `on_track(peer, track)`: called for each incoming track. `track.recv()` or
-  `async for frame in track` reads frames.
+  `async for frame in track` reads frames. In prepared 0.21.0, `track.stop()`
+  stops receiving one incoming track and ends its iteration; session cleanup
+  also stops every incoming track.
 - `on_message={spec: handler}`: validated messages per channel, keyed by its
   `DataChannelSpec` or its name. Without a handler, a channel can be consumed
   with `async for message in peer.channel(spec)`.

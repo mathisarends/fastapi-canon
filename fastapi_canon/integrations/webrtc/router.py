@@ -40,11 +40,11 @@ from fastapi_canon.integrations.webrtc.events import (
     SessionEventKind,
 )
 from fastapi_canon.integrations.webrtc.ice import IceServerSource
+from fastapi_canon.integrations.webrtc.media import stop_native_track
 from fastapi_canon.integrations.webrtc.runtime import (
     MINIMUM_CLEANUP_STEP_SECONDS,
     RuntimeOptions,
     SessionRuntime,
-    _stop_native,
 )
 
 logger = logging.getLogger("fastapi_canon.integrations.webrtc")
@@ -242,7 +242,7 @@ class WebRtcRouter(APIRouter):
             if runtime is None:
                 # A returned Session transfers its tracks even if admission fails.
                 for track in {id(t): t for t in session.tracks}.values():
-                    _stop_native(track)
+                    stop_native_track(track)
             else:
                 self._runtimes.discard(runtime)
 

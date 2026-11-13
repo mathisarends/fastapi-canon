@@ -67,6 +67,17 @@ class RpcErrorPayload(RpcSchema):
     details: Any = None
     _details_annotation: Any = PrivateAttr(default=None)
 
+    @classmethod
+    def with_details_annotation(
+        cls,
+        code: str,
+        details: Any,
+        annotation: Any,
+    ) -> Self:
+        payload = cls(code=code, details=details)
+        payload._details_annotation = annotation
+        return payload
+
     @field_serializer("details")
     def _serialize_details(self, details: Any, info: Any) -> Any:
         if details is None or self._details_annotation is None:
@@ -115,8 +126,11 @@ class RpcFailure(RpcSchema):
         if error.problem is not None:
             payload = RpcProblemPayload(problem=error.problem)
         else:
-            payload = RpcErrorPayload(code=error.code, details=error.details)
-            payload._details_annotation = error.details_type
+            payload = RpcErrorPayload.with_details_annotation(
+                error.code,
+                error.details,
+                error.details_type,
+            )
         return cls(
             id=request_id,
             error=RpcErrorData(

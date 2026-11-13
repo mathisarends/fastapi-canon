@@ -26,7 +26,7 @@ from fastapi_canon.error.contracts import (
 from fastapi_canon.error.openapi import inherited_contract
 from fastapi_canon.exceptions import FeatureConfigurationError
 from fastapi_canon.injection import injected_resolver_dependency
-from fastapi_canon.router import CanonRouter
+from fastapi_canon.router import CanonRouter, route_provenance
 
 
 def describe_composition(
@@ -63,7 +63,8 @@ def describe_composition(
         declared, _, _ = contracts_from_responses(route.path, route.responses, catalog)
         inherited, _ = inherited_contract(route)
         owned, _ = inherited_contract(source)
-        error_origins = dict(getattr(source.openapi_extra, "_error_origins", ()))
+        provenance = route_provenance(source.openapi_extra)
+        error_origins = dict(provenance.error_origins) if provenance is not None else {}
         for error in dict.fromkeys((*inherited, *declared)):
             origin = error_origins.get(str(id(error)), "route")
             if origin == "route" and isinstance(router, CanonRouter):
@@ -108,7 +109,9 @@ def describe_composition(
         ),
         operations=tuple(operations),
         endpoints=tuple(
-            getattr(route.openapi_extra, "_endpoint", route.original_route.endpoint)
+            provenance.endpoint
+            if (provenance := route_provenance(route.openapi_extra)) is not None
+            else route.original_route.endpoint
             for route in effective
         ),
     )
@@ -183,7 +186,8 @@ def _dependencies(
 ) -> tuple[DependencyInfo, ...]:
     original = getattr(source, "original_route", source)
     local = {id(dependency) for dependency in original.dependencies}
-    declared = dict(getattr(source.openapi_extra, "_dependency_origins", ()))
+    provenance = route_provenance(source.openapi_extra)
+    declared = dict(provenance.dependency_origins) if provenance is not None else {}
     origins = {
         id(dependency): "operation"
         if not declared and id(dependency) in local

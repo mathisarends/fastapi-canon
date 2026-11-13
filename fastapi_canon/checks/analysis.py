@@ -3,7 +3,12 @@
 import ast
 from dataclasses import dataclass, field
 
-from fastapi_canon.checks.source import _Definition, _Environment, _Source, _Value
+from fastapi_canon.checks.source import (
+    SourceDefinition,
+    SourceIndex,
+    SymbolEnvironment,
+    SymbolValue,
+)
 
 _PLAIN_DECORATORS = frozenset(
     {
@@ -24,51 +29,51 @@ class _Escape:
 
 
 @dataclass(frozen=True)
-class _Unknown:
+class UnknownValue:
     message: str
     function: str
     line: int
 
 
 @dataclass
-class _Flow:
+class ExceptionFlow:
     escapes: list[_Escape] = field(default_factory=list)
-    unknowns: list[_Unknown] = field(default_factory=list)
+    unknowns: list[UnknownValue] = field(default_factory=list)
 
-    def extend(self, other: "_Flow") -> None:
+    def extend(self, other: "ExceptionFlow") -> None:
         self.escapes.extend(other.escapes)
         self.unknowns.extend(other.unknowns)
 
 
-class _Analyzer:
-    def __init__(self, source: _Source) -> None:
+class ContractAnalyzer:
+    def __init__(self, source: SourceIndex) -> None:
         self.source = source
         self._summaries: dict[
             tuple[str, bool, str | None, str | None],
-            tuple[tuple[_Escape, ...], tuple[_Unknown, ...], frozenset[str]],
+            tuple[tuple[_Escape, ...], tuple[UnknownValue, ...], frozenset[str]],
         ] = {}
 
     def function(
         self,
-        function: _Definition,
+        function: SourceDefinition,
         stack: tuple[str, ...] = (),
         *,
         iterated: bool = False,
         receiver: str | None = None,
         dependency_transport: str | None = None,
-    ) -> _Flow:
+    ) -> ExceptionFlow:
         """Summarize *function*; iterated generators execute their bodies."""
         if function.name in stack:
-            return _Flow(
+            return ExceptionFlow(
                 unknowns=[
-                    _Unknown("recursive call", function.name, function.node.lineno)
+                    UnknownValue("recursive call", function.name, function.node.lineno)
                 ]
             )
         summary_key = function.name, iterated, receiver, dependency_transport
         if summary_key in self._summaries:
             escapes, unknowns, modules = self._summaries[summary_key]
             self.source.touched.update(modules)
-            return _Flow(list(escapes), list(unknowns))
+            return ExceptionFlow(list(escapes), list(unknowns))
         previous = self.source.touched
         self.source.touched = set()
         try:
@@ -99,22 +104,24 @@ class _Analyzer:
 
     def _analyze_function(
         self,
-        function: _Definition,
+        function: SourceDefinition,
         stack: tuple[str, ...],
         *,
         iterated: bool,
         receiver: str | None = None,
         dependency_transport: str | None = None,
-    ) -> _Flow:
+    ) -> ExceptionFlow:
         node = function.node
         assert isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
-        flow = _Flow()
+        flow = ExceptionFlow()
         for decorator in node.decorator_list:
             name = self.source.resolve(decorator, function.module)
             if name == "abc.abstractmethod":
-                return _Flow(
+                return ExceptionFlow(
                     unknowns=[
-                        _Unknown("abstract implementation", function.name, node.lineno)
+                        UnknownValue(
+                            "abstract implementation", function.name, node.lineno
+                        )
                     ]
                 )
             if name not in {
@@ -124,11 +131,13 @@ class _Analyzer:
                 "builtins.property",
             } and not _operation_decorator(decorator):
                 flow.unknowns.append(
-                    _Unknown("unresolved decorator", function.name, decorator.lineno)
+                    UnknownValue(
+                        "unresolved decorator", function.name, decorator.lineno
+                    )
                 )
         if not iterated and _generator(node):
             flow.unknowns.append(
-                _Unknown(
+                UnknownValue(
                     "generator execution is outside the HTTP response boundary",
                     function.name,
                     node.lineno,
@@ -142,14 +151,14 @@ class _Analyzer:
     def expression(
         self,
         node: ast.expr,
-        function: _Definition,
-        env: _Environment,
+        function: SourceDefinition,
+        env: SymbolEnvironment,
         stack: tuple[str, ...],
         *,
         awaited: bool = False,
         iterated: bool = False,
-    ) -> _Flow:
-        flow = _Flow()
+    ) -> ExceptionFlow:
+        flow = ExceptionFlow()
         if isinstance(node, ast.Await):
             return self.expression(
                 node.value, function, env, stack, awaited=True, iterated=iterated
@@ -161,7 +170,7 @@ class _Analyzer:
             # filters nor the result until a consumer advances the generator.
             flow.extend(self.expression(node.generators[0].iter, function, env, stack))
             flow.unknowns.append(
-                _Unknown(
+                UnknownValue(
                     "generator expression execution is deferred until iterated",
                     function.name,
                     node.lineno,
@@ -174,7 +183,7 @@ class _Analyzer:
             return self._comprehension(node, function, env, stack)
         if isinstance(node, ast.NamedExpr):
             flow.unknowns.append(
-                _Unknown(
+                UnknownValue(
                     f"unsupported expression: {type(node).__name__}",
                     function.name,
                     node.lineno,
@@ -200,7 +209,7 @@ class _Analyzer:
                     method = self.source.method(definition.name, "__call__")
                     if method is None:
                         flow.unknowns.append(
-                            _Unknown(
+                            UnknownValue(
                                 f"unresolved callable instance: {ast.unparse(node.func)}",
                                 function.name,
                                 node.lineno,
@@ -255,7 +264,7 @@ class _Analyzer:
                         and not self.source.classmethod(definition)
                     ):
                         flow.unknowns.append(
-                            _Unknown(
+                            UnknownValue(
                                 "inherited method dispatch may use subclass overrides",
                                 function.name,
                                 node.lineno,
@@ -286,7 +295,7 @@ class _Analyzer:
                     flow.extend(self._callback(argument, function, env, stack))
             else:
                 flow.unknowns.append(
-                    _Unknown(
+                    UnknownValue(
                         f"unresolved call: {ast.unparse(node.func)}",
                         function.name,
                         node.lineno,
@@ -313,11 +322,11 @@ class _Analyzer:
     def _comprehension(
         self,
         node: ast.ListComp | ast.SetComp | ast.DictComp | ast.GeneratorExp,
-        function: _Definition,
-        env: _Environment,
+        function: SourceDefinition,
+        env: SymbolEnvironment,
         stack: tuple[str, ...],
-    ) -> _Flow:
-        flow = _Flow()
+    ) -> ExceptionFlow:
+        flow = ExceptionFlow()
         local = env.copy()
         # All targets are lexical locals, even in filters before a later for.
         # The first iterable alone is evaluated in the enclosing environment.
@@ -328,7 +337,7 @@ class _Analyzer:
                 for child in ast.walk(generator.target)
             ):
                 flow.unknowns.append(
-                    _Unknown(
+                    UnknownValue(
                         "unsupported comprehension target",
                         function.name,
                         generator.target.lineno,
@@ -356,12 +365,12 @@ class _Analyzer:
     def _comprehension_iterable(
         self,
         node: ast.expr,
-        function: _Definition,
-        env: _Environment,
+        function: SourceDefinition,
+        env: SymbolEnvironment,
         stack: tuple[str, ...],
         *,
         asynchronous: bool,
-    ) -> _Flow:
+    ) -> ExceptionFlow:
         flow = self.expression(node, function, env, stack, iterated=True)
         target = node.func if isinstance(node, ast.Call) else node
         definition = self.source.definitions.get(
@@ -379,7 +388,7 @@ class _Analyzer:
             )
         if value_type and isinstance(value_type.node, ast.ClassDef):
             flow.unknowns.append(
-                _Unknown(
+                UnknownValue(
                     "unsupported comprehension iteration protocol",
                     function.name,
                     node.lineno,
@@ -394,7 +403,7 @@ class _Analyzer:
             )
         ):
             flow.unknowns.append(
-                _Unknown(
+                UnknownValue(
                     "unresolved async comprehension iterator",
                     function.name,
                     node.lineno,
@@ -405,12 +414,12 @@ class _Analyzer:
     def _context_manager(
         self,
         node: ast.With | ast.AsyncWith,
-        function: _Definition,
-        env: _Environment,
+        function: SourceDefinition,
+        env: SymbolEnvironment,
         stack: tuple[str, ...],
         reraised: tuple[_Escape, ...],
         index: int = 0,
-    ) -> _Flow:
+    ) -> ExceptionFlow:
         if index == len(node.items):
             return self.block(node.body, function, env, stack, reraised)
         item = node.items[index]
@@ -438,7 +447,7 @@ class _Analyzer:
                 for name in names
             ):
                 flow.unknowns.append(
-                    _Unknown(
+                    UnknownValue(
                         "unresolved contextlib.suppress exception types",
                         function.name,
                         item.context_expr.lineno,
@@ -482,7 +491,7 @@ class _Analyzer:
                 supported = False
         if not supported:
             flow.unknowns.append(
-                _Unknown(
+                UnknownValue(
                     "unresolved or unsupported context manager protocol",
                     function.name,
                     item.context_expr.lineno,
@@ -506,10 +515,12 @@ class _Analyzer:
                 )
                 if returned in {"typing.Self", "typing_extensions.Self"}:
                     returned = manager
-                local[item.optional_vars.id] = _Value(returned or "", instance=True)
+                local[item.optional_vars.id] = SymbolValue(
+                    returned or "", instance=True
+                )
             elif not isinstance(item.optional_vars, ast.Name):
                 flow.unknowns.append(
-                    _Unknown(
+                    UnknownValue(
                         "unsupported context manager binding target",
                         function.name,
                         item.optional_vars.lineno,
@@ -521,7 +532,7 @@ class _Analyzer:
             mode = _suppression(exit_method.node)
             if mode is None:
                 flow.unknowns.append(
-                    _Unknown(
+                    UnknownValue(
                         "context manager exception suppression is unresolved",
                         function.name,
                         item.context_expr.lineno,
@@ -536,7 +547,7 @@ class _Analyzer:
         return flow
 
     def _context_type(
-        self, node: ast.expr, function: _Definition, env: _Environment
+        self, node: ast.expr, function: SourceDefinition, env: SymbolEnvironment
     ) -> str | None:
         awaited = isinstance(node, ast.Await)
         expression = node.value if isinstance(node, ast.Await) else node
@@ -568,17 +579,17 @@ class _Analyzer:
 
     def _construct(
         self,
-        definition: _Definition,
-        function: _Definition,
+        definition: SourceDefinition,
+        function: SourceDefinition,
         stack: tuple[str, ...],
         line: int,
-    ) -> _Flow:
+    ) -> ExceptionFlow:
         """Follow the application code that constructing *definition* runs."""
-        flow = _Flow()
+        flow = ExceptionFlow()
         lineage = self.source.lineage(definition.name)
         if lineage is None:
             flow.unknowns.append(
-                _Unknown(
+                UnknownValue(
                     f"unresolved constructor: {definition.name}", function.name, line
                 )
             )
@@ -597,7 +608,7 @@ class _Analyzer:
             name = self.source.resolve(change, definition.module)
             if name is None or not self.source.external(name):
                 flow.unknowns.append(
-                    _Unknown(
+                    UnknownValue(
                         "class decorators or metaclasses may change construction",
                         function.name,
                         line,
@@ -608,7 +619,7 @@ class _Analyzer:
         if not external and node.keywords:
             # Class keywords of a scanned hierarchy reach its own __init_subclass__.
             flow.unknowns.append(
-                _Unknown(
+                UnknownValue(
                     "class decorators or metaclasses may change construction",
                     function.name,
                     line,
@@ -649,7 +660,7 @@ class _Analyzer:
                         for item in member_node.decorator_list
                     ):
                         flow.unknowns.append(
-                            _Unknown(
+                            UnknownValue(
                                 "library construction may call decorated hook: "
                                 f"{owner}.{member_node.name}",
                                 function.name,
@@ -661,10 +672,10 @@ class _Analyzer:
     def _callback(
         self,
         argument: ast.expr,
-        function: _Definition,
-        env: _Environment,
+        function: SourceDefinition,
+        env: SymbolEnvironment,
         stack: tuple[str, ...],
-    ) -> _Flow:
+    ) -> ExceptionFlow:
         """Assume library code calls the application callables it receives."""
         if isinstance(argument, ast.Starred):
             argument = argument.value
@@ -677,15 +688,15 @@ class _Analyzer:
                 *parameters.kwonlyargs,
                 *filter(None, [parameters.vararg, parameters.kwarg]),
             ]:
-                lambda_env[item.arg] = _Value()
+                lambda_env[item.arg] = SymbolValue()
             return self.expression(argument.body, function, lambda_env, stack)
         if not isinstance(argument, ast.Name | ast.Attribute | ast.Call):
-            return _Flow()
+            return ExceptionFlow()
         inferred = self.source.infer(argument, function.module, env)
         name = inferred.name or self.source.resolve(argument, function.module, env)
         definition = self.source.definitions.get(name or "")
         if definition is None:
-            return _Flow()
+            return ExceptionFlow()
         if isinstance(definition.node, ast.ClassDef):
             # Typed parameters and attributes resolve to their class; they
             # pass an instance, not a constructor.
@@ -696,9 +707,9 @@ class _Analyzer:
                         function, self.function(method, stack, receiver=definition.name)
                     )
                 return (
-                    _Flow(
+                    ExceptionFlow(
                         unknowns=[
-                            _Unknown(
+                            UnknownValue(
                                 "unresolved application callback",
                                 function.name,
                                 argument.lineno,
@@ -706,7 +717,7 @@ class _Analyzer:
                         ]
                     )
                     if method is not None
-                    else _Flow()
+                    else ExceptionFlow()
                 )
             return self._construct(definition, function, stack, argument.lineno)
         return self._traced(
@@ -719,8 +730,10 @@ class _Analyzer:
             ),
         )
 
-    def _traced(self, function: _Definition, called: _Flow) -> _Flow:
-        return _Flow(
+    def _traced(
+        self, function: SourceDefinition, called: ExceptionFlow
+    ) -> ExceptionFlow:
+        return ExceptionFlow(
             [
                 _Escape(item.exception, (function.name, *item.trace), item.line)
                 for item in called.escapes
@@ -731,15 +744,15 @@ class _Analyzer:
     def _call(
         self,
         node: ast.Call,
-        definition: _Definition,
-        function: _Definition,
+        definition: SourceDefinition,
+        function: SourceDefinition,
         stack: tuple[str, ...],
         *,
         awaited: bool,
         iterated: bool,
         receiver: str | None = None,
-    ) -> _Flow:
-        flow = _Flow()
+    ) -> ExceptionFlow:
+        flow = ExceptionFlow()
         iterated_generator = iterated and _generator(definition.node)
         if (
             isinstance(definition.node, ast.AsyncFunctionDef)
@@ -747,7 +760,7 @@ class _Analyzer:
             and not iterated_generator
         ):
             flow.unknowns.append(
-                _Unknown(
+                UnknownValue(
                     "coroutine execution is deferred until awaited",
                     function.name,
                     node.lineno,
@@ -767,13 +780,13 @@ class _Analyzer:
     def _dispatch(
         self,
         node: ast.Call,
-        port: _Definition,
-        function: _Definition,
+        port: SourceDefinition,
+        function: SourceDefinition,
         stack: tuple[str, ...],
         *,
         awaited: bool,
         iterated: bool,
-    ) -> _Flow:
+    ) -> ExceptionFlow:
         """Follow an abstract call to the implementations that can receive it.
 
         Dishka providers in the source bind ports to implementations. Abstract
@@ -782,10 +795,10 @@ class _Analyzer:
         """
         assert port.owner is not None
         assert isinstance(port.node, ast.FunctionDef | ast.AsyncFunctionDef)
-        flow = _Flow()
+        flow = ExceptionFlow()
         bound = self.source.implementations(port.owner)
         receiver = node.func.value if isinstance(node.func, ast.Attribute) else None
-        candidates: list[_Definition] = []
+        candidates: list[SourceDefinition] = []
         if bound:
             for implementation in bound:
                 method = (
@@ -795,7 +808,7 @@ class _Analyzer:
                 )
                 if method is None or self.source.abstract(method):
                     flow.unknowns.append(
-                        _Unknown(
+                        UnknownValue(
                             f"unresolved Dishka implementation of {port.name}",
                             function.name,
                             node.lineno,
@@ -810,7 +823,7 @@ class _Analyzer:
                     candidates.append(method)
         if not bound and not candidates:
             flow.unknowns.append(
-                _Unknown(
+                UnknownValue(
                     f"abstract implementation without Dishka binding: {port.name}",
                     function.name,
                     node.lineno,
@@ -833,21 +846,21 @@ class _Analyzer:
     def block(
         self,
         body: list[ast.stmt],
-        function: _Definition,
-        env: _Environment,
+        function: SourceDefinition,
+        env: SymbolEnvironment,
         stack: tuple[str, ...],
         reraised: tuple[_Escape, ...] = (),
-    ) -> _Flow:
-        flow = _Flow()
+    ) -> ExceptionFlow:
+        flow = ExceptionFlow()
         for node in body:
             if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
                 # Nested definitions are not executed, but their bodies cannot be resolved.
-                env[node.name] = _Value()
+                env[node.name] = SymbolValue()
                 for expression in node.decorator_list:
                     flow.extend(self.expression(expression, function, env, stack))
                 if isinstance(node, ast.ClassDef):
                     flow.unknowns.append(
-                        _Unknown(
+                        UnknownValue(
                             "nested class construction", function.name, node.lineno
                         )
                     )
@@ -864,7 +877,9 @@ class _Analyzer:
                         flow.escapes.extend(reraised)
                     else:
                         flow.unknowns.append(
-                            _Unknown("unresolved re-raise", function.name, node.lineno)
+                            UnknownValue(
+                                "unresolved re-raise", function.name, node.lineno
+                            )
                         )
                 else:
                     flow.extend(self.expression(node.exc, function, env, stack))
@@ -880,7 +895,7 @@ class _Analyzer:
                         )
                     else:
                         flow.unknowns.append(
-                            _Unknown(
+                            UnknownValue(
                                 f"unresolved raised exception: {ast.unparse(node.exc)}",
                                 function.name,
                                 node.lineno,
@@ -911,7 +926,7 @@ class _Analyzer:
                     )
                     if unknown_catch:
                         flow.unknowns.append(
-                            _Unknown(
+                            UnknownValue(
                                 "unresolved exception handler",
                                 function.name,
                                 handler.lineno,
@@ -931,7 +946,7 @@ class _Analyzer:
                     handler_env = env.copy()
                     caught_types = {item.exception for item in caught}
                     if handler.name:
-                        handler_env[handler.name] = _Value(
+                        handler_env[handler.name] = SymbolValue(
                             next(iter(caught_types)) if len(caught_types) == 1 else "",
                             instance=True,
                         )
@@ -953,7 +968,7 @@ class _Analyzer:
                     for child in _executed_nodes(node.finalbody)
                 ):
                     flow.unknowns.append(
-                        _Unknown(
+                        UnknownValue(
                             "finally may replace an escaping exception",
                             function.name,
                             node.lineno,
@@ -1007,9 +1022,9 @@ class _Analyzer:
                 targets = (
                     node.targets if isinstance(node, ast.Assign) else [node.target]
                 )
-                inferred = _Value()
+                inferred = SymbolValue()
                 if isinstance(node, ast.AnnAssign):
-                    inferred = _Value(
+                    inferred = SymbolValue(
                         self.source.annotation(node.annotation, function.module) or "",
                         instance=True,
                     )
@@ -1030,7 +1045,7 @@ class _Analyzer:
                 continue
             # Match, try*, etc. need more control-flow knowledge.
             flow.unknowns.append(
-                _Unknown(
+                UnknownValue(
                     f"unsupported statement: {type(node).__name__}",
                     function.name,
                     node.lineno,
@@ -1049,28 +1064,28 @@ class _Analyzer:
             self._invalidate(node, env)
         return flow
 
-    def _invalidate(self, node: ast.AST, env: _Environment) -> None:
+    def _invalidate(self, node: ast.AST, env: SymbolEnvironment) -> None:
         for child in ast.walk(node):
             if isinstance(child, ast.Name | ast.Attribute) and isinstance(
                 child.ctx, ast.Store
             ):
-                env[self.source.key(child)] = _Value()
+                env[self.source.key(child)] = SymbolValue()
 
 
-_ROUTE_METHODS = frozenset(
+HTTP_ROUTE_METHODS = frozenset(
     {"get", "post", "put", "patch", "delete", "head", "options", "trace", "api_route"}
 )
-_TRANSPORT_METHODS = frozenset({"sse", "webrtc"})
-_RPC_METHOD = "method"
+TRANSPORT_METHODS = frozenset({"sse", "webrtc"})
+RPC_METHOD = "method"
 
 
 def _operation_decorator(decorator: ast.expr) -> bool:
     if isinstance(decorator, ast.Attribute):
-        return decorator.attr == _RPC_METHOD
+        return decorator.attr == RPC_METHOD
     return (
         isinstance(decorator, ast.Call)
         and isinstance(decorator.func, ast.Attribute)
-        and decorator.func.attr in {*_ROUTE_METHODS, *_TRANSPORT_METHODS, _RPC_METHOD}
+        and decorator.func.attr in {*HTTP_ROUTE_METHODS, *TRANSPORT_METHODS, RPC_METHOD}
     )
 
 

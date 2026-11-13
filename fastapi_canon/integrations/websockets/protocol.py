@@ -70,6 +70,11 @@ class RpcMethodDefinition:
         if type(self.idempotent) is not bool:
             raise ProtocolDefinitionError("Method idempotent must be a bool")
 
+    @property
+    def has_timeout(self) -> bool:
+        """Whether the declaration overrides the inherited request timeout."""
+        return self._has_timeout
+
 
 @dataclass(frozen=True, slots=True)
 class RpcNotificationDefinition:

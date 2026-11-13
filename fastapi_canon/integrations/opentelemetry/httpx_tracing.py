@@ -24,7 +24,7 @@ _ATTRIBUTES = frozenset(
 )
 
 
-class _HttpProvider(trace.TracerProvider):
+class HttpInstrumentationProvider(trace.TracerProvider):
     def __init__(
         self, provider: trace.TracerProvider | None, *, capture_url: bool
     ) -> None:

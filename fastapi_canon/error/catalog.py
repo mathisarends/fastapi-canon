@@ -5,14 +5,18 @@ from typing import Any
 
 from fastapi import FastAPI
 
-from fastapi_canon.error.contracts import INSTALLED_REGISTRY_STATE_KEY
+from fastapi_canon.error.contracts import (
+    INSTALLED_REGISTRY_STATE_KEY,
+    AnyError,
+    ErrorCatalog,
+)
 from fastapi_canon.error.openapi import compile_problem_schema
 from fastapi_canon.error.problem import Problem
-from fastapi_canon.error.registry import AnyError, ErrorRegistry
+from fastapi_canon.error.registry import ErrorRegistry
 from fastapi_canon.error.rendering import render_problem_payload
 from fastapi_canon.exceptions import ErrorConfigurationError
 
-_current_registry: ContextVar[ErrorRegistry | None] = ContextVar(
+_current_registry: ContextVar[ErrorCatalog | None] = ContextVar(
     "canon_error_registry", default=None
 )
 
@@ -25,7 +29,7 @@ def app_registry(app: FastAPI, fallback: ErrorRegistry | None = None) -> ErrorRe
 
 
 @contextmanager
-def registry_scope(registry: ErrorRegistry | None) -> Iterator[None]:
+def registry_scope(registry: ErrorCatalog | None) -> Iterator[None]:
     token = _current_registry.set(registry)
     try:
         yield
@@ -33,13 +37,13 @@ def registry_scope(registry: ErrorRegistry | None) -> Iterator[None]:
         _current_registry.reset(token)
 
 
-def resolved_registry(fallback: ErrorRegistry) -> ErrorRegistry:
+def resolved_registry(fallback: ErrorCatalog) -> ErrorCatalog:
     active = _current_registry.get()
     return active if active is not None else fallback
 
 
 def problem_for(
-    registry: ErrorRegistry,
+    registry: ErrorCatalog,
     exception: Exception,
     *,
     include_status: bool = False,
@@ -65,7 +69,7 @@ def problem_for(
 
 
 def problem_schema(
-    registry: ErrorRegistry, error: AnyError, *, include_status: bool = False
+    registry: ErrorCatalog, error: AnyError, *, include_status: bool = False
 ) -> dict[str, Any]:
     if type(include_status) is not bool:
         raise ErrorConfigurationError("include_status must be a bool")
@@ -74,7 +78,7 @@ def problem_schema(
     return schema
 
 
-def internal_problem(registry: ErrorRegistry | None) -> Problem:
+def internal_problem(registry: ErrorCatalog | None) -> Problem:
     base = registry.type_base if registry is not None else None
     return Problem(
         type=f"{base}/internal_server_error"

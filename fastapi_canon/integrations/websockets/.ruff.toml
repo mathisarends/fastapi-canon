@@ -1,7 +1,9 @@
 line-length = 88
 target-version = "py312"
 [lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "TID251", "PGH003", "RUF"]
+preview = true
+explicit-preview-rules = true
+select = ["E", "F", "I", "UP", "B", "SIM", "TID251", "PGH003", "RUF", "PLC2701"]
 [lint.flake8-tidy-imports.banned-api]
 "fastapi._compat".msg = "Use FastAPI's documented public API."
 "fastapi.dependencies.utils".msg = "Declare dependencies with the public Depends API."
