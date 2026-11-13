@@ -11,6 +11,43 @@ The [repository migration](repository-migration.md) records the
 source history and publishing setup. The repository move does not rename the
 PyPI project or add further Python import changes.
 
+## Upgrade to 0.20.0
+
+Version 0.20.0 is prepared, not published. Upgrade FastAPI to >=0.143.1,<1
+before installing it. Earlier FastAPI versions are no longer supported; versions
+0.138.0 through 0.143.0 can omit included WebSocket routes from contract exports.
+The `otel` extra uses the same FastAPI minimum as core.
+
+Replace string arguments to Python contract export with enum members:
+
+```python
+from fastapi_canon import export_contracts
+from fastapi_canon.contracts import ContractKind
+
+contracts = export_contracts(app, kinds=(ContractKind.OPENAPI, ContractKind.OPENRPC))
+```
+
+CLI `--kind` names remain unchanged. To narrow a Python export, use
+`ContractSelection` with the actual installed `Feature` objects or exact registered
+paths; see [contract selection](contracts.md#export-an-installed-feature).
+CLI and version-2 generation exports remain application-wide.
+
+Regenerate SSE clients and update calls for dotted operation IDs. For example,
+`projects.events` now produces `client.projects.events(...)` in both languages,
+replacing TypeScript `client.<tag>.projectsEvents(...)` and Python
+`client.<tag>.projects_events(...)`. Deeper namespaces produce nested groups.
+Undotted operation IDs retain their first-tag or `streams` group. Resolve any
+reported reserved group or group/method name collision before regenerating.
+Operation IDs, generated type names and wire contracts stay unchanged. See
+[SSE client naming](integrations/sse/codegen.md).
+
+Before upgrading CI, re-run `fastapi-canon check errors src --strict --require-complete`
+over all application import roots. Package re-exports such as
+`from .router import router` no longer hide same-named source modules, so newly
+visible HTTP, SSE, WebRTC and RPC paths can produce CAN001/CAN002. Review their
+error mappings and `raises` declarations. CAN003 remains a separate completeness
+signal; the checker does not prove that every runtime exception is handled.
+
 ## Upgrade to 0.19.0
 
 Canon 0.19.0 includes source checking for methods declared on
@@ -336,7 +373,8 @@ require an application import or the aiortc engine.
 Dishka is a base dependency. Python server WebSockets use FastAPI/Starlette;
 the `websockets` Python client package is only needed by generated client
 applications that select that transport. Generated SSE consumers install their
-selected HTTP backend (`httpx` or `httpx2`) separately. `otel` selects FastAPI >=0.143 and OpenTelemetry API >=1.40,<2
+selected HTTP backend (`httpx` or `httpx2`) separately. From 0.20.0, core and
+`otel` require FastAPI >=0.143.1; `otel` adds OpenTelemetry API >=1.40,<2
 for native HTTP telemetry, Dishka port observations and WebSocket middleware. Application
 providers/exporters remain application-owned. See the [telemetry guide](telemetry.md).
 

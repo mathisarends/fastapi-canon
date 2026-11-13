@@ -1,5 +1,21 @@
 # Compatibility
 
+## Canon 0.20.0 (prepared, unpublished)
+
+Core and telemetry require FastAPI >=0.143.1,<1. Included WebSocket routes in
+FastAPI 0.138.0 through 0.143.0 can lose their effective paths during contract
+export; those versions are no longer accepted. SSE retains its higher minimum
+of FastAPI 0.143.3. Follow the [migration](package-migration.md#upgrade-to-0200).
+
+Local Windows validation passed both 20-combination installed-wheel matrices:
+minimum direct dependencies on Python 3.12 and current dependencies on Python
+3.14. Installed SSE CLI checks cover no HTTP backend, HTTPX and HTTPX2; the
+installed WebRTC client compiles. Chromium/aiortc scenarios passed, and the
+native telemetry bridge passed against FastAPI 0.143.1 and 0.162.0 on Python 3.12.
+These bounded checks do not replace exact-source CI or establish publication.
+See the [release gates](releases.md#prepare-a-version); the records below
+describe verified older releases.
+
 ## Canon 0.19.0
 
 The published source passed exact-commit CI on Linux/Python 3.12–3.14 and
@@ -107,9 +123,10 @@ Python signature metadata belongs to Canon's own handler functions.
 [FastAPI router API](https://fastapi.tiangolo.com/reference/apirouter/),
 [WebSocket API](https://fastapi.tiangolo.com/reference/websockets/).
 
-The installed-wheel WebSocket smoke passes on Python 3.12 with FastAPI 0.121.0
-and Starlette 0.49.3, and with FastAPI 0.143.3 and Starlette 1.10.0. It exercises
-RPC, typed sockets, connection dependencies and a custom handler with middleware.
+For releases before 0.20.0, the installed-wheel WebSocket smoke passed on Python
+3.12 with FastAPI 0.121.0 and Starlette 0.49.3, and with FastAPI 0.143.3 and
+Starlette 1.10.0. It exercises RPC, typed sockets, connection dependencies and a
+custom handler with middleware.
 The repository's locked suite additionally covers dependency cleanup, denial
 responses, disconnects, cancellation and telemetry.
 
@@ -124,7 +141,7 @@ published-version evidence below remains unchanged.
 ## Native telemetry bridge
 
 The native bridge is exercised from built wheels on Python 3.12 against
-FastAPI 0.143.0 and the locked 0.143.3 version, with actual SDK span exporters and
+FastAPI 0.143.1 and the locked 0.162.0 version, with actual SDK span exporters and
 metric readers. The check covers the shared private configuration dictionary,
 disabled auto-configuration, provider identity, repeated composition, exclusion,
 HTTP and port spans/metrics, and borrowed provider ownership. CI runs the same
