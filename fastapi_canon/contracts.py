@@ -13,7 +13,7 @@ from fastapi_canon.contract_routes import (
     WEBRTC_DECLARATION_ATTRIBUTE,
     iter_contract_routes,
 )
-from fastapi_canon.feature import Feature, _contract_ownership
+from fastapi_canon.feature import Feature, installed_contract_routes
 from fastapi_canon.openapi import export_openapi
 
 
@@ -37,6 +37,10 @@ class ContractSelection:
     def __post_init__(self) -> None:
         if self.features is None and self.paths is None:
             raise ValueError("ContractSelection needs features or paths")
+        if isinstance(self.features, Feature):
+            raise TypeError("features must be a tuple of Feature objects, not one")
+        if isinstance(self.paths, str):
+            raise TypeError("paths must be a tuple of path templates, not a string")
         if self.features is not None:
             features = tuple(self.features)
             if any(not isinstance(feature, Feature) for feature in features):
@@ -141,7 +145,7 @@ def export_contracts(
 def _select_routes(
     app: FastAPI, kinds: tuple[ContractKind, ...], selection: ContractSelection
 ) -> tuple[tuple[str, Any], ...]:
-    features, owned = _contract_ownership(app)
+    features, owned = installed_contract_routes(app)
     requested = {id(feature) for feature in selection.features or ()}
     foreign = [
         feature.name
@@ -243,3 +247,18 @@ def _select_openapi(
                     pending.append(schemas[name])
     if reachable:
         components["schemas"] = dict(sorted(reachable.items()))
+    elif "components" in document and not components:
+        del document["components"]
+    used_tags = {
+        tag
+        for item in document["paths"].values()
+        for name, operation in item.items()
+        if name in http_methods
+        for tag in operation.get("tags", ())
+    }
+    if "tags" in document:
+        tags = [tag for tag in document["tags"] if tag.get("name") in used_tags]
+        if tags:
+            document["tags"] = tags
+        else:
+            del document["tags"]

@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from copy import deepcopy
+from typing import Any
 
 import pytest
 from fastapi import APIRouter, FastAPI
@@ -114,6 +115,42 @@ def test_feature_selection_preserves_http_methods_schema_closure_and_app_cache()
     with TestClient(app) as client:
         assert client.get("/items").json() == {"child": {"value": 1}}
         assert client.post("/items").json() == {"secret": "private"}
+
+
+def test_openapi_selection_keeps_only_tags_and_components_it_uses() -> None:
+    public = APIRouter(tags=["public"])
+    private = APIRouter(tags=["private"])
+
+    @public.get("/public")
+    async def read() -> str:
+        return "public"
+
+    @private.get("/private")
+    async def hidden() -> str:
+        return "private"
+
+    selected = Feature(name="public", routers=(public,))
+    rpc = _rpc_feature("browser", "/rpc", endpoint="control")
+    app = Composition(
+        features=(selected, Feature(name="private", routers=(private,)), rpc),
+    ).build(FastAPI(openapi_tags=[{"name": "public"}, {"name": "private"}]))
+
+    def openapi(feature: Feature) -> dict[str, Any]:
+        document = export_contracts(
+            app,
+            kinds=(ContractKind.OPENAPI, ContractKind.OPENRPC),
+            selection=ContractSelection(features=(feature,)),
+        ).openapi
+        assert document is not None
+        return document
+
+    http = openapi(selected)
+    rpc_only = openapi(rpc)
+
+    assert http["tags"] == [{"name": "public"}]
+    assert rpc_only["paths"] == {}
+    assert "tags" not in rpc_only
+    assert "components" not in rpc_only
 
 
 def test_feature_references_select_all_mounts_and_paths_narrow_the_occurrence() -> None:

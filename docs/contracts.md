@@ -94,7 +94,8 @@ is not supported: a registered endpoint retains its methods, events and streams.
 RPC and WebRTC selection happens before their aggregate contract validation.
 Separate selections can reuse names or have different RPC service versions;
 combining incompatible routes still fails. OpenAPI selection preserves each
-selected route's methods, metadata and reachable model schemas without changing
+selected route's methods, metadata, used tags and reachable model schemas, and
+drops tags and components that no selected route references, without changing
 the application's cached document or runtime routes. Composition validation and
 canonical error identities remain application-wide.
 

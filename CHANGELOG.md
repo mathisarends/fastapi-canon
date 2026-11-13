@@ -4,7 +4,22 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## Unreleased
 
+### Added
+
+- `export_contracts(selection=ContractSelection(...))` exports only the routes
+  of installed features or exact registered paths. Selected OpenAPI documents keep
+  the used tags and reachable schemas. The CLI and `fastapi-canon generate` still
+  export application-wide contracts. See
+  [export an installed feature](docs/contracts.md#export-an-installed-feature).
+
 ### Breaking changes
+
+- Canon core requires FastAPI >=0.143.1 instead of >=0.121. FastAPI 0.138.0
+  through 0.143.0 report empty paths for WebSocket routes of included routers,
+  so contract export omitted their RPC endpoints; the fallback for versions before
+  0.138 is removed. The `otel` extra no longer declares its own FastAPI range.
+  Upgrade FastAPI to 0.143.1 or newer before upgrading Canon. Telemetry errors
+  no longer name a separate core minimum.
 
 - Source error checking preserves module identities when a package re-exports
   a same-named object, for example `from .router import router`. Previously

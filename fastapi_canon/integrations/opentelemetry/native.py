@@ -1,8 +1,7 @@
-"""The version-guarded FastAPI configuration bridge and non-owning span adapter."""
+"""The guarded FastAPI configuration bridge and non-owning span adapter."""
 
 from collections.abc import Mapping
 from contextlib import nullcontext
-from importlib.metadata import version
 from typing import Any
 
 from fastapi import FastAPI
@@ -35,10 +34,9 @@ _CONFIGURATION_FIELDS = frozenset(
 
 
 def validate_app(app: FastAPI) -> None:
-    installed = tuple(int(part) for part in version("fastapi").split(".")[:2])
-    if installed < (0, 143) or not isinstance(getattr(app, "_telemetry", None), dict):
+    if not isinstance(getattr(app, "_telemetry", None), dict):
         raise FeatureConfigurationError(
-            "Canon telemetry requires FastAPI >=0.143; core still supports FastAPI >=0.121"
+            "Canon telemetry requires the native telemetry configuration of FastAPI >=0.143.1"
         )
     if not _CONFIGURATION_FIELDS.issubset(app._telemetry):
         raise FeatureConfigurationError(

@@ -149,14 +149,9 @@ class Telemetry:
         )
 
     def _prepare(self, app: FastAPI) -> None:
-        from importlib.metadata import version
-
-        installed = tuple(int(part) for part in version("fastapi").split(".")[:2])
-        if installed < (0, 143) or not isinstance(
-            getattr(app, "_telemetry", None), dict
-        ):
+        if not isinstance(getattr(app, "_telemetry", None), dict):
             raise FeatureConfigurationError(
-                "Canon telemetry requires FastAPI >=0.143; core still supports FastAPI >=0.121"
+                "Canon telemetry requires the native telemetry configuration of FastAPI >=0.143.1"
             )
         try:
             # lazy telemetry adapter factory
