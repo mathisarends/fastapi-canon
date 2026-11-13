@@ -7,7 +7,7 @@ messages and operations, while registered routes determine their effective paths
 
 ## Python API
 
-The typed selection API below is prepared for unpublished 0.20.0.
+The typed selection API below is available in Canon 0.20.0 and later.
 Canon 0.19 uses string format names and has no `selection` argument.
 
 ```python

@@ -1023,7 +1023,7 @@ class _CompositionChecks:
         self.composition = composition
         self.issues: list[CheckIssue] = []
         self.checks: list[CheckResult] = []
-        self.missing_dependencies: list[ModuleNotFoundError] = []
+        self._missing_dependencies: list[ModuleNotFoundError] = []
         self.routers: tuple[APIRouter, ...] | None = None
         self.registry: ErrorRegistry | None = None
         self.container: AsyncContainer | None = None
@@ -1086,7 +1086,7 @@ class _CompositionChecks:
                 code="canon.mcp.E002",
                 hint="Use synchronous factories that borrow the APP container without starting resources.",
                 enabled=lambda: (
-                    self.composition.mcp is not None and not self.missing_dependencies
+                    self.composition.mcp is not None and not self._missing_dependencies
                 ),
             ),
             _CheckStep(
@@ -1143,7 +1143,7 @@ class _CompositionChecks:
             self.registry,
             self.container,
             self.description,
-            self.missing_dependencies[0] if self.missing_dependencies else None,
+            self._missing_dependencies[0] if self._missing_dependencies else None,
             self.mcp_runtime,
         )
 
@@ -1151,7 +1151,7 @@ class _CompositionChecks:
         self, step: _CheckStep, error: ErrorConfigurationError | ModuleNotFoundError
     ) -> None:
         if isinstance(error, ModuleNotFoundError):
-            self.missing_dependencies.append(error)
+            self._missing_dependencies.append(error)
         participants = {
             "providers": tuple(
                 f.name

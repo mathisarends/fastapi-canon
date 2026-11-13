@@ -6,17 +6,18 @@ version; the reference service is an example. `release.toml` and
 
 ## Current versions
 
-**Published: 0.19.0 (2026-11-10).**
+**Published: 0.20.0 (2026-11-13).**
 
-**Prepared: 0.21.0 (unpublished).** It includes the previous unpublished 0.20.0
-preparation and strengthens generated-file ownership validation. Follow the
-[0.21.0 migration](package-migration.md#upgrade-to-0210), the linked 0.20.0
-migration and [changelog](../CHANGELOG.md#0210---unreleased). Exact-source CI
-and a release dry run must pass after preparation is merged to `main`.
+This release requires FastAPI >=0.143.1, adds typed contract selection, changes
+generated SSE namespace access and makes package re-exported error paths visible
+to source checking. Follow the [migration](package-migration.md#upgrade-to-0200)
+and [changelog](../CHANGELOG.md#0200---2026-11-13) before upgrading.
 
-Published 0.19.0 includes RPC channel subclasses in source error-contract checking.
-Follow the [migration](package-migration.md#upgrade-to-0190) and
-[changelog](../CHANGELOG.md#0190---2026-11-10) before updating CI.
+**Prepared: 0.21.0 (unpublished).** It strengthens generated-file ownership
+validation and runs feature checks once per new build. Follow the
+[0.21.0 migration](package-migration.md#upgrade-to-0210) and
+[changelog](../CHANGELOG.md#0210---unreleased). Exact-source CI and a release
+dry run must pass after preparation is merged to `main`.
 
 Published artifacts, manifests and run results are linked below. They record
 verified publications; prepared source versions are not publication evidence.
@@ -24,6 +25,7 @@ Historical links retain their original repositories.
 
 | Version | Source | CI | Dry run | Publication | Wheel, sdist and manifest |
 | --- | --- | --- | --- | --- | --- |
+| 0.20.0 (2026-11-13) | [Source](https://github.com/mathisarends/fastapi-canon/commit/69639cfc5cba40ff299fe3ccb210d8dd1e42823c) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/43397811359) | [Dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/43492517877) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/43493725691) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.20.0) |
 | 0.19.0 (2026-11-10) | [Source](https://github.com/mathisarends/fastapi-canon/commit/f40ed640c99822abf2f7709ede1e16e0ea6fa8b2) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/42853226604) | [Preparatory dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/42850938534) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/42855022556) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.19.0) |
 | 0.18.0 (2026-11-10) | [Source](https://github.com/mathisarends/fastapi-canon/commit/f4fa6096ff9c18c2fe5df32c2cae40ee0d9ec969) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/42785593526) | [Dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/42787033263) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/42788045597) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.18.0) |
 | 0.17.0 (2026-11-10) | [Source](https://github.com/mathisarends/fastapi-canon/commit/9745a85fe6f16852a7eee16161be73d6a3703fbd) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/42719244150) | [Earlier dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/42717728251) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/42721013782) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.17.0) |
@@ -39,8 +41,10 @@ The 0.19.0 and 0.17.0 preparatory dry runs predate changelog finalization. Publi
 revalidated each final dated source; its public installs and attached artifacts
 are verified.
 
-Recovery notes: 0.19.0, 0.18.0, 0.15.0 and 0.14.0 needed public-index verification after
-stale index results. The 0.19.0 retry invalidated the stale uv cache and reused
+Recovery notes: 0.20.0 retried public verification after delayed PyPI metadata;
+the original run retained the verified artifact bytes. Versions 0.19.0, 0.18.0,
+0.15.0 and 0.14.0 needed public-index verification after stale index results.
+The 0.19.0 retry invalidated the stale uv cache and reused
 the original verified artifacts; 0.11.0 needed GitHub finalization retried after incomplete PyPI
 metadata. Version 0.10.0 required publisher configuration and local public-index
 verification before finalization. All recoveries retained the original artifact

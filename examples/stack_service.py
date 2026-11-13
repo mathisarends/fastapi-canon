@@ -23,11 +23,11 @@ class Counter:
 
 class Operations:
     def __init__(self, counter: Counter) -> None:
-        self.counter = counter
+        self._counter = counter
 
     def increment(self) -> int:
-        self.counter.value += 1
-        return self.counter.value
+        self._counter.value += 1
+        return self._counter.value
 
 
 class StackProvider(Provider):

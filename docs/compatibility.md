@@ -2,26 +2,33 @@
 
 ## Canon 0.21.0 (prepared, unpublished)
 
-This preparation includes the unpublished 0.20.0 changes below and strengthens
-WebSocket generator ownership checks. See the [migration](package-migration.md#upgrade-to-0210).
-The earlier local artifact results below apply to the 0.20.0 preparation;
-0.21.0 requires its own exact-source validation before publication.
+This preparation strengthens WebSocket generator ownership checks. See the
+[migration](package-migration.md#upgrade-to-0210). Local Windows validation passed
+both 20-combination installed-wheel matrices: minimum direct dependencies on
+Python 3.12 and current dependencies on Python 3.14. Installed SSE CLI/backend
+and WebRTC client checks passed, alongside strict WebSockets implementation
+typing, generated-client runtime checks and Chromium/WebRTC scenarios.
+Exact-source CI is still required before publication.
 
-## Canon 0.20.0 (unpublished source preparation)
+## Canon 0.20.0
 
 Core and telemetry require FastAPI >=0.143.1,<1. Included WebSocket routes in
 FastAPI 0.138.0 through 0.143.0 can lose their effective paths during contract
 export; those versions are no longer accepted. SSE retains its higher minimum
 of FastAPI 0.143.3. Follow the [migration](package-migration.md#upgrade-to-0200).
 
-Local Windows validation passed both 20-combination installed-wheel matrices:
-minimum direct dependencies on Python 3.12 and current dependencies on Python
-3.14. Installed SSE CLI checks cover no HTTP backend, HTTPX and HTTPX2; the
-installed WebRTC client compiles. Chromium/aiortc scenarios passed, and the
-native telemetry bridge passed against FastAPI 0.143.1 and 0.162.0 on Python 3.12.
-These bounded checks do not replace exact-source CI or establish publication.
-See the [release gates](releases.md#prepare-a-version); the records below
-describe verified older releases.
+The published source passed exact-commit CI on Linux/Python 3.12–3.14 and
+Windows/Python 3.14, including PostgreSQL and Chromium/WebRTC contracts. Both
+20-combination installed-wheel matrices passed on the actual publication
+artifacts: current dependencies on Python 3.14 and minimum direct dependencies
+on Python 3.12. Installed SSE CLI checks cover no HTTP backend, HTTPX and HTTPX2;
+the installed WebRTC client compiles. The native telemetry bridge also passed
+locally against FastAPI 0.143.1 and 0.162.0 on Python 3.12.
+
+All 15 public-index installation combinations passed. PyPI file hashes,
+downloaded GitHub wheel/sdist files, the attached manifest and release tag agree
+with the verified source. See the [publication record](releases.md#current-versions).
+These bounded checks do not establish support for every dependency combination.
 
 ## Canon 0.19.0
 
@@ -169,7 +176,7 @@ integration implementations, which share Canon's version.
 
 | Package | Published |
 | --- | --- |
-| `fastapi-canon` | 0.19.0 |
+| `fastapi-canon` | 0.20.0 |
 | `fastapi-streams` | 0.5.0 |
 | `fastapi-rpckit` | 0.4.1 |
 | `fastapi-webrtc` | 0.3.0 |

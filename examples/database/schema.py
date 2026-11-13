@@ -2,14 +2,14 @@ from sqlalchemy import MetaData, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
-class Base(DeclarativeBase):
+class DatabaseSchema(DeclarativeBase):
     pass
 
 
-class ItemRow(Base):
+class ItemRow(DatabaseSchema):
     __tablename__ = "items"
 
     name: Mapped[str] = mapped_column(String(80), primary_key=True)
 
 
-metadata: MetaData = Base.metadata
+metadata: MetaData = DatabaseSchema.metadata

@@ -386,14 +386,14 @@ class _RpcSession:
             "",
         )
         self.client_closed = False
-        self.outgoing: asyncio.Queue[str] = asyncio.Queue(self.limits.max_queue_size)
-        self.slow_consumer_reported = False
-        self.pending_rejections = 0
+        self._outgoing: asyncio.Queue[str] = asyncio.Queue(self.limits.max_queue_size)
+        self._slow_consumer_reported = False
+        self._pending_rejections = 0
         self.pending = _PendingRequests(self.limits.max_pending_requests)
-        self.codec = RpcCodec()
+        self._codec = RpcCodec()
         self.connection.set_close_handler(self.request_close)
-        self.tasks: set[asyncio.Task[None]] = set()
-        self.call_tasks: set[asyncio.Task[RpcSuccess | RpcFailure | None]] = set()
+        self._tasks: set[asyncio.Task[None]] = set()
+        self._call_tasks: set[asyncio.Task[RpcSuccess | RpcFailure | None]] = set()
         self.requests: dict[tuple[type[str] | type[int], str | int], _PendingCall] = {}
 
     async def run(self) -> None:
@@ -417,8 +417,8 @@ class _RpcSession:
                     server=self.server,
                     activity=self.activity,
                 )
-                self.writer_task = asyncio.create_task(self._writer())
-                self.producers = [
+                self._writer_task = asyncio.create_task(self._writer())
+                self._producers = [
                     asyncio.create_task(self._reader()),
                     asyncio.create_task(self._events()),
                 ]
@@ -429,12 +429,12 @@ class _RpcSession:
                 try:
                     self.connection.track_startup(None)
                     await self.close_event.wait()
-                    for task in (*self.producers, *self.tasks, *self.call_tasks):
+                    for task in (*self._producers, *self._tasks, *self._call_tasks):
                         task.cancel()
                     await asyncio.gather(
-                        *self.producers,
-                        *self.tasks,
-                        *self.call_tasks,
+                        *self._producers,
+                        *self._tasks,
+                        *self._call_tasks,
                         return_exceptions=True,
                     )
                     await self.subscriptions.close()
@@ -443,22 +443,22 @@ class _RpcSession:
                         RpcConnectionClose.SHUTDOWN,
                     ):
                         await _flush(
-                            self.outgoing, self.writer_task, self.limits.send_timeout
+                            self._outgoing, self._writer_task, self.limits.send_timeout
                         )
                 finally:
                     for task in (
-                        self.writer_task,
-                        *self.producers,
-                        *self.tasks,
-                        *self.call_tasks,
+                        self._writer_task,
+                        *self._producers,
+                        *self._tasks,
+                        *self._call_tasks,
                     ):
                         task.cancel()
                     try:
                         await asyncio.gather(
-                            self.writer_task,
-                            *self.producers,
-                            *self.tasks,
-                            *self.call_tasks,
+                            self._writer_task,
+                            *self._producers,
+                            *self._tasks,
+                            *self._call_tasks,
                             return_exceptions=True,
                         )
                     finally:
@@ -473,11 +473,11 @@ class _RpcSession:
             self.connection.mark_closed()
             raise
         finally:
-            if self.pending_rejections:
+            if self._pending_rejections:
                 logger.debug(
                     "Rejected %d messages exceeding max_pending_requests "
                     "on this connection",
-                    self.pending_rejections,
+                    self._pending_rejections,
                 )
             if not self.client_closed and (not self.connection.closed):
                 with suppress(RpcDisconnect):
@@ -493,15 +493,15 @@ class _RpcSession:
             self.close_event.set()
 
     async def _report_slow_consumer(self) -> None:
-        if self.slow_consumer_reported:
+        if self._slow_consumer_reported:
             return
-        self.slow_consumer_reported = True
+        self._slow_consumer_reported = True
         await notify_activity(self.activity, "slow_consumer_closed", self.connection)
 
     async def _send_outgoing(self, message: str) -> None:
         try:
             async with asyncio.timeout(self.limits.send_timeout):
-                await self.outgoing.put(message)
+                await self._outgoing.put(message)
         except TimeoutError:
             logger.warning("RPC client too slow: outgoing queue blocked")
             self.request_close(RpcConnectionClose.POLICY_VIOLATION, "Client too slow")
@@ -510,12 +510,12 @@ class _RpcSession:
     async def _writer(self) -> None:
         try:
             while True:
-                message = await self.outgoing.get()
+                message = await self._outgoing.get()
                 try:
                     async with asyncio.timeout(self.limits.send_timeout):
                         await self.socket.send(message)
                 finally:
-                    self.outgoing.task_done()
+                    self._outgoing.task_done()
         except asyncio.CancelledError:
             raise
         except RpcDisconnect as error:
@@ -599,24 +599,24 @@ class _RpcSession:
         ]
         if completed and (not self.close_event.is_set()):
             await self._send_outgoing(
-                self.codec.encode(completed if batch else completed[0])
+                self._codec.encode(completed if batch else completed[0])
             )
 
     async def _reject_pending(self, message: object) -> RpcSuccess | RpcFailure | None:
-        self.pending_rejections += 1
-        if self.pending_rejections == 1:
+        self._pending_rejections += 1
+        if self._pending_rejections == 1:
             logger.warning("RPC client exceeded max_pending_requests")
         return await self.server.handle_failure(message, RpcPendingLimitError())
 
     def _invocation_done(self, task: asyncio.Task[None]) -> None:
-        self.tasks.discard(task)
+        self._tasks.discard(task)
         if not task.cancelled() and (error := task.exception()) is not None:
             record_error(error)
             self.request_close(RpcConnectionClose.INTERNAL_ERROR, "Internal error")
 
     def _schedule_failure(self, message: object, error: Exception) -> bool:
         if (
-            len(self.tasks)
+            len(self._tasks)
             >= self.limits.max_pending_requests + self.limits.max_queue_size
         ):
             self.request_close(
@@ -627,10 +627,10 @@ class _RpcSession:
         async def respond() -> None:
             response = await self.server.handle_failure(message, error)
             if response is not None and (not self.close_event.is_set()):
-                await self._send_outgoing(self.codec.encode(response))
+                await self._send_outgoing(self._codec.encode(response))
 
         task = asyncio.create_task(respond())
-        self.tasks.add(task)
+        self._tasks.add(task)
         task.add_done_callback(self._invocation_done)
         return True
 
@@ -640,7 +640,7 @@ class _RpcSession:
         key: tuple[type[str] | type[int], str | int] | None,
         task: asyncio.Task[RpcSuccess | RpcFailure | None],
     ) -> None:
-        self.call_tasks.discard(call.task)
+        self._call_tasks.discard(call.task)
         if call.reservation is not None:
             self.pending.release(call.reservation)
         if key is not None and self.requests.get(key) is call:
@@ -690,7 +690,7 @@ class _RpcSession:
                         )
                         return
                 try:
-                    message = self.codec.decode(frame)
+                    message = self._codec.decode(frame)
                 except RpcParseError as error:
                     if not self._schedule_failure(frame, error):
                         return
@@ -705,7 +705,7 @@ class _RpcSession:
                 items = []
                 controls = []
                 collectors_full = (
-                    len(self.tasks)
+                    len(self._tasks)
                     >= self.limits.max_pending_requests + self.limits.max_queue_size
                 )
                 for item in message if isinstance(message, list) else [message]:
@@ -775,7 +775,7 @@ class _RpcSession:
                         envelope=envelope,
                     )
                     call.task = asyncio.create_task(self._invoke_one(call))
-                    self.call_tasks.add(call.task)
+                    self._call_tasks.add(call.task)
                     if key is not None:
                         self.requests[key] = call
                     call.task.add_done_callback(partial(self._call_done, call, key))
@@ -783,7 +783,7 @@ class _RpcSession:
                 if not items and (not controls):
                     continue
                 if (
-                    len(self.tasks)
+                    len(self._tasks)
                     >= self.limits.max_pending_requests + self.limits.max_queue_size
                 ):
                     self.request_close(
@@ -792,7 +792,7 @@ class _RpcSession:
                     )
                     return
                 task = asyncio.create_task(self._invoke(items, batch, controls))
-                self.tasks.add(task)
+                self._tasks.add(task)
                 task.add_done_callback(self._invocation_done)
         except RpcDisconnect as error:
             self.client_closed = True
@@ -833,15 +833,15 @@ class _RpcSession:
             self.request_close(RpcConnectionClose.NORMAL, "")
 
     async def _graceful(self) -> None:
-        self.producers[1].cancel()
-        await asyncio.gather(self.producers[1], return_exceptions=True)
-        await asyncio.gather(*tuple(self.tasks), return_exceptions=True)
+        self._producers[1].cancel()
+        await asyncio.gather(self._producers[1], return_exceptions=True)
+        await asyncio.gather(*tuple(self._tasks), return_exceptions=True)
         await self.subscriptions.wait_finished()
-        self.producers[0].cancel()
+        self._producers[0].cancel()
         await asyncio.gather(
-            self.producers[0], *tuple(self.tasks), return_exceptions=True
+            self._producers[0], *tuple(self._tasks), return_exceptions=True
         )
-        await _flush(self.outgoing, self.writer_task, None)
+        await _flush(self._outgoing, self._writer_task, None)
         self.request_close(RpcConnectionClose.SERVICE_RESTART, "Server restarting")
 
 
@@ -1107,7 +1107,7 @@ class _StreamSession:
         )
         self.client_closed = False
         self.connection.set_close_handler(self.request_close)
-        self.binary_input = (
+        self._binary_input = (
             RpcBinaryInput.create(self.limits.max_queue_size)
             if self.stream.has_input
             else None
@@ -1119,8 +1119,8 @@ class _StreamSession:
                     self.socket, self.connection, self.activity
                 ),
             }
-            if self.binary_input is not None:
-                self.values[RpcBinaryInput] = self.binary_input
+            if self._binary_input is not None:
+                self.values[RpcBinaryInput] = self._binary_input
         self.generator: AsyncGenerator[Any, None] | None = None
 
     async def run(self) -> None:
@@ -1255,7 +1255,7 @@ class _StreamSession:
         try:
             while True:
                 frame = await self.socket.receive()
-                if self.binary_input is None:
+                if self._binary_input is None:
                     self.request_close(
                         RpcConnectionClose.PROTOCOL_ERROR,
                         "Binary stream is server-to-client",
@@ -1276,14 +1276,14 @@ class _StreamSession:
                         )
                         return
                     input_ended = True
-                    await self.binary_input.end_input()
+                    await self._binary_input.end_input()
                 elif input_ended:
                     self.request_close(
                         RpcConnectionClose.PROTOCOL_ERROR, "Binary input after end"
                     )
                     return
                 else:
-                    await self.binary_input.enqueue(frame)
+                    await self._binary_input.enqueue(frame)
                     await notify_activity(
                         self.activity,
                         "stream_frame_received",
@@ -1359,7 +1359,7 @@ class _SocketSession:
         )
         self.client_closed = False
         self.connection.set_close_handler(self.request_close)
-        self.socket_handle = RpcSocket.create(
+        self._socket_handle = RpcSocket.create(
             self.socket,
             self.connection,
             self.definition.messages,
@@ -1370,7 +1370,7 @@ class _SocketSession:
             self.request_close,
             self.client_disconnected,
         )
-        self.values = {**self.values, RpcSocket: self.socket_handle}
+        self.values = {**self.values, RpcSocket: self._socket_handle}
 
     async def run(self) -> None:
         try:
@@ -1463,14 +1463,14 @@ class _SocketSession:
             assert self.definition.message_parameter is not None
             message_arguments[self.definition.message_parameter] = message
             response = await self.definition.function(**message_arguments)
-            await self.socket_handle.send(response)
+            await self._socket_handle.send(response)
 
     async def _handle(self) -> None:
         try:
             if self.definition.message_parameter is None:
                 await self.definition.function(**self.arguments)
             else:
-                async for frame in self.socket_handle:
+                async for frame in self._socket_handle:
                     await self._respond(frame)
             self.request_close(RpcConnectionClose.NORMAL, "")
         except asyncio.CancelledError:
@@ -1500,7 +1500,7 @@ class _SocketSession:
                         f"Unsupported {message_type} message",
                     )
                     return
-                if not await self.socket_handle.enqueue(message):
+                if not await self._socket_handle.enqueue(message):
                     return
                 await notify_activity(
                     self.activity, "stream_frame_received", self.connection, size
