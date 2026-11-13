@@ -1,8 +1,8 @@
 # Explain diagnostic codes
 
 `fastapi-canon explain CODE` gives the meaning, a minimal example, a repair and
-an authoritative guide for a built-in code. This page describes the prepared
-source interface; see [prepared changes](../CHANGELOG.md#0200---2026-11-13) and the
+an authoritative guide for a built-in code. This page describes the current
+source interface; see [changes](../CHANGELOG.md#0200---2026-11-13) and the
 [publication record](releases.md#current-versions).
 
 ```console

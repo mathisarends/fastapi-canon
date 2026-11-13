@@ -125,8 +125,8 @@ their types and constants, and the report objects are private implementation det
 the documented JSON fields are the machine-readable interface.
 
 Package re-exports such as `from .router import router` preserve the source
-module's identity. The corrected resolution is **unpublished and prepared for
-0.20.0**; newly visible paths can fail `--strict`. No additional runtime or
+module's identity. The corrected resolution is available in Canon 0.20.0 and
+later; newly visible paths can fail `--strict`. No additional runtime or
 dependency-lifecycle coverage is implied by this fix.
 
 ## Findings and CI

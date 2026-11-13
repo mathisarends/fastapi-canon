@@ -7,8 +7,8 @@ Use an external OpenAPI generator such as Orval with your framework's query
 integration for HTTP. Canon generates SSE, WebSocket and WebRTC clients.
 There is no Canon HTTP client generator or cross-protocol client facade.
 
-The [typed Python export API](contracts.md#export-an-installed-feature), prepared
-for unpublished 0.20.0, supports feature references and exact paths. Version-2
+The [typed Python export API](contracts.md#export-an-installed-feature), available
+in Canon 0.20.0 and later, supports feature references and exact paths. Version-2
 TOML targets still use the application-wide export below.
 
 ## Configuration

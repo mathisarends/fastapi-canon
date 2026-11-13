@@ -13,7 +13,7 @@ PyPI project or add further Python import changes.
 
 ## Upgrade to 0.20.0
 
-Version 0.20.0 is prepared, not published. Upgrade FastAPI to >=0.143.1,<1
+Version 0.20.0 was published on 2026-11-13. Upgrade FastAPI to >=0.143.1,<1
 before installing it. Earlier FastAPI versions are no longer supported; versions
 0.138.0 through 0.143.0 can omit included WebSocket routes from contract exports.
 The `otel` extra uses the same FastAPI minimum as core.
