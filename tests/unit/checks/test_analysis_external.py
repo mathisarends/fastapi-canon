@@ -181,7 +181,7 @@ def test_application_code_called_by_libraries_is_followed(
     assert finding["trace"][-1] == "api.fail"
 
 
-def test_pydantic_field_validator_is_analyzed(
+def test_decorated_hooks_of_library_bases_stay_incomplete(
     analyze: Callable[..., dict[str, dict[str, Any]]],
 ) -> None:
     source = """
@@ -198,8 +198,12 @@ def test_pydantic_field_validator_is_analyzed(
 
     operation = analyze("Request(title='x')", source)["api.endpoint"]
 
-    assert operation["complete"], _messages(operation)
-    assert _messages(operation) == []
+    assert _messages(operation) == [
+        (
+            "CAN003",
+            "library construction may call decorated hook: api.Request.strip",
+        )
+    ]
 
 
 def test_library_dependencies_are_external(
@@ -228,7 +232,7 @@ def test_library_dependencies_are_external(
     ("body", "message"),
     [
         ("missing_package.run()", "unresolved call: missing_package.run"),
-        ("getattr(Service(), name)()", "unresolved call: getattr(Service(), name)"),
+        ("getattr(Service(), 'run')()", "unresolved call: getattr(Service(), 'run')"),
         ("json.loads('{}').run()", "unresolved call: json.loads('{}').run"),
     ],
     ids=["not-importable", "dynamic-builtin", "application-method-on-result"],
@@ -249,39 +253,6 @@ def test_unknown_or_dynamic_targets_stay_incomplete(
 
     assert ("CAN003", message) in _messages(operation)
     assert not operation["complete"]
-
-
-def test_literal_getattr_follows_the_bound_method(
-    analyze: Callable[..., dict[str, dict[str, Any]]],
-) -> None:
-    operation = analyze(
-        "getattr(Service(), 'run')()",
-        "class Service:\n    def run(self): fail()\n",
-    )["api.endpoint"]
-
-    assert operation["complete"]
-    assert _messages(operation) == [
-        ("CAN001", "api.Missing: api.missing is missing from raises")
-    ]
-
-
-def test_gather_only_catches_errors_from_resumed_coroutines(
-    analyze: Callable[..., dict[str, dict[str, Any]]],
-) -> None:
-    operation = analyze(
-        "await asyncio.gather(make(), return_exceptions=True)",
-        """
-        import asyncio
-        async def work(): pass
-        def make():
-            fail()
-            return work()
-        """,
-    )["api.endpoint"]
-
-    assert ("CAN001", "api.Missing: api.missing is missing from raises") in _messages(
-        operation
-    )
 
 
 def test_packages_overlapping_a_scanned_root_are_not_external(

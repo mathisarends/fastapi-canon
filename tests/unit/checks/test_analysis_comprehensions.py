@@ -97,94 +97,6 @@ def endpoint(item_ids: list[int]):
         assert diagnostic["path"].endswith("api.py")
 
 
-@pytest.mark.parametrize("container", ["[Item()]", "(Item(),)"])
-def test_reversed_native_sequences_keep_application_element_methods(
-    analyze: Callable[..., tuple[int, dict[str, Any]]], container: str
-) -> None:
-    _, report = analyze(f"""
-class Item:
-    def require(self): raise Missing()
-@router.get('/')
-def endpoint(): return [item.require() for item in reversed({container})]
-""")
-    [operation] = report["operations"]
-    assert operation["complete"]
-    assert [d["code"] for d in operation["diagnostics"]] == ["CAN002"]
-    assert operation["diagnostics"][0]["trace"][-1] == "api.Item.require"
-
-
-def test_reversed_iterator_keeps_later_mutations_visible(
-    analyze: Callable[..., tuple[int, dict[str, Any]]],
-) -> None:
-    _, report = analyze("""
-class Safe:
-    def require(self): pass
-class Risky:
-    def require(self): raise Missing()
-@router.get('/')
-def endpoint():
-    items = [Safe()]
-    iterator = reversed(items)
-    items.clear()
-    items.append(Risky())
-    for item in iterator: item.require()
-""")
-    [operation] = report["operations"]
-    assert operation["complete"]
-    assert [d["code"] for d in operation["diagnostics"]] == ["CAN002"]
-
-
-def test_custom_reverse_protocol_remains_explicitly_incomplete(
-    analyze: Callable[..., tuple[int, dict[str, Any]]],
-) -> None:
-    _, report = analyze("""
-class Items:
-    def __reversed__(self): raise Missing()
-@router.get('/')
-def endpoint(): return list(reversed(Items()))
-""")
-    [operation] = report["operations"]
-    assert not operation["complete"]
-    assert any(
-        "unresolved reversed iteration protocol" in d["message"]
-        for d in operation["diagnostics"]
-    )
-
-
-@pytest.mark.parametrize(
-    "statement",
-    [
-        "return next((require_item(item) for item in item_ids), None)",
-        "delimiter = ',' if flag else '|'\n    return delimiter.join(str(require_item(item)) for item in item_ids)",
-    ],
-)
-def test_known_consumers_execute_generator_expressions_across_callable_alternatives(
-    analyze: Callable[..., tuple[int, dict[str, Any]]], statement: str
-) -> None:
-    _, report = analyze(f"""
-@router.get('/')
-def endpoint(item_ids: list[int], flag: bool):
-    {statement}
-""")
-    [operation] = report["operations"]
-    assert operation["complete"], operation["diagnostics"]
-    assert [d["code"] for d in operation["diagnostics"]] == ["CAN002"]
-
-
-def test_next_does_not_claim_full_generator_function_execution(
-    analyze: Callable[..., tuple[int, dict[str, Any]]],
-) -> None:
-    _, report = analyze("""
-def values():
-    yield 1
-    raise Missing()
-@router.get('/')
-def endpoint(): return next(values())
-""")
-    [operation] = report["operations"]
-    assert not operation["complete"]
-
-
 def test_iterable_filters_and_results_keep_independent_traces(
     analyze: Callable[..., tuple[int, dict[str, Any]]],
 ) -> None:
@@ -423,7 +335,7 @@ async def endpoint(source: AsyncIterator[int]):
     assert {d["code"] for d in operation["diagnostics"]} == {"CAN003"}
 
 
-def test_named_expression_analyzes_the_assigned_expression(
+def test_named_expression_keeps_unsupported_scope_changes_explicit(
     analyze: Callable[..., tuple[int, dict[str, Any]]],
 ) -> None:
     status, report = analyze("""
@@ -432,8 +344,8 @@ def endpoint(item_ids: list[int]):
     return [(seen := require_item(item)) for item in item_ids]
 """)
     (operation,) = report["operations"]
-    assert status == 1 and operation["complete"]
-    assert {d["code"] for d in operation["diagnostics"]} == {"CAN002"}
+    assert status == 1 and not operation["complete"]
+    assert {d["code"] for d in operation["diagnostics"]} == {"CAN002", "CAN003"}
 
 
 def test_unconsumed_async_generator_expression_keeps_awaits_deferred(
@@ -506,7 +418,7 @@ def endpoint(box: Box, item_ids: list[int]):
     assert any("target" in d["message"] for d in operation["diagnostics"])
 
 
-def test_typed_element_method_dispatch_finds_the_application_error(
+def test_unresolved_element_method_dispatch_stays_incomplete(
     analyze: Callable[..., tuple[int, dict[str, Any]]],
 ) -> None:
     status, report = analyze("""
@@ -518,5 +430,5 @@ def endpoint(items: list[Item]):
     return [item.validate() for item in items]
 """)
     (operation,) = report["operations"]
-    assert status == 1 and operation["complete"]
-    assert {d["code"] for d in operation["diagnostics"]} == {"CAN002"}
+    assert status == 1 and not operation["complete"]
+    assert {d["code"] for d in operation["diagnostics"]} == {"CAN003"}

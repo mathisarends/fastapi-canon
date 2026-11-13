@@ -6,44 +6,13 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Breaking changes
 
-- Error-contract checking discovers child RPC channels, RPC streams and direct
-  socket/binary-stream registrations, including imperative factories and aliases.
-  Previously omitted declarations now contribute gaps or CAN003 and can fail
-  `--strict --require-complete`. This targets unpublished 0.20.0. Re-scan all own
-  import roots and inspect operation counts; consumers of JSON must accept the
-  `socket` transport value. Unsupported socket/composition contracts remain
-  explicitly incomplete instead of disappearing from the report.
-
-- Error-contract checking preserves source-module boundaries when resolving
-  package re-exports such as `from .router import router`. Previously hidden
-  HTTP, SSE, WebRTC and RPC error paths can now produce CAN001/CAN002 and fail
-  `check errors --strict`. This change requires the next minor release, 0.20.0.
-  Before upgrading CI, scan each application's import roots, review the new
-  paths, map escaping application exceptions with `Error`, and declare them in
-  the operation or router `raises`. Remaining CAN003 findings still require
-  `--require-complete` to fail the check; do not rename exports or exclude source
-  to recover a passing result.
-
-- Error-contract checking follows registered dependencies returned or yielded by
-  Dishka provider methods, including local aliases and transitive forwarding.
-  Previously hidden application exceptions can now fail `--strict`; this also
-  belongs to the next minor release, 0.20.0. Review new error paths and update
-  their `Error` mappings and operation/router `raises` before upgrading CI.
-  Missing registrations, cycles and unsupported annotations remain CAN003;
-  keep `--require-complete` enabled wherever unresolved paths must block CI.
-  Conditional annotation origins remain visible on every affected operation.
-
-- Error-contract checking now propagates actual arguments, constructor fields,
-  container values and shared-object mutations through application call chains.
-  It follows converging recursive summaries, dependency construction, generator
-  resource entry, owned exit-stack cleanup, awaited tasks and supported Pydantic
-  and ORM value shapes. Opaque values and unsupported effects remain CAN003. Newly found
-  application exceptions can fail `--strict`; this targets unpublished 0.20.0.
-  Scan every application and shared-library import root, review new mappings and
-  `raises`, and use `--strict --require-complete` for the intended CI scope.
-  JSON operations include `scheduled_executions`; background work and provider
-  shutdown are separate from the operation contract. Third-party and built-in
-  exceptions require no application mapping and can still produce 500.
+- Source error checking preserves module identities when a package re-exports
+  a same-named object, for example `from .router import router`. Previously
+  hidden HTTP, SSE, WebRTC and RPC paths can now produce CAN001/CAN002 and fail
+  `check errors --strict`. This targets unpublished 0.20.0. Before upgrading CI,
+  re-scan all application import roots and review newly visible mappings and
+  `raises` declarations. CAN003 still means incomplete analysis; the checker
+  does not guarantee that every runtime exception is handled.
 
 - The typed contract-export API requires the next minor release, 0.20.0.
   Pass `ContractKind.OPENAPI`, `ContractKind.OPENRPC` or `ContractKind.WEBRTC`

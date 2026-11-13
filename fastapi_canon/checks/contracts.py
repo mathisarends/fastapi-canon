@@ -10,12 +10,10 @@ from fastapi_canon.checks.analysis import (
     _RPC_METHOD,
     _TRANSPORT_METHODS,
     _Analyzer,
+    _Flow,
+    _Unknown,
 )
-from fastapi_canon.checks.declarations import _Registration, _Registrations
-from fastapi_canon.checks.effects import _Flow, _Unknown
-from fastapi_canon.checks.source import _Source
-from fastapi_canon.checks.symbols import _Definition
-from fastapi_canon.checks.value_flow import _ValueSummary
+from fastapi_canon.checks.source import _Definition, _Source
 
 _API_ROUTERS = frozenset(
     {"fastapi_canon.APIRouter", "fastapi_canon.api_router.APIRouter"}
@@ -31,28 +29,6 @@ _DEPENDENCIES = {
     "fastapi.Security",
     "fastapi.params.Security",
 }
-_RPC_DECLARATIONS = frozenset({_RPC_METHOD, "stream", "socket"})
-_SOCKET_DECLARATIONS = frozenset({"socket", "binary_stream"})
-
-type _OperationKey = tuple[
-    str,
-    int,
-    str,
-    str,
-    str,
-    int,
-    int,
-    tuple[tuple[str, int], ...],
-    bool,
-    str | None,
-    frozenset[str],
-]
-
-
-@dataclass(frozen=True)
-class _Channel:
-    layers: tuple[tuple[str, ast.Call], ...]
-    status: str
 
 
 @dataclass(frozen=True)
@@ -64,13 +40,6 @@ class _Diagnostic:
     trace: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True)
-class _OperationSummary:
-    diagnostics: tuple[_Diagnostic, ...]
-    scheduled: tuple[str, ...]
-    observations: _ValueSummary
-
-
 @dataclass
 class _Operation:
     function: str
@@ -78,7 +47,6 @@ class _Operation:
     line: int
     diagnostics: list[_Diagnostic] = field(default_factory=list)
     transport: str = "http"
-    scheduled_executions: list[str] = field(default_factory=list)
 
     @property
     def complete(self) -> bool:
@@ -119,25 +87,11 @@ def _keyword(node: ast.Call, name: str) -> ast.expr | None:
 class _Checker:
     def __init__(self, source: _Source) -> None:
         self.source = source
-        self._registrations = _Registrations(source).read()
         self._catalog_cache: dict[str, str] | None = None
         # flow-analysis unit seam
         self._analyzer = _Analyzer(source)
-        self._operation_summaries: dict[_OperationKey, _OperationSummary] = {}
 
     def check(self) -> _Report:
-        # Operations share application-scoped objects. A later operation can
-        # populate a container read by an earlier one; report the fixed point.
-        for _ in range(32):
-            heap = dict(self.source.heap)
-            report = self._check_pass()
-            if self.source.heap == heap:
-                return report
-        for operation in report.operations:
-            self._unknown(operation, "shared object flow did not converge")
-        return report
-
-    def _check_pass(self) -> _Report:
         operations: list[_Operation] = []
         nested = {id(function.node) for function in self.source.nested}
         for function in [*self.source.definitions.values(), *self.source.nested]:
@@ -152,15 +106,10 @@ class _Checker:
                     method, owner = decorator.attr, decorator.value
                 else:
                     continue
-                if method in _RPC_DECLARATIONS:
-                    rpc = self._rpc_method(function, decorator, owner, nested, method)
+                if method == _RPC_METHOD:
+                    rpc = self._rpc_method(function, decorator, owner, nested)
                     if rpc is not None:
                         operations.append(rpc)
-                    continue
-                if method in _SOCKET_DECLARATIONS:
-                    socket = self._socket(function, decorator, owner)
-                    if socket is not None:
-                        operations.append(socket)
                     continue
                 if not isinstance(decorator, ast.Call) or method not in {
                     *_ROUTE_METHODS,
@@ -204,20 +153,6 @@ class _Checker:
                 assert isinstance(router, ast.Call)
                 operations.append(operation)
                 self._operation(operation, function, decorator, module, router)
-        registered_locations = {
-            (operation.path, operation.line) for operation in operations
-        }
-        for declaration in self._registrations:
-            location = (
-                str(self.source.paths[declaration.module]),
-                declaration.call.lineno,
-            )
-            if location in registered_locations:
-                continue
-            registration = self._registration(declaration, nested)
-            if registration is not None:
-                operations.append(registration)
-                registered_locations.add(location)
         return _Report(operations)
 
     def _rpc_method(
@@ -226,53 +161,34 @@ class _Checker:
         decorator: ast.expr,
         owner: ast.expr,
         nested: set[int],
-        method: str = _RPC_METHOD,
-        declaration_module: str | None = None,
-        registered_channel: _Channel | None = None,
-        uncertain_registration: bool = False,
     ) -> _Operation | None:
         # `method` is a common attribute name: only resolved RpcChannels count.
-        owner_module = declaration_module or function.module
-        self.source.touched = {function.module, owner_module}
-        declaration = registered_channel or self._channel(owner, owner_module)
+        self.source.touched = {function.module}
+        module, channel = self.source.value(owner, function.module)
+        if not isinstance(channel, ast.Call):
+            return None
+        declaration = self.source.rpc_channel(self.source.resolve(channel.func, module))
         if declaration is None:
-            return (
-                self._socket(function, decorator, owner, owner_module)
-                if method == "socket"
-                else None
-            )
+            return None
         declaration_modules = frozenset(self.source.touched)
         operation = _Operation(
             function.name,
-            str(self.source.paths[owner_module]),
+            str(self.source.paths[function.module]),
             decorator.lineno,
             transport="rpc",
         )
-        if uncertain_registration:
-            self._unknown(
-                operation,
-                "function-scoped registrations require factory composition analysis",
-            )
-            return operation
         if id(function.node) in nested:
             self._unknown(
                 operation, "nested RPC declarations require runtime factory execution"
             )
             return operation
-        if declaration.status == "incomplete":
+        if declaration == "incomplete":
             self._unknown(
                 operation,
-                "RPC channel subclass or composition contracts require runtime execution",
-            )
-            return operation
-        if method == "socket":
-            self._unknown(
-                operation,
-                "socket context, rejection and close contracts are unresolved",
+                "RPC channel subclass contracts require runtime class or constructor execution",
             )
             return operation
         call = decorator if isinstance(decorator, ast.Call) else None
-        module, channel = declaration.layers[-1]
         self._operation(
             operation,
             function,
@@ -280,97 +196,8 @@ class _Checker:
             module,
             channel,
             declaration_modules=declaration_modules,
-            ancestors=declaration.layers[:-1],
-            iterated=method == "stream",
-            decorator_module=owner_module,
         )
         return operation
-
-    def _channel(
-        self, node: ast.expr, module: str, seen: frozenset[int] = frozenset()
-    ) -> _Channel | None:
-        module, node = self.source.value(node, module)
-        if not isinstance(node, ast.Call) or id(node) in seen:
-            return None
-        status = self.source.rpc_channel(self.source.resolve(node.func, module))
-        if status is not None:
-            return _Channel(((module, node),), status)
-        if not isinstance(node.func, ast.Attribute):
-            return None
-        if node.func.attr == "child":
-            parent = self._channel(node.func.value, module, seen | {id(node)})
-            if parent is not None:
-                return _Channel((*parent.layers, (module, node)), parent.status)
-        if node.func.attr == "channel" and self._router(node.func.value, module):
-            return _Channel(((module, node),), "incomplete")
-        return None
-
-    def _router(self, node: ast.expr, module: str) -> bool:
-        module, value = self.source.value(node, module)
-        return (
-            isinstance(value, ast.Call)
-            and self.source.resolve(value.func, module) in _CANON_ROUTERS
-        )
-
-    def _socket(
-        self,
-        function: _Definition,
-        declaration: ast.expr,
-        owner: ast.expr,
-        declaration_module: str | None = None,
-        registered_owner: bool = False,
-    ) -> _Operation | None:
-        module = declaration_module or function.module
-        if not registered_owner and not self._router(owner, module):
-            return None
-        operation = _Operation(
-            function.name,
-            str(self.source.paths[module]),
-            declaration.lineno,
-            transport="socket",
-        )
-        self._unknown(
-            operation, "socket context, rejection and close contracts are unresolved"
-        )
-        return operation
-
-    def _registration(
-        self, declaration: _Registration, nested: set[int]
-    ) -> _Operation | None:
-        module, call = declaration.module, declaration.call
-        decorator = declaration.decorator.call
-        assert isinstance(decorator.func, ast.Attribute)
-        method, owner = decorator.func.attr, decorator.func.value
-        if declaration.function is None:
-            operation = _Operation(
-                f"{module}.<registration@{call.lineno}>",
-                str(self.source.paths[module]),
-                call.lineno,
-                transport="socket" if method in _SOCKET_DECLARATIONS else "rpc",
-            )
-            self._unknown(operation, "unresolved transport handler registration")
-            return operation
-        function = declaration.function
-        owners = declaration.decorator.owners
-        if owners[0].kind == "rpc":
-            status = "incomplete" if len(owners) != 1 else owners[0].status
-            registered = self._rpc_method(
-                function,
-                decorator,
-                owner,
-                nested,
-                method,
-                module,
-                registered_channel=_Channel(owners[0].layers, status),
-                uncertain_registration=declaration.uncertain,
-            )
-        else:
-            registered = self._socket(
-                function, decorator, owner, module, registered_owner=True
-            )
-        if registered is not None:
-            registered.line = call.lineno
-        return registered
 
     def _unknown(
         self, operation: _Operation, message: str, line: int | None = None
@@ -590,62 +417,9 @@ class _Checker:
         router: ast.Call,
         *,
         declaration_modules: frozenset[str] = frozenset(),
-        ancestors: tuple[tuple[str, ast.Call], ...] = (),
-        iterated: bool = False,
-        decorator_module: str | None = None,
-    ) -> None:
-        key = (
-            operation.path,
-            operation.line,
-            operation.function,
-            operation.transport,
-            module,
-            id(decorator),
-            id(router),
-            tuple((scope, id(layer)) for scope, layer in ancestors),
-            iterated,
-            decorator_module,
-            declaration_modules,
-        )
-        cached = self._operation_summaries.get(key)
-        if cached and self.source.reuse(cached.observations):
-            operation.diagnostics = list(cached.diagnostics)
-            operation.scheduled_executions = list(cached.scheduled)
-            return
-        with self.source.observations() as observed:
-            self._analyze_operation(
-                operation,
-                function,
-                decorator,
-                module,
-                router,
-                declaration_modules=declaration_modules,
-                ancestors=ancestors,
-                iterated=iterated,
-                decorator_module=decorator_module,
-            )
-        if observed.summary is not None:
-            self._operation_summaries[key] = _OperationSummary(
-                tuple(operation.diagnostics),
-                tuple(operation.scheduled_executions),
-                observed.summary,
-            )
-
-    def _analyze_operation(
-        self,
-        operation: _Operation,
-        function: _Definition,
-        decorator: ast.Call | None,
-        module: str,
-        router: ast.Call,
-        *,
-        declaration_modules: frozenset[str],
-        ancestors: tuple[tuple[str, ast.Call], ...],
-        iterated: bool,
-        decorator_module: str | None,
     ) -> None:
         self.source.touched = {function.module, module, *declaration_modules}
-        layers = [*ancestors, (module, router)]
+        layers = [(module, router)]
         policy_node = (
             _keyword(router, "policy") if operation.transport != "rpc" else None
         )
@@ -686,18 +460,14 @@ class _Checker:
             declared.update(self._errors(_keyword(layer, "raises"), scope, operation))
         if decorator is not None:
             declared.update(
-                self._errors(
-                    _keyword(decorator, "raises"),
-                    decorator_module or function.module,
-                    operation,
-                )
+                self._errors(_keyword(decorator, "raises"), function.module, operation)
             )
         catalog.update(declared)
         contracts_known = not operation.diagnostics
         # SSE generator bodies run while the response streams; follow iterated calls.
         flow = self._analyzer.function(
             function,
-            iterated=iterated or operation.transport == "sse",
+            iterated=operation.transport == "sse",
             dependency_transport=operation.transport,
         )
         flow.extend(self._dependencies(function, transport=operation.transport))
@@ -705,15 +475,12 @@ class _Checker:
             flow.extend(self._router_dependencies(layer, scope, operation))
         if decorator is not None:
             flow.extend(
-                self._router_dependencies(
-                    decorator, decorator_module or function.module, operation
-                )
+                self._router_dependencies(decorator, function.module, operation)
             )
         contracts_known = contracts_known and not any(
             self.source.uncertain.get(scope) for scope in self.source.touched
         )
         self._compare(operation, flow, catalog, declared, contracts_known)
-        operation.scheduled_executions = sorted(flow.scheduled)
         for scope in sorted(self.source.touched):
             for message in dict.fromkeys(self.source.uncertain.get(scope, [])):
                 operation.diagnostics.append(
@@ -730,8 +497,6 @@ class _Checker:
     ) -> None:
         seen: set[tuple[str, str]] = set()
         for escape in flow.escapes:
-            if escape.implicit:
-                continue
             if self.source.framework_exception(escape.exception):
                 if self.source.websocket_exception(
                     escape.exception
@@ -749,8 +514,6 @@ class _Checker:
                 continue
             # Only application-defined exceptions are in scope, not implicit runtime failures.
             if escape.exception.startswith("builtins."):
-                continue
-            if escape.exception not in self.source.definitions:
                 continue
             if not contracts_known:
                 continue
