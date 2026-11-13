@@ -163,9 +163,21 @@ def generate_typescript(contract: Contract) -> dict[str, str]:
             .joinpath(f"templates/{template}")
             .read_text(encoding="utf-8")
         )
-    grouped: dict[str, list[Operation]] = {}
+    grouped: dict[tuple[str, ...], list[Operation]] = {}
+    directories: dict[tuple[str, ...], str] = {}
     for operation in contract.operations:
-        grouped.setdefault(operation.group, []).append(operation)
+        keys = tuple(identifier(part) for part in operation.group)
+        parts = operation.directory.split("/")
+        for depth in range(1, len(keys) + 1):
+            grouped.setdefault(keys[:depth], [])
+            directories[keys[:depth]] = "/".join(parts[:depth])
+        grouped[keys].append(operation)
+    factories = {
+        keys: "create" + "".join(key[:1].upper() + key[1:] for key in keys) + "Api"
+        for keys in grouped
+    }
+    if len(set(factories.values())) != len(factories):
+        raise ContractError("Client group factory name collision")
     groups: list[dict[str, str]] = []
     exports = [
         _HEADER,
@@ -178,11 +190,21 @@ def generate_typescript(contract: Contract) -> dict[str, str]:
         "export { HttpError, isHttpError, TransportError, StreamParseError } "
         'from "./transport/errors.js";',
     ]
-    for group, operations in sorted(grouped.items()):
+    for keys, operations in sorted(grouped.items()):
         operations.sort(key=lambda operation: operation.name)
-        directory = operations[0].directory
-        factory = "create" + group[:1].upper() + group[1:] + "Api"
-        groups.append(dict(name=group, factory=factory, directory=directory))
+        directory = directories[keys]
+        factory = factories[keys]
+        if len(keys) == 1:
+            groups.append(dict(name=keys[0], factory=factory, directory=directory))
+        children = [
+            dict(
+                name=child[-1],
+                factory=factories[child],
+                directory=directories[child].rsplit("/", 1)[-1],
+            )
+            for child in sorted(grouped)
+            if len(child) == len(keys) + 1 and child[:-1] == keys
+        ]
         functions = ["stream"]
         if any(
             param.location == "path" for op in operations for param in op.parameters
@@ -200,9 +222,12 @@ def generate_typescript(contract: Contract) -> dict[str, str]:
             operations=operations,
             functions=functions,
             factory=factory,
+            children=children,
+            root="../" * len(keys),
         )
-        output[f"{directory}/index.ts"] = _HEADER + 'export * from "./api.js";\n'
-        exports.append(f'export type * from "./{directory}/api.js";')
+        if operations:
+            output[f"{directory}/index.ts"] = _HEADER + 'export * from "./api.js";\n'
+            exports.append(f'export type * from "./{directory}/api.js";')
     output["client.ts"] = env.get_template("typescript/client.ts.j2").render(
         groups=groups
     )

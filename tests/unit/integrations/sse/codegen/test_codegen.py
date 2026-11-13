@@ -54,7 +54,7 @@ def test_ir_and_types_are_typed_and_streams_only():
         "stream_run_events",
         "stream_prompt",
     }
-    assert all(op.group == "agentRuns" for op in contract.operations)
+    assert all(op.group == ("agentRuns",) for op in contract.operations)
     event = next(
         declaration
         for declaration in contract.declarations

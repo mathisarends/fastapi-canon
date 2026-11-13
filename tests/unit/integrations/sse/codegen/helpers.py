@@ -1,7 +1,11 @@
 import importlib.util
+import json
+import shutil
+import subprocess
 import sys
 from collections.abc import AsyncIterator
 from contextlib import contextmanager
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi import FastAPI
@@ -69,3 +73,35 @@ def load_package(tmp_path, files):
         for key in list(sys.modules):
             if key == name or key.startswith(name + "."):
                 sys.modules.pop(key)
+
+
+def compile_typescript(tmp_path, files, consumer):
+    write_files(tmp_path, files)
+    (tmp_path / "consumer.ts").write_text(consumer, encoding="utf-8")
+    (tmp_path / "tsconfig.json").write_text(
+        json.dumps(
+            {
+                "compilerOptions": {
+                    "strict": True,
+                    "target": "ES2022",
+                    "module": "ESNext",
+                    "moduleResolution": "Bundler",
+                    "skipLibCheck": True,
+                    "noEmit": True,
+                },
+                "include": ["**/*.ts"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    compiler = Path(__file__).parents[5] / "node_modules/typescript/bin/tsc"
+    node = shutil.which("node")
+    assert node and compiler.is_file(), (
+        "Run pnpm install --frozen-lockfile --ignore-scripts before acceptance tests"
+    )
+    return subprocess.run(
+        [node, str(compiler), "-p", str(tmp_path / "tsconfig.json")],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )

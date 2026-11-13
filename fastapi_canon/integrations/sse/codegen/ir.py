@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, cast
 
-from fastapi_canon.integrations.sse.codegen.names import identifier, slug
+from fastapi_canon.integrations.sse.codegen.names import client_path, identifier, slug
 from fastapi_canon.integrations.sse.codegen.openapi import (
     ContractError,
     Document,
@@ -161,7 +161,7 @@ class SecurityScheme:
 class Operation:
     operation_id: str
     name: str
-    group: str
+    group: tuple[str, ...]
     directory: str
     path: str
     method: str
@@ -205,9 +205,9 @@ def build_ir(
     operations: list[Operation] = []
     ids: set[str] = set()
     public_names: set[str] = set()
-    names: set[tuple[str, str]] = set()
-    groups: dict[str, str] = {}
-    directories: dict[str, str] = {}
+    names: set[tuple[tuple[str, ...], str]] = set()
+    groups: dict[tuple[str, ...], tuple[str, ...]] = {}
+    directories: dict[tuple[str, ...], tuple[str, ...]] = {}
     paths: Document = document.get("paths", {})
     for path, raw_path in sorted(paths.items()):
         path_item = resolve_ref(document, raw_path)
@@ -274,19 +274,26 @@ def build_ir(
             if public_name in public_names:
                 raise ContractError(f"Operation identifier collision: {public_name}")
             public_names.add(public_name)
-            tag: str = (raw.get("tags") or ["streams"])[0]
-            group, directory = identifier(tag), slug(tag)
-            if (group in groups and groups[group] != tag) or (
-                directory in directories and directories[directory] != tag
-            ):
-                raise ContractError(f"Tag name collision: {tag}")
-            if group in {"transport", "types", "client", "index"}:
-                raise ContractError(f"Reserved stream tag: {tag}")
-            groups[group], directories[directory] = tag, tag
-            name = identifier(operation_id)
-            if (group, name) in names:
-                raise ContractError(f"Operation name collision: {group}.{name}")
-            names.add((group, name))
+            group, member = client_path(operation_id, raw.get("tags") or ())
+            keys = tuple(identifier(part) for part in group)
+            directory = "/".join(slug(part) for part in group)
+            for depth in range(1, len(group) + 1):
+                for registry, key in (
+                    (groups, keys[:depth]),
+                    (directories, directory.split("/")[:depth]),
+                ):
+                    if registry.setdefault(tuple(key), group[:depth]) != group[:depth]:
+                        raise ContractError(
+                            f"Client group collision: {'.'.join(group[:depth])}"
+                        )
+            if keys[0] in {"transport", "types", "client", "index"}:
+                raise ContractError(f"Reserved stream group: {group[0]}")
+            name = identifier(member)
+            if (keys, name) in names:
+                raise ContractError(
+                    f"Operation name collision: {'.'.join(keys)}.{name}"
+                )
+            names.add((keys, name))
             merged: dict[tuple[str, str], Document] = {}
             for value in [*path_item.get("parameters", []), *raw.get("parameters", [])]:
                 param = resolve_ref(document, value)
@@ -394,6 +401,11 @@ def build_ir(
                     profile is not None,
                     tuple(problem_bindings),
                 )
+            )
+    for keys, name in names:
+        if (*keys, name) in groups:
+            raise ContractError(
+                f"Operation and client group share a name: {'.'.join((*keys, name))}"
             )
     if include_operations is not None and (missing := set(include_operations) - ids):
         raise ContractError(f"Unknown SSE operation IDs: {', '.join(sorted(missing))}")

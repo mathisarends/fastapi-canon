@@ -153,9 +153,11 @@ response class options are absent, because a stream infers its event model.
 `Feature.name` identifies a feature in diagnostics and lifecycle only; it is not a
 public API name. Public names come from the declaration that owns them: the
 router `namespace`, an explicit `operation_id` and `tags`, and an `RpcChannel`
-namespace. To group a feature's operations, set the namespace or tags where the
-router is declared (`APIRouter(namespace="projects", tags=["projects"])`) rather
-than expecting them from the feature. This keeps a reusable router's public names
+namespace. To group a feature's operations, set the namespace where the router is
+declared (`APIRouter(namespace="projects")`) rather than expecting it from the
+feature. Generated SSE and RPC clients use the namespace as their group, so
+`projects.events` becomes `client.projects.events`. Tags only group operations
+without a namespace and remain available for OpenAPI tooling. This keeps a reusable router's public names
 independent of where it is installed.
 
 Renaming an endpoint function changes its automatic ID and generated SDK member.
