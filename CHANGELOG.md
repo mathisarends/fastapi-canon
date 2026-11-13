@@ -6,6 +6,14 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Breaking changes
 
+- Source error checking preserves module identities when a package re-exports
+  a same-named object, for example `from .router import router`. Previously
+  hidden HTTP, SSE, WebRTC and RPC paths can now produce CAN001/CAN002 and fail
+  `check errors --strict`. This targets unpublished 0.20.0. Before upgrading CI,
+  re-scan all application import roots and review newly visible mappings and
+  `raises` declarations. CAN003 still means incomplete analysis; the checker
+  does not guarantee that every runtime exception is handled.
+
 - The typed contract-export API requires the next minor release, 0.20.0.
   Pass `ContractKind.OPENAPI`, `ContractKind.OPENRPC` or `ContractKind.WEBRTC`
   from `fastapi_canon.contracts` in `export_contracts(kinds=...)`; raw Python

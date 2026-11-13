@@ -24,6 +24,60 @@ application, constructing a Dishka container, or opening application resources.
 It is optional development tooling; normal route registration, runtime exception
 mapping and OpenAPI validation keep their existing behavior.
 
+The scope is explicit exceptions defined in your application and shared
+application libraries. Pass those libraries' import roots too. Third-party and
+built-in exceptions need no application `Error` mapping; unexpected database,
+browser or interpreter failures can still return 500. When an adapter translates
+such a failure into an application exception, the checker inspects that exception.
+
+A `raises` declaration documents the operation's allowed errors. It does not
+catch an exception. Runtime mapping requires the `Error` to be registered in the
+installed application. CAN001 is a missing declaration for an existing mapping;
+CAN002 is a missing source-visible mapping. Test actual responses separately.
+
+## Choose a CI guarantee
+
+Use an explicit inventory of business exception types and their intended `Error`
+definitions for a bounded mapping check. Validate it against the registry used
+by the application, rather than inferring it from every service call:
+
+```python
+from fastapi_canon import Error
+from fastapi_canon.error import ErrorRegistry
+
+
+class ProjectMissing(Exception):
+    pass
+
+
+project_missing = Error(
+    ProjectMissing, status=404, code="project_missing", title="Project missing"
+)
+business_exceptions = (ProjectMissing,)
+registry = ErrorRegistry(errors=[project_missing], type_base="urn:example:problem")
+
+
+def test_business_error_mappings() -> None:
+    mapped = {error.exception for error in registry.errors}
+    missing = [
+        exception.__qualname__
+        for exception in business_exceptions
+        if not any(base in mapped for base in exception.__mro__)
+    ]
+    assert not missing, missing
+```
+
+Reuse the same definitions in application composition. Keep the inventory
+explicit and review it when adding a business exception: this test does not
+discover newly added classes or prove that each route declares them. Retain HTTP
+tests for important Problem Details responses and resource cleanup. A cleanup
+framework can wrap an application exception, changing which mapping applies.
+
+Use source analysis as an additional signal. `--strict` rejects the gaps it
+finds; `--require-complete` also rejects unresolved paths. Enable the latter only
+for a slice whose whole shared call chain fits the supported model. Neither
+policy establishes that the application cannot return an unexpected 500.
+
 ## How the check works
 
 The checker compares two sets for each operation: application exceptions escaping
@@ -69,6 +123,11 @@ incomplete analysis can appear together.
 The command is the supported entry point. The `checks` implementation modules,
 their types and constants, and the report objects are private implementation details;
 the documented JSON fields are the machine-readable interface.
+
+Package re-exports such as `from .router import router` preserve the source
+module's identity. The corrected resolution is **unpublished and planned for
+0.20.0**; newly visible paths can fail `--strict`. No additional runtime or
+dependency-lifecycle coverage is implied by this fix.
 
 ## Findings and CI
 

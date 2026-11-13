@@ -548,9 +548,15 @@ class _Source:
             return self.canonical(binding, seen | {name})
         if binding is not None and isinstance(binding[1], ast.Name | ast.Attribute):
             return self.resolve(binding[1], binding[0], seen=seen | {name}) or name
-        # Resolve module aliases and re-exported classes in dotted references.
+        # Package attributes can share a name with a source module. Resolve
+        # aliases inside a namespace without rewriting an actual module prefix.
         prefix, separator, member = name.rpartition(".")
-        if separator and prefix in self.bindings and prefix not in seen:
+        if (
+            separator
+            and prefix not in self.paths
+            and prefix in self.bindings
+            and prefix not in seen
+        ):
             resolved = self.canonical(prefix, seen | {name})
             if resolved != prefix:
                 return self.canonical(f"{resolved}.{member}", seen | {name})
