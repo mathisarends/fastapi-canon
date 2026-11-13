@@ -31,7 +31,15 @@ cached document and ordinary REST endpoints remain intact.
 The generator extracts application data from
 `itemSchema.properties.data.contentSchema`. Only stream operations and models
 reachable from their parameters, bodies, events and error responses are emitted.
-Operations use the first tag as their group, defaulting to `streams`.
+Operation IDs determine client members in the same way as generated RPC
+clients. A dotted ID uses its namespace as nested groups and its last segment as
+the method: `projects.events` becomes `client.projects.events` and
+`projects.members.updates` becomes `client.projects.members.updates`. An ID
+without a namespace uses the first tag as its group, then `streams`. Tags do not
+change the group of a dotted ID. A group cannot share a name with a method at
+the same level, and the top-level groups `transport`, `types`, `client` and
+`index` are reserved in TypeScript. Python reserves the top-level groups `models`,
+`runtime`, `client`, `problem` and `aclose`, and the nested group `api`.
 
 In Canon 0.18.0 and later, pass `--include-operation OPERATION_ID` to
 `generate` or `check`, repeating the option for multiple SSE operations. The

@@ -58,7 +58,7 @@ def generate_python(
         "import httpx2 as httpx" if http_client == "httpx2" else "import httpx"
     )
     models = _Models(contract.declarations)
-    grouped: dict[str, list[Operation]] = {}
+    grouped: dict[tuple[str, ...], list[Operation]] = {}
     for operation in contract.operations:
         name = identifier(operation.operation_id, upper=True)
         seen = {"self", "options", "query", "headers", "content", "adapter"}
@@ -95,7 +95,10 @@ def generate_python(
         operation = replace(
             operation, parameters=tuple(parameters), body=body, event=event
         )
-        grouped.setdefault(python_identifier(operation.group), []).append(operation)
+        keys = tuple(python_identifier(part) for part in operation.group)
+        for depth in range(1, len(keys) + 1):
+            grouped.setdefault(keys[:depth], [])
+        grouped[keys].append(operation)
     env = environment()
 
     def render_type(value: Type) -> str:
@@ -114,16 +117,35 @@ def generate_python(
     )
     groups: list[dict[str, str]] = []
     output: dict[str, str] = {}
-    for name, operations in sorted(grouped.items()):
-        if name in {"models", "runtime", "client", "problem", "aclose"}:
-            raise ContractError(f"Reserved Python tag: {name}")
-        if len(
-            {python_identifier(operation.operation_id) for operation in operations}
-        ) != len(operations):
+    classes = {
+        keys: "".join(identifier(key, upper=True) for key in keys) + "Api"
+        for keys in grouped
+    }
+    if len(set(classes.values())) != len(classes):
+        raise ContractError("Python client group class name collision")
+    for keys, operations in sorted(grouped.items()):
+        name = ".".join(keys)
+        if keys[0] in {"models", "runtime", "client", "problem", "aclose"}:
+            raise ContractError(f"Reserved Python tag: {keys[0]}")
+        if "api" in keys[1:]:
+            raise ContractError(f"Reserved Python client group: {name}")
+        members = [python_identifier(operation.name) for operation in operations]
+        children = [
+            dict(name=child[-1], class_name=classes[child])
+            for child in sorted(grouped)
+            if len(child) == len(keys) + 1 and child[:-1] == keys
+        ]
+        if len({*members, *(child["name"] for child in children)}) != len(
+            members
+        ) + len(children):
             raise ContractError(f"Python operation name collision in {name}")
-        class_name = identifier(name, upper=True) + "Api"
-        groups.append(dict(name=name, directory=name, class_name=class_name))
-        functions = ["RequestOptions", "Transport"]
+        class_name = classes[keys]
+        directory = "/".join(keys)
+        if len(keys) == 1:
+            groups.append(dict(name=keys[0], directory=keys[0], class_name=class_name))
+        functions = ["Transport"]
+        if operations:
+            functions.append("RequestOptions")
         if any(op.parameters for op in operations):
             functions.append("validate_parameter as _validate_parameter")
         for location, function in (
@@ -137,12 +159,14 @@ def generate_python(
                 for parameter in op.parameters
             ):
                 functions.append(function)
-        output[f"{name}/api.py"] = env.get_template("python/api.py.j2").render(
+        output[f"{directory}/api.py"] = env.get_template("python/api.py.j2").render(
             class_name=class_name,
             operations=sorted(operations, key=lambda op: op.name),
             runtime_imports=sorted(functions),
+            children=children,
+            root="." * (len(keys) + 1),
         )
-        output[f"{name}/__init__.py"] = (
+        output[f"{directory}/__init__.py"] = (
             _HEADER + f"from .api import {class_name} as {class_name}\n"
         )
     output["models.py"] = models.render()

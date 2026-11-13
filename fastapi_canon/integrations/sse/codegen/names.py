@@ -1,5 +1,6 @@
 import keyword
 import re
+from collections.abc import Sequence
 
 from fastapi_canon.integrations.sse.codegen.openapi import ContractError
 
@@ -55,6 +56,19 @@ _RESERVED = {
     "__proto__",
     "then",
 }
+
+
+def client_path(operation_id: str, tags: Sequence[str]) -> tuple[tuple[str, ...], str]:
+    """Return an operation's client group path and member name.
+
+    Dotted operation IDs such as ``projects.members.updates`` use their namespace
+    as nested groups, matching generated RPC clients. IDs without a namespace use
+    the first tag as their group, then ``streams``.
+    """
+    *namespace, member = operation_id.split(".")
+    if namespace:
+        return tuple(namespace), member
+    return (tags[0] if tags else "streams",), operation_id
 
 
 def _words(value: str) -> list[str]:

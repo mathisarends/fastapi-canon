@@ -18,7 +18,7 @@ async def read_events(
     values: list[int] = []
     async with (
         Client(base_url, http_client=http_client) as client,
-        aclosing(client.projects.projects_events(project_id=project_id)) as events,
+        aclosing(client.projects.events(project_id=project_id)) as events,
     ):
         async for event in events:
             values.append(event.sequence)
