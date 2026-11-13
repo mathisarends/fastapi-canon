@@ -225,8 +225,8 @@ class _Models:
         field_name: Callable[[str], str] | None = None,
     ) -> None:
         self.field_name = field_name or _field_name
-        self.custom_fields = field_name is not None
-        self.python_patterns: set[str] = set()
+        self._custom_fields = field_name is not None
+        self._python_patterns: set[str] = set()
         if collisions := _MODEL_SYMBOLS & {
             declaration.name for declaration in declarations
         }:
@@ -283,10 +283,10 @@ class _Models:
                                 raise ContractError(
                                     f"Unsupported string pattern: {exc}"
                                 ) from exc
-                            self.python_patterns.add(pattern)
+                            self._python_patterns.add(pattern)
                     arguments = ", ".join(
                         f"pattern=_re.compile({value!r})"
-                        if key == "pattern" and value in self.python_patterns
+                        if key == "pattern" and value in self._python_patterns
                         else f"{key}={value!r}"
                         for key, value in constraints
                     )
@@ -438,7 +438,7 @@ class _Models:
                             lines.append(
                                 "    model_config = ConfigDict(populate_by_name=True)"
                             )
-                        if self.custom_fields:
+                        if self._custom_fields:
                             lines[-1] = (
                                 lines[-1].removesuffix(")")
                                 + ", protected_namespaces=())"
@@ -558,7 +558,7 @@ class _Models:
             if re.search(r"\b" + name + r"\b", text)
         ]
         imports = [_HEADER, "from __future__ import annotations", ""]
-        if self.python_patterns:
+        if self._python_patterns:
             imports.append("import re as _re")
         if any(isinstance(type_, StringEnum) for type_ in self.declarations.values()):
             imports.append("from enum import StrEnum")

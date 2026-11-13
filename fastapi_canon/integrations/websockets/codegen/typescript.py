@@ -126,13 +126,13 @@ class _Renderer:
         root_sockets: tuple[SocketDecl, ...] = (),
         bound: Mapping[str, SocketBinding] | None = None,
     ) -> None:
-        self.ir = ir
+        self._ir = ir
         self.root_operations = root_operations
         self.nodes = nodes
         self.root_events = root_events
         self.root_streams = root_streams
         self.root_sockets = root_sockets
-        self.bound = bound or {}
+        self._bound = bound or {}
         self.options = options
         self.client_name = client_name
 
@@ -197,23 +197,23 @@ class _Renderer:
         }
 
     def models(self) -> str:
-        return self.module(self._template("models", declarations=self.ir.declarations))
+        return self.module(self._template("models", declarations=self._ir.declarations))
 
     def namespaces_index(self) -> str:
         return self.module(self._template("namespace_index", nodes=self.nodes))
 
     def routes(self) -> str:
-        model_names = _route_model_names(self.ir.operations)
+        model_names = _route_model_names(self._ir.operations)
         model_names.update(
             name
-            for event in self.ir.notifications
+            for event in self._ir.notifications
             for name in _model_names(event.payload)
         )
         return self.module(
             self._template(
                 "routes",
-                routes=self.ir.operations,
-                notifications=self.ir.notifications,
+                routes=self._ir.operations,
+                notifications=self._ir.notifications,
                 model_import=(
                     _type_import(model_names, "./models") if model_names else ""
                 ),
@@ -224,8 +224,8 @@ class _Renderer:
         body = render_template(
             "typescript/core.ts.j2",
             transport_module=json.dumps(self._transport_module()),
-            binary_streams=bool(self.ir.binary_streams),
-            sockets=bool(self.ir.sockets),
+            binary_streams=bool(self._ir.binary_streams),
+            sockets=bool(self._ir.sockets),
         ).rstrip()
         return self.module(body)
 
@@ -236,7 +236,7 @@ class _Renderer:
         return self.module(
             self._template(
                 "streams",
-                streams=self.ir.binary_streams,
+                streams=self._ir.binary_streams,
                 with_websocket=self.options.with_transport == "websocket",
             )
         )
@@ -245,7 +245,7 @@ class _Renderer:
         return self.module(
             self._template(
                 "sockets",
-                sockets=self.ir.sockets,
+                sockets=self._ir.sockets,
                 with_websocket=self.options.with_transport == "websocket",
             )
         )
@@ -331,7 +331,7 @@ class _Renderer:
     def _socket_binding(self, socket: SocketDecl) -> SocketBinding | None:
         if socket.protocol is None:
             return None
-        return self.bound.get(socket.protocol.name)
+        return self._bound.get(socket.protocol.name)
 
     def _binding_imports(self, sockets: Iterable[SocketDecl], root: str) -> list[str]:
         modules: dict[str, SocketBinding] = {}
@@ -361,7 +361,7 @@ class _Renderer:
         if self.options.with_transport == "websocket":
             core_imports.insert(1, "RpcTransportPool")
         imports = [_value_import(core_imports, "./core")]
-        if self.ir.binary_streams:
+        if self._ir.binary_streams:
             stream_imports = ["type BinaryStreamOpener"]
             if self.root_streams:
                 stream_imports = [
@@ -377,7 +377,7 @@ class _Renderer:
                     "type BinaryWebSocketFactory",
                 ]
             imports.append(_value_import(stream_imports, "./streams"))
-        if self.ir.sockets:
+        if self._ir.sockets:
             socket_imports = ["type SocketOpener"]
             if self.root_sockets:
                 socket_imports = [
@@ -416,7 +416,7 @@ class _Renderer:
         )
         if models:
             imports.append(_type_import(models, "./models"))
-        if self.ir.servers:
+        if self._ir.servers:
             endpoint_imports = ["type ServerName"]
             if self.options.with_transport == "websocket":
                 endpoint_imports = [
@@ -434,7 +434,7 @@ class _Renderer:
                     "  type WebSocketCredentialsProvider,",
                     *(
                         ["  resolveWebSocketCredentials,"]
-                        if self.ir.binary_streams or self.ir.sockets
+                        if self._ir.binary_streams or self._ir.sockets
                         else []
                     ),
                     '} from "./transport";',
@@ -451,28 +451,28 @@ class _Renderer:
             "client",
             imports=imports,
             client_name=self.client_name,
-            servers=self.ir.servers,
-            variables=_connect_variables(self.ir),
+            servers=self._ir.servers,
+            variables=_connect_variables(self._ir),
             nodes=self.nodes,
             operations=self.root_operations,
             notifications=self.root_events,
             streams=self.root_streams,
-            binary_streams=self.ir.binary_streams,
+            binary_streams=self._ir.binary_streams,
             root_sockets=self.root_sockets,
-            sockets=self.ir.sockets,
+            sockets=self._ir.sockets,
             with_websocket=self.options.with_transport == "websocket",
-            heartbeat=self.ir.heartbeat,
-            request_metadata=self.ir.request_metadata,
+            heartbeat=self._ir.heartbeat,
+            request_metadata=self._ir.request_metadata,
         )
         return self.module(body)
 
     def endpoints(self) -> str:
-        return self.module(self._template("endpoints", servers=self.ir.servers))
+        return self.module(self._template("endpoints", servers=self._ir.servers))
 
     def errors(self) -> str:
         named = {
             error.name: error
-            for route in (*self.ir.operations, *self.ir.notifications)
+            for route in (*self._ir.operations, *self._ir.notifications)
             for error in route.errors
             if error.name is not None
         }
@@ -495,14 +495,14 @@ class _Renderer:
         body = self._template(
             "index",
             client_name=self.client_name,
-            servers=self.ir.servers,
+            servers=self._ir.servers,
             with_websocket=self.options.with_transport == "websocket",
             nodes=self.nodes,
-            routes=bool(self.ir.operations),
-            notifications=self.ir.notifications,
-            binary_streams=self.ir.binary_streams,
-            sockets=self.ir.sockets,
-            models=bool(self.ir.declarations),
+            routes=bool(self._ir.operations),
+            notifications=self._ir.notifications,
+            binary_streams=self._ir.binary_streams,
+            sockets=self._ir.sockets,
+            models=bool(self._ir.declarations),
         )
         return self.module(body)
 

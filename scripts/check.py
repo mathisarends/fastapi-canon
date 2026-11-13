@@ -239,7 +239,7 @@ class _Runner:
     def __init__(self, directory: Path | None) -> None:
         self.directory = directory.resolve() if directory else None
         self.gate = ""
-        self.commands: list[dict[str, object]] = []
+        self._commands: list[dict[str, object]] = []
         if self.directory:
             self.directory.mkdir(parents=True, exist_ok=True)
 
@@ -256,7 +256,7 @@ class _Runner:
         completed = subprocess.run(command, cwd=root, check=False, env=env)
         elapsed = perf_counter() - started
         print(f"[{self.gate}] {elapsed:.2f}s; exit {completed.returncode}", flush=True)
-        self.commands.append(
+        self._commands.append(
             {
                 "gate": self.gate,
                 "cwd": str(root.relative_to(_ROOT)),
@@ -272,7 +272,7 @@ class _Runner:
                         "python": sys.version,
                         "platform": sys.platform,
                         "commands": [
-                            item for item in self.commands if item["gate"] == self.gate
+                            item for item in self._commands if item["gate"] == self.gate
                         ],
                     },
                     indent=2,
