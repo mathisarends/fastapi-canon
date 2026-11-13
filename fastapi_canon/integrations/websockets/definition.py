@@ -128,9 +128,13 @@ class RpcEndpoint[ContextT]:
             socket,
             resolver=resolver,
             context=context,
-            error_mapper=error_mapper or self.error_mapper,
-            limits=limits or self.limits,
-            before_accept=before_accept or self.before_accept,
+            error_mapper=error_mapper
+            if error_mapper is not None
+            else self.error_mapper,
+            limits=limits if limits is not None else self.limits,
+            before_accept=before_accept
+            if before_accept is not None
+            else self.before_accept,
             rejections=chain_rejections(rejections, endpoint_rejections(self)),
             middleware=middleware,
         )
@@ -147,8 +151,10 @@ class RpcEndpoint[ContextT]:
         return RpcServer.from_channel(
             self.protocol,
             resolver=resolver_with_context(resolver, context),
-            error_mapper=error_mapper or self.error_mapper,
-            limits=limits or self.limits,
+            error_mapper=error_mapper
+            if error_mapper is not None
+            else self.error_mapper,
+            limits=limits if limits is not None else self.limits,
             strict_errors=self.service.strict_errors,
             middleware=(*middleware, *self.middleware),
             endpoint=self,
@@ -193,9 +199,13 @@ class RpcStreamEndpoint[ContextT]:
             socket,
             resolver=resolver,
             context=context,
-            limits=limits or self.limits,
-            before_accept=before_accept or self.before_accept,
-            error_mapper=error_mapper or self.error_mapper,
+            limits=limits if limits is not None else self.limits,
+            before_accept=before_accept
+            if before_accept is not None
+            else self.before_accept,
+            error_mapper=error_mapper
+            if error_mapper is not None
+            else self.error_mapper,
             rejections=chain_rejections(rejections, endpoint_rejections(self)),
             middleware=middleware,
         )
@@ -237,8 +247,10 @@ class RpcSocketEndpoint[ContextT]:
             socket,
             resolver=resolver,
             context=context,
-            limits=limits or self.limits,
-            before_accept=before_accept or self.before_accept,
+            limits=limits if limits is not None else self.limits,
+            before_accept=before_accept
+            if before_accept is not None
+            else self.before_accept,
             rejections=chain_rejections(rejections, endpoint_rejections(self)),
             middleware=middleware,
         )
@@ -266,9 +278,9 @@ class RpcDefinition:
         self._version = version
         self._error_mapper = error_mapper
         self._middleware = tuple(middleware)
-        self._limits = limits or RpcLimits()
+        self._limits = limits if limits is not None else RpcLimits()
         self._strict_errors = strict_errors
-        self.drain = drain or RpcDrain()
+        self.drain = drain if drain is not None else RpcDrain()
         self._rejects = rejecting_contracts(rejects, "RpcDefinition")
         self._endpoints: list[RpcAnyEndpoint] = []
         self._channels: set[RpcChannel] = set()
@@ -504,11 +516,11 @@ class RpcDefinition:
             )
         endpoint = RpcEndpoint(
             self,
-            name or _endpoint_name(path),
+            name if name is not None else _endpoint_name(path),
             path,
             tuple(channels),
-            error_mapper or self._error_mapper,
-            limits or self._limits,
+            error_mapper if error_mapper is not None else self._error_mapper,
+            limits if limits is not None else self._limits,
             subprotocol,
             summary,
             variables,
@@ -596,15 +608,15 @@ class RpcDefinition:
             )
         endpoint = RpcStreamEndpoint(
             self,
-            name or _endpoint_name(path),
+            name if name is not None else _endpoint_name(path),
             path,
             definition,
-            limits or self._limits,
+            limits if limits is not None else self._limits,
             subprotocol,
             summary,
             variables,
             before_accept,
-            error_mapper or self._error_mapper,
+            error_mapper if error_mapper is not None else self._error_mapper,
             None if context is NoneType else context,
             rejecting_contracts(rejects, f"RPC stream {path!r}"),
         )
@@ -690,10 +702,10 @@ class RpcDefinition:
             )
         endpoint = RpcSocketEndpoint(
             self,
-            name or _endpoint_name(path),
+            name if name is not None else _endpoint_name(path),
             path,
             definition,
-            limits or self._limits,
+            limits if limits is not None else self._limits,
             subprotocol,
             summary,
             variables,

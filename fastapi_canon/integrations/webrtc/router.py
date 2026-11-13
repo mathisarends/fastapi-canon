@@ -92,13 +92,13 @@ class WebRtcRouter(APIRouter):
     ) -> None:
         super().__init__(
             prefix=prefix,
-            tags=list(tags or []),
-            dependencies=list(dependencies or []),
+            tags=list(tags if tags is not None else []),
+            dependencies=list(dependencies if dependencies is not None else []),
             lifespan=self._lifespan,
         )
         self.engine = engine
         self.ice_servers = ice_servers
-        self.limits = limits or SessionLimits()
+        self.limits = limits if limits is not None else SessionLimits()
         self.event_hook = on_event
         self.allowed_origins = _origins(allowed_origins)
         self.declarations: list[SessionDeclaration] = []

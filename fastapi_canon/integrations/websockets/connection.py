@@ -235,7 +235,9 @@ class RpcConnection:
         self._endpoint = endpoint
         self._handshake = socket.handshake
         self._path_params = MappingProxyType(
-            dict(path_params or socket.handshake.path_params)
+            dict(
+                path_params if path_params is not None else socket.handshake.path_params
+            )
         )
         self._accepted = False
         self._closed = False

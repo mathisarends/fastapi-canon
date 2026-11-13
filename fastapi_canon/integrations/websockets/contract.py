@@ -151,7 +151,7 @@ def contract_from_endpoints(
     elif base_url.startswith("http://"):
         base_url = "ws://" + base_url.removeprefix("http://")
     base_url = base_url.rstrip("/")
-    supplied = dict(variables or {})
+    supplied = dict(variables if variables is not None else {})
     used: set[str] = set()
     servers = []
     streams = []

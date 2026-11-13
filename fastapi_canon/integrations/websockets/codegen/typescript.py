@@ -133,7 +133,7 @@ class _Renderer:
         self.root_events = root_events
         self.root_streams = root_streams
         self.root_sockets = root_sockets
-        self._bound = bound or {}
+        self._bound = bound if bound is not None else {}
         self.options = options
         self.client_name = client_name
 

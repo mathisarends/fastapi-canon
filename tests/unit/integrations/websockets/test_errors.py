@@ -47,6 +47,39 @@ def test_error_metadata_is_derived() -> None:
     assert _PrivateError.message == "Private"
 
 
+@pytest.mark.parametrize("message", [None, ""])
+def test_only_none_selects_the_default_error_message(message: str | None) -> None:
+    error = HTTPTimeoutError(message=message)
+    failure = RpcFailure.from_error(1, error)
+    assert failure.error.message == (
+        HTTPTimeoutError.message if message is None else ""
+    )
+
+
+async def test_a_falsy_error_mapper_overrides_the_endpoint_default() -> None:
+    class MapFailure:
+        def __bool__(self) -> bool:
+            return False
+
+        def __call__(self, error: Exception) -> RpcError:
+            return HTTPTimeoutError(message="mapped")
+
+    channel = RpcChannel("failures")
+
+    @channel.method()
+    async def fail() -> None:
+        raise ValueError("private")
+
+    definition = RpcDefinition()
+    endpoint = definition.socket("/rpc", channels=(channel,))
+    server = endpoint.create_server(error_mapper=MapFailure())
+    response = await server.handle(
+        {"jsonrpc": "2.0", "id": 1, "method": "failures.fail"}
+    )
+
+    assert response == RpcFailure.from_error(1, HTTPTimeoutError(message="mapped"))
+
+
 def test_details_accept_fields_or_model() -> None:
     expected = MissingDetails(project_id="p-1")
     assert ProjectNotFoundError(project_id="p-1").details == expected

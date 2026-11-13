@@ -203,7 +203,12 @@ class _Checker:
         self, operation: _Operation, message: str, line: int | None = None
     ) -> None:
         operation.diagnostics.append(
-            _Diagnostic("CAN003", message, operation.path, line or operation.line)
+            _Diagnostic(
+                "CAN003",
+                message,
+                operation.path,
+                line if line is not None else operation.line,
+            )
         )
 
     def _sequence(

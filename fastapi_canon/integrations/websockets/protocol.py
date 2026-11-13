@@ -547,7 +547,11 @@ def stream_definition(
         injected_parameters=injected,
         resolver_scope=resolver_scope,
         direction=direction,
-        input_content_type=(input_content_type or content_type) if has_input else None,
+        input_content_type=(
+            input_content_type if input_content_type is not None else content_type
+        )
+        if has_input
+        else None,
         path_parameters=tuple(parameter.name for parameter in path_parameters),
         path_model=_path_model(function, hints, path_parameters),
     )

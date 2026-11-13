@@ -85,7 +85,9 @@ class AiortcEngine:
     def __init__(
         self, *, codec_preferences: dict[MediaKind, Sequence[str]] | None = None
     ) -> None:
-        self._codec_preferences = dict(codec_preferences or {})
+        self._codec_preferences = dict(
+            codec_preferences if codec_preferences is not None else {}
+        )
 
     @property
     def capabilities(self) -> EngineCapabilities:

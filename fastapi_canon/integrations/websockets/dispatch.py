@@ -37,7 +37,7 @@ class RpcDispatcher:
         resolver: RpcResolver | None = None,
     ) -> None:
         self._protocol = protocol
-        self._resolver = resolver or EmptyResolver()
+        self._resolver = resolver if resolver is not None else EmptyResolver()
         _assert_executable(protocol)
 
     def parse_request(

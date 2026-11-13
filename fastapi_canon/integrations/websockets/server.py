@@ -95,7 +95,7 @@ class RpcServer:
         server._endpoint = endpoint
         server._connection = connection
         server._codec = RpcCodec()
-        server._limits = limits or RpcLimits()
+        server._limits = limits if limits is not None else RpcLimits()
         server._semaphore = asyncio.Semaphore(server._limits.max_concurrency)
         server._strict_errors = strict_errors
         server._methods = {method.name: method for method in protocol.methods}

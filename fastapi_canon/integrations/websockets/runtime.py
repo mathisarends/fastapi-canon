@@ -210,7 +210,7 @@ async def serve_socket_endpoint(
                 resolved,
                 values,
                 path_values,
-                limits or RpcLimits(),
+                limits if limits is not None else RpcLimits(),
                 rejections,
                 activity,
             )

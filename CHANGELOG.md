@@ -8,6 +8,12 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Breaking changes
 
+- Optional arguments now use their default only when passed `None`. Empty error
+  messages, empty path-parameter overrides and callable objects with false
+  truthiness are preserved rather than replaced by inherited defaults. Pass
+  `None` to request a default; replace empty endpoint names with a valid name or
+  `None` to derive the name from its path.
+
 - WebSocket generation now rejects corrupt ownership manifests and unsafe output
   paths instead of ignoring them. Generated paths must be relative POSIX paths
   without backslashes, colons or parent traversal. Restore a corrupt

@@ -262,7 +262,9 @@ class Composition:
             msg = "router_factory must be callable or None"
             raise FeatureConfigurationError(msg)
         object.__setattr__(self, "features", normalized_features)
-        object.__setattr__(self, "errors", errors or ErrorOptions())
+        object.__setattr__(
+            self, "errors", errors if errors is not None else ErrorOptions()
+        )
         object.__setattr__(self, "router_factory", router_factory)
         object.__setattr__(self, "overrides", ())
 

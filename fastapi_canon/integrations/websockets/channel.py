@@ -503,7 +503,9 @@ class RpcChannel:
         child = RpcChannel(
             join_rpc_name(self.name, local),
             namespace=join_rpc_name(self.namespace, local),
-            resolver_scope=resolver_scope or self.resolver_scope,
+            resolver_scope=resolver_scope
+            if resolver_scope is not None
+            else self.resolver_scope,
         )
         child.error_registry = self.error_registry
         child._raises = self.raises

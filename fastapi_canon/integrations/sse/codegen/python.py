@@ -224,7 +224,7 @@ class _Models:
         *,
         field_name: Callable[[str], str] | None = None,
     ) -> None:
-        self.field_name = field_name or _field_name
+        self.field_name = field_name if field_name is not None else _field_name
         self._custom_fields = field_name is not None
         self._python_patterns: set[str] = set()
         if collisions := _MODEL_SYMBOLS & {

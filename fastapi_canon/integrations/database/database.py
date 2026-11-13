@@ -59,7 +59,9 @@ class Database:
         if not issubclass(session_class, AsyncSession):
             raise TypeError("session_class must inherit SQLAlchemy AsyncSession")
         self._url = normalized
-        self._engine_options = dict(engine_options or {})
+        self._engine_options = dict(
+            engine_options if engine_options is not None else {}
+        )
         if (
             normalized.get_backend_name() == "sqlite"
             and "isolation_level" in self._engine_options

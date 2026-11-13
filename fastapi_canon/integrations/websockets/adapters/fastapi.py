@@ -181,7 +181,7 @@ async def _reject(
                 reason,
                 status_code=_HTTP_STATUS[rejection],
                 media_type="text/plain",
-                headers=dict(headers or {}),
+                headers=dict(headers if headers is not None else {}),
             )
         )
     else:
@@ -490,7 +490,7 @@ class CanonWebSocketRouter(APIRouter):
             # RpcDefinition owns validation of a missing/empty channel sequence.
             endpoint = self._definition.socket(
                 self.prefix + path,
-                channels=channels or (),
+                channels=channels if channels is not None else (),
                 context=selected_context,
                 **options,
             )
@@ -571,7 +571,9 @@ class CanonWebSocketRouter(APIRouter):
             limits=limits,
             subprotocol=subprotocol,
             summary=summary,
-            before_accept=before_accept or self._before_accept,
+            before_accept=before_accept
+            if before_accept is not None
+            else self._before_accept,
             error_mapper=error_mapper,
             context=self._context_type
             if context is NoneType and self._context_type is not None

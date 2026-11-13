@@ -179,8 +179,8 @@ class InMemorySocket:
     ) -> None:
         self._handshake = RpcHandshake(
             path=path,
-            headers=headers or {},
-            query_params=query_params or {},
+            headers=headers if headers is not None else {},
+            query_params=query_params if query_params is not None else {},
             subprotocols=tuple(subprotocols),
         )
         self._incoming: asyncio.Queue[Any] = asyncio.Queue()
@@ -190,8 +190,12 @@ class InMemorySocket:
         self.rejection: tuple[RpcRejection, str] | None = None
         self.closed: tuple[RpcConnectionClose, str] | None = None
         self.disconnect_error: RpcDisconnect | None = None
-        self.client_to_server = client_to_server or SocketFaults()
-        self.server_to_client = server_to_client or SocketFaults()
+        self.client_to_server = (
+            client_to_server if client_to_server is not None else SocketFaults()
+        )
+        self.server_to_client = (
+            server_to_client if server_to_client is not None else SocketFaults()
+        )
         self.client_to_server.bind()
         self.server_to_client.bind()
         self._handshake_complete = asyncio.Event()
@@ -370,7 +374,7 @@ class InMemorySocketFactory:
         socket = InMemorySocket(
             unquote(urlsplit(url).path) or "/",
             headers=additional_headers,
-            subprotocols=subprotocols or (),
+            subprotocols=subprotocols if subprotocols is not None else (),
         )
         if self.configure is not None:
             self.configure(socket, self.attempts)
@@ -525,7 +529,7 @@ class RpcTestClient:
                         "jsonrpc": "2.0",
                         "id": request_id,
                         "method": method,
-                        "params": dict(params or {}),
+                        "params": dict(params if params is not None else {}),
                     }
                 )
             )
@@ -552,7 +556,11 @@ class RpcTestClient:
     ) -> None:
         await self.socket.client_send(
             json.dumps(
-                {"jsonrpc": "2.0", "method": method, "params": dict(params or {})}
+                {
+                    "jsonrpc": "2.0",
+                    "method": method,
+                    "params": dict(params if params is not None else {}),
+                }
             )
         )
 

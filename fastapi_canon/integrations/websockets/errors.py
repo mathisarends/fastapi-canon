@@ -124,7 +124,7 @@ class RpcError(Exception):
             if details is not None and not isinstance(details, details_type):
                 raise TypeError(f"details must be {details_type.__name__}")
             self.details = details if details is not None else details_type(**fields)
-        self.message = message or type(self).message
+        self.message = message if message is not None else type(self).message
         super().__init__(self.message)
 
     @property
