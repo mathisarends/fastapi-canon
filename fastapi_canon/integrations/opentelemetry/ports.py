@@ -49,7 +49,7 @@ class _Observer:
         self.tracer = trace.get_tracer(
             "fastapi_canon", tracer_provider=options.tracer_provider
         )
-        self.histogram = (
+        self._histogram = (
             metrics.get_meter(
                 "fastapi_canon", meter_provider=options.meter_provider
             ).create_histogram("canon.port.duration", unit="s")
@@ -57,7 +57,7 @@ class _Observer:
             else None
         )
         self.spans = options.tracing and options.port_spans
-        self.proxies = {
+        self._proxies = {
             spec: type(
                 f"Instrumented{spec.port.__name__}",
                 (_InstrumentedProxy,),
@@ -70,9 +70,9 @@ class _Observer:
         }
 
     def wrap(self, spec: Instrumentation, instance: Any) -> Any:
-        if not self.spans and self.histogram is None:
+        if not self.spans and self._histogram is None:
             return instance
-        return self.proxies[spec](instance)
+        return self._proxies[spec](instance)
 
     def _wrapper(
         self,
@@ -126,8 +126,8 @@ class _Observer:
                             span.set_status(StatusCode.ERROR)
                     raise
                 finally:
-                    if self.histogram is not None:
-                        self.histogram.record(perf_counter() - started, outcome)
+                    if self._histogram is not None:
+                        self._histogram.record(perf_counter() - started, outcome)
 
         return call
 

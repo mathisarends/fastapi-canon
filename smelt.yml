@@ -248,6 +248,9 @@ architecture:
     type_checking: include
     cycles: [layers, siblings]
 structure:
+  file_naming:
+    yaml_extension: yml
+    compose_basename: compose
   forbidden_names: [utils, helpers, common, misc]
   contracts:
     canon:
@@ -291,16 +294,22 @@ rules:
   unclassified-module: error
   public-definitions-first: error
   bundled-instance-assignment: error
+  information-hiding: warning
   internal-public-member: error
-  internal-public-module-symbol: warning
   internal-static-helper: error
+  private-class-constant: error
   redundant-str-enum-value: error
   prefer-package-import: error
   prefer-str-enum-discriminator: hint
+  implicit-optional-default: hint
+  deep-object-navigation: hint
+  no-base-class-prefix: error
   no-base-class-suffix: error
   secret-settings-field: warning
   redundant-dishka-provider: hint
   caller-before-callee: hint
+  prefer-callable-instance: hint
+  redundant-module-name: hint
   package-only-dunder-all: off
   unnecessary-future-annotations: warning
   prefer-match-type-dispatch: warning
@@ -312,13 +321,15 @@ rules:
   independent-test-case-loop: warning
   async-mock-without-await-check: error
   test-only-public-function: error
-  test-only-public-attribute: warning
   nondeterministic-test-data: warning
   unused-suppression: error
   resolved-debt: error
 suppressions:
   require_reason: true
 ignore:
+- rule: yaml-file-extension
+  paths: [pnpm-lock.yaml, fastapi_canon/skills/build-canon-backend/agents/openai.yaml]
+  reason: pnpm and the agent skill format require these exact filenames.
 - rule: import-style
   paths: ['**/__init__.py']
   reason: Package facades deliberately use relative imports; ordinary Canon modules use absolute
