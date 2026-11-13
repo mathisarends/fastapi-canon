@@ -369,11 +369,19 @@ class _Installation:
 class _Preparation:
     report: CheckReport
     routers: tuple[APIRouter, ...]
+    wrapped_route_counts: tuple[int, ...] | None
     registry: ErrorRegistry | None
     container: AsyncContainer | None
     description: CompositionInfo | None
     missing_dependency: ModuleNotFoundError | None
     mcp_runtime: McpRuntime | None
+
+
+@dataclass(frozen=True, slots=True)
+class _PreparedRouters:
+    routers: tuple[APIRouter, ...]
+    # Routes registered per feature router inside the composition router, if any.
+    wrapped_route_counts: tuple[int, ...] | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -446,14 +454,21 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
     original_lifespan = app.router.lifespan_context
     if container is not None:
         _install_scopes(app, container)
-    previous_routes = len(tuple(iter_contract_routes(app.routes)))
-    for router in installed_routers:
-        app.include_router(router)
+    previous_routes = sum(1 for _ in iter_contract_routes(app.routes))
+    included = tuple(_include_counted(app, router) for router in installed_routers)
+    route_counts = (
+        included
+        if prepared.wrapped_route_counts is None
+        else prepared.wrapped_route_counts
+    )
     owners = tuple(
         feature
-        for feature in composition.features
-        for router in feature.routers
-        for _ in iter_contract_routes(router.routes)
+        for feature, count in zip(
+            (feature for feature in composition.features for _ in feature.routers),
+            route_counts,
+            strict=True,
+        )
+        for _ in range(count)
     )
     registered = tuple(iter_contract_routes(app.routes))[previous_routes:]
     contract_routes = tuple(
@@ -588,12 +603,13 @@ def _prepare_composition(app: FastAPI, composition: Composition) -> _Preparation
         "Install before startup and OpenAPI generation; check integration options.",
         lambda: _validate_runtime_options(app, composition),
     )
-    routers, routers_ok = attempt(
+    prepared_routers, routers_ok = attempt(
         "http.routers",
         "canon.routing.E001",
         "Contribute each router once and return a fresh empty application router.",
         lambda: _prepare_feature_routers(app, composition),
     )
+    routers = prepared_routers.routers if prepared_routers is not None else None
     if routers_ok and routers is not None and composition.mcp is not None:
         mcp_path = composition.mcp.path
         attempt(
@@ -710,6 +726,7 @@ def _prepare_composition(app: FastAPI, composition: Composition) -> _Preparation
     return _Preparation(
         CheckReport(tuple(issues), tuple(checks)),
         routers or (),
+        prepared_routers.wrapped_route_counts if prepared_routers is not None else None,
         registry,
         container,
         description,
@@ -746,7 +763,7 @@ def _validate_runtime_options(app: FastAPI, composition: Composition) -> None:
 
 def _prepare_feature_routers(
     app: FastAPI, composition: Composition
-) -> tuple[APIRouter, ...]:
+) -> _PreparedRouters:
     _reject_duplicate_contributions(composition.features, "routers", "router")
     return _prepare_routers(
         _flatten_routers(composition.features),
@@ -1636,10 +1653,10 @@ def _prepare_routers(
     routers: tuple[APIRouter, ...],
     router_factory: Callable[[], APIRouter] | None,
     validate_paths: Callable[[str], None],
-) -> tuple[APIRouter, ...]:
+) -> _PreparedRouters:
     if router_factory is None:
         validate_paths("")
-        return routers
+        return _PreparedRouters(routers, None)
     try:
         wrapper: object = router_factory()
     except Exception as error:
@@ -1652,13 +1669,25 @@ def _prepare_routers(
         msg = "router_factory must return a fresh APIRouter without routes"
         raise FeatureConfigurationError(msg)
     validate_paths(wrapper.prefix)
+    counts: list[int] = []
     try:
         for router in routers:
-            wrapper.include_router(router)
+            counts.append(_include_counted(wrapper, router))
     except Exception as error:
         msg = f"composition router failed to include feature routers: {error}"
         raise FeatureConfigurationError(msg) from error
-    return (wrapper,)
+    return _PreparedRouters((wrapper,), tuple(counts))
+
+
+def _include_counted(target: FastAPI | APIRouter, router: APIRouter) -> int:
+    """Include ``router`` and count the routes FastAPI actually registered.
+
+    FastAPI versions before 0.140 drop mounts from included routers, so the
+    contributed routes cannot be predicted from ``router.routes`` alone.
+    """
+    before = sum(1 for _ in iter_contract_routes(target.routes))
+    target.include_router(router)
+    return sum(1 for _ in iter_contract_routes(target.routes)) - before
 
 
 def _validate_handlers(app: FastAPI, features: tuple[Feature, ...]) -> None:
