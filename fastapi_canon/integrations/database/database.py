@@ -139,7 +139,7 @@ class _DatabaseProvider(Provider):
             # The configured class is a runtime Dishka key, not a static type alias.
             self.alias(
                 async_sessionmaker[AsyncSession],
-                provides=async_sessionmaker[session_class],  # type: ignore[valid-type]
+                provides=async_sessionmaker[session_class],  # type: ignore[valid-type]  # The runtime session class forms a Dishka key.
             )
 
     @provide

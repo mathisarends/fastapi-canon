@@ -120,7 +120,7 @@ def _render_client(
         )
         return dict(render_python_client(document, options))
     else:
-        options = TypeScriptClientOptions(
+        ts_options = TypeScriptClientOptions(
             client_name=arguments.client_name,
             transport_module=arguments.transport_module,
             api_root=arguments.api_root,
@@ -130,7 +130,7 @@ def _render_client(
             bindings=bindings,
             contract=arguments.schema,
         )
-        return dict(render_typescript_client(document, options))
+        return dict(render_typescript_client(document, ts_options))
 
 
 def _extra_python_files(
@@ -230,6 +230,7 @@ def _generate_config(path: Path, *, check: bool) -> int:
                 if contract_job is not None and arguments.schema == contract_job[0]
                 else json.loads(arguments.schema.read_text(encoding="utf-8"))
             )
+            assert document is not None
             try:
                 rendered.append((arguments, _render_client(arguments, document)))
             except (OSError, SyntaxError, UnsupportedSchemaError, ValueError) as error:
@@ -375,7 +376,9 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _add_schema_command(commands: argparse._SubParsersAction) -> None:
+def _add_schema_command(
+    commands: "argparse._SubParsersAction[argparse.ArgumentParser]",
+) -> None:
     schema = commands.add_parser(
         "schema",
         help="Render the contract of a protocol.",
@@ -413,7 +416,9 @@ def _add_schema_command(commands: argparse._SubParsersAction) -> None:
     )
 
 
-def _add_generate_command(commands: argparse._SubParsersAction) -> None:
+def _add_generate_command(
+    commands: "argparse._SubParsersAction[argparse.ArgumentParser]",
+) -> None:
     generate = commands.add_parser("generate", help="Generate a client package.")
     generate.add_argument(
         "schema", nargs="?", type=Path, help="OpenRPC document to read."

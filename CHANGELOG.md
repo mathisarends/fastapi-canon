@@ -4,6 +4,36 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## Unreleased
 
+## 0.21.0 - Unreleased
+
+### Breaking changes
+
+- WebSocket generation now rejects corrupt ownership manifests and unsafe output
+  paths instead of ignoring them. Generated paths must be relative POSIX paths
+  without backslashes, colons or parent traversal. Restore a corrupt
+  `.rpcgen/manifest.json` from version control, or review and remove the old
+  generated output before regenerating into a clean directory. Handwritten files
+  are preserved; writes atomically replace each changed file. SSE and WebRTC use
+  the same validated writer and retain their existing manifest formats.
+
+- A new `Composition.build()` executes feature checks once during preparation;
+  repeated builds still validate the installed application and rerun feature
+  checks. Keep checks free of side effects and remove assumptions about duplicate
+  execution during the first build.
+
+### Fixed
+
+- Error registry contributions survive router inclusion through a typed
+  router/endpoint contract.
+
+### Development
+
+- Include WebSockets implementation in root strict mypy, alongside the installed
+  API-completeness check. Split concurrent RPC, stream and socket state into
+  sessions, and separate feature declarations, checks and installation.
+- Declare composition check prerequisites explicitly. Align transport lint rules
+  and document reasons for type suppressions. Regenerate committed clients.
+
 ## 0.20.0 - 2026-11-13
 
 ### Added

@@ -165,6 +165,8 @@ def test_feature_checks_receive_detached_context_and_run_during_validation() -> 
     assert report.complete and not report.has_errors
     assert report.issues[0].feature_names == ("reports",)
     composition.build(app)
+    assert calls == ["reports", "reports"]
+    composition.build(app)
     assert calls == ["reports", "reports", "reports"]
 
 

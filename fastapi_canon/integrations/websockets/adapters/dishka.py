@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator, Callable, Mapping
 from contextlib import asynccontextmanager
 from inspect import Parameter, signature
-from typing import TYPE_CHECKING, Any, get_type_hints
+from typing import TYPE_CHECKING, Any, cast, get_type_hints
 
 if TYPE_CHECKING:
     from dishka import AsyncContainer
@@ -114,11 +114,14 @@ class Dishka:
             )
         # Dishka's FastAPI injector used Request for missing transport arguments
         # in 1.7; a WebSocket dependency needs the WebSocket's container instead.
-        return wrap_injection(
-            func=function,
-            is_async=True,
-            additional_params=additional_params,
-            container_getter=lambda _, values: (
-                values[websocket_name].state.dishka_container
+        return cast(
+            FunctionT,
+            wrap_injection(
+                func=function,
+                is_async=True,
+                additional_params=additional_params,
+                container_getter=lambda _, values: (
+                    values[websocket_name].state.dishka_container
+                ),
             ),
         )

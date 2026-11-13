@@ -11,6 +11,24 @@ The [repository migration](repository-migration.md) records the
 source history and publishing setup. The repository move does not rename the
 PyPI project or add further Python import changes.
 
+## Upgrade to 0.21.0
+
+Version 0.21.0 is prepared, not published. It includes the unpublished 0.20.0
+changes below. WebSocket generators now fail on corrupt `.rpcgen/manifest.json`
+files and unsafe output paths. Restore the manifest from version control; if it
+cannot be recovered, review the old generated files and regenerate into a clean
+directory. Never delete handwritten files to repair generator ownership.
+
+Use relative POSIX paths in custom generated-file mappings. Replace backslashes
+with `/`, and remove drive prefixes, colons and parent traversal. SSE, WebSocket
+and WebRTC generators share path validation and atomic per-file replacement;
+their manifest filenames and wire contracts stay the same.
+
+New compositions execute feature checks once during `build()`. Repeated builds
+still validate installed routes and rerun feature checks. Checks must be
+synchronous and free of side effects; remove code that depended on duplicate
+execution during the first build.
+
 ## Upgrade to 0.20.0
 
 Version 0.20.0 is prepared, not published. Upgrade FastAPI to >=0.143.1,<1

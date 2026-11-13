@@ -64,7 +64,7 @@ def validate_contract(document: Document) -> None:
         files(__package__).joinpath("schemas/openapi-3.2.json").read_text()
     )
     errors = sorted(
-        Draft202012Validator(meta).iter_errors(document),  # pyright: ignore[reportUnknownMemberType]
+        Draft202012Validator(meta).iter_errors(document),  # pyright: ignore[reportUnknownMemberType]  # jsonschema exposes an untyped validator factory.
         key=lambda e: str(e.json_path),
     )
     if errors:

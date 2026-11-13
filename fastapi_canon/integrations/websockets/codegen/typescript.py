@@ -3,6 +3,7 @@ import posixpath
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
+from itertools import chain
 
 from fastapi_canon.codegen.problems import problem_runtime
 from fastapi_canon.integrations.websockets.codegen.bindings import (
@@ -472,7 +473,9 @@ class _Renderer:
     def errors(self) -> str:
         named = {
             error.name: error
-            for route in (*self.ir.operations, *self.ir.notifications)
+            for route in chain[RouteDecl | NotificationDecl](
+                self.ir.operations, self.ir.notifications
+            )
             for error in route.errors
             if error.name is not None
         }
@@ -514,6 +517,7 @@ class _Renderer:
             else f"socketBinding_{binding.module}.{binding.session}"
         )
         if binding is None and socket.client_message is not None:
+            assert socket.server_message is not None
             session = (
                 f"Socket<{self._type(socket.server_message)}, "
                 f"{self._type(socket.client_message)}>"
@@ -525,6 +529,7 @@ class _Renderer:
         binding = self._socket_binding(socket)
         create = "new Socket(transport, endpoint)"
         if socket.client_message is not None:
+            assert socket.server_message is not None
             create = (
                 f"new Socket<{self._type(socket.server_message)}, "
                 f"{self._type(socket.client_message)}>(transport, endpoint, true)"
@@ -644,7 +649,9 @@ def _connect_variables(ir: ClientIr) -> tuple[ServerVariableDecl, ...]:
     """The server URL variables `connect` accepts; streams inherit them too."""
     declared = {variable.name for server in ir.servers for variable in server.variables}
     merged: dict[str, ServerVariableDecl] = {}
-    for declaration in (*ir.servers, *ir.binary_streams, *ir.sockets):
+    for declaration in chain[ServerDecl | BinaryStreamDecl | SocketDecl](
+        ir.servers, ir.binary_streams, ir.sockets
+    ):
         for variable in declaration.variables:
             if variable.name not in declared:
                 continue
@@ -684,7 +691,9 @@ def _validate(
         if len(ir.servers) > 1:
             unassigned = [
                 item.rpc_name
-                for item in (*ir.operations, *ir.notifications)
+                for item in chain[RouteDecl | NotificationDecl](
+                    ir.operations, ir.notifications
+                )
                 if item.server is None
             ]
             if unassigned:
@@ -814,7 +823,9 @@ def _validate_nodes(nodes: tuple[NamespaceViewNode, ...]) -> None:
         )
         values.extend(
             (stream.rpc_name, _identifier(stream.operation_name))
-            for stream in (*node.streams, *node.sockets)
+            for stream in chain[BinaryStreamDecl | SocketDecl](
+                node.streams, node.sockets
+            )
         )
         assert_unique_names(f"API path {'.'.join(node.path)}", values)
         _validate_nodes(node.children)
@@ -856,7 +867,7 @@ def _property(value: str) -> str:
     return value if _VALID_IDENTIFIER.fullmatch(value) else json.dumps(value)
 
 
-def _route_key(route: RouteDecl) -> str:
+def _route_key(route: RouteDecl | NotificationDecl) -> str:
     return _identifier(route.rpc_name)
 
 
@@ -1075,7 +1086,9 @@ def _walk_postorder(
 def _named_errors(ir: ClientIr) -> bool:
     return any(
         error.name is not None
-        for route in (*ir.operations, *ir.notifications)
+        for route in chain[RouteDecl | NotificationDecl](
+            ir.operations, ir.notifications
+        )
         for error in route.errors
     )
 

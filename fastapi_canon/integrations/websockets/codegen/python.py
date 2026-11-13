@@ -2,6 +2,7 @@ import json
 import keyword
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
+from itertools import chain
 from typing import Any
 
 from fastapi_canon.codegen.problems import problem_runtime
@@ -263,7 +264,7 @@ def _render_runtime_init(ir: ClientIr, options: PythonClientOptions) -> str:
     body = render_template(
         "python/package_init.py.j2",
         filters={"literal": _literal},
-        exports=sorted(exported),
+        exports=sorted(exported, key=lambda name: (not name.isupper(), name)),
     ).rstrip()
     return _module(options, imports, body)
 
@@ -481,7 +482,7 @@ def _render_errors(ir: ClientIr, options: PythonClientOptions) -> str:
     )
     errors = []
     seen: set[str] = set()
-    for route in (*ir.operations, *ir.notifications):
+    for route in chain[RouteDecl | NotificationDecl](ir.operations, ir.notifications):
         for error in route.errors:
             if error.name is None or error.name in seen:
                 continue
@@ -567,7 +568,7 @@ def _render_namespaces_init(
     body = render_template(
         "python/package_init.py.j2",
         filters={"literal": _literal},
-        exports=sorted(exported),
+        exports=sorted(exported, key=lambda name: (not name.isupper(), name)),
     ).rstrip()
     return _module(options, imports, body)
 
@@ -671,7 +672,9 @@ def _connect_variables(ir: ClientIr) -> tuple[ServerVariableDecl, ...]:
     """The server URL variables ``connect`` accepts; streams inherit them too."""
     declared = {variable.name for server in ir.servers for variable in server.variables}
     merged: dict[str, ServerVariableDecl] = {}
-    for declaration in (*ir.servers, *ir.binary_streams, *ir.sockets):
+    for declaration in chain[ServerDecl | BinaryStreamDecl | SocketDecl](
+        ir.servers, ir.binary_streams, ir.sockets
+    ):
         for variable in declaration.variables:
             if variable.name not in declared:
                 continue
@@ -834,7 +837,7 @@ def _render_package_init(
     body = render_template(
         "python/package_init.py.j2",
         filters={"literal": _literal},
-        exports=sorted(exported),
+        exports=sorted(exported, key=lambda name: (not name.isupper(), name)),
     ).rstrip()
     return _module(options, imports, body)
 
@@ -1089,7 +1092,9 @@ def _validate(
         if len(ir.servers) > 1:
             unassigned = [
                 item.rpc_name
-                for item in (*ir.operations, *ir.notifications)
+                for item in chain[RouteDecl | NotificationDecl](
+                    ir.operations, ir.notifications
+                )
                 if item.server is None
             ]
             if unassigned:
@@ -1263,7 +1268,9 @@ def _validate_nodes(nodes: tuple[NamespaceViewNode, ...]) -> None:
         )
         values.extend(
             (stream.rpc_name, _identifier(stream.operation_name))
-            for stream in (*node.streams, *node.sockets)
+            for stream in chain[BinaryStreamDecl | SocketDecl](
+                node.streams, node.sockets
+            )
         )
         assert_unique_names(f"API path {'.'.join(node.path)}", values)
         _validate_nodes(node.children)
@@ -1348,7 +1355,7 @@ def _named_errors(ir: ClientIr) -> bool:
 
 def _named_error_codes(ir: ClientIr) -> tuple[str, ...]:
     codes: dict[str, None] = {}
-    for route in (*ir.operations, *ir.notifications):
+    for route in chain[RouteDecl | NotificationDecl](ir.operations, ir.notifications):
         for error in route.errors:
             if error.name is not None:
                 codes.setdefault(error.code, None)

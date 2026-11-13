@@ -6,7 +6,7 @@ from fastapi_canon.integrations.websockets.constants import LOGGER_NAME
 logger = logging.getLogger(LOGGER_NAME)
 
 
-class _Activity:
+class Activity:
     def __init__(self, middleware: Sequence[object]) -> None:
         self._middleware = tuple(middleware)
 
@@ -21,12 +21,12 @@ class _Activity:
                 logger.exception("RPC middleware %s callback failed", method)
 
 
-def _activity_for(middleware: Sequence[object]) -> _Activity | None:
-    return _Activity(middleware) if middleware else None
+def activity_for(middleware: Sequence[object]) -> Activity | None:
+    return Activity(middleware) if middleware else None
 
 
 async def notify_activity(
-    activity: _Activity | None, method: str, *args: object
+    activity: Activity | None, method: str, *args: object
 ) -> None:
     if activity is not None:
         await activity.emit(method, *args)

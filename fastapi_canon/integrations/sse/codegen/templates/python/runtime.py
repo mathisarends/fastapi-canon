@@ -58,7 +58,7 @@ class _Default(Enum):
 @dataclass(frozen=True)
 class RequestOptions:
     headers: Mapping[str, str] | None = None
-    timeout: float | None | _Default = _Default.TIMEOUT
+    timeout: float | _Default | None = _Default.TIMEOUT
     unknown_events: Literal["error", "ignore"] = "error"
 
 

@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from pydantic_core import PydanticSerializationError
 from typing_extensions import TypeVar
 
-from fastapi_canon.integrations.websockets.activity import _Activity, notify_activity
+from fastapi_canon.integrations.websockets.activity import Activity, notify_activity
 from fastapi_canon.integrations.websockets.connection import (
     RpcConnection,
     RpcConnectionClose,
@@ -90,19 +90,29 @@ class RpcSocket(Generic[_IncomingT, _OutgoingT]):
     """
 
     __slots__ = (
+        "_activity",
         "_connection",
         "_disconnected",
         "_lock",
-        "_messages",
         "_message_contract",
+        "_messages",
         "_protocol",
-        "_activity",
         "_queue",
         "_request_close",
         "_send_timeout",
         "_socket",
     )
 
+    _socket: RpcWebSocket
+    _connection: RpcConnection
+    _messages: tuple[RpcMessageType, ...]
+    _protocol: RpcSocketProtocol | None
+    _message_contract: SocketMessages | None
+    _activity: Activity | None
+    _send_timeout: float | None
+    _queue: asyncio.Queue[_IncomingT]
+    _request_close: Callable[[RpcConnectionClose, str], None]
+    _disconnected: Callable[[RpcDisconnect], None]
     _lock: asyncio.Lock
 
     def __init__(self) -> None:
@@ -111,7 +121,7 @@ class RpcSocket(Generic[_IncomingT, _OutgoingT]):
         )
 
     @classmethod
-    def _create(
+    def create(
         cls,
         socket: RpcWebSocket,
         connection: RpcConnection,
@@ -119,7 +129,7 @@ class RpcSocket(Generic[_IncomingT, _OutgoingT]):
         protocol: RpcSocketProtocol | None,
         message_contract: SocketMessages | None,
         limits: RpcLimits,
-        activity: _Activity | None,
+        activity: Activity | None,
         request_close: Callable[[RpcConnectionClose, str], None],
         disconnected: Callable[[RpcDisconnect], None],
     ) -> Self:
@@ -228,7 +238,7 @@ class RpcSocket(Generic[_IncomingT, _OutgoingT]):
         """Close the connection and cancel its handler."""
         await self._connection.close(close, reason=reason)
 
-    async def _put(self, message: RpcSocketMessage) -> bool:
+    async def enqueue(self, message: RpcSocketMessage) -> bool:
         value: Any = message
         if self._message_contract is not None:
             try:

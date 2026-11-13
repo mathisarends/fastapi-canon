@@ -195,7 +195,7 @@ def _main() -> None:
 
 
 def _check_webrtc_types(runner: "_Runner") -> None:
-    # The root mypy profile excludes transport code; this profile checks it.
+    # SSE uses pyright and WebSockets uses root mypy; WebRTC has this scoped profile.
     config = """[tool.mypy]
 python_version = "3.12"
 strict = true

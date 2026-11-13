@@ -26,7 +26,7 @@ async def test_subscription_ack_is_not_followed_by_a_second_response(
     from fastapi_canon.integrations.websockets.envelopes import RpcRequestEnvelope
     from fastapi_canon.integrations.websockets.server import (
         # Verify the internal client-cancellation sentinel.
-        _CLIENT_CANCEL,  # smelt: ignore[SMT420] -- unit seam
+        CLIENT_CANCEL,
     )
     from fastapi_canon.integrations.websockets.subscriptions import SubscriptionSession
 
@@ -76,7 +76,7 @@ async def test_subscription_ack_is_not_followed_by_a_second_response(
             if interrupt == "timeout":
                 clock.expire(deadline)
             else:
-                task.cancel(_CLIENT_CANCEL)
+                task.cancel(CLIENT_CANCEL)
             assert await task is None
             release.set()
             await session.wait_finished()

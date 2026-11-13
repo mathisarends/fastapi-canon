@@ -146,7 +146,7 @@ class Error[ExceptionT: Exception]:
             msg = f"extensions must not redefine reserved members: {names}"
             raise ErrorConfigurationError(msg)
 
-        frozen_extensions = _freeze_json_mapping(extensions, path="extensions")
+        frozen_extensions = freeze_json_mapping(extensions, path="extensions")
         if model is not None:
             try:
                 validated = model.model_validate(dict(frozen_extensions))
@@ -157,7 +157,7 @@ class Error[ExceptionT: Exception]:
                 dict[str, JsonValue],
                 validated.model_dump(mode="json", by_alias=True),
             )
-            frozen_extensions = _freeze_json_mapping(serialized, path="extensions")
+            frozen_extensions = freeze_json_mapping(serialized, path="extensions")
         object.__setattr__(self, "extensions", frozen_extensions)
 
     def _validate_extension_model(self, model: builtins.type[BaseModel]) -> None:
@@ -187,7 +187,7 @@ class Error[ExceptionT: Exception]:
             object.__setattr__(self, "headers", frozen_headers)
             # Static headers document themselves; openapi_headers= refines them.
             for name, value in frozen_headers.items():
-                definitions[name] = _freeze_json_mapping(
+                definitions[name] = freeze_json_mapping(
                     {"schema": {"type": "string", "const": value}},
                     path=f"headers.{name}",
                 )
@@ -197,7 +197,7 @@ class Error[ExceptionT: Exception]:
                 msg = "openapi_headers must be a mapping or None"
                 raise ErrorConfigurationError(msg)
             for name, definition in openapi_headers.items():
-                header_name = _validate_header_name(name, path="openapi_headers")
+                header_name = validate_header_name(name, path="openapi_headers")
                 if not isinstance(definition, Mapping):
                     msg = f"openapi_headers.{header_name} must be a mapping"
                     raise ErrorConfigurationError(msg)
@@ -207,7 +207,7 @@ class Error[ExceptionT: Exception]:
                     if known.lower() == header_name.lower()
                 ]:
                     del definitions[documented]
-                definitions[header_name] = _freeze_json_mapping(
+                definitions[header_name] = freeze_json_mapping(
                     definition, path=f"openapi_headers.{header_name}"
                 )
         if definitions:
@@ -232,11 +232,11 @@ class Error[ExceptionT: Exception]:
             object.__setattr__(
                 self,
                 "example",
-                _freeze_json_mapping(example, path="example"),
+                freeze_json_mapping(example, path="example"),
             )
 
 
-def _freeze_json_mapping[KeyT, ValueT](
+def freeze_json_mapping[KeyT, ValueT](
     value: Mapping[KeyT, ValueT], *, path: str
 ) -> Mapping[str, JsonValue]:
     frozen: dict[str, JsonValue] = {}
@@ -265,7 +265,7 @@ def _freeze_json(value: object, *, path: str) -> JsonValue:
             ),
         )
     if isinstance(value, Mapping):
-        return cast(JsonValue, _freeze_json_mapping(value, path=path))
+        return cast(JsonValue, freeze_json_mapping(value, path=path))
     msg = f"{path} contains a non-JSON value of type {type(value).__name__}"
     raise ErrorConfigurationError(msg)
 
@@ -288,7 +288,7 @@ def freeze_headers[KeyT, ValueT](
     """Validate response headers and return an immutable detached mapping."""
     frozen: dict[str, str] = {}
     for name, header_value in value.items():
-        header_name = _validate_header_name(name, path=path)
+        header_name = validate_header_name(name, path=path)
         if not isinstance(header_value, str):
             msg = f"{path}.{header_name} must be a string"
             raise ErrorConfigurationError(msg)
@@ -296,7 +296,7 @@ def freeze_headers[KeyT, ValueT](
     return MappingProxyType(frozen)
 
 
-def _validate_header_name(name: object, *, path: str) -> str:
+def validate_header_name(name: object, *, path: str) -> str:
     if not isinstance(name, str) or _HEADER_NAME_PATTERN.fullmatch(name) is None:
         msg = f"{path} contains an invalid HTTP header name"
         raise ErrorConfigurationError(msg)

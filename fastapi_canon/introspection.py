@@ -1,5 +1,7 @@
 """Adapt effective FastAPI HTTP routes into detached composition metadata."""
 
+from __future__ import annotations
+
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -27,22 +29,7 @@ from fastapi_canon.injection import injected_resolver_dependency
 from fastapi_canon.router import CanonRouter
 
 
-@dataclass(frozen=True, slots=True)
-class _HttpRoute:
-    path: str
-    operation_id: str | None
-    unique_id: str
-    methods: tuple[str, ...]
-    include_in_schema: bool
-    responses: Mapping[str, Any]
-    dependencies: tuple[Depends, ...]
-    dependant: Dependant | None
-    openapi_extra: Mapping[str, Any] | None
-    original_route: APIRoute
-    callbacks: tuple[object, ...] = ()
-
-
-def _describe(
+def describe_composition(
     features: Sequence[tuple[str, tuple[APIRouter, ...], tuple[str, ...]]],
     routers: tuple[APIRouter, ...],
     catalog: ErrorCatalog | None,
@@ -52,7 +39,7 @@ def _describe(
         (name, router, route)
         for name, contributions, _ in features
         for router in contributions
-        for route in _http_routes(router)
+        for route in http_routes(router)
     ]
     wrapper = APIRouter(
         prefix=application_router.prefix,
@@ -62,7 +49,7 @@ def _describe(
     )
     for router in routers:
         wrapper.include_router(router)
-    effective = list(_http_routes(wrapper))
+    effective = list(http_routes(wrapper))
     if len(sources) != len(effective):
         raise FeatureConfigurationError(
             "Prepared routers changed the number of HTTP operations"
@@ -127,7 +114,7 @@ def _describe(
     )
 
 
-def _http_routes(router: APIRouter) -> Iterator[_HttpRoute]:
+def http_routes(router: APIRouter) -> Iterator[_HttpRoute]:
     for path, route in iter_contract_routes(router.routes, include_mounts=False):
         original = getattr(route, "original_route", route)
         if isinstance(original, APIRoute):
@@ -146,12 +133,12 @@ def _http_routes(router: APIRouter) -> Iterator[_HttpRoute]:
             )
 
 
-def _operation_headers(
+def operation_headers(
     router: APIRouter, known: tuple[OperationInfo, ...] = ()
 ) -> tuple[OperationInfo, ...]:
     owners = {(op.operation_id, op.path, op.methods): op.feature_name for op in known}
     result = []
-    for route in _http_routes(router):
+    for route in http_routes(router):
         identity = route.operation_id or route.unique_id
         methods = tuple(sorted(route.methods))
         result.append(
@@ -164,6 +151,28 @@ def _operation_headers(
             )
         )
     return tuple(result)
+
+
+def qualified_name(value: object) -> str:
+    subject = value if hasattr(value, "__qualname__") else type(value)
+    return (
+        f"{getattr(subject, '__module__', '')}.{getattr(subject, '__qualname__', '')}"
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class _HttpRoute:
+    path: str
+    operation_id: str | None
+    unique_id: str
+    methods: tuple[str, ...]
+    include_in_schema: bool
+    responses: Mapping[str, Any]
+    dependencies: tuple[Depends, ...]
+    dependant: Dependant | None
+    openapi_extra: Mapping[str, Any] | None
+    original_route: APIRoute
+    callbacks: tuple[object, ...] = ()
 
 
 def _dependencies(
@@ -191,7 +200,7 @@ def _dependencies(
         origins[id(dependency)] = "application"
     result = [
         DependencyInfo(
-            _qualified_name(dep.dependency),
+            qualified_name(dep.dependency),
             origins.get(id(dep), "composition.router_factory"),
         )
         for dep in route.dependencies
@@ -205,15 +214,8 @@ def _dependencies(
         if injected_resolver_dependency(parameter_dependency.call) is not None:
             # Inject[T] resolves a service; it is not a request prerequisite.
             continue
-        name = _qualified_name(parameter_dependency.call)
+        name = qualified_name(parameter_dependency.call)
         if not any(item.name == name for item in result):
             result.append(DependencyInfo(name, "dependency"))
         pending.extend(parameter_dependency.dependencies)
     return tuple(result)
-
-
-def _qualified_name(value: object) -> str:
-    subject = value if hasattr(value, "__qualname__") else type(value)
-    return (
-        f"{getattr(subject, '__module__', '')}.{getattr(subject, '__qualname__', '')}"
-    )

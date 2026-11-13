@@ -23,7 +23,7 @@ from fastapi_canon.integrations.webrtc.events import EventHook
 from fastapi_canon.integrations.webrtc.ice import IceServerSource
 from fastapi_canon.integrations.webrtc.router import WebRtcRouter
 from fastapi_canon.policy import normalize_raises as _normalize_raises
-from fastapi_canon.router import CanonRouter, RouterOptions, _distinct
+from fastapi_canon.router import CanonRouter, RouterOptions, distinct_errors
 
 __all__ = [
     "CanonWebRtcRouter",
@@ -82,7 +82,7 @@ class CanonWebRtcRouter(CanonRouter, WebRtcRouter):
         if admission_errors is not None:
             msg = "CanonWebRtcRouter derives admission_errors from raises"
             raise ErrorConfigurationError(msg)
-        declared = _distinct(
+        declared = distinct_errors(
             (
                 *self.raises,
                 *_normalize_raises(raises, parameter="raises"),

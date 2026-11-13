@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from itertools import chain
 
 from fastapi_canon.integrations.websockets.codegen.ir import (
     ApiNode,
@@ -171,7 +172,7 @@ def client_view(
         tuple[tuple[str, ...], tuple[str, ...], BinaryStreamDecl | SocketDecl]
     ] = []
     root = tuple(api_root.split(".")) if api_root else ()
-    for stream in (*ir.binary_streams, *ir.sockets):
+    for stream in chain[BinaryStreamDecl | SocketDecl](ir.binary_streams, ir.sockets):
         visible = (
             stream.path[len(root) :]
             if root and stream.path[: len(root)] == root

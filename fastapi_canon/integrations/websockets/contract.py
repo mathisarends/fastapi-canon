@@ -22,7 +22,10 @@ from fastapi_canon.integrations.websockets.websocket import (
 )
 
 if TYPE_CHECKING:
-    from fastapi_canon.integrations.websockets.definition import RpcAnyEndpoint
+    from fastapi_canon.integrations.websockets.definition import (
+        RpcAnyEndpoint,
+        RpcDefinition,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,7 +103,7 @@ class RpcContract:
 
 
 def contract_from_service(
-    service,
+    service: "RpcDefinition",
     *,
     title: str,
     base_url: str,

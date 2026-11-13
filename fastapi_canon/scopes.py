@@ -74,7 +74,7 @@ class _SocketScopeMiddleware(ContainerMiddleware):
             await super().__call__(scope, receive, send)
 
 
-def _install_scopes(app: FastAPI, container: AsyncContainer) -> None:
+def install_scopes(app: FastAPI, container: AsyncContainer) -> None:
     app.state.dishka_container = container
     app.add_middleware(_SocketScopeMiddleware)
     dependency = Depends(_http_request_scope, scope="function")

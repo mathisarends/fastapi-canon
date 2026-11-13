@@ -391,7 +391,7 @@ def test_an_endpoint_override_must_match_its_server(
         url="wss://secondary.example.com/rpc",
     )
 
-    with pytest.raises(ValueError, match="Endpoint override.*declares"):
+    with pytest.raises(ValueError, match=r"Endpoint override.*declares"):
         client_module.GreetingClient.connect(
             servers={client_module.ServerName.PRIMARY: mismatched}
         )

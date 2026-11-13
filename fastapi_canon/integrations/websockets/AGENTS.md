@@ -10,7 +10,7 @@ into a JSON-RPC 2.0 protocol over WebSockets. FastAPI is a required dependency.
 
 | Area | Modules |
 | --- | --- |
-| Definition | `channel.py`, `protocol.py`, `service.py` |
+| Definition | `channel.py`, `protocol.py`, `definition.py` |
 | Serving | `runtime.py`, `dispatch.py`, `server.py`, `adapters/fastapi.py` |
 | Contract | `schema/` (OpenRPC) |
 | Client generation | `codegen/`; Python clients embed `codegen/templates/python/runtime/` |

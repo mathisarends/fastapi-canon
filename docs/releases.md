@@ -8,12 +8,11 @@ version; the reference service is an example. `release.toml` and
 
 **Published: 0.19.0 (2026-11-10).**
 
-**Prepared: 0.20.0 (unpublished).** It raises the FastAPI minimum to 0.143.1,
-adds typed contract selection, changes generated SSE namespace access and makes
-package re-exported error paths visible to source checking. Follow the
-[0.20.0 migration](package-migration.md#upgrade-to-0200) and
-[changelog](../CHANGELOG.md#0200---2026-11-13). Exact-source CI and a release
-dry run must pass after preparation is merged to `main`.
+**Prepared: 0.21.0 (unpublished).** It includes the previous unpublished 0.20.0
+preparation and strengthens generated-file ownership validation. Follow the
+[0.21.0 migration](package-migration.md#upgrade-to-0210), the linked 0.20.0
+migration and [changelog](../CHANGELOG.md#0210---unreleased). Exact-source CI
+and a release dry run must pass after preparation is merged to `main`.
 
 Published 0.19.0 includes RPC channel subclasses in source error-contract checking.
 Follow the [migration](package-migration.md#upgrade-to-0190) and

@@ -34,7 +34,7 @@ from fastapi_canon.integrations.websockets.middleware import (
     RpcRequestContext,
     RpcRequestOutcome,
     RpcRequestScope,
-    _middleware_scope,
+    middleware_scope,
 )
 from fastapi_canon.integrations.websockets.protocol import (
     RpcMethodDefinition,
@@ -52,17 +52,30 @@ type RpcResponse = RpcSuccess | RpcFailure
 type RpcResponseMessage = RpcResponse | list[RpcResponse] | None
 
 logger: logging.Logger = logging.getLogger(LOGGER_NAME)
-_CLIENT_CANCEL = object()
+CLIENT_CANCEL = object()
 
 
 class RpcServer:
     """Serve decoded or encoded JSON-RPC messages over any transport."""
 
+    _protocol: RpcProtocol
+    _dispatcher: RpcDispatcher
+    _error_mapper: RpcErrorMapper | None
+    _middleware: tuple[RpcMiddlewareLike, ...]
+    _endpoint: "RpcEndpoint[Any] | None"
+    _connection: RpcConnection | None
+    _codec: RpcCodec
+    _limits: RpcLimits
+    _semaphore: asyncio.Semaphore
+    _strict_errors: bool
+    _methods: dict[str, RpcMethodDefinition]
+    _scope_methods: dict[str, RpcMethodDefinition]
+
     def __init__(self) -> None:
         raise TypeError("RpcServer instances are created by RpcChannel.create_server()")
 
     @classmethod
-    def _from_channel(
+    def from_channel(
         cls,
         protocol: RpcProtocol,
         *,
@@ -112,14 +125,14 @@ class RpcServer:
         """Serve one decoded request or batch."""
         if isinstance(raw_request, list):
             if not raw_request or len(raw_request) > self._limits.max_batch_size:
-                return await self._handle_failure(raw_request, RpcInvalidRequestError())
+                return await self.handle_failure(raw_request, RpcInvalidRequestError())
             responses = await asyncio.gather(
-                *(self._handle_one_bounded(item) for item in raw_request)
+                *(self.handle_one_bounded(item) for item in raw_request)
             )
             return [response for response in responses if response is not None] or None
-        return await self._handle_one_bounded(raw_request)
+        return await self.handle_one_bounded(raw_request)
 
-    async def _handle_one_bounded(
+    async def handle_one_bounded(
         self,
         raw_request: object,
         *,
@@ -131,15 +144,9 @@ class RpcServer:
                 raw_request, scope=scope, envelope=envelope
             )
 
-        return await self._run_bounded(raw_request, dispatch, admitted_at=admitted_at)
+        return await self.run_bounded(raw_request, dispatch, admitted_at=admitted_at)
 
-    def _request_timeout(self, raw_request: object) -> float | None:
-        method = self._methods.get(_request_method(raw_request) or "")
-        if method is not None and method._has_timeout:
-            return method.timeout
-        return self._limits.request_timeout
-
-    async def _run_bounded(
+    async def run_bounded(
         self,
         raw_request: object,
         operation: Callable[[RpcRequestScope | None], Awaitable[RpcResponse | None]],
@@ -160,7 +167,7 @@ class RpcServer:
                 return RpcRequestTimeoutError()
             if (
                 error.args
-                and error.args[0] is _CLIENT_CANCEL
+                and error.args[0] is CLIENT_CANCEL
                 and (self._connection is None or self._connection.close_code is None)
             ):
                 return RpcRequestCancelledError()
@@ -175,6 +182,7 @@ class RpcServer:
                 response = self._failure_response(raw_request, error, scope=scope)
                 observed = True
 
+        failure: RpcError | None
         try:
             async with (
                 waiting if waiting is not None else nullcontext(),
@@ -201,142 +209,13 @@ class RpcServer:
         try:
             request = self._codec.decode(message)
         except RpcParseError as error:
-            return self._codec.encode(await self._handle_failure(message, error))
+            failure_response = await self.handle_failure(message, error)
+            assert failure_response is not None
+            return self._codec.encode(failure_response)
         response = await self.handle(request)
         return None if response is None else self._codec.encode(response)
 
-    @asynccontextmanager
-    async def _request_scope(
-        self,
-        raw_request: object,
-        *,
-        on_error: Callable[[RpcRequestScope, BaseException], None] | None = None,
-    ) -> AsyncGenerator[RpcRequestScope, None]:
-        request = RpcRequestContext(
-            raw_request=raw_request,
-            method=_request_method(raw_request),
-            request_id=_request_id(raw_request),
-            notification=_looks_like_notification(raw_request),
-            connection=self._connection,
-            metadata=observed_request_metadata(raw_request),
-        )
-        scope = RpcRequestScope(
-            request,
-            self._endpoint,
-            self._scope_methods.get(request.method or ""),
-        )
-        started = time.perf_counter()
-        caught: BaseException | None = None
-
-        def interrupted(error: BaseException) -> None:
-            if on_error is not None:
-                on_error(scope, error)
-            if scope.outcome is not None:
-                scope.outcome = replace(
-                    scope.outcome, duration=time.perf_counter() - started
-                )
-
-        async with _middleware_scope(
-            self._middleware, "request", scope, on_error=interrupted
-        ):
-            try:
-                yield scope
-            except BaseException as error:
-                caught = error
-                raise
-            finally:
-                previous = scope.outcome
-                error = caught if previous is None else previous.error or caught
-                scope.outcome = RpcRequestOutcome(
-                    response=None if previous is None else previous.response,
-                    duration=time.perf_counter() - started,
-                    error=error,
-                    cancelled=isinstance(caught, asyncio.CancelledError)
-                    or (previous is not None and previous.cancelled),
-                    error_code=None if previous is None else previous.error_code,
-                )
-
-    async def _handle_one(
-        self, raw_request: object, *, failure: Exception | None = None
-    ) -> RpcResponse | None:
-        if not self._middleware:
-            return await self._dispatch_request(raw_request, failure=failure)
-        async with self._request_scope(raw_request) as scope:
-            return await self._dispatch_request(
-                raw_request, failure=failure, scope=scope
-            )
-
-    async def _dispatch_request(
-        self,
-        raw_request: object,
-        *,
-        failure: Exception | None = None,
-        scope: RpcRequestScope | None = None,
-        envelope: RpcRequestEnvelope | None = None,
-    ) -> RpcResponse | None:
-        invocation = None
-        response: RpcResponse | None = None
-        try:
-            if failure is not None:
-                raise failure
-            invocation = self._dispatcher.parse_request(raw_request, envelope=envelope)
-            result = await self._dispatcher.execute(invocation)
-        except Exception as error:
-            return self._failure_response(
-                raw_request,
-                error,
-                scope=scope,
-                declared=invocation.method.raises if invocation else (),
-            )
-        else:
-            response = (
-                RpcSuccess._with_result_annotation(
-                    invocation.request.id, result, invocation.method.result
-                )
-                if invocation.request.expects_response
-                else None
-            )
-            if scope is not None:
-                scope.outcome = RpcRequestOutcome(response, 0.0)
-        return response
-
-    def _failure_response(
-        self,
-        raw_request: object,
-        error: Exception,
-        *,
-        scope: RpcRequestScope | None = None,
-        declared: tuple[type[RpcError], ...] = (),
-    ) -> RpcFailure | None:
-        mapped = self._rpc_error(
-            error,
-            _request_method(raw_request) if scope is None else scope.request.method,
-            declared=declared,
-        )
-        notification = (
-            _looks_like_notification(raw_request)
-            if scope is None
-            else scope.request.notification
-        )
-        response = (
-            None
-            if notification
-            else RpcFailure.from_error(
-                _request_id(raw_request) if scope is None else scope.request.request_id,
-                mapped,
-            )
-        )
-        if scope is not None:
-            scope.outcome = RpcRequestOutcome(
-                response,
-                0.0,
-                error,
-                cancelled=isinstance(error, RpcRequestCancelledError),
-                error_code=str(mapped.rpc_code),
-            )
-        return response
-
-    async def _handle_failure(
+    async def handle_failure(
         self, raw_request: object, error: Exception
     ) -> RpcResponse | None:
         return await self._handle_one(raw_request, failure=error)
@@ -349,16 +228,17 @@ class RpcServer:
         method: str | None = None,
         declared: tuple[type[RpcError], ...] = (),
     ) -> RpcFailure:
-        rpc_error = self._rpc_error(error, method, declared=declared)
+        rpc_error = self.map_error(error, method, declared=declared)
         return RpcFailure.from_error(request_id, rpc_error)
 
-    def _rpc_error(
+    def map_error(
         self,
         error: Exception,
         method: str | None = None,
         *,
         declared: tuple[type[RpcError], ...] = (),
     ) -> RpcError:
+        mapped: RpcError | None
         if isinstance(error, RpcError):
             mapped = error
         elif (
@@ -407,6 +287,143 @@ class RpcServer:
         logger.error("RPC method %s failed", method, exc_info=error)
         return _internal_error(declared)
 
+    def _request_timeout(self, raw_request: object) -> float | None:
+        method = self._methods.get(_request_method(raw_request) or "")
+        if method is not None and method._has_timeout:
+            return method.timeout
+        return self._limits.request_timeout
+
+    @asynccontextmanager
+    async def _request_scope(
+        self,
+        raw_request: object,
+        *,
+        on_error: Callable[[RpcRequestScope, BaseException], None] | None = None,
+    ) -> AsyncGenerator[RpcRequestScope, None]:
+        request = RpcRequestContext(
+            raw_request=raw_request,
+            method=_request_method(raw_request),
+            request_id=_request_id(raw_request),
+            notification=_looks_like_notification(raw_request),
+            connection=self._connection,
+            metadata=observed_request_metadata(raw_request),
+        )
+        scope = RpcRequestScope(
+            request,
+            self._endpoint,
+            self._scope_methods.get(request.method or ""),
+        )
+        started = time.perf_counter()
+        caught: BaseException | None = None
+
+        def interrupted(error: BaseException) -> None:
+            if on_error is not None:
+                on_error(scope, error)
+            if scope.outcome is not None:
+                scope.outcome = replace(
+                    scope.outcome, duration=time.perf_counter() - started
+                )
+
+        async with middleware_scope(
+            self._middleware, "request", scope, on_error=interrupted
+        ):
+            try:
+                yield scope
+            except BaseException as error:
+                caught = error
+                raise
+            finally:
+                previous = scope.outcome
+                outcome_error = caught if previous is None else previous.error or caught
+                scope.outcome = RpcRequestOutcome(
+                    response=None if previous is None else previous.response,
+                    duration=time.perf_counter() - started,
+                    error=outcome_error,
+                    cancelled=isinstance(caught, asyncio.CancelledError)
+                    or (previous is not None and previous.cancelled),
+                    error_code=None if previous is None else previous.error_code,
+                )
+
+    async def _handle_one(
+        self, raw_request: object, *, failure: Exception | None = None
+    ) -> RpcResponse | None:
+        if not self._middleware:
+            return await self._dispatch_request(raw_request, failure=failure)
+        async with self._request_scope(raw_request) as scope:
+            return await self._dispatch_request(
+                raw_request, failure=failure, scope=scope
+            )
+
+    async def _dispatch_request(
+        self,
+        raw_request: object,
+        *,
+        failure: Exception | None = None,
+        scope: RpcRequestScope | None = None,
+        envelope: RpcRequestEnvelope | None = None,
+    ) -> RpcResponse | None:
+        invocation = None
+        response: RpcResponse | None = None
+        try:
+            if failure is not None:
+                raise failure
+            invocation = self._dispatcher.parse_request(raw_request, envelope=envelope)
+            result = await self._dispatcher.execute(invocation)
+        except Exception as error:
+            return self._failure_response(
+                raw_request,
+                error,
+                scope=scope,
+                declared=invocation.method.raises if invocation else (),
+            )
+        else:
+            response = (
+                RpcSuccess.with_result_annotation(
+                    invocation.request.id, result, invocation.method.result
+                )
+                if invocation.request.expects_response
+                else None
+            )
+            if scope is not None:
+                scope.outcome = RpcRequestOutcome(response, 0.0)
+        return response
+
+    def _failure_response(
+        self,
+        raw_request: object,
+        error: Exception,
+        *,
+        scope: RpcRequestScope | None = None,
+        declared: tuple[type[RpcError], ...] = (),
+    ) -> RpcFailure | None:
+        mapped = self.map_error(
+            error,
+            _request_method(raw_request) if scope is None else scope.request.method,
+            declared=declared,
+        )
+        notification = (
+            _looks_like_notification(raw_request)
+            if scope is None
+            else scope.request.notification
+        )
+        response = (
+            None
+            if notification
+            else RpcFailure.from_error(
+                _request_id(raw_request) if scope is None else scope.request.request_id,
+                mapped,
+            )
+        )
+        if scope is not None:
+            scope.outcome = RpcRequestOutcome(
+                response,
+                0.0,
+                error,
+                cancelled=isinstance(error, RpcRequestCancelledError),
+                error_code=str(mapped.rpc_code),
+            )
+        return response
+
 
 def _request_id(raw_request: object) -> RpcRequestId:
     if not isinstance(raw_request, dict):
@@ -435,17 +452,17 @@ def _looks_like_notification(raw_request: object) -> bool:
 
 def _internal_error(declared: tuple[type[RpcError], ...]) -> RpcError:
     from fastapi_canon.error.catalog import internal_problem, resolved_registry
-    from fastapi_canon.integrations.websockets.errors import _CanonBinding
+    from fastapi_canon.integrations.websockets.errors import CanonBinding
 
     error = RpcInternalError()
     binding = next(
         (
             contract_of(item)
             for item in declared
-            if isinstance(contract_of(item), _CanonBinding)
+            if isinstance(contract_of(item), CanonBinding)
         ),
         None,
     )
-    if isinstance(binding, _CanonBinding):
+    if isinstance(binding, CanonBinding):
         error.problem = internal_problem(resolved_registry(binding.registry))
     return error

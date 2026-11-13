@@ -36,6 +36,7 @@ from .transport import RpcTransport
 from .unset import UNSET, UnsetType
 
 __all__ = [
+    "UNSET",
     "ClientConnection",
     "JsonValue",
     "Problem",
@@ -70,7 +71,6 @@ __all__ = [
     "RpcTransportPool",
     "RpcTransportSource",
     "TransportError",
-    "UNSET",
     "UnsetType",
     "parse_problem",
     "resolve_url_template",

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, ValidationError
 
@@ -109,7 +109,7 @@ def _validated_params(
             )
     except ValidationError as error:
         raise RpcInvalidParamsError.from_validation_error(error) from error
-    return validated
+    return cast(BaseModel, validated)
 
 
 def _unexpected_params_error(

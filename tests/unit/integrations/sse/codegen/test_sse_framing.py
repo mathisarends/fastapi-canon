@@ -1,4 +1,5 @@
 import codecs
+import itertools
 import random
 
 import httpx
@@ -55,7 +56,7 @@ def reference_frames(raw: bytes) -> list[str]:
 def random_chunks(raw: bytes, rng: random.Random) -> list[bytes]:
     cuts = sorted(rng.sample(range(len(raw) + 1), min(len(raw) + 1, rng.randint(0, 6))))
     edges = [0, *cuts, len(raw)]
-    return [raw[start:end] for start, end in zip(edges, edges[1:], strict=False)]
+    return [raw[start:end] for start, end in itertools.pairwise(edges)]
 
 
 async def test_line_splitting_matches_the_character_parser():

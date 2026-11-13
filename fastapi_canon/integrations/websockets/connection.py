@@ -1,11 +1,11 @@
 import asyncio
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from math import isfinite
 from time import time
 from types import MappingProxyType
-from typing import Protocol
+from typing import Any, Protocol, Self
 
 
 class RpcRejection(StrEnum):
@@ -74,25 +74,6 @@ class RpcConnectionExpiry:
 
     def __post_init__(self) -> None:
         _validate_expiry(self.expires_at)
-
-
-def _validate_expiry(value: float) -> None:
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, (int, float))
-        or not isfinite(value)
-    ):
-        raise ValueError("Connection expiry must be a finite Unix timestamp")
-
-
-def _schedule_expiry(
-    expires_at: float, callback: Callable[[], None]
-) -> asyncio.TimerHandle:
-    loop = asyncio.get_running_loop()
-    return loop.call_at(loop.time() + max(0.0, expires_at - time()), callback)
-
-
-type RpcBeforeAccept = Callable[[RpcHandshake], Awaitable[Mapping[type, object] | None]]
 
 
 class RpcReject(Exception):
@@ -211,51 +192,47 @@ class RpcLimits:
             raise ValueError("max_pending_requests must be at least 1")
 
 
-class _Headers(Mapping[str, str]):
-    def __init__(self, values: Mapping[str, str]) -> None:
-        self._values = {key.lower(): value for key, value in values.items()}
-
-    def __getitem__(self, key: str) -> str:
-        return self._values[key.lower()]
-
-    def __iter__(self):
-        return iter(self._values)
-
-    def __len__(self) -> int:
-        return len(self._values)
-
-
-_STARTUP_EXPIRED = object()
-
-
 class RpcConnection:
     __slots__ = (
         "_accepted",
-        "_closed",
-        "_endpoint",
-        "_handshake",
         "_close_code",
         "_close_reason",
-        "_raw_close_code",
-        "_on_close",
-        "_path_params",
+        "_closed",
+        "_endpoint",
         "_expires_at",
         "_expiry_timer",
+        "_handshake",
+        "_on_close",
+        "_path_params",
+        "_raw_close_code",
         "_startup_task",
     )
+
+    _endpoint: str
+    _handshake: RpcHandshake
+    _path_params: Mapping[str, str]
+    _accepted: bool
+    _closed: bool
+    _close_code: RpcConnectionClose | None
+    _close_reason: str
+    _raw_close_code: int | None
+    _on_close: Callable[[RpcConnectionClose, str, int | None], None] | None
+    _expires_at: float | None
+    _expiry_timer: asyncio.TimerHandle | None
+    _startup_task: asyncio.Task[object] | None
 
     def __init__(self) -> None:
         raise TypeError("RpcConnection instances are created by Canon")
 
     @classmethod
-    def _create(
+    def create(
         cls,
-        endpoint,
+        endpoint: str,
         socket: RpcWebSocket,
         path_params: Mapping[str, str] | None = None,
-    ):
+    ) -> Self:
         self = cls.__new__(cls)
-        self._endpoint = endpoint.name
+        self._endpoint = endpoint
         self._handshake = socket.handshake
         self._path_params = MappingProxyType(
             dict(path_params or socket.handshake.path_params)
@@ -268,7 +245,7 @@ class RpcConnection:
         self._on_close = None
         self._expires_at = None
         self._expiry_timer = None
-        self._startup_task: asyncio.Task | None = None
+        self._startup_task = None
         return self
 
     @property
@@ -330,32 +307,31 @@ class RpcConnection:
     def expire_at(self, timestamp: float | None) -> None:
         self.expires_at = timestamp
 
-    def _arm_expiry(self) -> None:
-        if self._expiry_timer is not None:
-            self._expiry_timer.cancel()
-            self._expiry_timer = None
-        if self._accepted and not self._closed and self._expires_at is not None:
-            self._expiry_timer = _schedule_expiry(self._expires_at, self._expire)
+    def record_close(
+        self,
+        code: RpcConnectionClose,
+        reason: str = "",
+        raw_close_code: int | None = None,
+    ) -> None:
+        self._close_code = code
+        self._close_reason = reason
+        self._raw_close_code = raw_close_code
 
-    def _expire(self) -> None:
-        self._expiry_timer = None
-        if self._closed or self._close_code is not None:
-            return
-        if self._on_close is not None:
-            self._on_close(RpcConnectionClose.POLICY_VIOLATION, "credentials_expired")
-        else:
-            self._close_code = RpcConnectionClose.POLICY_VIOLATION
-            self._close_reason = "credentials_expired"
-        if self._startup_task is not None:
-            self._startup_task.cancel(_STARTUP_EXPIRED)
-            self._startup_task = None
+    def mark_accepted(self) -> None:
+        self._accepted = True
+        self._arm_expiry()
 
-    def _set_close_handler(self, callback: Callable) -> None:
+    def track_startup(self, task: asyncio.Task[object] | None) -> None:
+        self._startup_task = task
+
+    def set_close_handler(
+        self, callback: Callable[[RpcConnectionClose, str, int | None], None]
+    ) -> None:
         self._on_close = callback
         if self._close_reason == "credentials_expired":
-            callback(RpcConnectionClose.POLICY_VIOLATION, "credentials_expired")
+            callback(RpcConnectionClose.POLICY_VIOLATION, "credentials_expired", None)
 
-    def _mark_closed(self) -> None:
+    def mark_closed(self) -> None:
         self._closed = True
         self._startup_task = None
         if self._expiry_timer is not None:
@@ -370,4 +346,64 @@ class RpcConnection:
                 "RpcConnection.close() is only valid after the connection was accepted"
             )
         if self._on_close is not None:
-            self._on_close(close, reason)
+            self._on_close(close, reason, None)
+
+    def _arm_expiry(self) -> None:
+        if self._expiry_timer is not None:
+            self._expiry_timer.cancel()
+            self._expiry_timer = None
+        if self._accepted and not self._closed and self._expires_at is not None:
+            self._expiry_timer = _schedule_expiry(self._expires_at, self._expire)
+
+    def _expire(self) -> None:
+        self._expiry_timer = None
+        if self._closed or self._close_code is not None:
+            return
+        if self._on_close is not None:
+            self._on_close(
+                RpcConnectionClose.POLICY_VIOLATION, "credentials_expired", None
+            )
+        else:
+            self._close_code = RpcConnectionClose.POLICY_VIOLATION
+            self._close_reason = "credentials_expired"
+        if self._startup_task is not None:
+            self._startup_task.cancel(STARTUP_EXPIRED)
+            self._startup_task = None
+
+
+def _validate_expiry(value: float) -> None:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not isfinite(value)
+    ):
+        raise ValueError("Connection expiry must be a finite Unix timestamp")
+
+
+def _schedule_expiry(
+    expires_at: float, callback: Callable[[], None]
+) -> asyncio.TimerHandle:
+    loop = asyncio.get_running_loop()
+    return loop.call_at(loop.time() + max(0.0, expires_at - time()), callback)
+
+
+type RpcBeforeAccept = Callable[
+    [RpcHandshake], Awaitable[Mapping[type[Any], object] | None]
+]
+
+
+class _Headers(Mapping[str, str]):
+    def __init__(self, values: Mapping[str, str]) -> None:
+        self._values = {key.lower(): value for key, value in values.items()}
+
+    def __getitem__(self, key: str) -> str:
+        return self._values[key.lower()]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._values)
+
+    def __len__(self) -> int:
+        return len(self._values)
+
+
+STARTUP_EXPIRED = object()

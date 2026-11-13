@@ -407,7 +407,7 @@ def test_service_sockets_take_channels_or_a_socket_handler() -> None:
     async def undecorated(socket: Inject[RpcSocket]) -> None: ...
 
     service = RpcDefinition()
-    with pytest.raises(ProtocolDefinitionError, match="channels=... or a"):
+    with pytest.raises(ProtocolDefinitionError, match=r"channels=... or a"):
         service.socket("/rpc")
     with pytest.raises(ProtocolDefinitionError, match="either channels"):
         service.socket("/shell", shell, channels=(RpcChannel("other"),))

@@ -115,10 +115,8 @@ def _terminal_stream(
                     if isinstance(item, ServerSentEvent):
                         if item.event and item.event.startswith("canon."):
                             raise ValueError("canon.* SSE event names are reserved")
-                        if (
-                            item.raw_data is not None
-                            or item.comment is not None
-                            and item.data is None
+                        if item.raw_data is not None or (
+                            item.comment is not None and item.data is None
                         ):
                             raise ValueError(
                                 "Canon streams require typed JSON business events"

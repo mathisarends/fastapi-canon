@@ -2,6 +2,7 @@ import inspect
 from collections import Counter
 from collections.abc import AsyncGenerator, AsyncIterator, Iterable
 from dataclasses import dataclass
+from itertools import chain
 from types import FunctionType, UnionType
 from typing import (
     Annotated,
@@ -185,7 +186,9 @@ class RpcProtocol:
                     raise ProtocolDefinitionError(
                         f"RPC stream control collides with an operation: {control}"
                     )
-        for operation in (*self.methods, *self.notifications, *self.subscriptions):
+        for operation in chain[
+            RpcMethodDefinition | RpcNotificationDefinition | RpcSubscriptionDefinition
+        ](self.methods, self.notifications, self.subscriptions):
             bind_contracts(
                 (
                     contract
@@ -597,7 +600,7 @@ def socket_definition(
         payload_types = (incoming, result)
         message_parameter = parameter.name
     else:
-        parameter, annotation = socket_parameters[0]
+        socket_parameter, annotation = socket_parameters[0]
         arguments = get_args(annotation)
         if arguments:
             if len(arguments) != 2:
@@ -606,7 +609,7 @@ def socket_definition(
                 )
             payload_types = arguments
         injected = tuple(
-            RpcInjectedParameter(p.name, RpcSocket) if p is parameter else p
+            RpcInjectedParameter(p.name, RpcSocket) if p is socket_parameter else p
             for p in injected
         )
         if result is not None and result is not type(None):

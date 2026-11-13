@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from starlette.routing import BaseRoute, WebSocketRoute
 
 from fastapi_canon.contract_routes import iter_contract_routes
+from fastapi_canon.error.contributions import error_registries
 from fastapi_canon.exceptions import ConfigurationError
 from fastapi_canon.injected_route import InjectedRoute, inject_endpoint
 from fastapi_canon.router import APIRouteOptions as APIRouteOptions
@@ -432,9 +433,7 @@ class APIRouter(CanonRouter):
             name=route.name,
             dependencies=[*dependencies, *route.dependencies],
         )
-        self._included_error_registries.extend(
-            getattr(adapter, "_canon_error_registries", ())
-        )
+        self._included_error_registries.extend(error_registries(adapter))
 
 
 def _websocket_path(path: str) -> str:

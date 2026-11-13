@@ -1,6 +1,13 @@
 # Compatibility
 
-## Canon 0.20.0 (prepared, unpublished)
+## Canon 0.21.0 (prepared, unpublished)
+
+This preparation includes the unpublished 0.20.0 changes below and strengthens
+WebSocket generator ownership checks. See the [migration](package-migration.md#upgrade-to-0210).
+The earlier local artifact results below apply to the 0.20.0 preparation;
+0.21.0 requires its own exact-source validation before publication.
+
+## Canon 0.20.0 (unpublished source preparation)
 
 Core and telemetry require FastAPI >=0.143.1,<1. Included WebSocket routes in
 FastAPI 0.138.0 through 0.143.0 can lose their effective paths during contract

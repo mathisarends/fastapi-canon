@@ -169,7 +169,7 @@ class Telemetry:
         validate_app(app)
 
 
-def _instrumentation_providers(
+def instrumentation_providers(
     registrations: tuple[tuple[str, Instrumentation], ...],
     options: Telemetry | None,
 ) -> tuple[Provider, ...]:

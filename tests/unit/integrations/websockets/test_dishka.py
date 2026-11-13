@@ -97,7 +97,7 @@ async def test_dishka_resolver_rejects_a_non_app_container() -> None:
     container.scope = Scope.SESSION
     resolver = DishkaResolver(container)  # type: ignore[arg-type]
 
-    with pytest.raises(ValueError, match="needs the APP container.*SESSION"):
+    with pytest.raises(ValueError, match=r"needs the APP container.*SESSION"):
         async with resolver.enter_connection({}):
             pass
 

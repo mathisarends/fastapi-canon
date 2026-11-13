@@ -4,7 +4,7 @@ from collections.abc import Callable, Iterable, Mapping
 from contextlib import suppress
 from enum import IntEnum
 from functools import cache
-from typing import Any, ClassVar, get_type_hints
+from typing import Any, ClassVar, cast, get_type_hints
 
 from pydantic import BaseModel, ValidationError
 
@@ -53,7 +53,7 @@ class RpcInvalidParams(RpcModel):
 
 class RpcError(Exception):
     code: ClassVar[str]
-    message: ClassVar[str]
+    message: str
     details: Any
     rpc_code: ClassVar[int] = RpcErrorCode.SERVER_ERROR
     details_type: ClassVar[type[BaseModel] | None] = None
@@ -318,13 +318,18 @@ class RpcErrorBinding[ExceptionT: Exception]:
             raise TypeError(
                 f"Expected {self.exception.__name__}, got {type(error).__name__}"
             )
+        data: BaseModel | None
         details = self._details
-        if isinstance(details, type):
+        if isinstance(details, type) and issubclass(details, BaseModel):
             data = details.model_validate(
                 error, from_attributes=True, by_name=True, by_alias=False
             )
         else:
-            data = None if details is None else details(error)
+            data = (
+                None
+                if details is None
+                else cast(Callable[[ExceptionT], BaseModel], details)(error)
+            )
         return self.error_type(data, message=self.message_for(error))
 
     def check(self, error: ExceptionT) -> None:
@@ -341,7 +346,7 @@ class RpcErrorBinding[ExceptionT: Exception]:
 type RpcErrorDeclaration = type[RpcError] | RpcErrorBinding[Any] | Error[Any]
 
 
-class _CanonBinding(RpcErrorBinding[Exception]):
+class CanonBinding(RpcErrorBinding[Exception]):
     __slots__ = ("definition", "registry")
 
     def __init__(self, definition: Error[Any], registry: ErrorRegistry) -> None:
@@ -364,59 +369,6 @@ class _CanonBinding(RpcErrorBinding[Exception]):
                 "Canonical RPC error is absent from the catalog"
             )
         return mapped
-
-
-def _check_details_fields(exception: type[Exception], details: type[BaseModel]) -> None:
-    attributes = set().union(
-        *(getattr(cls, "__annotations__", {}) for cls in exception.__mro__)
-    )
-    attributes.update(name for cls in exception.__mro__ for name in vars(cls))
-    with suppress(TypeError, ValueError):
-        attributes.update(
-            name
-            for name, parameter in inspect.signature(
-                exception.__init__
-            ).parameters.items()
-            if name != "self"
-            and parameter.kind
-            not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
-        )
-    missing = [
-        name
-        for name, field in details.model_fields.items()
-        if field.is_required() and name not in attributes
-    ]
-    if missing:
-        raise ProtocolDefinitionError(
-            f"RPC error binding details {details.__name__} fields {missing!r} "
-            f"are absent from {exception.__name__} annotations and init parameters; "
-            "use an annotated details function for custom mappings"
-        )
-
-
-def _details_type(
-    details: object, exception: type[Exception]
-) -> type[BaseModel] | None:
-    if details is None:
-        return None
-    if isinstance(details, type):
-        if issubclass(details, BaseModel):
-            return details
-    elif callable(details):
-        try:
-            returned = get_type_hints(details).get("return")
-        except (NameError, TypeError, ValueError, SyntaxError) as error:
-            raise ProtocolDefinitionError(
-                f"RPC error binding {exception.__name__}: cannot resolve "
-                f"details annotations: {error}"
-            ) from error
-        if isinstance(returned, type) and issubclass(returned, BaseModel):
-            return returned
-    raise ProtocolDefinitionError(
-        f"RPC error binding {exception.__name__} details must be a Pydantic model "
-        "or a function "
-        f"annotated to return one, got {details!r}"
-    )
 
 
 def contract_of(error: type[RpcError]) -> RpcErrorBinding[Any] | None:
@@ -527,6 +479,59 @@ def contract_rejections(
     return reject
 
 
+def _check_details_fields(exception: type[Exception], details: type[BaseModel]) -> None:
+    attributes = set().union(
+        *(getattr(cls, "__annotations__", {}) for cls in exception.__mro__)
+    )
+    attributes.update(name for cls in exception.__mro__ for name in vars(cls))
+    with suppress(TypeError, ValueError):
+        attributes.update(
+            name
+            for name, parameter in inspect.signature(
+                exception.__init__
+            ).parameters.items()
+            if name != "self"
+            and parameter.kind
+            not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+        )
+    missing = [
+        name
+        for name, field in details.model_fields.items()
+        if field.is_required() and name not in attributes
+    ]
+    if missing:
+        raise ProtocolDefinitionError(
+            f"RPC error binding details {details.__name__} fields {missing!r} "
+            f"are absent from {exception.__name__} annotations and init parameters; "
+            "use an annotated details function for custom mappings"
+        )
+
+
+def _details_type(
+    details: object, exception: type[Exception]
+) -> type[BaseModel] | None:
+    if details is None:
+        return None
+    if isinstance(details, type) and issubclass(details, BaseModel):
+        if issubclass(details, BaseModel):
+            return details
+    elif callable(details):
+        try:
+            returned = get_type_hints(details).get("return")
+        except (NameError, TypeError, ValueError, SyntaxError) as error:
+            raise ProtocolDefinitionError(
+                f"RPC error binding {exception.__name__}: cannot resolve "
+                f"details annotations: {error}"
+            ) from error
+        if isinstance(returned, type) and issubclass(returned, BaseModel):
+            return returned
+    raise ProtocolDefinitionError(
+        f"RPC error binding {exception.__name__} details must be a Pydantic model "
+        "or a function "
+        f"annotated to return one, got {details!r}"
+    )
+
+
 @cache
-def _canon_binding(error: Error[Any], registry: ErrorRegistry) -> _CanonBinding:
-    return _CanonBinding(error, registry)
+def _canon_binding(error: Error[Any], registry: ErrorRegistry) -> CanonBinding:
+    return CanonBinding(error, registry)

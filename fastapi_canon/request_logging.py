@@ -17,7 +17,7 @@ def install_request_logging(app: FastAPI) -> None:
 
     # Wrap the lazily built stack so later add_middleware calls still work and
     # ServerErrorMiddleware's actual 500 response passes through our send hook.
-    app.build_middleware_stack = build_with_logging  # type: ignore[method-assign]
+    app.build_middleware_stack = build_with_logging  # type: ignore[method-assign]  # Install the per-app lazy stack wrapper.
 
 
 class _RequestLogging:

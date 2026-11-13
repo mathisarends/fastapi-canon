@@ -7,7 +7,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
-from fastapi_canon.integrations.websockets.activity import _Activity, _activity_for
+from fastapi_canon.integrations.websockets.activity import Activity, activity_for
 from fastapi_canon.integrations.websockets.connection import (
     RpcConnection,
     RpcConnectionClose,
@@ -150,7 +150,7 @@ class RpcMiddleware:
 
 
 @asynccontextmanager
-async def _middleware_scope(
+async def middleware_scope(
     middleware: Sequence[RpcMiddlewareLike],
     kind: str,
     scope: RpcConnectionScope | RpcRequestScope | RpcStreamScope,
@@ -219,11 +219,11 @@ async def _middleware_scope(
 
 
 @dataclass(slots=True)
-class _ServingState:
+class ServingState:
     scope: RpcConnectionScope
     socket: RpcWebSocket
     middleware: tuple[RpcMiddlewareLike, ...]
-    activity: _Activity | None
+    activity: Activity | None
     started_at: float = field(default_factory=time.perf_counter)
     error: BaseException | None = None
     disconnect_error: BaseException | None = None
@@ -248,16 +248,16 @@ class _ServingState:
         )
 
 
-_serving: ContextVar[_ServingState | None] = ContextVar(
+_serving: ContextVar[ServingState | None] = ContextVar(
     "fastapi_canon.integrations.websockets.serving", default=None
 )
 
 
-def _current_serving() -> _ServingState | None:
+def current_serving() -> ServingState | None:
     return _serving.get()
 
 
-def _record_error(error: BaseException) -> None:
+def record_error(error: BaseException) -> None:
     state = _serving.get()
     if state is not None and isinstance(error, asyncio.CancelledError):
         state.cancelled = True
@@ -270,18 +270,18 @@ def _record_error(error: BaseException) -> None:
         state.error = error
 
 
-def _record_rejection(rejection: RpcRejection) -> None:
+def record_rejection(rejection: RpcRejection) -> None:
     state = _serving.get()
     if state is not None:
         state.rejection = rejection
 
 
 @asynccontextmanager
-async def _serving_scope(
+async def serving_scope(
     endpoint: "RpcAnyEndpoint",
     socket: RpcWebSocket,
     middleware: Sequence[RpcMiddlewareLike] = (),
-) -> AsyncGenerator[_ServingState | None, None]:
+) -> AsyncGenerator[ServingState | None, None]:
     active = _serving.get()
     if (
         active is not None
@@ -298,7 +298,7 @@ async def _serving_scope(
             return
         previous = active.middleware, active.activity
         active.middleware = (*active.middleware, *additional)
-        active.activity = _activity_for(active.middleware)
+        active.activity = activity_for(active.middleware)
         try:
             async with _connection_middleware(active, additional):
                 yield active
@@ -315,11 +315,11 @@ async def _serving_scope(
             if token is not None:
                 _serving.reset(token)
         return
-    state = _ServingState(
+    state = ServingState(
         RpcConnectionScope(endpoint, socket.handshake),
         socket,
         chain,
-        _activity_for(chain),
+        activity_for(chain),
     )
     token = _serving.set(state)
     try:
@@ -330,37 +330,37 @@ async def _serving_scope(
 
 
 @asynccontextmanager
-async def _connection_middleware(
-    state: _ServingState, middleware: Sequence[RpcMiddlewareLike]
-) -> AsyncGenerator[None, None]:
-    async with _middleware_scope(middleware, "connection", state.scope):
-        try:
-            yield
-        except BaseException as error:
-            _record_error(error)
-            raise
-        finally:
-            state.finish()
-
-
-@asynccontextmanager
-async def _stream_scope(
+async def stream_scope(
     scope: RpcStreamScope, middleware: Sequence[RpcMiddlewareLike]
 ) -> AsyncGenerator[None, None]:
     started = time.perf_counter()
-    async with _middleware_scope(middleware, "stream", scope):
+    async with middleware_scope(middleware, "stream", scope):
         try:
             yield
         except BaseException as error:
-            _record_error(error)
+            record_error(error)
             raise
         finally:
             state = _serving.get()
-            error = None if state is None else state.error
+            outcome_error = None if state is None else state.error
             scope.outcome = RpcStreamOutcome(
                 close_code=scope.connection.close_code,
                 raw_close_code=scope.connection.raw_close_code,
                 duration=time.perf_counter() - started,
-                error=error,
+                error=outcome_error,
                 cancelled=state is not None and state.cancelled,
             )
+
+
+@asynccontextmanager
+async def _connection_middleware(
+    state: ServingState, middleware: Sequence[RpcMiddlewareLike]
+) -> AsyncGenerator[None, None]:
+    async with middleware_scope(middleware, "connection", state.scope):
+        try:
+            yield
+        except BaseException as error:
+            record_error(error)
+            raise
+        finally:
+            state.finish()

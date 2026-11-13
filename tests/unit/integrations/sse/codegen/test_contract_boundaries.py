@@ -171,7 +171,7 @@ def test_forbidden_required_undeclared_keys_fail_before_writing(
     schema = {"type": "object", "required": ["name"], "additionalProperties": False}
     if mixed:
         schema["properties"] = {"count": {"type": "integer"}}
-    with pytest.raises(ContractError, match="Required.*name.*additionalProperties"):
+    with pytest.raises(ContractError, match=r"Required.*name.*additionalProperties"):
         schema_contract(schema)
     document = event_document(str)
     media = document["paths"]["/events"]["get"]["responses"]["200"]["content"]

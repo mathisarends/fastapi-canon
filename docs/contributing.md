@@ -43,6 +43,12 @@ committed clients through their generators before checking drift.
 Add a test when behavior changes or an existing guarantee lacks coverage. Start
 with one regression for a bug, or a success case and distinct failure/boundary
 cases for new behavior. There is no required number of tests per function or PR.
+Type suppressions must name the diagnostic code and explain the concrete reason
+on the same line (`# type: ignore[code]  # Reason.`). Prefer a typed adapter or cast
+when it expresses the boundary. Ruff rejects blanket type ignores. WebSockets is
+checked by root strict mypy; installed-wheel API completeness is an additional
+consumer check. SSE and WebRTC keep their scoped type profiles.
+
 Pure documentation, formatting and behavior-preserving refactors normally use
 the existing checks.
 

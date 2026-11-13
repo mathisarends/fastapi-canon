@@ -18,7 +18,7 @@ from fastapi_canon.integrations.websockets.request_metadata import (
     validate_request_metadata,
 )
 
-JSONRPC_VERSION = "2.0"
+JSONRPC_VERSION: Literal["2.0"] = "2.0"
 
 type RpcRequestId = str | int | None
 
@@ -83,7 +83,7 @@ class RpcSuccess(RpcSchema):
     _result_annotation: Any = PrivateAttr(default=None)
 
     @classmethod
-    def _with_result_annotation(
+    def with_result_annotation(
         cls,
         request_id: RpcRequestId,
         result: Any,
@@ -132,7 +132,7 @@ class RpcNotification(RpcSchema):
     _payload_annotation: Any = PrivateAttr(default=None)
 
     @classmethod
-    def _with_payload_annotation(
+    def with_payload_annotation(
         cls,
         method: str,
         payload: Any,

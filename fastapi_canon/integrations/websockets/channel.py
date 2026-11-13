@@ -103,7 +103,7 @@ class RpcChannel:
         # Collected from raises; Composition merges it into the application catalog.
         self.error_registry: ErrorRegistry | None = None
         self._raises: tuple[type[RpcError], ...] = ()
-        self._raises = self._merge_raises(raises, owner=f"RPC channel {self.name}")
+        self._raises = self.merge_raises(raises, owner=f"RPC channel {self.name}")
         if not callable(resolver_scope):
             raise ProtocolDefinitionError("RPC resolver scope must be callable")
         self._resolver_scope = resolver_scope
@@ -171,7 +171,7 @@ class RpcChannel:
         *,
         summary: str | None = None,
         raises: Iterable[RpcErrorDeclaration] = (),
-        timeout: float | None | _TimeoutDefault = _INHERIT_TIMEOUT,
+        timeout: float | _TimeoutDefault | None = _INHERIT_TIMEOUT,
         idempotent: bool = False,
     ) -> Callable[[Handler], Handler]: ...
 
@@ -182,11 +182,11 @@ class RpcChannel:
         *,
         summary: str | None = None,
         raises: Iterable[RpcErrorDeclaration] = (),
-        timeout: float | None | _TimeoutDefault = _INHERIT_TIMEOUT,
+        timeout: float | _TimeoutDefault | None = _INHERIT_TIMEOUT,
         idempotent: bool = False,
     ) -> Any:
         channel = self
-        channel._ensure_mutable()
+        channel.ensure_mutable()
         if type(idempotent) is not bool:
             raise ProtocolDefinitionError("Method idempotent must be a bool")
         has_timeout = timeout is not _INHERIT_TIMEOUT
@@ -213,15 +213,15 @@ class RpcChannel:
         raises = tuple(raises)
 
         def decorate(function: FunctionType) -> FunctionType:
-            channel._validate_function(function, "method", coroutine=True)
+            channel.validate_function(function, "method", coroutine=True)
             wire_name = join_rpc_name(
                 channel.namespace, local_name or function.__name__
             )
-            merged_raises = channel._merge_raises(
+            merged_raises = channel.merge_raises(
                 raises,
                 owner=f"RPC method {wire_name}",
             )
-            channel._reserve(wire_name)
+            channel.reserve_name(wire_name)
             channel._routes.append(
                 RpcRoute(
                     wire_name,
@@ -264,7 +264,7 @@ class RpcChannel:
         raises: Iterable[RpcErrorDeclaration] = (),
     ) -> Any:
         channel = self
-        channel._ensure_mutable()
+        channel.ensure_mutable()
         if isinstance(name, FunctionType):
             return self.event()(name)
         if on_error not in ("continue", "close"):
@@ -278,11 +278,11 @@ class RpcChannel:
         raises = tuple(raises)
 
         def decorate(function: FunctionType) -> FunctionType:
-            channel._validate_function(function, "event", coroutine=False)
+            channel.validate_function(function, "event", coroutine=False)
             wire_name = join_rpc_name(
                 channel.namespace, _name(name or function.__name__, "event name")
             )
-            merged_raises = channel._merge_raises(
+            merged_raises = channel.merge_raises(
                 raises,
                 owner=f"RPC event {wire_name}",
             )
@@ -295,7 +295,7 @@ class RpcChannel:
                 on_error=on_error,
                 raises=merged_raises,
             )
-            channel._reserve(wire_name)
+            channel.reserve_name(wire_name)
             channel._events.append(definition)
             return function
 
@@ -327,7 +327,7 @@ class RpcChannel:
         raises: Iterable[RpcErrorDeclaration] = (),
     ) -> Any:
         channel = self
-        channel._ensure_mutable()
+        channel.ensure_mutable()
         if isinstance(name, FunctionType):
             return self.stream()(name)
         if name is not None and not isinstance(name, str):
@@ -348,7 +348,7 @@ class RpcChannel:
         raises = tuple(raises)
 
         def decorate(function: FunctionType) -> FunctionType:
-            channel._validate_function(function, "stream", coroutine=False)
+            channel.validate_function(function, "stream", coroutine=False)
             local = _name(name or function.__name__, "stream name")
             wire_name = join_rpc_name(channel.namespace, local)
             if (
@@ -359,7 +359,7 @@ class RpcChannel:
                     raise ProtocolDefinitionError(
                         "Content types apply only to binary streams"
                     )
-                merged_raises = channel._merge_raises(
+                merged_raises = channel.merge_raises(
                     raises,
                     owner=f"RPC stream {wire_name}",
                 )
@@ -377,7 +377,7 @@ class RpcChannel:
                     raise ProtocolDefinitionError(
                         "Message streams cannot inject binary ports"
                     )
-                channel._reserve(wire_name)
+                channel.reserve_name(wire_name)
                 channel._subscriptions.append(message_stream)
                 return function
             if raises:
@@ -392,7 +392,7 @@ class RpcChannel:
                 summary=summary or _docstring_summary(function),
                 resolver_scope=channel.resolver_scope,
             )
-            channel._reserve(wire_name)
+            channel.reserve_name(wire_name)
             channel._streams.append(definition)
             function.__dict__["__rpckit_stream__"] = channel, local
             return function
@@ -444,7 +444,7 @@ class RpcChannel:
         close code and reason the client receives.
         """
         channel = self
-        channel._ensure_mutable()
+        channel.ensure_mutable()
         if isinstance(name, FunctionType):
             return self.socket()(name)
         if name is not None and not isinstance(name, str):
@@ -466,7 +466,7 @@ class RpcChannel:
         message_types = tuple(item for item in RpcMessageType if item in declared)
 
         def decorate(function: FunctionType) -> FunctionType:
-            channel._validate_function(function, "socket", coroutine=False)
+            channel.validate_function(function, "socket", coroutine=False)
             local = _name(name or function.__name__, "socket name")
             wire_name = join_rpc_name(channel.namespace, local)
             definition = socket_definition(
@@ -478,7 +478,7 @@ class RpcChannel:
                 summary=summary or _docstring_summary(function),
                 resolver_scope=channel.resolver_scope,
             )
-            channel._reserve(wire_name)
+            channel.reserve_name(wire_name)
             channel._sockets.append(definition)
             function.__dict__["__rpckit_socket__"] = channel, local
             return function
@@ -493,7 +493,7 @@ class RpcChannel:
         raises: Iterable[RpcErrorDeclaration] = (),
         resolver_scope: RpcResolverScope | None = None,
     ) -> "RpcChannel":
-        self._ensure_mutable()
+        self.ensure_mutable()
         local = _name(name, "child channel name")
         child = RpcChannel(
             join_rpc_name(self.name, local),
@@ -502,7 +502,7 @@ class RpcChannel:
         )
         child.error_registry = self.error_registry
         child._raises = self.raises
-        child._raises = child._merge_raises(raises, owner=f"RPC channel {child.name}")
+        child._raises = child.merge_raises(raises, owner=f"RPC channel {child.name}")
         self._children.append(child)
         return child
 
@@ -513,7 +513,7 @@ class RpcChannel:
         child namespaces, handler functions, error mappings and scopes are kept.
         Later registrations on the original channel do not change this snapshot.
         """
-        self._ensure_mutable()
+        self.ensure_mutable()
         if not isinstance(channel, RpcChannel):
             raise ProtocolDefinitionError("include_channel expects an RpcChannel")
         if channel is self:
@@ -521,7 +521,7 @@ class RpcChannel:
         if not isinstance(namespace, str):
             raise ProtocolDefinitionError("RPC namespace must be a string")
         namespace = normalize_namespace(namespace)
-        snapshot = channel._snapshot(join_rpc_name(self.namespace, namespace))
+        snapshot = channel.snapshot(join_rpc_name(self.namespace, namespace))
         names = _channel_names(self)
         included = _channel_names(snapshot)
         duplicates = names.intersection(included)
@@ -611,7 +611,7 @@ class RpcChannel:
         strict_errors: bool = False,
         middleware: Sequence[RpcMiddlewareLike] = (),
     ) -> RpcServer:
-        return RpcServer._from_channel(
+        return RpcServer.from_channel(
             self.protocol,
             resolver=resolver_with_context(resolver, context),
             error_mapper=error_mapper,
@@ -620,7 +620,7 @@ class RpcChannel:
             middleware=middleware,
         )
 
-    def _merge_raises(
+    def merge_raises(
         self, raises: Iterable[RpcErrorDeclaration], *, owner: str
     ) -> tuple[type[RpcError], ...]:
         declarations = tuple(raises)
@@ -638,7 +638,7 @@ class RpcChannel:
         self.error_registry = registry
         return result
 
-    def _reserve(self, name: str) -> None:
+    def reserve_name(self, name: str) -> None:
         included_controls = set().union(
             *(_channel_controls(child) for child in self.children)
         )
@@ -646,7 +646,7 @@ class RpcChannel:
             raise ProtocolDefinitionError(f"Duplicate RPC route: {name}")
         self._names.add(name)
 
-    def _snapshot(self, namespace: str) -> "RpcChannel":
+    def snapshot(self, namespace: str) -> "RpcChannel":
         snapshot = RpcChannel(
             self.name, namespace=namespace, resolver_scope=self.resolver_scope
         )
@@ -674,11 +674,11 @@ class RpcChannel:
         ]
         snapshot._names = {rename(name) for name in self._names}
         snapshot._children = [
-            child._snapshot(rename(child.namespace)) for child in self.children
+            child.snapshot(rename(child.namespace)) for child in self.children
         ]
         return snapshot
 
-    def _validate_function(self, function: Any, kind: str, *, coroutine: bool) -> None:
+    def validate_function(self, function: Any, kind: str, *, coroutine: bool) -> None:
         if not isinstance(function, FunctionType) or not _is_free_function(function):
             raise ProtocolDefinitionError(
                 f"RPC {kind} must decorate a free function, got {function!r}"
@@ -688,7 +688,7 @@ class RpcChannel:
                 f"RPC method {function.__qualname__} must be async"
             )
 
-    def _ensure_mutable(self) -> None:
+    def ensure_mutable(self) -> None:
         if self._protocol is not None:
             raise ProtocolDefinitionError(
                 f"RpcChannel {self.name!r} is frozen because its protocol was "

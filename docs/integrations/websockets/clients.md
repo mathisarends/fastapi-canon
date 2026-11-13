@@ -42,6 +42,10 @@ Use `contract.write("tasks.openrpc.json")` to write canonical UTF-8 JSON, or
 `contract.to_json()` to get the same text. `contract.to_openrpc()` returns the
 complete document as a dictionary for integrations that need one.
 
+Generation preserves handwritten files and removes only manifest-owned stale
+files. A corrupt `.rpcgen/manifest.json` now fails before any write; restore it
+from version control or follow the [ownership migration](../../package-migration.md#upgrade-to-0210).
+
 ## One configuration for contract and clients
 
 Put the importable contract in a module, then create `rpcgen.toml` beside your
