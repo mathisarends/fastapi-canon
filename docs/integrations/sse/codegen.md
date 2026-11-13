@@ -31,7 +31,7 @@ cached document and ordinary REST endpoints remain intact.
 The generator extracts application data from
 `itemSchema.properties.data.contentSchema`. Only stream operations and models
 reachable from their parameters, bodies, events and error responses are emitted.
-Operation IDs determine client members in the same way as generated RPC
+In prepared, unpublished 0.20.0, operation IDs determine client members like RPC
 clients. A dotted ID uses its namespace as nested groups and its last segment as
 the method: `projects.events` becomes `client.projects.events` and
 `projects.members.updates` becomes `client.projects.members.updates`. An ID
