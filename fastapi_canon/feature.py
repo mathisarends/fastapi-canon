@@ -346,6 +346,31 @@ def inspect_app(app: FastAPI) -> CompositionInfo:
     return _installed_description(app)
 
 
+def installed_contract_routes(
+    app: FastAPI,
+) -> tuple[tuple[Feature, ...], tuple[tuple[Feature, str, object], ...]]:
+    """Return installed features and the routes each registered, across mounts.
+
+    Routes are ``(feature, effective path, original route)`` triples. Mounted
+    FastAPI applications contribute their own compositions under the mount path.
+    """
+    installed = getattr(app.state, _INSTALLATION_STATE_KEY, None)
+    features = installed.features if isinstance(installed, _Installation) else ()
+    routes = installed.contract_routes if isinstance(installed, _Installation) else ()
+    for prefix, child in iter_contract_mounts(app.routes):
+        if isinstance(child, FastAPI):
+            child_features, child_routes = installed_contract_routes(child)
+            features = (*features, *child_features)
+            routes = (
+                *routes,
+                *(
+                    (feature, prefix + path, route)
+                    for feature, path, route in child_routes
+                ),
+            )
+    return features, routes
+
+
 @dataclass(frozen=True, slots=True)
 class _Installation:
     features: tuple[Feature, ...] = field(compare=False)
@@ -506,26 +531,6 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         contract_routes=contract_routes,
     )
     setattr(app.state, _INSTALLATION_STATE_KEY, completed)
-
-
-def _contract_ownership(
-    app: FastAPI,
-) -> tuple[tuple[Feature, ...], tuple[tuple[Feature, str, object], ...]]:
-    installed = getattr(app.state, _INSTALLATION_STATE_KEY, None)
-    features = installed.features if isinstance(installed, _Installation) else ()
-    routes = installed.contract_routes if isinstance(installed, _Installation) else ()
-    for prefix, child in iter_contract_mounts(app.routes):
-        if isinstance(child, FastAPI):
-            child_features, child_routes = _contract_ownership(child)
-            features = (*features, *child_features)
-            routes = (
-                *routes,
-                *(
-                    (feature, prefix + path, route)
-                    for feature, path, route in child_routes
-                ),
-            )
-    return features, routes
 
 
 def _prepare_composition(app: FastAPI, composition: Composition) -> _Preparation:

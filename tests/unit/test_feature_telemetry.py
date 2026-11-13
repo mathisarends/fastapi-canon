@@ -1,7 +1,6 @@
 import pytest
 from fastapi import FastAPI
 
-import fastapi_canon.integrations.opentelemetry.native as native
 from fastapi_canon import Composition
 from fastapi_canon.exceptions import FeatureConfigurationError
 from fastapi_canon.integrations.opentelemetry import Telemetry
@@ -14,14 +13,6 @@ def test_telemetry_requires_native_fastapi_support(
     monkeypatch.delattr(app, "_telemetry")
     with pytest.raises(FeatureConfigurationError, match=r"FastAPI >=0\.143"):
         Composition(telemetry=Telemetry()).build(app)
-
-
-def test_telemetry_rejects_unsupported_fastapi_version(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(native, "version", lambda name: "0.142.0")
-    with pytest.raises(FeatureConfigurationError, match=r"FastAPI >=0\.143"):
-        Composition(telemetry=Telemetry()).build(FastAPI())
 
 
 def test_telemetry_rejects_changed_native_configuration(

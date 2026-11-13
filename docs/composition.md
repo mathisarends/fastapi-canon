@@ -756,7 +756,7 @@ Configuration failures raise `FeatureConfigurationError`.
 ## Requirements
 
 - CPython 3.12, 3.13, or 3.14
-- FastAPI 0.121 or newer, below 1.0
+- FastAPI 0.143.1 or newer, below 1.0
 - Dishka 1.10 or newer, below 2.0
 - Pydantic 2.9 or newer, below 3.0
 

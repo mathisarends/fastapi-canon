@@ -3,10 +3,9 @@
 Canon adds port spans to FastAPI's native HTTP telemetry. Endpoints, application
 services and domain classes need no telemetry annotations or imports.
 
-Install `fastapi-canon[otel]`. This extra requires FastAPI >=0.143 and the
-OpenTelemetry API and instrumentation helpers; the SDK and exporters remain
-application dependencies. Core requires FastAPI >=0.121 and can run without
-OpenTelemetry on older FastAPI versions.
+Install `fastapi-canon[otel]`. This extra adds the OpenTelemetry API and
+instrumentation helpers; the SDK and exporters remain application dependencies.
+Canon core, with or without telemetry, requires FastAPI >=0.143.1.
 Recent FastAPI versions themselves depend on the OpenTelemetry API.
 
 ## Developer-facing API

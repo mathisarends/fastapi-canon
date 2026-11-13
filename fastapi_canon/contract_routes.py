@@ -1,8 +1,9 @@
-"""Read the effective paths of registered routes across FastAPI versions."""
+"""Read the effective paths of registered routes through FastAPI route contexts."""
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from typing import Any
 
+from fastapi.routing import iter_route_contexts
 from starlette.routing import BaseRoute, Mount
 
 RPC_ENDPOINT_ATTRIBUTE = "__canon_rpc_endpoint__"
@@ -13,7 +14,8 @@ def iter_contract_routes(
     routes: Sequence[BaseRoute], *, prefix: str = "", include_mounts: bool = True
 ) -> Iterator[tuple[str, Any]]:
     """Include router prefixes and recursively traverse mounted applications."""
-    for route in _route_contexts(routes):
+    contexts: Iterable[Any] = iter_route_contexts(routes)
+    for route in contexts:
         original = getattr(route, "original_route", route)
         if isinstance(original, Mount):
             if include_mounts:
@@ -30,16 +32,8 @@ def iter_contract_mounts(
     routes: Sequence[BaseRoute],
 ) -> Iterator[tuple[str, Any]]:
     """Read mounted applications without entering their runtime."""
-    for route in _route_contexts(routes):
+    contexts: Iterable[Any] = iter_route_contexts(routes)
+    for route in contexts:
         original = getattr(route, "original_route", route)
         if isinstance(original, Mount):
             yield route.path, original.app
-
-
-def _route_contexts(routes: Sequence[BaseRoute]) -> Iterator[Any]:
-    try:
-        from fastapi.routing import iter_route_contexts
-    except ImportError:  # pragma: no cover - FastAPI < 0.140
-        yield from routes
-    else:
-        yield from iter_route_contexts(routes)

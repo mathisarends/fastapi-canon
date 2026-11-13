@@ -1,9 +1,15 @@
+from collections.abc import Callable
 from copy import deepcopy
+from typing import Any
 
 import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import PlainTextResponse
+from starlette.routing import Route
 
 from fastapi_canon import Composition, Feature, export_contracts
 from fastapi_canon.contracts import ContractKind, ContractSelection
@@ -111,6 +117,42 @@ def test_feature_selection_preserves_http_methods_schema_closure_and_app_cache()
         assert client.post("/items").json() == {"secret": "private"}
 
 
+def test_openapi_selection_keeps_only_tags_and_components_it_uses() -> None:
+    public = APIRouter(tags=["public"])
+    private = APIRouter(tags=["private"])
+
+    @public.get("/public")
+    async def read() -> str:
+        return "public"
+
+    @private.get("/private")
+    async def hidden() -> str:
+        return "private"
+
+    selected = Feature(name="public", routers=(public,))
+    rpc = _rpc_feature("browser", "/rpc", endpoint="control")
+    app = Composition(
+        features=(selected, Feature(name="private", routers=(private,)), rpc),
+    ).build(FastAPI(openapi_tags=[{"name": "public"}, {"name": "private"}]))
+
+    def openapi(feature: Feature) -> dict[str, Any]:
+        document = export_contracts(
+            app,
+            kinds=(ContractKind.OPENAPI, ContractKind.OPENRPC),
+            selection=ContractSelection(features=(feature,)),
+        ).openapi
+        assert document is not None
+        return document
+
+    http = openapi(selected)
+    rpc_only = openapi(rpc)
+
+    assert http["tags"] == [{"name": "public"}]
+    assert rpc_only["paths"] == {}
+    assert "tags" not in rpc_only
+    assert "components" not in rpc_only
+
+
 def test_feature_references_select_all_mounts_and_paths_narrow_the_occurrence() -> None:
     feature = _rpc_feature("browser", "/rpc", endpoint="control")
     child = Composition(features=(feature,)).build(FastAPI())
@@ -198,6 +240,45 @@ def test_openapi_selection_retains_mounted_application_boundaries() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("router_factory", "prefix"),
+    [(None, ""), (lambda: APIRouter(prefix="/api"), "/api")],
+)
+def test_feature_routers_with_mounts_keep_route_ownership(
+    router_factory: Callable[[], APIRouter] | None, prefix: str
+) -> None:
+    assets = APIRouter()
+
+    @assets.get("/assets")
+    async def list_assets() -> str:
+        return "assets"
+
+    assets.mount("/static", Starlette(routes=[Route("/file", _plain_text)]))
+    reports = APIRouter()
+
+    @reports.get("/reports")
+    async def list_reports() -> str:
+        return "reports"
+
+    first = Feature(name="assets", routers=(assets,))
+    second = Feature(name="reports", routers=(reports,))
+    app = Composition(features=(first, second), router_factory=router_factory).build(
+        FastAPI()
+    )
+
+    def selected_paths(feature: Feature) -> list[str]:
+        document = export_contracts(
+            app,
+            kinds=(ContractKind.OPENAPI,),
+            selection=ContractSelection(features=(feature,)),
+        ).openapi
+        assert document is not None
+        return list(document["paths"])
+
+    assert selected_paths(first) == [f"{prefix}/assets"]
+    assert selected_paths(second) == [f"{prefix}/reports"]
+
+
 def test_openapi_selection_preserves_discriminator_mapping_schema_references() -> None:
     class Animal(BaseModel):
         kind: str
@@ -272,3 +353,7 @@ def _rpc_feature(name: str, path: str, *, endpoint: str, version: int = 1) -> Fe
     router = CanonWebSocketRouter(version=version)
     router.socket(path, channels=(channel,), name=endpoint)
     return Feature(name=name, routers=(router,))
+
+
+async def _plain_text(request: Request) -> PlainTextResponse:
+    return PlainTextResponse("file")

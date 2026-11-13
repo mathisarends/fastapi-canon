@@ -22,7 +22,7 @@ def _main() -> None:
     output = _ROOT / "dist" / "telemetry-compatibility"
     _run("uv", "build", "--out-dir", str(output))
     wheel = output / f"fastapi_canon-{version('fastapi-canon')}-py3-none-any.whl"
-    versions = options.fastapi or list(dict.fromkeys(("0.143.0", version("fastapi"))))
+    versions = options.fastapi or list(dict.fromkeys(("0.143.1", version("fastapi"))))
     for selected in versions:
         with tempfile.TemporaryDirectory(
             prefix="canon-fastapi-telemetry-"
