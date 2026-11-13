@@ -31,7 +31,10 @@ from fastapi_canon.integrations.websockets.definition import (
 )
 from fastapi_canon.integrations.websockets.dependencies import RpcResolverLike
 from fastapi_canon.integrations.websockets.server import RpcErrorMapper
-from fastapi_canon.integrations.websockets.streams import RpcInputEndMessage
+from fastapi_canon.integrations.websockets.streams import (
+    RpcInputEndMessage,
+    RpcInputMessageType,
+)
 from fastapi_canon.integrations.websockets.websocket import (
     CLOSE_CODES,
     REJECTION_CLOSE_CODES,
@@ -610,7 +613,9 @@ class RpcTestClient:
     async def end_input(self) -> None:
         if not self._input:
             raise TypeError("end_input() is only available for streams with input")
-        await self.socket.client_send(RpcInputEndMessage(type="end").model_dump_json())
+        await self.socket.client_send(
+            RpcInputEndMessage(type=RpcInputMessageType.END).model_dump_json()
+        )
 
     async def closed(self) -> tuple[RpcConnectionClose, str] | None:
         """Wait until the server finished the connection and return its close."""

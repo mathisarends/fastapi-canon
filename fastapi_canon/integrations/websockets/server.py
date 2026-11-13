@@ -451,7 +451,8 @@ def _looks_like_notification(raw_request: object) -> bool:
 
 
 def _internal_error(declared: tuple[type[RpcError], ...]) -> RpcError:
-    from fastapi_canon.error.catalog import internal_problem, resolved_registry
+    from fastapi_canon.error import resolved_registry
+    from fastapi_canon.error.catalog import internal_problem
     from fastapi_canon.integrations.websockets.errors import CanonBinding
 
     error = RpcInternalError()

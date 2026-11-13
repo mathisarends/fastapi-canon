@@ -5,7 +5,8 @@ from typing import Any, cast
 
 from pydantic import TypeAdapter
 
-from fastapi_canon.error.catalog import problem_schema, resolved_registry
+from fastapi_canon.error import resolved_registry
+from fastapi_canon.error.catalog import problem_schema
 from fastapi_canon.integrations.websockets.errors import (
     CanonBinding,
     ProtocolDefinitionError,

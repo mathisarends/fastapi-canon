@@ -28,7 +28,7 @@ class RpcInjectedParameter:
     dependency: type[Any]
 
 
-class EmptyResolver:
+class EmptyResolver(RpcResolver):
     async def resolve[DependencyT](self, dependency: type[DependencyT]) -> DependencyT:
         raise LookupError(
             f"No RPC resolver is configured for dependency {dependency!r}"
@@ -38,7 +38,7 @@ class EmptyResolver:
 type RpcResolverLike = RpcResolver | Callable[[type[Any]], Awaitable[Any] | Any]
 
 
-class FunctionResolver:
+class FunctionResolver(RpcResolver):
     def __init__(self, function: Callable[[type[Any]], Awaitable[Any] | Any]) -> None:
         self._function = function
 
@@ -57,7 +57,7 @@ def as_resolver(value: RpcResolverLike | None) -> RpcResolver:
     raise TypeError("resolver must implement resolve() or be callable")
 
 
-class ContextResolver:
+class ContextResolver(RpcResolver):
     def __init__(
         self,
         resolver: RpcResolver,

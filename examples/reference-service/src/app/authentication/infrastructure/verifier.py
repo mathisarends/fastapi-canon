@@ -15,7 +15,7 @@ class LocalTokenVerifier(TokenVerifier):
         self._settings = settings
 
     def verify(self, *, token: str) -> AuthenticatedPrincipal:
-        expected = self._settings.local_bearer_token.get_secret_value()
+        expected = self._settings.bearer_token()
         if not compare_digest(token, expected):
             raise AuthenticationFailed
         return AuthenticatedPrincipal(user_id=self._settings.local_user_id)

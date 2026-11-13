@@ -14,6 +14,11 @@ All notable changes to `fastapi-canon` are documented in this file.
   `None` to request a default; replace empty endpoint names with a valid name or
   `None` to derive the name from its path.
 
+- `RpcInputEndMessage.type` now uses the narrow enum literal
+  `RpcInputMessageType.END`. Construct typed control messages with
+  `RpcInputEndMessage(type=RpcInputMessageType.END)` instead of a raw Python
+  string. The JSON control frame remains `{"type":"end"}`.
+
 - WebSocket generation now rejects corrupt ownership manifests and unsafe output
   paths instead of ignoring them. Generated paths must be relative POSIX paths
   without backslashes, colons or parent traversal. Restore a corrupt
@@ -31,6 +36,14 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 - Error registry contributions survive router inclusion through a typed
   router/endpoint contract.
+
+### Added
+
+- `AcquireTransactionLock` provides callable transaction lock acquisition.
+  `TransactionLocks` remains an alias, with its existing `acquire()` operation.
+- `fastapi_canon.error` exposes the read-only `ErrorCatalog` and `AnyError`
+  types, `installed_catalog()`, `registry_scope()` and `resolved_registry()` for
+  custom transport adapters.
 
 ### Development
 

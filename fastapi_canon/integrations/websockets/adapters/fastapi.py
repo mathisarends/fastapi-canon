@@ -29,8 +29,7 @@ from fastapi.websockets import WebSocketState
 from pydantic import BaseModel
 from starlette.types import Message
 
-from fastapi_canon.error.catalog import registry_scope
-from fastapi_canon.error.contracts import INSTALLED_REGISTRY_STATE_KEY
+from fastapi_canon.error import installed_catalog, registry_scope
 from fastapi_canon.error.contributions import (
     RegistryContributions,
     attach_error_registries,
@@ -241,8 +240,8 @@ async def serve_websocket(
                 middleware=middleware,
             )
 
-    state = getattr(websocket.scope.get("app"), "state", None)
-    with registry_scope(getattr(state, INSTALLED_REGISTRY_STATE_KEY, None)):
+    catalog = installed_catalog(websocket.scope.get("app"))
+    with registry_scope(catalog):
         serving = asyncio.create_task(serve())
     task = asyncio.current_task()
     cancelling = task.cancelling() if task is not None else 0

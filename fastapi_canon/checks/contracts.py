@@ -84,14 +84,14 @@ def _keyword(node: ast.Call, name: str) -> ast.expr | None:
     return next((item.value for item in node.keywords if item.arg == name), None)
 
 
-class _Checker:
+class _CheckContracts:
     def __init__(self, source: SourceIndex) -> None:
         self.source = source
         self._catalog_cache: dict[str, str] | None = None
         # flow-analysis unit seam
         self._analyzer = ContractAnalyzer(source)
 
-    def check(self) -> ContractReport:
+    def __call__(self) -> ContractReport:
         operations: list[_Operation] = []
         nested = {id(function.node) for function in self.source.nested}
         for function in [*self.source.definitions.values(), *self.source.nested]:
@@ -569,4 +569,4 @@ class _Checker:
 
 
 def analyze_error_contracts(roots: list[Path]) -> ContractReport:
-    return _Checker(SourceIndex.read(roots)).check()
+    return _CheckContracts(SourceIndex.read(roots))()

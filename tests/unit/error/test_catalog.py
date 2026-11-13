@@ -14,7 +14,13 @@ from fastapi_canon import (
     ErrorOptions,
     Feature,
 )
-from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
+from fastapi_canon.error import (
+    ErrorConfigurationError,
+    ErrorRegistry,
+    installed_catalog,
+    registry_scope,
+    resolved_registry,
+)
 from fastapi_canon.error.catalog import app_registry, problem_for, problem_schema
 from fastapi_canon.router import CanonRouter
 
@@ -238,3 +244,28 @@ def test_problem_status_is_an_actual_json_integer(status: Any) -> None:
             code="item_missing",
             status=status,
         )
+
+
+def test_installed_catalog_preserves_the_application_installation() -> None:
+    app = FastAPI()
+    fallback = ErrorRegistry(errors=(), type_base="https://fallback.test/problems")
+    installed = ErrorRegistry(errors=(), type_base="https://app.test/problems")
+
+    assert installed_catalog(app) is None
+    assert installed_catalog(app, fallback) is fallback
+    installed.install(app)
+
+    assert installed_catalog(app, fallback) is installed
+
+
+def test_catalog_scopes_restore_the_previous_catalog_and_fallback() -> None:
+    fallback = ErrorRegistry(errors=(), type_base="https://fallback.test/problems")
+    installed = ErrorRegistry(errors=(), type_base="https://app.test/problems")
+
+    with registry_scope(installed):
+        assert resolved_registry(fallback) is installed
+        with registry_scope(None):
+            assert resolved_registry(fallback) is fallback
+        assert resolved_registry(fallback) is installed
+
+    assert resolved_registry(fallback) is fallback

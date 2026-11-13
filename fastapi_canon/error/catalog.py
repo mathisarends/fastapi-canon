@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Any
+from typing import Any, cast
 
 from fastapi import FastAPI
 
@@ -22,10 +22,20 @@ _current_registry: ContextVar[ErrorCatalog | None] = ContextVar(
 
 
 def app_registry(app: FastAPI, fallback: ErrorRegistry | None = None) -> ErrorRegistry:
-    registry = getattr(app.state, INSTALLED_REGISTRY_STATE_KEY, fallback)
+    registry = installed_catalog(app, fallback)
     if not isinstance(registry, ErrorRegistry):
         raise ErrorConfigurationError("application has no installed ErrorRegistry")
     return registry
+
+
+def installed_catalog(
+    app: object, fallback: ErrorCatalog | None = None
+) -> ErrorCatalog | None:
+    """Read an application's catalog without mutating its installation."""
+    state = getattr(app, "state", None)
+    return cast(
+        ErrorCatalog | None, getattr(state, INSTALLED_REGISTRY_STATE_KEY, fallback)
+    )
 
 
 @contextmanager

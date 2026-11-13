@@ -6,7 +6,10 @@ from typing import Any, cast
 
 from pydantic import BaseModel, ValidationError
 
-from fastapi_canon.integrations.websockets.activity import Activity, notify_activity
+from fastapi_canon.integrations.websockets.activity import (
+    NotifyActivity,
+    notify_activity,
+)
 from fastapi_canon.integrations.websockets.adapter import adapter
 from fastapi_canon.integrations.websockets.codec import RpcCodec
 from fastapi_canon.integrations.websockets.envelopes import (
@@ -46,7 +49,7 @@ class SubscriptionSession:
         *,
         limit: int,
         server: RpcServer,
-        activity: Activity | None = None,
+        activity: NotifyActivity | None = None,
     ) -> None:
         self._definitions = {item.name: item for item in definitions}
         self._methods = frozenset(

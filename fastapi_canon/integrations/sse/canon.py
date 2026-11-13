@@ -11,10 +11,9 @@ from starlette.concurrency import iterate_in_threadpool
 from starlette.routing import Match
 
 from fastapi_canon.contract_routes import iter_contract_routes
-from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
+from fastapi_canon.error import AnyError, ErrorConfigurationError, ErrorRegistry
 from fastapi_canon.error.catalog import app_registry, internal_problem, problem_for
 from fastapi_canon.error.openapi import inherited_contract
-from fastapi_canon.error.registry import AnyError
 from fastapi_canon.integrations.sse.router import (
     ServerSentEvent,
     StreamRouter,

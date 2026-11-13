@@ -26,9 +26,9 @@ lockfile and the agent skill's `openai.yaml` retain their required names.
 Callable-instance, redundant-module-name, optional-default and deep-navigation
 reviews are hints. Inspect public contracts and falsy inputs before changing
 names, dependency lifetimes or defaults; syntax alone cannot establish that a
-change preserves compatibility. The named acquisition operation on
-`TransactionLocks`, for example, is a supported API, even though it is the
-class's only public method.
+change preserves compatibility. `AcquireTransactionLock`, for example, provides
+a callable operation while retaining the supported `TransactionLocks` alias and
+named `acquire` operation.
 
 ## Change the policy
 

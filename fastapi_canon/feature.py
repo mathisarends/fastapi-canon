@@ -35,8 +35,7 @@ from fastapi_canon.diagnostics import (
     CompositionInfo,
     FeatureCheck,
 )
-from fastapi_canon.error import ErrorRegistry
-from fastapi_canon.error.contracts import AnyError
+from fastapi_canon.error import AnyError, ErrorRegistry
 from fastapi_canon.exceptions import ErrorConfigurationError, FeatureConfigurationError
 from fastapi_canon.openapi import (
     validate_openapi_contracts,

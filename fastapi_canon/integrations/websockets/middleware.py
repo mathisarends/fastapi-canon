@@ -7,7 +7,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
-from fastapi_canon.integrations.websockets.activity import Activity, activity_for
+from fastapi_canon.integrations.websockets.activity import NotifyActivity, activity_for
 from fastapi_canon.integrations.websockets.connection import (
     RpcConnection,
     RpcConnectionClose,
@@ -223,7 +223,7 @@ class ServingState:
     scope: RpcConnectionScope
     socket: RpcWebSocket
     middleware: tuple[RpcMiddlewareLike, ...]
-    activity: Activity | None
+    activity: NotifyActivity | None
     started_at: float = field(default_factory=time.perf_counter)
     error: BaseException | None = None
     disconnect_error: BaseException | None = None

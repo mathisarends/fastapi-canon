@@ -1,10 +1,13 @@
 import asyncio
-from enum import StrEnum
+from enum import StrEnum, auto
 from typing import Literal, Self, cast
 
 from pydantic import BaseModel, ConfigDict
 
-from fastapi_canon.integrations.websockets.activity import Activity, notify_activity
+from fastapi_canon.integrations.websockets.activity import (
+    NotifyActivity,
+    notify_activity,
+)
 from fastapi_canon.integrations.websockets.connection import (
     RpcConnection,
     RpcConnectionClose,
@@ -21,12 +24,16 @@ class RpcStreamDirection(StrEnum):
     BIDIRECTIONAL = "bidirectional"
 
 
+class RpcInputMessageType(StrEnum):
+    END = auto()
+
+
 class RpcInputEndMessage(BaseModel):
     """The text message a client sends to end its input; output keeps flowing."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    type: Literal["end"]
+    type: Literal[RpcInputMessageType.END]
 
 
 class RpcInputEnded(Exception):
@@ -95,7 +102,7 @@ class RpcBinaryOutput:
     _connection: RpcConnection
     _socket: RpcWebSocket
     _lock: asyncio.Lock
-    _activity: Activity | None
+    _activity: NotifyActivity | None
 
     def __init__(self) -> None:
         raise TypeError("RpcBinaryOutput instances are created by Canon")
@@ -105,7 +112,7 @@ class RpcBinaryOutput:
         cls,
         socket: RpcWebSocket,
         connection: RpcConnection,
-        activity: Activity | None = None,
+        activity: NotifyActivity | None = None,
     ) -> Self:
         self = cls.__new__(cls)
         self._socket = socket

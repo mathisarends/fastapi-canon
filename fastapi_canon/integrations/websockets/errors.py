@@ -8,8 +8,14 @@ from typing import Any, ClassVar, cast, get_type_hints
 
 from pydantic import BaseModel, ValidationError
 
-from fastapi_canon.error import Error, ErrorConfigurationError, ErrorRegistry, Problem
-from fastapi_canon.error.catalog import problem_for, resolved_registry
+from fastapi_canon.error import (
+    Error,
+    ErrorConfigurationError,
+    ErrorRegistry,
+    Problem,
+    resolved_registry,
+)
+from fastapi_canon.error.catalog import problem_for
 from fastapi_canon.integrations.websockets.connection import (
     RpcReject,
     RpcRejection,

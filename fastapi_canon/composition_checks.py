@@ -33,8 +33,7 @@ from fastapi_canon.diagnostics import (
     CompositionInfo,
     OperationInfo,
 )
-from fastapi_canon.error import ErrorRegistry
-from fastapi_canon.error.contracts import INSTALLED_REGISTRY_STATE_KEY
+from fastapi_canon.error import ErrorRegistry, installed_catalog
 from fastapi_canon.error.contributions import error_registries
 from fastapi_canon.exceptions import ErrorConfigurationError, FeatureConfigurationError
 from fastapi_canon.injected_route import InjectedRoute, endpoint_dependencies
@@ -83,7 +82,7 @@ class WebSocketPathError(FeatureConfigurationError):
 
 
 def prepare_composition(app: FastAPI, composition: Composition) -> Preparation:
-    return _CompositionChecks(app, composition).run()
+    return _CheckComposition(app, composition)()
 
 
 def validate_runtime_options(app: FastAPI, composition: Composition) -> None:
@@ -199,7 +198,7 @@ def prepare_registry(
         name=composition.errors.registry_name,
         type_base=composition.errors.type_base,
     )
-    installed_registry = getattr(app.state, INSTALLED_REGISTRY_STATE_KEY, None)
+    installed_registry = installed_catalog(app)
     if registry is None and isinstance(installed_registry, ErrorRegistry):
         return installed_registry
     return ErrorRegistry.merge(
@@ -972,7 +971,7 @@ def validate_error_installation(
         generate_unique_id_function=app.router.generate_unique_id_function,
     )
     validation_app.router.routes = list(app.router.routes)
-    installed_registry = getattr(app.state, INSTALLED_REGISTRY_STATE_KEY, None)
+    installed_registry = installed_catalog(app)
     if isinstance(installed_registry, ErrorRegistry) and installed_registry is registry:
         try:
             registry.install(
@@ -1019,7 +1018,7 @@ class _CheckStep:
     enabled: Callable[[], bool] = lambda: True
 
 
-class _CompositionChecks:
+class _CheckComposition:
     def __init__(self, app: FastAPI, composition: Composition) -> None:
         self.app = app
         self.composition = composition
@@ -1032,7 +1031,7 @@ class _CompositionChecks:
         self.description: CompositionInfo | None = None
         self.mcp_runtime: McpRuntime | None = None
 
-    def run(self) -> Preparation:
+    def __call__(self) -> Preparation:
         steps = (
             _CheckStep(
                 "installation",

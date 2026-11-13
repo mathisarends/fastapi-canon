@@ -6,10 +6,14 @@ from typing import Any, TypeVar, Unpack
 from fastapi import FastAPI
 from fastapi.params import Depends as DependsParam
 
-from fastapi_canon.error import ErrorConfigurationError
+from fastapi_canon.error import (
+    AnyError,
+    ErrorCatalog,
+    ErrorConfigurationError,
+    ErrorRegistry,
+    installed_catalog,
+)
 from fastapi_canon.error.catalog import problem_schema
-from fastapi_canon.error.contracts import INSTALLED_REGISTRY_STATE_KEY
-from fastapi_canon.error.registry import AnyError, ErrorRegistry
 from fastapi_canon.integrations.webrtc.capacity import SessionCapacity
 from fastapi_canon.integrations.webrtc.declarations import (
     AdmissionErrors,
@@ -91,9 +95,9 @@ class CanonWebRtcRouter(CanonRouter, WebRtcRouter):
         self._register_errors(declared)
 
         def contracts(app: FastAPI | None) -> Sequence[Mapping[str, Any]]:
-            registry = self.error_registry
+            registry: ErrorCatalog | None = self.error_registry
             if app is not None:
-                registry = getattr(app.state, INSTALLED_REGISTRY_STATE_KEY, registry)
+                registry = installed_catalog(app, registry)
             if not declared:
                 return []
             if not isinstance(registry, ErrorRegistry):

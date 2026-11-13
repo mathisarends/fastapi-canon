@@ -10,7 +10,10 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-from fastapi_canon.integrations.websockets.activity import Activity, notify_activity
+from fastapi_canon.integrations.websockets.activity import (
+    NotifyActivity,
+    notify_activity,
+)
 from fastapi_canon.integrations.websockets.adapter import adapter
 from fastapi_canon.integrations.websockets.admission import PendingCall, PendingRequests
 from fastapi_canon.integrations.websockets.codec import RpcCodec
@@ -298,7 +301,7 @@ async def _serve_endpoint(
     limits: RpcLimits | None = None,
     before_accept: RpcBeforeAccept | None = None,
     rejections: RpcRejections | None = None,
-    activity: Activity | None = None,
+    activity: NotifyActivity | None = None,
     middleware: Sequence[RpcMiddlewareLike] = (),
 ) -> None:
     limits = limits or RpcLimits()
@@ -339,7 +342,7 @@ async def _run_rpc_endpoint(
     error_mapper: RpcErrorMapper | None,
     limits: RpcLimits,
     rejections: RpcRejections | None,
-    activity: Activity | None,
+    activity: NotifyActivity | None,
     middleware: Sequence[RpcMiddlewareLike],
 ) -> None:
     await _RpcSession(
@@ -367,7 +370,7 @@ class _RpcSession:
         error_mapper: RpcErrorMapper | None,
         limits: RpcLimits,
         rejections: RpcRejections | None,
-        activity: Activity | None,
+        activity: NotifyActivity | None,
         middleware: Sequence[RpcMiddlewareLike],
     ) -> None:
         self.endpoint = endpoint
@@ -861,7 +864,7 @@ async def _event_source(
     event: RpcNotificationDefinition,
     resolver: RpcResolver,
     send: Callable[[str], Awaitable[None]],
-    activity: Activity | None,
+    activity: NotifyActivity | None,
     rejections: RpcRejections | None,
     server: RpcServer,
 ) -> None:
@@ -935,7 +938,7 @@ async def _serve_stream_endpoint(
     before_accept: RpcBeforeAccept | None = None,
     error_mapper: RpcErrorMapper | None = None,
     rejections: RpcRejections | None = None,
-    activity: Activity | None = None,
+    activity: NotifyActivity | None = None,
     middleware: Sequence[RpcMiddlewareLike] = (),
 ) -> None:
     limits = limits or RpcLimits()
@@ -1024,7 +1027,7 @@ async def _run_stream_endpoint(
     limits: RpcLimits,
     error_mapper: RpcErrorMapper | None,
     rejections: RpcRejections | None,
-    activity: Activity | None,
+    activity: NotifyActivity | None,
 ) -> None:
     await _StreamSession(
         endpoint,
@@ -1052,7 +1055,7 @@ class _StreamSession:
         limits: RpcLimits,
         error_mapper: RpcErrorMapper | None,
         rejections: RpcRejections | None,
-        activity: Activity | None,
+        activity: NotifyActivity | None,
     ) -> None:
         self.endpoint = endpoint
         self.socket = socket
@@ -1278,7 +1281,7 @@ async def _run_socket(
     path_values: dict[str, Any],
     limits: RpcLimits,
     rejections: RpcRejections | None,
-    activity: Activity | None,
+    activity: NotifyActivity | None,
 ) -> None:
     await _SocketSession(
         endpoint,
@@ -1304,7 +1307,7 @@ class _SocketSession:
         path_values: dict[str, Any],
         limits: RpcLimits,
         rejections: RpcRejections | None,
-        activity: Activity | None,
+        activity: NotifyActivity | None,
     ) -> None:
         self.endpoint = endpoint
         self.socket = socket

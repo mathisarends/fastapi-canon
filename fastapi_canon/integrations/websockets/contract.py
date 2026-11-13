@@ -7,8 +7,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Self
 
-from fastapi_canon.error.catalog import registry_scope
-from fastapi_canon.error.contracts import ErrorCatalog
+from fastapi_canon.error import ErrorCatalog, registry_scope
 from fastapi_canon.integrations.websockets.errors import (
     ProtocolDefinitionError,
     RpcErrorBinding,

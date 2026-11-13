@@ -9,7 +9,10 @@ from pydantic import ValidationError
 from pydantic_core import PydanticSerializationError
 from typing_extensions import TypeVar
 
-from fastapi_canon.integrations.websockets.activity import Activity, notify_activity
+from fastapi_canon.integrations.websockets.activity import (
+    NotifyActivity,
+    notify_activity,
+)
 from fastapi_canon.integrations.websockets.connection import (
     RpcConnection,
     RpcConnectionClose,
@@ -108,7 +111,7 @@ class RpcSocket(Generic[_IncomingT, _OutgoingT]):
     _messages: tuple[RpcMessageType, ...]
     _protocol: RpcSocketProtocol | None
     _message_contract: SocketMessages | None
-    _activity: Activity | None
+    _activity: NotifyActivity | None
     _send_timeout: float | None
     _queue: asyncio.Queue[_IncomingT]
     _request_close: Callable[[RpcConnectionClose, str], None]
@@ -129,7 +132,7 @@ class RpcSocket(Generic[_IncomingT, _OutgoingT]):
         protocol: RpcSocketProtocol | None,
         message_contract: SocketMessages | None,
         limits: RpcLimits,
-        activity: Activity | None,
+        activity: NotifyActivity | None,
         request_close: Callable[[RpcConnectionClose, str], None],
         disconnected: Callable[[RpcDisconnect], None],
     ) -> Self:

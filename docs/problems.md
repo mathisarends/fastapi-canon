@@ -212,6 +212,19 @@ normalize public problem payloads in an application adapter. External HTTP
 tooling owns its HTTP error handling.
 
 
+## Custom transport adapters
+
+In the prepared 0.21.0 release, adapters can read the application's installed
+`ErrorCatalog` through `fastapi_canon.error.installed_catalog(app)`. The protocol
+provides read-only error lookup and resolved problem type URIs; `AnyError` is the
+shared type for an error definition with any exception type.
+
+Use `registry_scope(catalog)` while rendering transport contracts or problems.
+`resolved_registry(fallback)` selects that context's catalog and otherwise uses
+the supplied fallback. Scopes restore the previous catalog on exit, including
+exceptions; passing `None` selects the fallback within that scope. Read the
+catalog through this API rather than depending on application-state attributes.
+
 ## Migration
 
 ### Titles are public text

@@ -48,7 +48,7 @@ class _InstrumentedProxy:
         return type(self._instance).__name__
 
 
-class _Observer:
+class _InstrumentPort:
     def __init__(
         self, registrations: tuple[tuple[str, Instrumentation], ...], options: Telemetry
     ) -> None:
@@ -75,7 +75,7 @@ class _Observer:
             for feature, spec in registrations
         }
 
-    def wrap(self, spec: Instrumentation, instance: Any) -> Any:
+    def __call__(self, spec: Instrumentation, instance: Any) -> Any:
         if not self.spans and self._histogram is None:
             return instance
         return self._proxies[spec](instance)
@@ -145,13 +145,13 @@ class _Observer:
 def create_instrumentation_providers(
     registrations: tuple[tuple[str, Instrumentation], ...], options: Telemetry
 ) -> tuple[Provider, ...]:
-    observer = _Observer(registrations, options)
+    observer = _InstrumentPort(registrations, options)
     return tuple(_provider(spec, observer) for _, spec in registrations)
 
 
-def _provider(spec: Instrumentation, observer: _Observer) -> Provider:
+def _provider(spec: Instrumentation, observer: _InstrumentPort) -> Provider:
     def wrap(instance: Any) -> Any:
-        return observer.wrap(spec, instance)
+        return observer(spec, instance)
 
     wrap.__annotations__ = {"instance": spec.port, "return": spec.port}
     provider = Provider(component=spec.component)

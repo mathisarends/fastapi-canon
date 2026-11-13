@@ -8,7 +8,11 @@ from fastapi import FastAPI
 from sqlalchemy import text
 
 from fastapi_canon import Composition
-from fastapi_canon.integrations.database import Database, TransactionLocks
+from fastapi_canon.integrations.database import (
+    AcquireTransactionLock,
+    Database,
+    TransactionLocks,
+)
 
 
 @pytest.mark.parametrize("outcome", ["commit", "rollback", "cancel"])
@@ -35,8 +39,8 @@ async def test_postgres_advisory_lock_follows_its_scoped_transaction(
             )
             with expected:
                 async with app.state.dishka_container(scope=Scope.REQUEST) as scope:
-                    locks = await scope.get(TransactionLocks)
-                    await locks.acquire(-1234567890123)
+                    acquire_lock = await scope.get(AcquireTransactionLock)
+                    await acquire_lock(-1234567890123)
                     assert (
                         await observer.scalar(
                             text("SELECT pg_try_advisory_xact_lock(-1234567890123)")
@@ -66,6 +70,7 @@ async def test_sqlite_advisory_lock_omission_requires_explicit_configuration(
         app.state.dishka_container(scope=Scope.REQUEST) as scope,
     ):
         locks = await scope.get(TransactionLocks)
+        assert await scope.get(AcquireTransactionLock) is locks
         with pytest.raises(NotImplementedError, match="require PostgreSQL"):
             await locks.acquire(123)
     explicit = Database(
@@ -78,4 +83,5 @@ async def test_sqlite_advisory_lock_omission_requires_explicit_configuration(
         permitted.state.dishka_container(scope=Scope.REQUEST) as scope,
     ):
         locks = await scope.get(TransactionLocks)
+        assert await scope.get(AcquireTransactionLock) is locks
         assert await locks.acquire(123) is None

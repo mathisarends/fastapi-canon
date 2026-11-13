@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import AsyncIterator
+from enum import StrEnum, auto
 from importlib.metadata import version
 from pathlib import Path
 from typing import Literal
@@ -17,8 +18,12 @@ from fastapi_canon.integrations.sse.router import StreamRouter
 from pydantic import BaseModel
 
 
+class EventType(StrEnum):
+    EVENT = auto()
+
+
 class Event(BaseModel):
-    type: Literal["event"] = "event"
+    type: Literal[EventType.EVENT] = EventType.EVENT
     text: str
 
 

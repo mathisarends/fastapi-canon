@@ -8,6 +8,7 @@ protocol revisions can add optional fields; unknown ``type`` values are a
 
 from __future__ import annotations
 
+from enum import StrEnum, auto
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
@@ -27,6 +28,14 @@ from fastapi_canon.integrations.webrtc.ice import IceServer
 
 PROTOCOL_VERSION = 1
 SUBPROTOCOL = "fastapi-webrtc.v1"
+
+
+class SignalingMessageType(StrEnum):
+    DESCRIPTION = auto()
+    CANDIDATE = auto()
+    SESSION = auto()
+    READY = auto()
+    ERROR = auto()
 
 
 class _Message(BaseModel):
@@ -78,7 +87,7 @@ class CandidatePayload(_Message):
 class DescriptionMessage(_Message):
     """An offer or answer. Answers echo the ``negotiation`` of their offer."""
 
-    type: Literal["description"] = "description"
+    type: Literal[SignalingMessageType.DESCRIPTION] = SignalingMessageType.DESCRIPTION
     description: DescriptionPayload
     negotiation: int = Field(ge=0)
 
@@ -86,7 +95,7 @@ class DescriptionMessage(_Message):
 class CandidateMessage(_Message):
     """A trickled candidate, or ``null`` for end-of-candidates."""
 
-    type: Literal["candidate"] = "candidate"
+    type: Literal[SignalingMessageType.CANDIDATE] = SignalingMessageType.CANDIDATE
     candidate: CandidatePayload | None
 
 
@@ -133,7 +142,7 @@ class CapabilitiesDescriptor(_Message):
 class SessionMessage(_Message):
     """The first server message, sent once the session was admitted."""
 
-    type: Literal["session"] = "session"
+    type: Literal[SignalingMessageType.SESSION] = SignalingMessageType.SESSION
     protocol: int = PROTOCOL_VERSION
     session_id: str
     name: str
@@ -148,13 +157,13 @@ class SessionMessage(_Message):
 class ReadyMessage(_Message):
     """The transport is connected, channels are open and ``on_start`` finished."""
 
-    type: Literal["ready"] = "ready"
+    type: Literal[SignalingMessageType.READY] = SignalingMessageType.READY
 
 
 class ErrorMessage(_Message):
     """A non-terminal failure. Terminal failures close the WebSocket instead."""
 
-    type: Literal["error"] = "error"
+    type: Literal[SignalingMessageType.ERROR] = SignalingMessageType.ERROR
     code: ErrorCode
     message: str
     channel: str | None = None

@@ -435,7 +435,7 @@ class SessionRuntime:
             stop_native_track(native)
 
     async def _accept(self) -> bool:
-        offered = self._ws.scope.get("subprotocols") or []
+        offered = self._ws.get("subprotocols") or []
         if offered and protocol.SUBPROTOCOL not in offered:
             await self._ws.accept()
             self._signaling_open = True

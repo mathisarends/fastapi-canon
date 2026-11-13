@@ -13,8 +13,8 @@ from fastapi.types import IncEx
 from starlette.routing import BaseRoute, get_name
 from starlette.types import ASGIApp, Lifespan
 
-from fastapi_canon.error import Error, ErrorConfigurationError, ErrorRegistry
-from fastapi_canon.error.contracts import SUCCESS_EXTENSION, AnyError
+from fastapi_canon.error import AnyError, Error, ErrorConfigurationError, ErrorRegistry
+from fastapi_canon.error.contracts import SUCCESS_EXTENSION
 from fastapi_canon.error.contributions import attach_error_registries, error_registries
 from fastapi_canon.error.openapi import InheritedContract
 from fastapi_canon.error.types import OpenAPIResponses

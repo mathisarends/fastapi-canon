@@ -24,7 +24,7 @@ from fastapi_canon.router import RouteOptions as RouteOptions
 from fastapi_canon.router import RouterOptions as RouterOptions
 
 if TYPE_CHECKING:
-    from fastapi_canon.error.contracts import AnyError
+    from fastapi_canon.error import AnyError
     from fastapi_canon.integrations.webrtc import (
         DataChannelSpec,
         EventHook,

@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import AsyncIterator
+from enum import StrEnum, auto
 from importlib.metadata import version
 from logging.handlers import BufferingHandler
 from pathlib import Path
@@ -31,8 +32,12 @@ _MODULES = {
 _STACK = {"fastapi-canon", "sse", "websockets"}
 
 
+class EventType(StrEnum):
+    READY = auto()
+
+
 class Event(BaseModel):
-    type: Literal["ready"] = "ready"
+    type: Literal[EventType.READY] = EventType.READY
     value: int = 1
 
 
@@ -470,19 +475,19 @@ def _observation_check(*, enabled: bool) -> None:
         assert importlib.util.find_spec("opentelemetry.sdk") is None
         global_provider = trace.get_tracer_provider()
 
-    class Port:
-        async def ping(self) -> str:
+    class Ping:
+        async def __call__(self) -> str:
             return "pong"
 
     class Dependencies(Provider):
-        port = provide(Port, scope=Scope.REQUEST)
+        port = provide(Ping, scope=Scope.REQUEST)
 
     router = APIRouter()
 
     @router.get("/observed")
     @inject
-    async def observed(port: FromDishka[Port]) -> str:
-        return await port.ping()
+    async def observed(port: FromDishka[Ping]) -> str:
+        return await port()
 
     app = Composition(
         features=(
@@ -490,7 +495,7 @@ def _observation_check(*, enabled: bool) -> None:
                 name="observed",
                 providers=[Dependencies],
                 routers=[router],
-                instrumentation=instrument(Port),
+                instrumentation=instrument(Ping),
             ),
         ),
         telemetry=Telemetry() if enabled else None,
