@@ -376,6 +376,8 @@ class _Analyzer:
         function: _Definition,
         stack: tuple[str, ...],
         pending: frozenset[str] = frozenset(),
+        *,
+        implicit: bool = True,
     ) -> _Flow:
         flow = _Flow()
         if port in pending:
@@ -385,7 +387,7 @@ class _Analyzer:
                 )
             )
             return flow
-        value = self.source.provided(port, implicit=True)
+        value = self.source.provided(port, implicit=implicit)
         if not self.source.creations.get(port) and any(
             not variant.name or variant.unresolved
             for variant in self.source.expand(value).variants
@@ -400,7 +402,9 @@ class _Analyzer:
         for creation in self.source.creations.get(port, []):
             for dependency in creation.dependencies:
                 flow.extend(
-                    self._dependency(dependency, function, stack, pending | {port})
+                    self._dependency(
+                        dependency, function, stack, pending | {port}, implicit=implicit
+                    )
                 )
             definition = self.source.definitions.get(creation.name)
             if definition is None:
@@ -1621,7 +1625,7 @@ class _Analyzer:
                 )
             else:
                 with self.source.request_scope(manager_value.site):
-                    flow.extend(self._dependency(port, function, stack))
+                    flow.extend(self._dependency(port, function, stack, implicit=False))
             if item.optional_vars:
                 self.source.assign(
                     item.optional_vars,

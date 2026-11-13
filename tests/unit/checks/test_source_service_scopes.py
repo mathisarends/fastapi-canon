@@ -73,6 +73,7 @@ async def endpoint(container: Inject[AsyncContainer], service: Inject[Service]):
         "unknown_scope",
         "provider_component",
         "uncached",
+        "missing_registration",
     ],
 )
 def test_service_scope_boundaries_remain_explicit(
@@ -95,6 +96,8 @@ def test_service_scope_boundaries_remain_explicit(
         provider = "service = provide(Service, scope=Scope.REQUEST)"
     if boundary == "uncached":
         provider = "service = provide(Service, cache=False)"
+    if boundary == "missing_registration":
+        provider = "pass"
     call = (
         "ServiceScope(container, Service, component='custom')"
         if boundary == "component"
@@ -120,7 +123,7 @@ router = APIRouter()
 async def endpoint(container: {container}):
     work = {call}
     async with work() as service:
-        service.run()
+        {"pass" if boundary == "missing_registration" else "service.run()"}
 """,
         encoding="utf8",
     )
