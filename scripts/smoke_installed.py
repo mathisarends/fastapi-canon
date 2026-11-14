@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import AsyncIterator
-from enum import StrEnum, auto
+from enum import StrEnum
 from importlib.metadata import version
 from logging.handlers import BufferingHandler
 from pathlib import Path
@@ -33,7 +33,7 @@ _STACK = {"fastapi-canon", "sse", "websockets"}
 
 
 class EventType(StrEnum):
-    READY = auto()
+    READY = "ready"
 
 
 class Event(BaseModel):

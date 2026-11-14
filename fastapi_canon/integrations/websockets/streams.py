@@ -1,5 +1,5 @@
 import asyncio
-from enum import StrEnum, auto
+from enum import StrEnum
 from typing import Literal, Self, cast
 
 from pydantic import BaseModel, ConfigDict
@@ -25,7 +25,7 @@ class RpcStreamDirection(StrEnum):
 
 
 class RpcInputMessageType(StrEnum):
-    END = auto()
+    END = "end"
 
 
 class RpcInputEndMessage(BaseModel):

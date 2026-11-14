@@ -8,7 +8,7 @@ protocol revisions can add optional fields; unknown ``type`` values are a
 
 from __future__ import annotations
 
-from enum import StrEnum, auto
+from enum import StrEnum
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
@@ -31,11 +31,11 @@ SUBPROTOCOL = "fastapi-webrtc.v1"
 
 
 class SignalingMessageType(StrEnum):
-    DESCRIPTION = auto()
-    CANDIDATE = auto()
-    SESSION = auto()
-    READY = auto()
-    ERROR = auto()
+    DESCRIPTION = "description"
+    CANDIDATE = "candidate"
+    SESSION = "session"
+    READY = "ready"
+    ERROR = "error"
 
 
 class _Message(BaseModel):

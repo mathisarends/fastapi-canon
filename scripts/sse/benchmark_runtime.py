@@ -13,7 +13,7 @@ import tempfile
 import time
 import tracemalloc
 from collections.abc import AsyncIterator
-from enum import StrEnum, auto
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -21,8 +21,8 @@ _ROOT = Path(__file__).resolve().parents[2]
 
 
 class EventType(StrEnum):
-    TOKEN = auto()
-    BATCH = auto()
+    TOKEN = "token"
+    BATCH = "batch"
 
 
 def _main():

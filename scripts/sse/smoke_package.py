@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import AsyncIterator
-from enum import StrEnum, auto
+from enum import StrEnum
 from importlib.metadata import version
 from pathlib import Path
 from typing import Literal
@@ -19,7 +19,7 @@ from pydantic import BaseModel
 
 
 class EventType(StrEnum):
-    EVENT = auto()
+    EVENT = "event"
 
 
 class Event(BaseModel):

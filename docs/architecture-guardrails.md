@@ -25,6 +25,10 @@ errors. Private literal class constants belong at module scope. Repository-owned
 YAML uses `.yml`, and Compose files use `compose` as their basename; pnpm's
 lockfile and the agent skill's `openai.yaml` retain their required names.
 
+Declare `StrEnum` members with explicit string literals. Their wire and public
+values must remain visible and independent of Python member names; do not use
+`auto()` for these enums.
+
 Inspect public contracts and falsy inputs before changing
 names, dependency lifetimes or defaults; syntax alone cannot establish that a
 change preserves compatibility. `AcquireTransactionLock`, for example, provides
