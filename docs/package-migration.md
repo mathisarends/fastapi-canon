@@ -14,7 +14,13 @@ PyPI project or add further Python import changes.
 ## Upgrade to 0.21.0
 
 Version 0.21.0 is prepared, not published. Follow the 0.20.0 migration below
-when upgrading from an earlier release. WebSocket generators now fail on corrupt `.rpcgen/manifest.json`
+for the FastAPI minimum, SSE naming and source-check changes when upgrading from
+an earlier release. Where APIs differ, the 0.21.0 instructions take precedence;
+older sections describe the API at that version. The changelog's
+[`CANON-021-*` markers](../CHANGELOG.md#0210---unreleased) identify the individual
+breaking migrations for coding agents.
+
+WebSocket generators now fail on corrupt `.rpcgen/manifest.json`
 files and unsafe output paths. Restore the manifest from version control; if it
 cannot be recovered, review the old generated files and regenerate into a clean
 directory. Never delete handwritten files to repair generator ownership.
@@ -32,24 +38,47 @@ execution during the first build.
 Optional integrations move to `integrations=`:
 
 ```python
+from fastapi import FastAPI
+from fastapi_canon import Composition, Feature
+from fastapi_canon.integrations.mcp import Mcp, McpMount, McpServer
+from fastapi_canon.integrations.opentelemetry import Telemetry
+
+tasks_mcp = McpServer("tasks")
 feature = Feature(
     name="tasks",
     integrations=[
         McpMount(server=tasks_mcp, namespace="tasks"),
-        instrument(TaskRepository),
     ],
 )
-app = Composition(features=[feature], integrations=[Mcp(), Telemetry()])
+app = Composition(features=[feature], integrations=[Mcp(), Telemetry()]).build(
+    FastAPI()
+)
 ```
 
 Rename `McpOptions` to `Mcp` and drop `*` before `instrument(...)`. Enable
-`Telemetry.disabled()` where `telemetry=None` was used. Replace
+`Composition(integrations=[Telemetry.disabled()])` when retaining
+`Feature(integrations=[instrument(Port)])` or providers that inject `Telemetry`
+without recording signals. Otherwise omit telemetry. Replace
 `@router.webrtc(...)` with `@rtc.session(...)` on a `WebRtcRouter` passed to
-`Feature(routers=[...])`, and `ContractKind` values with strings. Remove
-`SqlAlchemyInstrumentation` and manual `instrument_httpx` wrappers: enabled
-`Telemetry` instruments provided clients and engines, configured with
-`resources=[HttpxClients(...), SqlAlchemyEngines(...)]`. See the
-[changelog](../CHANGELOG.md#0210---unreleased) for the full list.
+`Feature(routers=[...])`; move engine, ICE-server, event-hook and origin options to
+that router. See the [WebRTC example](webrtc.md).
+
+Replace `ContractKind` values with strings, such as `kinds=("openapi", "openrpc")`.
+Replace `Contracts(openapi=doc)` with `Contracts(documents={"openapi": doc})`.
+The `documents` mapping is read-only; use `contracts.documents.get("webrtc")`
+instead of `contracts.webrtc`. Omitted `kinds` exports all available contract kinds.
+
+Replace `engine_context=SqlAlchemyInstrumentation(...)` with telemetry resource
+options, such as `Telemetry(resources=[HttpxClients(), SqlAlchemyEngines(pool_name="db")])`.
+An explicit `resources` list replaces the defaults; `resources=[]` opts out of
+resource instrumentation. Manual `instrument_httpx` / `instrument_sqlalchemy`
+contexts remain supported for per-instance options and resources outside Dishka;
+automatic instrumentation skips those instances. Keep other `engine_context`
+listeners. See [resource telemetry](telemetry.md#http-clients-and-database-engines).
+
+Regenerate contracts and clients, review the diff, and run your application's
+checks. Refresh an installed agent skill with `fastapi-canon skill install --force`
+after upgrading Canon; this replaces its destination directories, including local edits.
 
 ## Upgrade to 0.20.0
 
@@ -291,8 +320,9 @@ forms and the per-check coverage report before enforcing `--require-complete`.
 
 The new MCP integration is opt-in: install `fastapi-canon[mcp]`, contribute
 `McpMount` declarations through `Feature(mcp=[...])`, and activate them with
-`Composition(mcp=Mcp())`. Core installations do not require FastMCP.
-Mounted routes use FastMCP authentication configured on `Mcp`, independently
+`Composition(mcp=McpOptions())`. These are the 0.15.0 names; for 0.21.0 use
+`integrations=` and `Mcp` as described above. Core installations do not require FastMCP.
+Mounted routes use FastMCP authentication configured on `McpOptions`, independently
 of FastAPI router dependencies. See the [MCP guide](integrations/mcp/README.md)
 for `Inject[T]`, lifecycle ownership and supported handlers.
 
@@ -453,8 +483,9 @@ does not download another skill version.
 | `fastapi_webrtc` | `fastapi_canon.integrations.webrtc` |
 | `fastapi_canon.integrations.streams` | `APIRouter.sse()` |
 
-Declare SSE streams with `APIRouter.sse()` and WebRTC sessions with
-`APIRouter.webrtc()`; the stream and session routers are internal since 0.16.0.
+Declare SSE streams with `APIRouter.sse()`. In 0.21.0, declare WebRTC sessions
+with `WebRtcRouter.session()` and contribute that router through `Feature.routers`.
+Versions 0.16.0–0.20.0 used `APIRouter.webrtc()` instead.
 WebRTC value types such as `Session` and `SessionCapacity` remain in
 `fastapi_canon.integrations.webrtc`, and engine adapter types live in
 `fastapi_canon.integrations.webrtc.engines`.

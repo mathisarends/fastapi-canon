@@ -28,6 +28,10 @@ webrtc = contracts.documents.get("webrtc")
 without registered routes and unselected kinds are absent; HTTP/SSE always has
 an OpenAPI document when selected.
 
+For manually assembled snapshots, use `Contracts(documents={"openapi": document})`.
+The mapping cannot be changed; the contained JSON documents remain mutable.
+Omitting `kinds` exports all available kinds, including custom transport kinds.
+
 Select kinds with `export_contracts(app, kinds=("openapi",))`. Kinds are the
 document names: `openapi` for HTTP/SSE, and the kind each route transport
 exports, such as `openrpc` for WebSockets and `webrtc` for WebRTC sessions. They
@@ -119,7 +123,7 @@ fastapi-canon contracts export --app backend.application:app --kind openapi --ou
 `--app` accepts an existing FastAPI instance or a synchronous zero-argument factory
 returning one. Instances are used directly; factories are called automatically,
 without an additional flag. Async factories are rejected. `--kind` is repeatable.
-All three formats are selected by default, and absent RPC/WebRTC transports produce
+All available kinds are selected by default, and absent RPC/WebRTC transports produce
 no file. Explicitly
 selecting a missing transport is an error. `--base-url` supplies the public RPC origin.
 

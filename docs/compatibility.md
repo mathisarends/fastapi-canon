@@ -2,8 +2,9 @@
 
 ## Canon 0.21.0 (prepared, unpublished)
 
-This preparation strengthens WebSocket generator ownership checks. See the
-[migration](package-migration.md#upgrade-to-0210). Local Windows validation passed
+This preparation changes integration configuration, WebRTC routers, contract
+snapshots and telemetry defaults, and strengthens generator ownership checks.
+See the [migration](package-migration.md#upgrade-to-0210). Local Windows validation passed
 both 20-combination installed-wheel matrices: minimum direct dependencies on
 Python 3.12 and current dependencies on Python 3.14. Installed SSE CLI/backend
 and WebRTC client checks passed, alongside strict WebSockets implementation

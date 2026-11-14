@@ -19,7 +19,7 @@ scope.
 | `webrtc` | AnyIO, Starlette and typing requirements for session signaling |
 | `aiortc` | Optional reference media engine; use with `webrtc` |
 | `otel` | Native FastAPI telemetry, observed Dishka ports and WebSocket middleware |
-| `otel-httpx`, `otel-sqlalchemy` | Explicit per-client HTTPX and per-engine SQLAlchemy telemetry adapters |
+| `otel-httpx`, `otel-sqlalchemy` | Automatic Dishka resource telemetry and explicit per-client/per-engine adapters |
 | `codegen` | Template, schema-validation and model dependencies for generators |
 | `database` | Async SQLAlchemy engine and session ownership, without a driver |
 | `sqlite`, `postgres` | Database integration with aiosqlite or asyncpg |
@@ -48,6 +48,7 @@ scope.
 | HTTP client and engine instrumentation | `HttpxClients`, `instrument_httpx` in `.opentelemetry.httpx`; `SqlAlchemyEngines`, `instrument_sqlalchemy` in `.opentelemetry.sqlalchemy` | [Resources](telemetry.md#http-clients-and-database-engines) |
 | MCP features | `fastapi_canon.integrations.mcp.McpServer`, `McpMount`, `McpScope`, `Mcp`, `Inject` | [MCP](integrations/mcp/README.md) |
 | Custom integrations | `fastapi_canon.integration.Integration`, `IntegrationPart`, `IntegrationContext`, `Installer`, `IntegrationError`, `IntegrationRoute`, `RouteContext`, `ContractExporter`, `attach_route` | [Integrations](composition.md#integrations) |
+| Generator extensions | `fastapi_canon.codegen.generators.Generator`, `TargetConfig`, `Rendering` | [Generator registration](codegen.md#generator-registration) |
 
 Import application-building names from `fastapi_canon` and optional types from
 their integration facade. Other implementation modules are internal, even without

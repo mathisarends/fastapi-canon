@@ -84,8 +84,9 @@ uv run fastapi-canon check errors src --strict --require-complete
 ```
 
 Use the actual consumer source root (for example `backend/src`). The checker
-covers supported source paths in `APIRouter` HTTP/SSE/WebRTC operations and
-`RpcChannel` methods. Calls on abstract ports follow the implementations that
+covers supported source paths in `APIRouter` HTTP/SSE operations,
+`WebRtcRouter` sessions and `RpcChannel` methods. Calls on abstract ports follow
+the implementations that
 Dishka `Provider` classes under the scanned roots bind (`@provide` factories with
 a port return annotation, `provide(Impl, provides=Port)`); include the wiring
 modules in the scanned roots. Unbound ports, factories that return no statically
