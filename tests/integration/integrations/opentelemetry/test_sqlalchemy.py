@@ -22,17 +22,15 @@ from fastapi_canon.exceptions import FeatureConfigurationError
 from fastapi_canon.integrations.database import Database
 from fastapi_canon.integrations.opentelemetry import Telemetry
 from fastapi_canon.integrations.opentelemetry.sqlalchemy import (
-    SqlAlchemyInstrumentation,
+    SqlAlchemyEngines,
     instrument_sqlalchemy,
 )
 from tests.fixtures.telemetry import SpanCapture
 
 
 @pytest.mark.parametrize("capture_statement", [False, True])
-@pytest.mark.parametrize("declarative", [False, True])
 def test_engine_local_queries_privacy_failure_and_cleanup(
     capture_statement: bool,
-    declarative: bool,
 ) -> None:
     factory = sqlalchemy.create_engine
     global_provider = trace.get_tracer_provider()
@@ -43,14 +41,8 @@ def test_engine_local_queries_privacy_failure_and_cleanup(
     try:
         with SpanCapture() as capture:
             options = Telemetry(tracer_provider=capture.provider, meter_provider=meter)
-            manager = (
-                SqlAlchemyInstrumentation(
-                    telemetry=options, capture_statement=capture_statement
-                )(first)
-                if declarative
-                else instrument_sqlalchemy(
-                    first, options, capture_statement=capture_statement
-                )
+            manager = instrument_sqlalchemy(
+                first, options, capture_statement=capture_statement
             )
             with manager as bound:
                 assert bound is first and sqlalchemy.create_engine is factory
@@ -145,7 +137,7 @@ async def test_async_engine_independent_signals_and_borrowed_lifetime(
                 metrics=metrics,
             )
             async with asyncio.timeout(5):
-                with SqlAlchemyInstrumentation(telemetry=options)(engine):
+                with instrument_sqlalchemy(engine, options):
                     async with engine.connect() as connection:
                         assert await connection.scalar(text("select 1")) == 1
                         with pytest.raises(OperationalError):
@@ -222,7 +214,7 @@ async def test_async_query_cancellation_finishes_span_and_restores_context() -> 
         with SpanCapture() as capture:
             options = Telemetry(tracer_provider=capture.provider, metrics=False)
             async with asyncio.timeout(5):
-                with SqlAlchemyInstrumentation(telemetry=options)(engine):
+                with instrument_sqlalchemy(engine, options):
 
                     async def query() -> None:
                         async with engine.connect() as connection:
@@ -253,7 +245,7 @@ async def test_async_query_cancellation_finishes_span_and_restores_context() -> 
 
 
 @pytest.mark.parametrize("pool_metrics", [False, True])
-def test_declaration_reuses_configuration_with_fresh_engine_contexts(
+def test_adapter_reuses_configuration_with_fresh_engine_contexts(
     pool_metrics: bool,
 ) -> None:
     first = create_engine("sqlite://", poolclass=QueuePool)
@@ -262,14 +254,14 @@ def test_declaration_reuses_configuration_with_fresh_engine_contexts(
     meter = MeterProvider(metric_readers=[reader])
     try:
         with SpanCapture() as capture:
-            instrumentation = SqlAlchemyInstrumentation(
-                telemetry=Telemetry(
-                    tracer_provider=capture.provider, meter_provider=meter
-                ),
-                pool_name="backend",
-                pool_metrics=pool_metrics,
-            )
-            with instrumentation(first) as bound, first.connect() as connection:
+            options = Telemetry(tracer_provider=capture.provider, meter_provider=meter)
+            engines = SqlAlchemyEngines(pool_name="backend", pool_metrics=pool_metrics)
+            assert engines.accepts(type(first)) and engines.accepts(AsyncEngine)
+            assert not engines.accepts(QueuePool)
+            with (
+                engines.instrument(first, options) as bound,
+                first.connect() as connection,
+            ):
                 assert bound is first
                 assert connection.scalar(text("select 1")) == 1
                 assert _pool_values(reader) == (
@@ -278,11 +270,14 @@ def test_declaration_reuses_configuration_with_fresh_engine_contexts(
                     else {}
                 )
             assert _pool_values(reader) == {}
-            with instrumentation(second) as bound, second.connect() as connection:
+            with (
+                engines.instrument(second, options) as bound,
+                second.connect() as connection,
+            ):
                 assert bound is second
                 assert connection.scalar(text("select 2")) == 2
             assert _pool_values(reader) == {}
-            with instrumentation(first), first.connect() as connection:
+            with engines.instrument(first, options), first.connect() as connection:
                 assert connection.scalar(text("select 3")) == 3
             with first.connect() as connection:
                 assert connection.scalar(text("select 4")) == 4
@@ -296,7 +291,7 @@ def test_declaration_reuses_configuration_with_fresh_engine_contexts(
 
 
 @pytest.mark.parametrize("fail_startup", [False, True])
-async def test_database_declaration_detaches_before_disposal_and_after_feature_cleanup(
+async def test_database_engine_is_instrumented_until_after_feature_cleanup(
     fail_startup: bool,
 ) -> None:
     reader = InMemoryMetricReader()
@@ -322,18 +317,24 @@ async def test_database_declaration_detaches_before_disposal_and_after_feature_c
 
     try:
         with SpanCapture() as capture:
-            database = Database(
-                url="sqlite://",
-                engine_context=SqlAlchemyInstrumentation(
-                    telemetry=Telemetry(
-                        tracer_provider=capture.provider, meter_provider=meter
-                    ),
-                    pool_name="backend",
-                    capture_statement=True,
-                ),
-            )
+            database = Database(url="sqlite://")
             app = Composition(
-                features=[database.feature, Feature(name="consumer", lifespan=lifespan)]
+                features=[
+                    database.feature,
+                    Feature(name="consumer", lifespan=lifespan),
+                ],
+                integrations=[
+                    Telemetry(
+                        tracer_provider=capture.provider,
+                        meter_provider=meter,
+                        logs=False,
+                        resources=[
+                            SqlAlchemyEngines(
+                                pool_name="backend", capture_statement=True
+                            )
+                        ],
+                    )
+                ],
             ).build(FastAPI())
             async with asyncio.timeout(10):
                 with (

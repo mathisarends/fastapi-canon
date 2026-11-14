@@ -619,6 +619,8 @@ def test_invalid_instrumentation() -> None:
         Feature(name="invalid", integrations=[Repository])  # type: ignore[list-item]
     with pytest.raises(FeatureConfigurationError, match="list of integration parts"):
         Feature(name="invalid", integrations=instrument(Repository))  # type: ignore[arg-type]
+    with pytest.raises(FeatureConfigurationError, match="ResourceInstrumentation"):
+        Telemetry(resources=[object()])  # type: ignore[list-item]
 
 
 @pytest.mark.parametrize("enabled", [False, True])

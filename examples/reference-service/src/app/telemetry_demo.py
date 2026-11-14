@@ -11,8 +11,6 @@ from dishka import Provider, Scope, provide
 from fastapi import FastAPI
 from fastapi_canon import APIRouter, Composition, ErrorOptions, Feature, Inject
 from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
-from fastapi_canon.integrations.opentelemetry.httpx import instrument_httpx
-from fastapi_canon.integrations.opentelemetry.sqlalchemy import instrument_sqlalchemy
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk._logs import LoggerProvider
@@ -21,13 +19,10 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from starlette.types import Lifespan
 
-from app.infrastructure.database.provider import DatabaseProvider
 from app.main import FEATURES
 from app.presentation.health import router as health_router
-from app.settings import DatabaseSettings
 from app.telemetry_logging import export_python_logs
 
 logger = logging.getLogger(__name__)
@@ -104,27 +99,10 @@ def _notifier_client() -> httpx2.AsyncClient:
 # Public demo application factory for standalone telemetry services.
 def create_tasks_app() -> FastAPI:  # smelt: ignore[SMT429] -- external API
     options, lifecycle = _telemetry("tasks")
-
-    class TracedDatabaseProvider(DatabaseProvider):
-        @provide(scope=Scope.APP, override=True)
-        async def traced_engine(
-            self, settings: DatabaseSettings, telemetry: Telemetry
-        ) -> AsyncIterator[AsyncEngine]:
-            engine = create_async_engine(settings.url, pool_pre_ping=True)
-            try:
-                with instrument_sqlalchemy(engine, telemetry, pool_name="tasks"):
-                    yield engine
-            finally:
-                await engine.dispose()
-
     app = FastAPI(title="Canon telemetry: tasks", lifespan=lifecycle)
     app.include_router(health_router)
     Composition(
-        features=(
-            Feature(name="database", providers=(TracedDatabaseProvider,)),
-            *FEATURES[1:],
-            _notification_feature(),
-        ),
+        features=(*FEATURES, _notification_feature()),
         integrations=[options],
         request_logging=True,
         errors=ErrorOptions(type_base="https://api.example.test/problems"),
@@ -153,12 +131,9 @@ def create_notifier_app() -> FastAPI:  # smelt: ignore[SMT429] -- external API
 def _notification_feature() -> Feature:
     class NotifierProvider(Provider):
         @provide(scope=Scope.APP)
-        async def client(
-            self, telemetry: Telemetry
-        ) -> AsyncIterator[httpx2.AsyncClient]:
+        async def client(self) -> AsyncIterator[httpx2.AsyncClient]:
             async with _notifier_client() as client:
-                with instrument_httpx(client, telemetry):
-                    yield client
+                yield client
 
         gateway = provide(
             HttpNotificationGateway, provides=NotificationGateway, scope=Scope.REQUEST

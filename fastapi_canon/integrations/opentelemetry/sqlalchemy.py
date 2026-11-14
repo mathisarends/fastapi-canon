@@ -12,7 +12,10 @@ from weakref import WeakKeyDictionary, WeakSet, ref
 
 from fastapi_canon.exceptions import FeatureConfigurationError
 from fastapi_canon.integrations.opentelemetry.declarations import Telemetry
-from fastapi_canon.integrations.opentelemetry.resources import claim_resource
+from fastapi_canon.integrations.opentelemetry.resources import (
+    claim_resource,
+    is_claimed,
+)
 
 if TYPE_CHECKING:
     from opentelemetry.metrics import CallbackOptions, Meter, Observation
@@ -60,22 +63,36 @@ def instrument_sqlalchemy[T](
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class SqlAlchemyInstrumentation:
-    """Reusable engine-context configuration for SQLAlchemy telemetry.
+class SqlAlchemyEngines:
+    """Instrument every Dishka-provided SQLAlchemy ``Engine`` and ``AsyncEngine``.
 
-    Pass this declaration to ``Database(engine_context=...)``. Each engine gets
-    a fresh instrumentation context; engines and SDK providers stay borrowed.
+    Enabled by default through ``Telemetry(resources=None)``. Engines instrumented
+    with ``instrument_sqlalchemy`` are skipped; use it to name additional pools.
     """
 
-    telemetry: Telemetry
     pool_name: str = "default"
     pool_metrics: bool = True
     capture_statement: bool = False
 
-    def __call__[T](self, engine: T) -> AbstractContextManager[T]:
+    def __post_init__(self) -> None:
+        if not self.pool_name:
+            raise FeatureConfigurationError("pool_name must not be empty")
+
+    def accepts(self, provided: type[Any]) -> bool:
+        return any(
+            cls.__module__.partition(".")[0] == "sqlalchemy"
+            and cls.__qualname__ in {"Engine", "AsyncEngine"}
+            for cls in provided.__mro__
+        )
+
+    def instrument(
+        self, resource: Any, telemetry: Telemetry
+    ) -> AbstractContextManager[object]:
+        if is_claimed(getattr(resource, "sync_engine", resource)):
+            return nullcontext(resource)
         return instrument_sqlalchemy(
-            engine,
-            self.telemetry,
+            resource,
+            telemetry,
             pool_name=self.pool_name,
             pool_metrics=self.pool_metrics,
             capture_statement=self.capture_statement,

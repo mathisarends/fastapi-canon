@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Callable, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol, runtime_checkable
 
 from starlette.types import Scope as ASGIScope
 
@@ -30,9 +31,31 @@ if TYPE_CHECKING:
 
 __all__ = [
     "Instrumentation",
+    "ResourceInstrumentation",
     "Telemetry",
     "instrument",
 ]
+
+
+@runtime_checkable
+class ResourceInstrumentation(Protocol):
+    """Instrument every Dishka-provided resource of an accepted type.
+
+    Register a zero-argument factory in the ``fastapi_canon.telemetry_resources``
+    entry-point group to enable it by default. ``instrument`` returns a context
+    that stays open for the resource's Dishka lifetime; it must not instrument
+    a resource that already has instrumentation.
+    """
+
+    def accepts(self, provided: type[Any]) -> bool:
+        """Return whether a provided type should be instrumented."""
+        ...
+
+    def instrument(
+        self, resource: Any, telemetry: Telemetry
+    ) -> AbstractContextManager[object]:
+        """Return the context that instruments *resource* while it is open."""
+        ...
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -117,6 +140,7 @@ class Telemetry(Integration):
     tracer_provider: TracerProvider | None = None
     meter_provider: MeterProvider | None = None
     logger_provider: LoggerProvider | None = None
+    resources: Sequence[ResourceInstrumentation] | None = None
 
     def __post_init__(self) -> None:
         for name in (
@@ -132,6 +156,13 @@ class Telemetry(Integration):
                 raise FeatureConfigurationError(f"{name} must be a bool")
         if self.exclude is not None and not callable(self.exclude):
             raise FeatureConfigurationError("exclude must be callable or None")
+        if self.resources is not None:
+            resources = tuple(self.resources)
+            if not all(isinstance(item, ResourceInstrumentation) for item in resources):
+                raise FeatureConfigurationError(
+                    "resources must contain ResourceInstrumentation instances"
+                )
+            object.__setattr__(self, "resources", resources)
 
     @classmethod
     def disabled(cls) -> Telemetry:
@@ -165,10 +196,17 @@ class Telemetry(Integration):
         )
 
     def providers(self, context: ProviderContext) -> tuple[Provider, ...]:
-        """Bind this configuration per component and decorate instrumented ports."""
+        """Bind this configuration per component; decorate ports and resources.
+
+        ``resources=None`` uses every installed ``fastapi_canon.telemetry_resources``
+        entry point; ``resources=[]`` instruments no resource.
+        """
         providers = context.providers
         _reject_reserved_binding(providers)
-        instrumentation = instrumentation_providers(context.parts, self, context.errors)
+        instrumentation = (
+            *instrumentation_providers(context.parts, self, context.errors),
+            *self._resource_providers(providers),
+        )
         if not providers and not instrumentation:
             return ()
         components = dict.fromkeys(
@@ -203,6 +241,19 @@ class Telemetry(Integration):
 
         validate_app(context.app)
         return Installer(lambda app, container: install(app, self), before_routes=True)
+
+    def _resource_providers(
+        self, providers: tuple[Provider, ...]
+    ) -> tuple[Provider, ...]:
+        if not (self.tracing or self.metrics) or self.resources == ():
+            return ()
+        from fastapi_canon.integrations.opentelemetry.resources import (
+            default_resources,
+            resource_providers,
+        )
+
+        adapters = default_resources() if self.resources is None else self.resources
+        return resource_providers(providers, adapters, self)
 
 
 Instrumentation.integration = Telemetry
