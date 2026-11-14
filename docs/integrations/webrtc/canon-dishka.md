@@ -1,6 +1,7 @@
 # Canon and Dishka
 
-Declare sessions with `@router.webrtc(...)` on the feature's `APIRouter`. Canon
+Declare sessions with `@rtc.session(...)` on a `WebRtcRouter` in the feature's
+`routers`. Canon
 installs Dishka's middleware and manages the application container. The router's
 registry and `raises` declarations describe admission errors, which are exported
 as HTTP denial metadata in the WebRTC contract while the native session runtime
@@ -21,8 +22,13 @@ from collections.abc import AsyncIterator
 
 from dishka import AsyncContainer, FromDishka, Provider, Scope, provide
 from fastapi import FastAPI
-from fastapi_canon import APIRouter, Composition, Feature, Inject
-from fastapi_canon.integrations.webrtc import DataChannelSpec, Peer, Session
+from fastapi_canon import Composition, Feature, Inject
+from fastapi_canon.integrations.webrtc import (
+    DataChannelSpec,
+    Peer,
+    Session,
+    WebRtcRouter,
+)
 from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine
 
 
@@ -50,11 +56,11 @@ class Services(Provider):
         # Release this message's transaction or other short-lived resources.
 
 
-router = APIRouter()
+rtc = WebRtcRouter(engine=AiortcEngine())
 CHAT = DataChannelSpec("chat", receive_model=str, send_model=str)
 
 
-@router.webrtc("/chat", engine=AiortcEngine(), data_channels=[CHAT])
+@rtc.session("/chat", data_channels=[CHAT])
 async def chat(
     transcript: Inject[Transcript], container: FromDishka[AsyncContainer]
 ) -> Session:
@@ -67,7 +73,7 @@ async def chat(
 
 
 app = Composition(
-    features=(Feature(name="chat", routers=[router], providers=[Services]),)
+    features=(Feature(name="chat", routers=[rtc], providers=[Services]),)
 ).build(FastAPI())
 ```
 

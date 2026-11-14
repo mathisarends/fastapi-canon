@@ -39,8 +39,9 @@ at the composition root.
 
 The normal application remains exporter-free. Its tasks feature declares
 `instrument(TaskRepository)` and `instrument(TaskService, expected=(TaskNotFound,))`
-in `Feature.instrumentation`. Composition adds their Dishka decorators only when
-telemetry is enabled; TaskProvider remains usable in direct Dishka containers.
+in `Feature.integrations`. The application always enables `Telemetry`, using
+`Telemetry.disabled()` by default, so Composition adds their Dishka decorators
+only when telemetry records; TaskProvider remains usable in direct Dishka containers.
 `create_app(telemetry=Telemetry(...))` accepts application-owned
 providers. See the [developer API](../../docs/telemetry.md).
 

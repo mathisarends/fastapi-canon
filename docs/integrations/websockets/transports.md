@@ -48,7 +48,6 @@ Mount JSON-RPC channels on the feature's `APIRouter` and contribute it through
 ```python
 from fastapi import FastAPI
 from fastapi_canon import APIRouter, Composition, Feature, export_contracts
-from fastapi_canon.contracts import ContractKind
 
 router = APIRouter()
 router.include_channel(channel, path="/rpc")
@@ -57,7 +56,7 @@ app = Composition(
     features=(Feature(name="control", routers=[router]),),
 ).build(FastAPI(title="Control"))
 contract = export_contracts(
-    app, kinds=(ContractKind.OPENRPC,), base_url="wss://api.example.com"
+    app, kinds=("openrpc",), base_url="wss://api.example.com"
 ).openrpc
 ```
 

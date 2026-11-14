@@ -37,12 +37,12 @@ async def get_portfolio(
 portfolio_feature = Feature(
     name="portfolio",
     providers=[PortfolioProvider],
-    mcp=[McpMount(server=portfolio_mcp, namespace="portfolio")],
+    integrations=[McpMount(server=portfolio_mcp, namespace="portfolio")],
 )
 
 app = Composition(
     features=[portfolio_feature],
-    mcp=Mcp(),
+    integrations=[Mcp()],
 ).build(FastAPI(title="Maximus"))
 ```
 
@@ -51,14 +51,14 @@ Clients see `portfolio_get_portfolio` with only `portfolio_id` in its input sche
 `Mcp(name="Agent API", path="/agent")` overrides the server identity and
 endpoint. Namespaces are explicit public API identifiers, independent of feature
 names. Duplicate namespaces or server instances fail during composition.
-Contributing mounts requires explicit `Composition(mcp=Mcp())` activation.
+Contributing mounts requires explicit `Composition(integrations=[Mcp()])` activation.
 Mounts alone never open an endpoint. The activation is deliberate: authentication
 is configured only on `Mcp(auth=...)` (a mounted server's own `auth` is
 rejected), so an endpoint created implicitly from a mount would be
 unauthenticated, and its path and ownership would be implicit. A feature
-that declares mounts without `Mcp` fails composition with `Features with MCP
-mounts require Composition(mcp=Mcp())`; add `mcp=Mcp()` (or
-`Mcp(auth=...)`) to the `Composition`.
+that declares mounts without `Mcp` fails composition with
+`canon.integrations.E001`; add `Mcp()` (or `Mcp(auth=...)`) to
+`Composition(integrations=[...])`.
 
 When auth or root middleware depends on application services, use
 `Mcp(auth_factory=..., middleware_factory=...)`. Each synchronous factory

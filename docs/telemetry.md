@@ -105,22 +105,9 @@ by an `Mcp(auth_factory=...)` verifier. Token validity, tool/turn scoping and
 revocation remain the application's responsibility. Keep request-scoped services
 out of longer-lived tokens; return detached identity data for those bindings.
 
-### Migration from 0.11
+### Migration from 0.20
 
-`instrument(Port)` now returns a tuple rather than a single declaration.
-Replace `Feature(instrumentation=[instrument(Port)])` with
-`Feature(instrumentation=instrument(Port))`. Combine ports sharing settings with
-`instrument(FirstPort, SecondPort, expected=(ExpectedError,))`. Unpack each call
-with `instrument(...)` when combining groups with different settings in a list
-or tuple. Replace `instrument(port=Port)` with the positional `instrument(Port)`.
-
-### Migration from 0.10
-
-`observe()` has been removed, without an alias. Move its declarations out of
-Provider classes into `Feature(instrumentation=instrument(Port, OtherPort))`. Remove
-separate telemetry-only providers/features. Keep `expected=(...)` on the new
-declaration, and supply `component=` explicitly for named Dishka bindings.
-SDK configuration and ownership remain unchanged.
+See the [0.21.0 upgrade guide](package-migration.md#upgrade-to-0210).
 
 ## Configuration and ownership
 
@@ -142,8 +129,8 @@ exporters, sets global providers, or flushes/shuts down application providers.
 The application may install global providers in its lifespan before requests
 start; both FastAPI and the port tracer resolve them lazily. Explicit providers
 should be created before composition and shut down by an application lifespan.
-Without a Canon telemetry option, FastAPI keeps its own constructor/environment
-configuration; `telemetry=None` does not disable an independently configured
+Without an enabled `Telemetry`, FastAPI keeps its own constructor/environment
+configuration; omitting `Telemetry` does not disable an independently configured
 FastAPI pipeline.
 
 ### HTTP exclusion and suppression
@@ -169,13 +156,13 @@ configuration remains explicit as described below.
 
 ### Injecting configuration into infrastructure
 
-Each Composition-owned Dishka container binds the same immutable `Telemetry`
-instance at `Scope.APP`, in every contributed Dishka component. Infrastructure
+With `Telemetry` enabled, each Composition-owned Dishka container binds the same
+immutable `Telemetry` instance at `Scope.APP`, in every contributed Dishka component. Infrastructure
 providers can depend directly on `Telemetry`. Composition reserves that binding;
 remove custom bindings of the same type rather than overriding it.
 
-With `Composition(features=features, telemetry=None)`, infrastructure receives
-`Telemetry.disabled()`: tracing, metrics and logs are off, and the adapters below
+Enable `Composition(integrations=[Telemetry.disabled()])` to keep this binding
+without recording: tracing, metrics and logs are off, and the adapters below
 leave resources untouched without importing their optional runtimes. This does
 not disable an independently configured FastAPI pipeline. Without contributed
 providers Composition still avoids creating an otherwise unused DI container.
@@ -375,7 +362,7 @@ router.include_channel(
 )
 app = Composition(
     features=(Feature(name="browser", routers=[router]),),
-    telemetry=telemetry,
+    integrations=[telemetry],
 ).build(FastAPI())
 ```
 

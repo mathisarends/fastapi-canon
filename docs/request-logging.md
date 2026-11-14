@@ -12,7 +12,7 @@ app = Composition(
     features=features,
     errors=ErrorOptions(type_base="https://api.example.test/problems"),
     request_logging=True,
-    telemetry=telemetry,  # Optional; omit for request logging alone.
+    integrations=[telemetry],  # Optional; omit for request logging alone.
 ).build(FastAPI())
 ```
 
