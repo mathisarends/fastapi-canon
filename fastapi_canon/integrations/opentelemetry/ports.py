@@ -25,6 +25,9 @@ from fastapi_canon.integrations.opentelemetry.declarations import (
     instrumented_methods,
 )
 
+type Registrations = tuple[tuple[str, type[Any], Instrumentation], ...]
+"""``(feature name, port, declaration)`` triples in composition order."""
+
 excluded: ContextVar[bool] = ContextVar("canon.telemetry.excluded", default=False)
 
 
@@ -49,9 +52,7 @@ class _InstrumentedProxy:
 
 
 class _InstrumentPort:
-    def __init__(
-        self, registrations: tuple[tuple[str, Instrumentation], ...], options: Telemetry
-    ) -> None:
+    def __init__(self, registrations: Registrations, options: Telemetry) -> None:
         self.tracer = trace.get_tracer(
             "fastapi_canon", tracer_provider=options.tracer_provider
         )
@@ -64,33 +65,34 @@ class _InstrumentPort:
         )
         self.spans = options.tracing and options.port_spans
         self._proxies = {
-            spec: type(
-                f"Instrumented{spec.port.__name__}",
+            (spec, port): type(
+                f"Instrumented{port.__name__}",
                 (_InstrumentedProxy,),
                 {
-                    name: self._wrapper(spec, feature, name, method)
-                    for name, method in instrumented_methods(spec.port)
+                    name: self._wrapper(spec, port, feature, name, method)
+                    for name, method in instrumented_methods(port)
                 },
             )
-            for feature, spec in registrations
+            for feature, port, spec in registrations
         }
 
-    def __call__(self, spec: Instrumentation, instance: Any) -> Any:
+    def __call__(self, spec: Instrumentation, port: type[Any], instance: Any) -> Any:
         if not self.spans and self._histogram is None:
             return instance
-        return self._proxies[spec](instance)
+        return self._proxies[(spec, port)](instance)
 
     def _wrapper(
         self,
         spec: Instrumentation,
+        port: type[Any],
         feature: str,
         name: str,
         method: Callable[..., Any],
     ) -> Callable[..., Any]:
         registered: dict[str, str] = {
             "canon.feature": feature,
-            "canon.port": spec.port.__name__,
-            "code.function.name": f"{spec.port.__name__}.{name}",
+            "canon.port": port.__name__,
+            "code.function.name": f"{port.__name__}.{name}",
         }
 
         @wraps(method)
@@ -143,17 +145,20 @@ class _InstrumentPort:
 
 
 def create_instrumentation_providers(
-    registrations: tuple[tuple[str, Instrumentation], ...], options: Telemetry
+    registrations: Registrations, options: Telemetry
 ) -> tuple[Provider, ...]:
+    """Decorate each ``(feature, port, declaration)`` binding with a proxy."""
     observer = _InstrumentPort(registrations, options)
-    return tuple(_provider(spec, observer) for _, spec in registrations)
+    return tuple(_provider(spec, port, observer) for _, port, spec in registrations)
 
 
-def _provider(spec: Instrumentation, observer: _InstrumentPort) -> Provider:
+def _provider(
+    spec: Instrumentation, port: type[Any], observer: _InstrumentPort
+) -> Provider:
     def wrap(instance: Any) -> Any:
-        return observer(spec, instance)
+        return observer(spec, port, instance)
 
-    wrap.__annotations__ = {"instance": spec.port, "return": spec.port}
+    wrap.__annotations__ = {"instance": port, "return": port}
     provider = Provider(component=spec.component)
-    provider.decorate(wrap, provides=spec.port)
+    provider.decorate(wrap, provides=port)
     return provider

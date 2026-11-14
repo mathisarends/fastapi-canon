@@ -7,29 +7,31 @@ messages and operations, while registered routes determine their effective paths
 
 ## Python API
 
-The typed selection API below is available in Canon 0.20.0 and later.
-Canon 0.19 uses string format names and has no `selection` argument.
+The `selection` argument is available in Canon 0.20.0 and later. Contract kinds
+are plain strings from Canon 0.21.0 (unreleased); 0.20 uses `ContractKind`.
 
 ```python
 from fastapi_canon import export_contracts
-from fastapi_canon.contracts import ContractKind, Contracts
+from fastapi_canon.contracts import Contracts
 
 app = create_app()
 contracts: Contracts = export_contracts(app)
 
 openapi = contracts.openapi
 openrpc = contracts.openrpc
-webrtc = contracts.webrtc
+webrtc = contracts.documents.get("webrtc")
 ```
 
 `Contracts` is a snapshot, independent of the application's cached OpenAPI document.
-Each attribute is a JSON document or `None`. Unregistered RPC/WebRTC transports
-and unselected formats are `None`; HTTP/SSE always has an OpenAPI document when
-selected. `contracts.documents` maps the present names to their documents.
+`contracts.documents` maps each present contract kind to its JSON document;
+`openapi` and `openrpc` are shortcuts that return `None` when absent. Transports
+without registered routes and unselected kinds are absent; HTTP/SSE always has
+an OpenAPI document when selected.
 
-Select formats with `export_contracts(app, kinds=(ContractKind.OPENAPI,))`.
-`ContractKind` is a `StrEnum` with `OPENAPI`, `OPENRPC` and `WEBRTC` members;
-raw Python strings are rejected. CLI format names remain unchanged. The Python API
+Select kinds with `export_contracts(app, kinds=("openapi",))`. Kinds are the
+document names: `openapi` for HTTP/SSE, and the kind each route transport
+exports, such as `openrpc` for WebSockets and `webrtc` for WebRTC sessions. They
+are also the `<kind>.json` filenames of `fastapi-canon contracts export`. The Python API
 uses FastAPI/Pydantic contract generation; the CLI and SDK pipeline additionally
 validate OpenAPI against its meta-schema and JSON Schema. Those commands require
 `fastapi-canon[codegen]`.
@@ -48,7 +50,7 @@ Reuse the feature object installed in the application:
 from fastapi import FastAPI
 
 from fastapi_canon import APIRouter, Composition, Feature, export_contracts
-from fastapi_canon.contracts import ContractKind, ContractSelection
+from fastapi_canon.contracts import ContractSelection
 
 router = APIRouter()
 control = router.channel("/rpc", namespace="browser")
@@ -63,7 +65,7 @@ browser_tunnel = Feature(name="browser_tunnel", routers=(router,))
 app = Composition(features=(browser_tunnel,)).build(FastAPI())
 contracts = export_contracts(
     app,
-    kinds=(ContractKind.OPENRPC,),
+    kinds=("openrpc",),
     selection=ContractSelection(features=(browser_tunnel,)),
 )
 ```

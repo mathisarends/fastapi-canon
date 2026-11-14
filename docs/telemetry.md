@@ -32,40 +32,42 @@ tasks = Feature(
     name="tasks",
     routers=(router,),
     providers=(TaskProvider,),
-    instrumentation=instrument(
-        TaskRepository,
-        TaskService,
-        expected=(TaskNotFound,),
-    ),
+    integrations=[
+        instrument(TaskRepository),
+        instrument(TaskService, expected=(TaskNotFound,)),
+    ],
 )
 app = Composition(
     features=(tasks,),
-    telemetry=Telemetry(
-        tracer_provider=tracer_provider,
-        exclude=lambda scope: scope["path"] in {"/health", "/ready"},
-    ),
+    integrations=[
+        Telemetry(
+            tracer_provider=tracer_provider,
+            exclude=lambda scope: scope["path"] in {"/health", "/ready"},
+        ),
+    ],
 ).build(FastAPI())
 ```
 
 `instrument(Port, OtherPort, ...)` requires at least one positional port and
-returns a tuple of immutable `Instrumentation` declarations in input order,
-including for a single port. Pass that tuple directly to `Feature.instrumentation`.
-The keyword-only `expected` and `component` options apply to every port in the call.
-For ports with different settings, unpack multiple groups into one sequence:
+returns one immutable `Instrumentation` part, which goes into
+`Feature(integrations=[...])` like any other integration part. The keyword-only
+`expected` and `component` options apply to every port in the call. Use one call
+per group of ports with different settings:
 
 ```python
-instrumentation = [
-    *instrument(TaskRepository, AuditRepository),
-    *instrument(TaskService, expected=(TaskNotFound,)),
-    *instrument(BillingGateway, component="billing"),
+integrations = [
+    instrument(TaskRepository, AuditRepository),
+    instrument(TaskService, expected=(TaskNotFound,)),
+    instrument(BillingGateway, component="billing"),
 ]
 ```
 
 Dishka providers stay focused on their normal bindings.
-Existing `@provide` factory methods work too. Composition generates
-separate decorator providers only when `telemetry=Telemetry(...)` is supplied.
-With `telemetry=None`, the declarations add no DI dependencies or decorators and
-import no Canon OpenTelemetry runtime. Direct Dishka containers can use the same
+Existing `@provide` factory methods work too. Instrumentation requires
+`Telemetry` in `Composition(integrations=[...])`; a feature that instruments ports
+in a composition without it is rejected with `canon.integrations.E001`. Use
+`Telemetry.disabled()` to keep the declarations without producing telemetry; it
+adds no proxies or spans. Direct Dishka containers can use the same
 original providers without Canon. Features and provider instances can be reused
 across applications; their instrumentation runtime belongs to each composition.
 
@@ -99,26 +101,13 @@ service reference can remain concretely typed with
 `model_config = ConfigDict(arbitrary_types_allowed=True)` and
 `registry: ToolAccessRegistry = Field(exclude=True)` when the wrapped adapter is a
 `ToolAccessRegistry`. This also applies to FastMCP `AccessToken` subclasses returned
-by an `McpOptions(auth_factory=...)` verifier. Token validity, tool/turn scoping and
+by an `Mcp(auth_factory=...)` verifier. Token validity, tool/turn scoping and
 revocation remain the application's responsibility. Keep request-scoped services
 out of longer-lived tokens; return detached identity data for those bindings.
 
-### Migration from 0.11
+### Migration from 0.20
 
-`instrument(Port)` now returns a tuple rather than a single declaration.
-Replace `Feature(instrumentation=[instrument(Port)])` with
-`Feature(instrumentation=instrument(Port))`. Combine ports sharing settings with
-`instrument(FirstPort, SecondPort, expected=(ExpectedError,))`. Unpack each call
-with `*instrument(...)` when combining groups with different settings in a list
-or tuple. Replace `instrument(port=Port)` with the positional `instrument(Port)`.
-
-### Migration from 0.10
-
-`observe()` has been removed, without an alias. Move its declarations out of
-Provider classes into `Feature(instrumentation=instrument(Port, OtherPort))`. Remove
-separate telemetry-only providers/features. Keep `expected=(...)` on the new
-declaration, and supply `component=` explicitly for named Dishka bindings.
-SDK configuration and ownership remain unchanged.
+See the [0.21.0 upgrade guide](package-migration.md#upgrade-to-0210).
 
 ## Configuration and ownership
 
@@ -140,8 +129,8 @@ exporters, sets global providers, or flushes/shuts down application providers.
 The application may install global providers in its lifespan before requests
 start; both FastAPI and the port tracer resolve them lazily. Explicit providers
 should be created before composition and shut down by an application lifespan.
-Without a Canon telemetry option, FastAPI keeps its own constructor/environment
-configuration; `telemetry=None` does not disable an independently configured
+Without an enabled `Telemetry`, FastAPI keeps its own constructor/environment
+configuration; omitting `Telemetry` does not disable an independently configured
 FastAPI pipeline.
 
 ### HTTP exclusion and suppression
@@ -167,13 +156,13 @@ configuration remains explicit as described below.
 
 ### Injecting configuration into infrastructure
 
-Each Composition-owned Dishka container binds the same immutable `Telemetry`
-instance at `Scope.APP`, in every contributed Dishka component. Infrastructure
+With `Telemetry` enabled, each Composition-owned Dishka container binds the same
+immutable `Telemetry` instance at `Scope.APP`, in every contributed Dishka component. Infrastructure
 providers can depend directly on `Telemetry`. Composition reserves that binding;
 remove custom bindings of the same type rather than overriding it.
 
-With `Composition(features=features, telemetry=None)`, infrastructure receives
-`Telemetry.disabled()`: tracing, metrics and logs are off, and the adapters below
+Enable `Composition(integrations=[Telemetry.disabled()])` to keep this binding
+without recording: tracing, metrics and logs are off, and the adapters below
 leave resources untouched without importing their optional runtimes. This does
 not disable an independently configured FastAPI pipeline. Without contributed
 providers Composition still avoids creating an otherwise unused DI container.
@@ -373,7 +362,7 @@ router.include_channel(
 )
 app = Composition(
     features=(Feature(name="browser", routers=[router]),),
-    telemetry=telemetry,
+    integrations=[telemetry],
 ).build(FastAPI())
 ```
 

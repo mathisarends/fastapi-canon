@@ -13,6 +13,7 @@ from fastapi_canon.integrations.webrtc import (
     Session,
     SessionLimits,
     WebRtcError,
+    WebRtcRouter,
 )
 from fastapi_canon.integrations.webrtc.engine import (
     ConnectionState,
@@ -23,7 +24,6 @@ from fastapi_canon.integrations.webrtc.engine import (
     SignalingState,
 )
 from fastapi_canon.integrations.webrtc.engines import DescriptionType
-from fastapi_canon.integrations.webrtc.router import WebRtcRouter
 
 from tests.unit.integrations.webrtc.fake_engine import FakeEngine, NativeTrack, sdp
 from tests.unit.integrations.webrtc.server import serve

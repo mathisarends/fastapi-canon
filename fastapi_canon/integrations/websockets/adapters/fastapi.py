@@ -34,6 +34,7 @@ from fastapi_canon.error.contributions import (
     RegistryContributions,
     attach_error_registries,
 )
+from fastapi_canon.integration import attach_route
 from fastapi_canon.integrations.websockets.activity import notify_activity
 from fastapi_canon.integrations.websockets.adapters.contexts import ContextDependencies
 from fastapi_canon.integrations.websockets.channel import RpcChannel
@@ -89,6 +90,7 @@ from fastapi_canon.integrations.websockets.protocol import (
     RpcProtocol,
     RpcSubscriptionDefinition,
 )
+from fastapi_canon.integrations.websockets.routes import RpcRoute
 from fastapi_canon.integrations.websockets.runtime import map_rejection
 from fastapi_canon.integrations.websockets.server import RpcErrorMapper
 from fastapi_canon.integrations.websockets.websocket import (
@@ -619,8 +621,11 @@ class CanonWebSocketRouter(APIRouter):
             else self._custom_handler(endpoint, handler)
         )
         setattr(handler_function, ENDPOINT_ATTRIBUTE, endpoint)
-        handler_function.__dict__["__canon_rpc_dependency_roots__"] = lambda: (
-            self._dependency_roots(endpoint, custom=handler is not None)
+        attach_route(
+            handler_function,
+            RpcRoute(
+                lambda: self._dependency_roots(endpoint, custom=handler is not None)
+            ),
         )
         self.websocket(
             self._route_path(endpoint),

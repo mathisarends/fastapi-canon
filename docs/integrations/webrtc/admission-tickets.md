@@ -48,7 +48,8 @@ tokens as query values. Redact ticket query parameters in application and proxy
 logs and avoid returning internal connection URLs.
 
 Declare the same named Canon errors on the HTTP route and the
-`@router.webrtc(...)` session of the same `APIRouter`. Expected admission failures remain HTTP problems;
+`@rtc.session(...)` declaration of the feature's `WebRtcRouter`. Expected admission
+failures remain HTTP problems;
 accepted-session failures retain WebRTC error framing. The ticket endpoint makes
 its own HTTP response readable, while a subsequent failed WebSocket handshake can
 still appear as `connection_failed` to the browser.

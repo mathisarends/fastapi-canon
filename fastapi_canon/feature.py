@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from inspect import iscoroutinefunction
-from typing import TYPE_CHECKING
+from typing import cast
 
 from dishka import (
     Provider,
@@ -37,15 +37,11 @@ from fastapi_canon.diagnostics import (
 )
 from fastapi_canon.error import AnyError, ErrorRegistry
 from fastapi_canon.exceptions import ErrorConfigurationError, FeatureConfigurationError
+from fastapi_canon.integration import Integration, IntegrationPart
 from fastapi_canon.openapi import (
     validate_openapi_contracts,
 )
 from fastapi_canon.policy import normalize_raises
-
-if TYPE_CHECKING:
-    from fastapi_canon.integrations.mcp import McpMount, McpOptions
-    from fastapi_canon.integrations.opentelemetry import Instrumentation, Telemetry
-
 
 type FeatureLifespan = Lifespan[FastAPI]
 
@@ -57,8 +53,7 @@ class Feature:
     name: str
     routers: tuple[APIRouter, ...]
     providers: tuple[Provider | Callable[[], Provider], ...]
-    instrumentation: tuple[Instrumentation, ...]
-    mcp: tuple[McpMount, ...]
+    integrations: tuple[IntegrationPart, ...]
     exception_handlers: Mapping[type[Exception], ExceptionHandler]
     lifespan: FeatureLifespan | None
     checks: tuple[FeatureCheck, ...]
@@ -70,8 +65,7 @@ class Feature:
         name: str,
         routers: Sequence[APIRouter] = (),
         providers: Sequence[Provider | Callable[[], Provider]] = (),
-        instrumentation: Sequence[Instrumentation] = (),
-        mcp: Sequence[McpMount] = (),
+        integrations: Sequence[IntegrationPart] = (),
         errors: Sequence[AnyError] = (),
         exception_handlers: Mapping[type[Exception], ExceptionHandler] | None = None,
         lifespan: FeatureLifespan | None = None,
@@ -88,12 +82,6 @@ class Feature:
                 "checks must contain synchronous callable functions"
             )
         object.__setattr__(self, "checks", normalized_checks)
-        normalized_mcp = tuple(mcp)
-        if normalized_mcp:
-            from fastapi_canon.integrations.mcp import McpMount
-
-            normalized_mcp = unique_instances(normalized_mcp, McpMount, "mcp")
-        object.__setattr__(self, "mcp", normalized_mcp)
         normalized_name = _validate_feature_name(name)
         normalized_routers = unique_instances(
             routers, APIRouter, f"feature {normalized_name!r} routers"
@@ -101,15 +89,9 @@ class Feature:
         normalized_providers = unique_provider_sources(
             providers, owner=f"feature {normalized_name!r} providers"
         )
-        normalized_instrumentation = tuple(instrumentation)
-        if normalized_instrumentation:
-            from fastapi_canon.integrations.opentelemetry import Instrumentation
-
-            normalized_instrumentation = unique_instances(
-                normalized_instrumentation,
-                Instrumentation,
-                f"feature {normalized_name!r} instrumentation",
-            )
+        normalized_parts = _integration_parts(
+            integrations, f"feature {normalized_name!r} integrations"
+        )
         normalized_handlers = _normalize_handlers(
             exception_handlers, feature_name=normalized_name
         )
@@ -143,7 +125,7 @@ class Feature:
         object.__setattr__(self, "name", normalized_name)
         object.__setattr__(self, "routers", normalized_routers)
         object.__setattr__(self, "providers", normalized_providers)
-        object.__setattr__(self, "instrumentation", normalized_instrumentation)
+        object.__setattr__(self, "integrations", normalized_parts)
         object.__setattr__(self, "_listed_errors", listed)
         object.__setattr__(self, "exception_handlers", normalized_handlers)
         object.__setattr__(self, "lifespan", lifespan)
@@ -219,9 +201,8 @@ class Composition:
     features: tuple[Feature, ...]
     errors: ErrorOptions
     router_factory: Callable[[], APIRouter] | None
-    telemetry: Telemetry | None
+    integrations: tuple[Integration, ...]
     request_logging: bool
-    mcp: McpOptions | None
     overrides: tuple[Provider | Callable[[], Provider], ...]
 
     def __init__(
@@ -230,26 +211,24 @@ class Composition:
         features: Sequence[Feature] = (),
         errors: ErrorOptions | None = None,
         router_factory: Callable[[], APIRouter] | None = None,
-        telemetry: Telemetry | None = None,
+        integrations: Sequence[Integration] = (),
         request_logging: bool = False,
-        mcp: McpOptions | None = None,
     ) -> None:
-        if mcp is not None:
-            from fastapi_canon.integrations.mcp import McpOptions
-
-            if not isinstance(mcp, McpOptions):
-                raise FeatureConfigurationError("mcp must be McpOptions or None")
-        object.__setattr__(self, "mcp", mcp)
+        normalized_integrations = unique_instances(
+            integrations, Integration, "integrations"
+        )
+        enabled: dict[type[Integration], int] = {}
+        for index, integration in enumerate(normalized_integrations):
+            previous = enabled.setdefault(type(integration), index)
+            if previous != index:
+                msg = (
+                    f"integrations[{index}] enables {type(integration).__name__} "
+                    f"again; integrations[{previous}] already configures it"
+                )
+                raise FeatureConfigurationError(msg)
+        object.__setattr__(self, "integrations", normalized_integrations)
         _validate_bool(request_logging, "request_logging")
         object.__setattr__(self, "request_logging", request_logging)
-        if telemetry is not None:
-            from fastapi_canon.integrations.opentelemetry import Telemetry
-
-            if not isinstance(telemetry, Telemetry):
-                raise FeatureConfigurationError(
-                    "telemetry must be a Telemetry instance or None"
-                )
-        object.__setattr__(self, "telemetry", telemetry)
         normalized_features = unique_instances(features, Feature, "features")
         validate_unique_feature_names(normalized_features)
         raw_errors: object = errors
@@ -379,6 +358,32 @@ def unique_provider_sources(
             raise FeatureConfigurationError(msg)
         seen.add(id(value))
         result.append(value)
+    return tuple(result)
+
+
+def _integration_parts(
+    values: Sequence[object], parameter: str
+) -> tuple[IntegrationPart, ...]:
+    if not isinstance(values, Sequence) or isinstance(values, str):
+        msg = f"{parameter} must be a list of integration parts"
+        raise FeatureConfigurationError(msg)
+    result: list[IntegrationPart] = []
+    seen: set[int] = set()
+    for index, value in enumerate(values):
+        integration = getattr(type(value), "integration", None)
+        if not isinstance(integration, type) or not issubclass(
+            integration, Integration
+        ):
+            msg = (
+                f"{parameter}[{index}] must be an integration part whose class "
+                "names its Integration"
+            )
+            raise FeatureConfigurationError(msg)
+        if id(value) in seen:
+            msg = f"{parameter}[{index}] duplicates an earlier instance"
+            raise FeatureConfigurationError(msg)
+        seen.add(id(value))
+        result.append(cast(IntegrationPart, value))
     return tuple(result)
 
 

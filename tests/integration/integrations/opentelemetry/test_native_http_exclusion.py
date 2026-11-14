@@ -121,7 +121,7 @@ async def scenario(
                     name="http",
                     providers=[provider],
                     routers=[router],
-                    instrumentation=instrument(UseCase, Repository),
+                    integrations=[instrument(UseCase, Repository)],
                 ),
                 observations,
                 cancel_started,
@@ -146,15 +146,17 @@ async def test_http_exclusion_suppresses_use_case_ports_and_httpx(
 
     app = Composition(
         features=(scenario.feature,),
-        telemetry=Telemetry(
-            tracer_provider=capture.provider,
-            meter_provider=meter,
-            tracing=native_signals,
-            metrics=native_signals,
-            port_metrics=True,
-            logs=False,
-            exclude=exclude,
-        ),
+        integrations=[
+            Telemetry(
+                tracer_provider=capture.provider,
+                meter_provider=meter,
+                tracing=native_signals,
+                metrics=native_signals,
+                port_metrics=True,
+                logs=False,
+                exclude=exclude,
+            )
+        ],
     ).build(FastAPI())
     async with (
         asyncio.timeout(5),
@@ -305,13 +307,15 @@ async def test_parallel_applications_reuse_features_without_exclusion_leaks(
     capture, meter, reader = telemetry
     excluded = Composition(
         features=(scenario.feature,),
-        telemetry=Telemetry(
-            tracer_provider=capture.provider,
-            meter_provider=meter,
-            port_metrics=True,
-            logs=False,
-            exclude=lambda scope: True,
-        ),
+        integrations=[
+            Telemetry(
+                tracer_provider=capture.provider,
+                meter_provider=meter,
+                port_metrics=True,
+                logs=False,
+                exclude=lambda scope: True,
+            )
+        ],
     ).build(FastAPI())
     included = _application(scenario.feature, capture, meter)
     async with (
@@ -346,12 +350,14 @@ async def test_mounted_http_application_keeps_inherited_exclusion(
     capture, meter, reader = telemetry
     inner = _application(scenario.feature, capture, meter)
     outer = Composition(
-        telemetry=Telemetry(
-            tracer_provider=capture.provider,
-            meter_provider=meter,
-            logs=False,
-            exclude=lambda scope: True,
-        ),
+        integrations=[
+            Telemetry(
+                tracer_provider=capture.provider,
+                meter_provider=meter,
+                logs=False,
+                exclude=lambda scope: True,
+            )
+        ],
     ).build(FastAPI())
     outer.mount("/inner", inner)
     async with (
@@ -376,13 +382,15 @@ def _application(
 ) -> FastAPI:
     return Composition(
         features=(feature,),
-        telemetry=Telemetry(
-            tracer_provider=capture.provider,
-            meter_provider=meter,
-            port_metrics=True,
-            logs=False,
-            exclude=lambda scope: scope["path"].startswith("/excluded"),
-        ),
+        integrations=[
+            Telemetry(
+                tracer_provider=capture.provider,
+                meter_provider=meter,
+                port_metrics=True,
+                logs=False,
+                exclude=lambda scope: scope["path"].startswith("/excluded"),
+            )
+        ],
     ).build(FastAPI())
 
 

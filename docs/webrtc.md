@@ -1,21 +1,19 @@
 # WebRTC admission errors
 
-Install `fastapi-canon[webrtc]` and declare sessions with `@router.webrtc(...)` on
-the feature's `APIRouter`. Admission failures use the same `Error` definitions
-and registry as the router's HTTP operations.
+Install `fastapi-canon[webrtc]`, declare sessions with `@rtc.session(...)` on a
+`WebRtcRouter` and add the router to the feature's `routers`. Admission failures
+use the same `Error` definitions and composed registry as HTTP operations.
 
 ```python
 from fastapi import FastAPI
 from fastapi_canon import (
-    APIRouter,
     Composition,
     Error,
     ErrorOptions,
     Feature,
     export_contracts,
 )
-from fastapi_canon.contracts import ContractKind
-from fastapi_canon.integrations.webrtc import Session
+from fastapi_canon.integrations.webrtc import Session, WebRtcRouter
 from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine
 
 
@@ -26,22 +24,20 @@ class BrowserMissing(Exception):
 BROWSER_MISSING = Error(
     BrowserMissing, status=404, code="browser_missing", title="Browser missing"
 )
-router = APIRouter()
+rtc = WebRtcRouter(engine=AiortcEngine(), raises=[BROWSER_MISSING])
 
 
-@router.webrtc(
-    "/browser/{browser_id}/video", engine=AiortcEngine(), raises=[BROWSER_MISSING]
-)
+@rtc.session("/browser/{browser_id}/video")
 async def video(browser_id: str) -> Session:
     # Authenticate and load the stream through application services here.
     raise BrowserMissing()
 
 
 app = Composition(
-    features=(Feature(name="browser", routers=[router]),),
+    features=(Feature(name="browser", routers=[rtc]),),
     errors=ErrorOptions(type_base="https://example.test/problems"),
 ).build(FastAPI())
-contract = export_contracts(app, kinds=(ContractKind.WEBRTC,)).webrtc
+contract = export_contracts(app, kinds=("webrtc",)).documents["webrtc"]
 ```
 
 The engine extra remains independent: install `fastapi-canon[webrtc,aiortc]` for this

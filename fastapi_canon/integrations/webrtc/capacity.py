@@ -4,7 +4,7 @@
 class SessionCapacity:
     """Limit concurrent sessions across every declaration that shares this instance.
 
-    Pass one instance as ``capacity=`` to several ``APIRouter.webrtc()``
+    Pass one instance as ``capacity=`` to several ``WebRtcRouter.session()``
     declarations, on any routers or features. A session holds one slot from
     admission until its cleanup finished; a full capacity refuses new sessions
     with ``session_limit`` before a peer is created. The instance is process

@@ -40,13 +40,14 @@ scope.
 | Typed SSE | `APIRouter.sse()` | [SSE contracts](streams.md) |
 | WebSocket JSON-RPC | `APIRouter.channel()`; `APIRouter.include_channel()` with `fastapi_canon.integrations.websockets.RpcChannel` for shared channels | [WebSockets](integrations/websockets/README.md) |
 | Typed or raw WebSocket messages and binary streams | `@APIRouter.socket()`, `@APIRouter.binary_stream()`; `RpcSocket` | [Sockets](integrations/websockets/sockets.md), [binary streams](integrations/websockets/streams.md) |
-| WebRTC with Canon admission errors | `APIRouter.webrtc()`, `fastapi_canon.integrations.webrtc.Session`, `SessionCapacity`; engine adapters in `.webrtc.engines` | [WebRTC admission](webrtc.md) |
-| Contract export | `fastapi_canon.export_contracts`; `fastapi_canon.contracts.Contracts`, `ContractKind`, `ContractSelection`; `fastapi-canon contracts export` | [Application export](contracts.md) |
+| WebRTC with Canon admission errors | `fastapi_canon.integrations.webrtc.WebRtcRouter` and `@rtc.session()`, `Session`, `SessionCapacity`; engine adapters in `.webrtc.engines` | [WebRTC admission](webrtc.md) |
+| Contract export | `fastapi_canon.export_contracts`; `fastapi_canon.contracts.Contracts`, `ContractSelection`; `fastapi-canon contracts export` | [Application export](contracts.md) |
 | OpenAPI contracts without `Composition` | `fastapi_canon.openapi.install_openapi_contracts`, `validate_openapi_contracts` | [Composition](composition.md) |
 | Startup configuration errors | `fastapi_canon.exceptions.ConfigurationError` and its subclasses | [Problems](problems.md) |
 | Telemetry declarations | `fastapi_canon.integrations.opentelemetry.Telemetry`, `instrument` | [Telemetry](telemetry.md) |
 | SQLAlchemy engine instrumentation declaration | `fastapi_canon.integrations.opentelemetry.sqlalchemy.SqlAlchemyInstrumentation` | [Engine lifetime](database.md#engine-instrumentation-lifetime) |
-| MCP features | `fastapi_canon.integrations.mcp.McpServer`, `McpMount`, `McpScope`, `McpOptions`, `Inject` | [MCP](integrations/mcp/README.md) |
+| MCP features | `fastapi_canon.integrations.mcp.McpServer`, `McpMount`, `McpScope`, `Mcp`, `Inject` | [MCP](integrations/mcp/README.md) |
+| Custom integrations | `fastapi_canon.integration.Integration`, `IntegrationPart`, `IntegrationContext`, `Installer`, `IntegrationError`, `IntegrationRoute`, `RouteContext`, `ContractExporter`, `attach_route` | [Integrations](composition.md#integrations) |
 
 Import application-building names from `fastapi_canon` and optional types from
 their integration facade. Other implementation modules are internal, even without

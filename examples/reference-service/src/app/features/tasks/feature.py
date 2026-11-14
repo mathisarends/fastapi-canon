@@ -10,8 +10,8 @@ feature = Feature(
     name="tasks",
     routers=(router,),
     providers=(TaskProvider,),
-    instrumentation=(
-        *instrument(TaskRepository),
-        *instrument(TaskService, expected=(TaskNotFound,)),
-    ),
+    integrations=[
+        instrument(TaskRepository),
+        instrument(TaskService, expected=(TaskNotFound,)),
+    ],
 )

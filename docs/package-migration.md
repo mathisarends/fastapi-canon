@@ -29,6 +29,25 @@ still validate installed routes and rerun feature checks. Checks must be
 synchronous and free of side effects; remove code that depended on duplicate
 execution during the first build.
 
+Optional integrations move to `integrations=`:
+
+```python
+feature = Feature(
+    name="tasks",
+    integrations=[
+        McpMount(server=tasks_mcp, namespace="tasks"),
+        instrument(TaskRepository),
+    ],
+)
+app = Composition(features=[feature], integrations=[Mcp(), Telemetry()])
+```
+
+Rename `McpOptions` to `Mcp` and drop `*` before `instrument(...)`. Enable
+`Telemetry.disabled()` where `telemetry=None` was used. Replace
+`@router.webrtc(...)` with `@rtc.session(...)` on a `WebRtcRouter` passed to
+`Feature(routers=[...])`, and `ContractKind` values with strings. See the
+[changelog](../CHANGELOG.md#0210---unreleased) for the full list.
+
 ## Upgrade to 0.20.0
 
 Version 0.20.0 was published on 2026-11-13. Upgrade FastAPI to >=0.143.1,<1
@@ -269,8 +288,8 @@ forms and the per-check coverage report before enforcing `--require-complete`.
 
 The new MCP integration is opt-in: install `fastapi-canon[mcp]`, contribute
 `McpMount` declarations through `Feature(mcp=[...])`, and activate them with
-`Composition(mcp=McpOptions())`. Core installations do not require FastMCP.
-Mounted routes use FastMCP authentication configured on `McpOptions`, independently
+`Composition(mcp=Mcp())`. Core installations do not require FastMCP.
+Mounted routes use FastMCP authentication configured on `Mcp`, independently
 of FastAPI router dependencies. See the [MCP guide](integrations/mcp/README.md)
 for `Inject[T]`, lifecycle ownership and supported handlers.
 

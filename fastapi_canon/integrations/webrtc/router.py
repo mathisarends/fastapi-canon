@@ -1,4 +1,4 @@
-"""``WebRtcRouter``: declare session endpoints on a FastAPI router.
+"""``SessionRouter``: the session runtime behind ``WebRtcRouter``.
 
 This module evaluates annotations eagerly: FastAPI reads the generated
 endpoint signature, whose dependency refers to a closure-local factory.
@@ -19,10 +19,11 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket
 from fastapi.params import Depends as DependsParam
 from starlette.requests import HTTPConnection
 
-from fastapi_canon.contract_routes import WEBRTC_DECLARATION_ATTRIBUTE
 from fastapi_canon.injection import injected_dependency
+from fastapi_canon.integration import attach_route
 from fastapi_canon.integrations.webrtc.capacity import SessionCapacity, SlotReservation
 from fastapi_canon.integrations.webrtc.declarations import (
+    DECLARATION_ATTRIBUTE,
     AdmissionErrors,
     DataChannelSpec,
     MediaPolicy,
@@ -41,6 +42,7 @@ from fastapi_canon.integrations.webrtc.events import (
 )
 from fastapi_canon.integrations.webrtc.ice import IceServerSource
 from fastapi_canon.integrations.webrtc.media import stop_native_track
+from fastapi_canon.integrations.webrtc.routes import WebRtcRoute
 from fastapi_canon.integrations.webrtc.runtime import (
     MINIMUM_CLEANUP_STEP_SECONDS,
     RuntimeOptions,
@@ -51,10 +53,8 @@ logger = logging.getLogger("fastapi_canon.integrations.webrtc")
 
 Factory = TypeVar("Factory", bound=Callable[..., Any])
 
-DECLARATION_ATTRIBUTE = WEBRTC_DECLARATION_ATTRIBUTE
 
-
-class WebRtcRouter(APIRouter):
+class SessionRouter(APIRouter):
     """An ``APIRouter`` whose ``session`` decorator declares WebRTC sessions.
 
     Each session is a WebSocket signaling endpoint. Its factory is a regular
@@ -173,7 +173,7 @@ class WebRtcRouter(APIRouter):
             endpoint.__doc__ = factory.__doc__
             endpoint.__name__ = f"webrtc_session_{declaration.name}"
             setattr(endpoint, DECLARATION_ATTRIBUTE, declaration)
-            endpoint.__dict__["__canon_webrtc_dependency_roots__"] = roots
+            attach_route(endpoint, WebRtcRoute(roots))
             self.add_api_websocket_route(
                 path,
                 endpoint,

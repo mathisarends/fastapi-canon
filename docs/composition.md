@@ -34,6 +34,7 @@ outside the library's intended architecture.
 - [Unified package and migration](package-migration.md)
 - [Quick start](#quick-start)
 - [Feature composition](#feature-composition)
+  - [Integrations](#integrations)
   - [Application router](#application-router)
   - [Router policies](#router-policies)
   - [Dishka](#dishka)
@@ -98,17 +99,15 @@ feature = Feature(
     name="projects",
     routers=[router],
     providers=[provider],
-    instrumentation=instrument(ProjectRepository),
+    integrations=[instrument(ProjectRepository)],
     errors=[rate_limited],
     exception_handlers={DomainError: domain_error_handler},
     lifespan=feature_lifespan,
 )
 ```
 
-`instrumentation=` declares ports and asynchronous `__call__` use cases at the
-feature boundary. Composition adds their Dishka decorators only when telemetry
-is enabled; the original providers remain usable directly. See the
-[telemetry guide](telemetry.md) for configuration and migration from `observe()`.
+`integrations=` gives parts to optional integrations, here instrumentation of a
+port for `Telemetry`. See [Integrations](#integrations).
 
 Features automatically collect `Error` definitions from `raises=` declarations
 on their routers, policies and channels, including nested routers and channels.
@@ -124,6 +123,36 @@ preserves declaration order for routes and startup. Shutdown runs in reverse
 order, including cleanup of features that started before a later feature failed.
 Feature names are required, unique within a composition, and included in
 configuration diagnostics.
+
+### Integrations
+
+Optional integrations, such as MCP and OpenTelemetry, are enabled once per
+application and receive parts from features:
+
+```python
+from fastapi_canon.integrations.mcp import Mcp, McpMount
+from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
+
+projects = Feature(
+    name="projects",
+    routers=[router],
+    integrations=[
+        McpMount(server=projects_mcp, namespace="projects"),
+        instrument(ProjectRepository),
+    ],
+)
+app = Composition(
+    features=[projects],
+    integrations=[Mcp(path="/mcp"), Telemetry()],
+).build(FastAPI())
+```
+
+Enable each integration once. A part whose integration is not enabled fails
+with `canon.integrations.E001`, so an MCP endpoint is never opened by a feature
+alone. Route-only transports such as `WebRtcRouter` are routers, not integrations.
+
+Custom integrations subclass `fastapi_canon.integration.Integration`; parts set
+`integration: ClassVar[type[Integration]]`.
 
 ### Application router
 
@@ -252,8 +281,8 @@ projects_feature = Feature(name="projects", routers=[projects, health])
 Endpoints resolve `Inject[T]` and `FromDishka[T]` through the route class of
 the router where they are declared; an including router does not replace route
 classes. WebRTC sessions declare their admission contracts with `raises=` and
-`dependencies=` on `@router.webrtc(...)`; inherited HTTP contracts do not extend
-the separate WebRTC session descriptor.
+`dependencies=` on their `WebRtcRouter` and `@rtc.session(...)`; inherited HTTP
+contracts do not extend the separate WebRTC session descriptor.
 
 ### Dishka
 

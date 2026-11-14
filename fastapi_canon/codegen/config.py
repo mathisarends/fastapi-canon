@@ -2,27 +2,10 @@ import keyword
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Literal, cast
 
-type Generator = Literal["sse", "websockets", "webrtc", "external"]
-
-
-@dataclass(frozen=True)
-class TargetConfig:
-    name: str
-    generator: Generator
-    language: Literal["python", "typescript"] = "typescript"
-    output: Path | None = None
-    package: str = "api_client"
-    client_name: str = "ApiClient"
-    http_client: Literal["httpx", "httpx2"] = "httpx"
-    generate_command: tuple[str, ...] = ()
-    check_command: tuple[str, ...] = ()
-    timeout: int = 120
-    strict: bool = False
-    diagnostics: Path | None = None
-    allow_diagnostics: Path | None = None
-    include_operations: tuple[str, ...] | None = None
+from fastapi_canon.codegen.generators import TargetConfig, load_generator
 
 
 @dataclass(frozen=True)
@@ -97,13 +80,8 @@ def _target(root: Path, name: str, value: object) -> TargetConfig:
     if not isinstance(value, dict):
         raise ValueError(f"Target {name} must be a table")
     generator = value.get("generator")
-    if not isinstance(generator, str) or generator not in {
-        "sse",
-        "websockets",
-        "webrtc",
-        "external",
-    }:
-        raise ValueError(f"Target {name} needs a supported generator")
+    if not isinstance(generator, str) or not generator:
+        raise ValueError(f"Target {name} needs a generator name")
     if generator == "external":
         _keys(
             value, {"generator", "generate-command", "check-command", "timeout"}, name
@@ -118,27 +96,22 @@ def _target(root: Path, name: str, value: object) -> TargetConfig:
             check_command=_command(value.get("check-command")),
             timeout=timeout,
         )
-    _keys(
-        value,
-        {
-            "generator",
-            "language",
-            "output",
-            "package",
-            "client-name",
-            "python-http-client",
-            "strict",
-            "diagnostics",
-            "allow-diagnostics",
-            "include-operations",
-        },
-        name,
+    settings = load_generator(generator).settings
+    if not settings:
+        raise ValueError(f"Generator {generator} declares no languages")
+    language = value.get(
+        "language", "typescript" if "typescript" in settings else next(iter(settings))
     )
-    language = value.get("language", "typescript")
-    sse_keys = {"strict", "diagnostics", "allow-diagnostics", "include-operations"}
-    if generator != "sse" and value.keys() & sse_keys:
+    if not isinstance(language, str) or language not in settings:
         raise ValueError(
-            "SSE diagnostic and operation options apply only to SSE targets"
+            f"Unsupported language for target {name}; {generator} supports "
+            + ", ".join(settings)
+        )
+    unknown = value.keys() - {"generator", "language", "output"} - settings[language]
+    if unknown:
+        raise ValueError(
+            f"Target {name} does not accept {', '.join(sorted(unknown))} for "
+            f"{language} {generator} clients"
         )
     strict = value.get("strict", False)
     if type(strict) is not bool:
@@ -153,19 +126,9 @@ def _target(root: Path, name: str, value: object) -> TargetConfig:
         raise ValueError(
             f"Target {name} include-operations must contain unique nonempty IDs"
         )
-    if language not in {"python", "typescript"} or (
-        generator == "webrtc" and language != "typescript"
-    ):
-        raise ValueError(f"Unsupported language for target {name}")
-    if "package" in value and (generator != "websockets" or language != "python"):
-        raise ValueError("package applies only to Python WebSocket targets")
-    if "client-name" in value and generator == "sse":
-        raise ValueError("SSE client naming is owned by its specialized generator")
     http = value.get("python-http-client", "httpx")
-    if http not in {"httpx", "httpx2"} or (
-        "python-http-client" in value and (generator != "sse" or language != "python")
-    ):
-        raise ValueError("python-http-client applies only to Python SSE targets")
+    if http not in {"httpx", "httpx2"}:
+        raise ValueError(f"Target {name} python-http-client must be httpx or httpx2")
     package = value.get("package", "api_client")
     client = value.get("client-name", "ApiClient")
     if (
@@ -179,8 +142,8 @@ def _target(root: Path, name: str, value: object) -> TargetConfig:
         raise ValueError(f"Invalid package or client-name for target {name}")
     return TargetConfig(
         name,
-        cast(Generator, generator),
-        cast(Literal["python", "typescript"], language),
+        generator,
+        language,
         _path(root, value.get("output")),
         package,
         client,
@@ -193,7 +156,26 @@ def _target(root: Path, name: str, value: object) -> TargetConfig:
         if "allow-diagnostics" in value
         else None,
         include_operations=tuple(include) if include is not None else None,
+        options=MappingProxyType(
+            {key: value[key] for key in value.keys() - _COMMON_KEYS}
+        ),
     )
+
+
+_COMMON_KEYS = frozenset(
+    {
+        "generator",
+        "language",
+        "output",
+        "package",
+        "client-name",
+        "python-http-client",
+        "strict",
+        "diagnostics",
+        "allow-diagnostics",
+        "include-operations",
+    }
+)
 
 
 def _path(root: Path, value: object) -> Path:

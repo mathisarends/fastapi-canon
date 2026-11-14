@@ -188,22 +188,23 @@ Application authors keep using `APIRouter`, `Feature` and `Composition`, or ordi
 FastAPI route registration. Codegen does not require decorators naming clients,
 additional export apps, an SDK builder or a second router list.
 
-The Python export boundary now accepts typed formats and installed feature
+The Python export boundary now accepts contract kinds and installed feature
 references. The configured workflow can build on this selection value later:
 
 ```python
 from fastapi_canon import export_contracts
-from fastapi_canon.contracts import ContractKind, ContractSelection
+from fastapi_canon.contracts import ContractSelection
 
 contracts = export_contracts(
     app,
-    kinds=(ContractKind.OPENRPC,),
+    kinds=("openrpc",),
     selection=ContractSelection(features=(browser_tunnel,)),
 )
 ```
 
 `browser_tunnel` is the actual `Feature` passed to `Composition`, not its name.
-`ContractKind` is a `StrEnum`; the Python API rejects raw format strings.
+Contract kinds are plain strings; a kind without registered routes yields no
+document.
 `ContractSelection` is an immutable value with optional feature-reference and
 path tuples. Feature identity is validated against the installed application,
 including mounted FastAPI apps. Selection precedes RPC/WebRTC aggregate contract

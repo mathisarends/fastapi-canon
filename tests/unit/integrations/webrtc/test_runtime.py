@@ -26,6 +26,7 @@ from fastapi_canon.integrations.webrtc import (
     SessionEventKind,
     SessionLimits,
     WebRtcError,
+    WebRtcRouter,
 )
 from fastapi_canon.integrations.webrtc.contract import build_contract
 from fastapi_canon.integrations.webrtc.engine import PeerConfig, PeerObserver
@@ -33,7 +34,6 @@ from fastapi_canon.integrations.webrtc.engines import (
     ConnectionState,
     EngineCapabilities,
 )
-from fastapi_canon.integrations.webrtc.router import WebRtcRouter
 from pydantic import BaseModel, Field
 from websockets.exceptions import InvalidStatus
 

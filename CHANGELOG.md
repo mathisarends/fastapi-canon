@@ -32,6 +32,33 @@ All notable changes to `fastapi-canon` are documented in this file.
   checks. Keep checks free of side effects and remove assumptions about duplicate
   execution during the first build.
 
+- Optional integrations use one `integrations=` parameter. Replace
+  `Composition(mcp=McpOptions(...), telemetry=Telemetry(...))` with
+  `Composition(integrations=[Mcp(...), Telemetry(...)])`, and
+  `Feature(mcp=[...], instrumentation=...)` with `Feature(integrations=[...])`.
+  `McpOptions` is renamed to `Mcp`.
+
+- `instrument(...)` returns one `Instrumentation` part; remove `*` unpacking.
+  Instrumentation and `McpMount` parts fail with `canon.integrations.E001` unless
+  their integration is enabled. `Telemetry` is no longer bound implicitly; enable
+  `Telemetry.disabled()` where `telemetry=None` was used.
+
+- WebRTC sessions use their own router. Replace `@router.webrtc(...)` with
+  `rtc = WebRtcRouter(engine=...)`, `@rtc.session(...)` and
+  `Feature(routers=[rtc])`. `CanonWebRtcRouter` is now `WebRtcRouter`, and
+  `SessionOptions` is removed.
+
+- `ContractKind` is removed; contract kinds are strings such as `"openapi"`.
+  Read WebRTC documents from `contracts.documents["webrtc"]`.
+
+- The `mcp.routes`, `mcp.runtime`, `rpc.method_dependencies` and
+  `webrtc.factory_dependencies` check steps become `integration.Mcp` and
+  `integration.routes`. Update tooling that matches step names.
+
+- Codegen generators are loaded from `fastapi_canon.generators` entry points, and
+  targets reject keys that their generator does not accept for the language.
+  `TargetConfig` moved to `fastapi_canon.codegen.generators`.
+
 ### Fixed
 
 - Error registry contributions survive router inclusion through a typed
@@ -39,6 +66,8 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Added
 
+- `fastapi_canon.integration` for custom integrations, route contracts and
+  checks; generators and CLI commands register through entry points.
 - `AcquireTransactionLock` provides callable transaction lock acquisition.
   `TransactionLocks` remains an alias, with its existing `acquire()` operation.
 - `fastapi_canon.error` exposes the read-only `ErrorCatalog` and `AnyError`

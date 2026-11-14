@@ -11,7 +11,7 @@ from fastmcp.utilities.asgi_transport import StreamingASGITransport
 from pydantic import ConfigDict, Field
 
 from fastapi_canon import Composition, Feature
-from fastapi_canon.integrations.mcp import McpMount, McpOptions, McpServer
+from fastapi_canon.integrations.mcp import Mcp, McpMount, McpServer
 from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
 from tests.fixtures.telemetry import SpanCapture
 from tests.integration.integrations.mcp.test_runtime import connected
@@ -97,16 +97,20 @@ async def test_typed_capability_authentication_over_instrumented_http(
     feature = Feature(
         name="tools",
         providers=[dependencies],
-        instrumentation=instrument(ToolAccessRegistry),
-        mcp=[McpMount(server=server, namespace="tools")],
+        integrations=[
+            McpMount(server=server, namespace="tools"),
+            instrument(ToolAccessRegistry),
+        ],
     )
     with SpanCapture() as capture:
         app = Composition(
             features=[feature],
-            mcp=McpOptions(auth_factory=ToolCapabilityVerifier),
-            telemetry=Telemetry(tracer_provider=capture.provider)
-            if telemetry_enabled
-            else None,
+            integrations=[
+                Telemetry(tracer_provider=capture.provider)
+                if telemetry_enabled
+                else Telemetry.disabled(),
+                Mcp(auth_factory=ToolCapabilityVerifier),
+            ],
         ).build(FastAPI())
 
         async with (

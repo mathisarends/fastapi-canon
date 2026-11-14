@@ -14,7 +14,7 @@ from fastapi_canon import (
 )
 from fastapi_canon.error import ErrorConfigurationError
 from fastapi_canon.integrations.webrtc import Session
-from fastapi_canon.integrations.webrtc.canon import CanonWebRtcRouter
+from fastapi_canon.integrations.webrtc.canon import WebRtcRouter
 from fastapi_canon.integrations.webrtc.codegen.typescript import generate_typescript
 from fastapi_canon.integrations.webrtc.contract import build_contract
 from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine
@@ -42,7 +42,7 @@ class NoPeerEngine(AiortcEngine):
 
 
 def application(*, dependency: bool, declared: bool = True) -> FastAPI:
-    router = CanonWebRtcRouter(engine=NoPeerEngine())
+    router = WebRtcRouter(engine=NoPeerEngine())
 
     def authorize() -> None:
         if dependency:
@@ -86,7 +86,7 @@ def test_factory_and_dependency_problems_do_not_allocate_peers(
 
 
 def test_shared_local_contracts_use_composed_registry_and_effective_path() -> None:
-    router = CanonWebRtcRouter(engine=NoPeerEngine(), raises=[MISSING, MISSING])
+    router = WebRtcRouter(engine=NoPeerEngine(), raises=[MISSING, MISSING])
 
     @router.session("/{browser_id}", raises=[MISSING, FORBIDDEN, FORBIDDEN])
     async def video(browser_id: str) -> Session:
@@ -127,7 +127,7 @@ def test_router_policy_applies_to_webrtc_admission_and_contract() -> None:
         dependencies=[Depends(authorize)],
         raises=[FORBIDDEN],
     )
-    router = CanonWebRtcRouter(
+    router = WebRtcRouter(
         engine=NoPeerEngine(),
         policy=policy,
     )
@@ -156,7 +156,7 @@ def test_router_policy_applies_to_webrtc_admission_and_contract() -> None:
 
 
 def test_invalid_declarations_fail_during_configuration() -> None:
-    router = CanonWebRtcRouter(engine=NoPeerEngine(), raises=[MISSING])
+    router = WebRtcRouter(engine=NoPeerEngine(), raises=[MISSING])
     with pytest.raises(ErrorConfigurationError, match="Error instance"):
         router.session("/s", raises=[object()])  # type: ignore[list-item]
     with pytest.raises(ErrorConfigurationError, match="derives admission_errors"):
@@ -167,7 +167,7 @@ def test_error_after_accept_uses_protocol_close() -> None:
     async def ice(context: Any) -> Any:
         raise Missing()
 
-    router = CanonWebRtcRouter(engine=NoPeerEngine(), ice_servers=ice)
+    router = WebRtcRouter(engine=NoPeerEngine(), ice_servers=ice)
 
     @router.session("/s", raises=[MISSING])
     async def video() -> Session:
@@ -201,7 +201,7 @@ def test_embedded_problem_schema_preserves_nested_extension_references() -> None
         extensions_model=Details,
         extensions=lambda exc: Details(items=[Item(reason="gone")]),
     )
-    router = CanonWebRtcRouter(engine=NoPeerEngine())
+    router = WebRtcRouter(engine=NoPeerEngine())
 
     @router.session("/s", raises=[error])
     async def video() -> Session:

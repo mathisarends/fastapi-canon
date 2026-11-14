@@ -13,7 +13,7 @@ from fastapi_canon.cli import main
     [
         ("http", "APIRouter", "get('/')", "raise Missing()"),
         ("sse", "APIRouter", "sse('/')", "yield 1\n    raise Missing()"),
-        ("webrtc", "APIRouter", "webrtc('/')", "raise Missing()"),
+        ("webrtc", "WebRtcRouter", "session('/')", "raise Missing()"),
         ("rpc", "RpcChannel", "method()", "raise Missing()"),
     ],
 )
@@ -40,6 +40,7 @@ def test_reexported_router_keeps_its_error_contract(
         dedent(f"""
 from collections.abc import AsyncIterator
 from fastapi_canon import APIRouter, Error, Feature
+from fastapi_canon.integrations.webrtc import WebRtcRouter
 from fastapi_canon.integrations.websockets import RpcChannel
 
 raise RuntimeError('Application source must not be imported')

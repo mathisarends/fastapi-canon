@@ -84,6 +84,17 @@ diagnostic report is written even on failure or in check mode. Keep reports outs
 the contracts and native output directories and distinct from configuration and
 allowance inputs. Check mode otherwise preserves contracts and generated clients.
 
+### Generator registration
+
+`generator` names an entry point in the `fastapi_canon.generators` group
+(0.21.0, unreleased). Canon registers `sse`, `websockets` and `webrtc`; register
+your own `fastapi_canon.codegen.generators.Generator` with:
+
+```toml
+[project.entry-points."fastapi_canon.generators"]
+graphql = "my_package.codegen:GENERATOR"
+```
+
 ## Developer commands
 
 ```console
