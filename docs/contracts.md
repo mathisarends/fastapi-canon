@@ -8,7 +8,7 @@ messages and operations, while registered routes determine their effective paths
 ## Python API
 
 The `selection` argument is available in Canon 0.20.0 and later. Contract kinds
-are plain strings from Canon 0.21.0 (unreleased); 0.20 uses `ContractKind`.
+are plain strings from Canon 0.21.0; 0.20 uses `ContractKind`.
 
 ```python
 from fastapi_canon import export_contracts

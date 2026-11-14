@@ -66,7 +66,7 @@ Composition owns the application Dishka container and feature installation.
 Applications own authentication, business resources and telemetry providers.
 See [composition](composition.md) and the integration guides for lifecycle rules.
 
-In the prepared 0.21.0 release, optional arguments select their default only for
+In Canon 0.21.0 and later, optional arguments select their default only for
 `None`. Explicit empty values and callable objects with false truthiness retain
 their meaning; for example, `message=""` preserves an empty error message and
 an empty path-parameter mapping overrides the handshake parameters.

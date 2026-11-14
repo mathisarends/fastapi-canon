@@ -6,20 +6,12 @@ version; the reference service is an example. `release.toml` and
 
 ## Current versions
 
-**Published: 0.20.0 (2026-11-13).**
-
-This release requires FastAPI >=0.143.1, adds typed contract selection, changes
-generated SSE namespace access and makes package re-exported error paths visible
-to source checking. Follow the [migration](package-migration.md#upgrade-to-0200)
-and [changelog](../CHANGELOG.md#0200---2026-11-13) before upgrading.
-
-**Prepared: 0.21.0 (unpublished).** It unifies optional integrations under
+**Published: 0.21.0 (2026-11-14).** It unifies optional integrations under
 `integrations=`, moves WebRTC sessions to `WebRtcRouter`, replaces contract-kind
 enums with strings and enables automatic resource telemetry. It also strengthens
 generated-file ownership validation and runs feature checks once per new build.
 Follow the [0.21.0 migration](package-migration.md#upgrade-to-0210) and
-[changelog](../CHANGELOG.md#0210---2026-11-14). Exact-source CI and a release
-dry run must pass after preparation is merged to `main`.
+[changelog](../CHANGELOG.md#0210---2026-11-14) before upgrading.
 
 Published artifacts, manifests and run results are linked below. They record
 verified publications; prepared source versions are not publication evidence.
@@ -27,6 +19,7 @@ Historical links retain their original repositories.
 
 | Version | Source | CI | Dry run | Publication | Wheel, sdist and manifest |
 | --- | --- | --- | --- | --- | --- |
+| 0.21.0 (2026-11-14) | [Source](https://github.com/mathisarends/fastapi-canon/commit/96ab6fba652f8ab9e574d2e43c3c574c30b13ab2) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/43610469562) | [Dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/43611339346) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/43611879247) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.21.0) |
 | 0.20.0 (2026-11-13) | [Source](https://github.com/mathisarends/fastapi-canon/commit/69639cfc5cba40ff299fe3ccb210d8dd1e42823c) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/43397811359) | [Dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/43492517877) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/43493725691) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.20.0) |
 | 0.19.0 (2026-11-10) | [Source](https://github.com/mathisarends/fastapi-canon/commit/f40ed640c99822abf2f7709ede1e16e0ea6fa8b2) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/42853226604) | [Preparatory dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/42850938534) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/42855022556) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.19.0) |
 | 0.18.0 (2026-11-10) | [Source](https://github.com/mathisarends/fastapi-canon/commit/f4fa6096ff9c18c2fe5df32c2cae40ee0d9ec969) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/42785593526) | [Dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/42787033263) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/42788045597) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.18.0) |

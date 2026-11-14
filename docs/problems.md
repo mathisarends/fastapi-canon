@@ -214,7 +214,7 @@ tooling owns its HTTP error handling.
 
 ## Custom transport adapters
 
-In the prepared 0.21.0 release, adapters can read the application's installed
+From Canon 0.21.0, adapters can read the application's installed
 `ErrorCatalog` through `fastapi_canon.error.installed_catalog(app)`. The protocol
 provides read-only error lookup and resolved problem type URIs; `AnyError` is the
 shared type for an error definition with any exception type.
