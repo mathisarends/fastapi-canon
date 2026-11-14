@@ -364,6 +364,9 @@ def unique_provider_sources(
 def _integration_parts(
     values: Sequence[object], parameter: str
 ) -> tuple[IntegrationPart, ...]:
+    if not isinstance(values, Sequence) or isinstance(values, str):
+        msg = f"{parameter} must be a list of integration parts"
+        raise FeatureConfigurationError(msg)
     result: list[IntegrationPart] = []
     seen: set[int] = set()
     for index, value in enumerate(values):

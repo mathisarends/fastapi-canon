@@ -22,7 +22,11 @@ import fastapi_canon.integrations.opentelemetry as telemetry_api
 from fastapi_canon import Composition, ErrorOptions, Feature
 from fastapi_canon.error import Error
 from fastapi_canon.exceptions import FeatureConfigurationError
-from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
+from fastapi_canon.integrations.opentelemetry import (
+    Instrumentation,
+    Telemetry,
+    instrument,
+)
 from fastapi_canon.integrations.websockets import CanonWebSocketRouter
 from fastapi_canon.router import CanonRouter
 from tests.fixtures.telemetry import SpanCapture
@@ -96,7 +100,7 @@ def callable_application(options: Telemetry) -> FastAPI:
                 routers=[router],
                 errors=[Error(Missing, status=404, code="missing", title="Missing")],
                 integrations=[
-                    *instrument(Repository, CallableService, expected=(Missing,))
+                    instrument(Repository, CallableService, expected=(Missing,))
                 ],
             ),
         ),
@@ -137,7 +141,7 @@ def application(options: Telemetry, *, expected: bool = True) -> FastAPI:
         providers=[Dependencies],
         routers=[router],
         integrations=[
-            *instrument(Repository, Service, expected=[Missing] if expected else [])
+            instrument(Repository, Service, expected=[Missing] if expected else [])
         ],
     )
     composition = Composition(
@@ -323,11 +327,11 @@ def test_disabled_metadata_keeps_original_instances() -> None:
 
 
 @pytest.mark.parametrize("ports", [(Repository,), (Repository, Service)])
-def test_instrument_always_returns_a_tuple(ports: tuple[type, ...]) -> None:
-    declarations = instrument(ports[0], *ports[1:])
+def test_instrument_returns_one_part_for_all_ports(ports: tuple[type, ...]) -> None:
+    declaration = instrument(ports[0], *ports[1:])
 
-    assert isinstance(declarations, tuple)
-    assert tuple(spec.port for spec in declarations) == ports
+    assert isinstance(declaration, Instrumentation)
+    assert declaration.ports == ports
 
 
 def test_instrument_requires_a_positional_port() -> None:
@@ -335,6 +339,8 @@ def test_instrument_requires_a_positional_port() -> None:
         instrument()  # type: ignore[call-arg]
     with pytest.raises(TypeError, match="port"):
         instrument(port=Repository)  # type: ignore[call-arg]
+    with pytest.raises(FeatureConfigurationError, match="unique"):
+        instrument(Repository, Repository)
 
 
 def test_combined_groups_keep_expected_failures_independent() -> None:
@@ -346,8 +352,8 @@ def test_combined_groups_keep_expected_failures_independent() -> None:
         name="items",
         providers=[Dependencies],
         integrations=[
-            *instrument(Repository, expected=(Missing,)),
-            *instrument(Service),
+            instrument(Repository, expected=(Missing,)),
+            instrument(Service),
         ],
     )
     with SpanCapture() as capture:
@@ -373,20 +379,16 @@ def test_combined_groups_keep_expected_failures_independent() -> None:
 
 def test_instrumentation_is_immutable_and_copied_by_feature() -> None:
     expected: list[type[Exception]] = [Missing]
-    group = instrument(Repository, Service, expected=expected, component="named")
-    declarations = list(group)
-    feature = Feature(name="items", integrations=[*declarations])
+    declaration = instrument(Repository, Service, expected=expected, component="named")
+    feature = Feature(name="items", integrations=[declaration])
     expected.clear()
-    declarations.clear()
 
-    repository, service = group
-    assert repository.port is Repository
-    assert service.port is Service
-    assert repository.expected == service.expected == (Missing,)
-    assert repository.component == service.component == "named"
-    assert feature.integrations == group
+    assert declaration.ports == (Repository, Service)
+    assert declaration.expected == (Missing,)
+    assert declaration.component == "named"
+    assert feature.integrations == (declaration,)
     with pytest.raises(FrozenInstanceError):
-        repository.component = "other"  # type: ignore[misc]
+        declaration.component = "other"  # type: ignore[misc]
     assert not hasattr(telemetry_api, "observe")
 
 
@@ -395,7 +397,7 @@ def test_feature_reuse_keeps_providers_and_app_telemetry_isolated() -> None:
     provider = Provider()
     provider.provide(lambda: original, provides=Repository, scope=Scope.APP)
     feature = Feature(
-        name="items", providers=[provider], integrations=[*instrument(Repository)]
+        name="items", providers=[provider], integrations=[instrument(Repository)]
     )
 
     with SpanCapture() as first, SpanCapture() as second:
@@ -578,6 +580,8 @@ def test_invalid_instrumentation() -> None:
         instrument(Repository, component=None)  # type: ignore[arg-type]
     with pytest.raises(FeatureConfigurationError, match="integration part"):
         Feature(name="invalid", integrations=[Repository])  # type: ignore[list-item]
+    with pytest.raises(FeatureConfigurationError, match="list of integration parts"):
+        Feature(name="invalid", integrations=instrument(Repository))  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize("enabled", [False, True])
@@ -587,14 +591,17 @@ def test_duplicate_instrumentation_is_rejected(
 ) -> None:
     features = (
         (
-            Feature(name="first", integrations=[*instrument(Repository)]),
-            Feature(name="second", integrations=[*instrument(Repository)]),
+            Feature(name="first", integrations=[instrument(Repository)]),
+            Feature(name="second", integrations=[instrument(Repository)]),
         )
         if across_features
         else (
             Feature(
                 name="duplicate",
-                integrations=[*instrument(Repository, Repository)],
+                integrations=[
+                    instrument(Repository),
+                    instrument(Repository, expected=[Missing]),
+                ],
             ),
         )
     )
@@ -697,7 +704,7 @@ def test_provider_scopes_caching_and_original_cleanup() -> None:
                 Feature(
                     name="app",
                     providers=[Dependencies],
-                    integrations=[*instrument(Repository)],
+                    integrations=[instrument(Repository)],
                 ),
             ),
             integrations=[Telemetry(tracer_provider=capture.provider)],
@@ -832,12 +839,12 @@ def test_named_components_keep_feature_ownership() -> None:
                 Feature(
                     name="default",
                     providers=[Dependencies],
-                    integrations=[*instrument(Repository)],
+                    integrations=[instrument(Repository)],
                 ),
                 Feature(
                     name="named",
                     providers=[lambda: Dependencies(component="named")],
-                    integrations=[*instrument(Repository, component="named")],
+                    integrations=[instrument(Repository, component="named")],
                 ),
             ),
             integrations=[Telemetry(tracer_provider=capture.provider)],
@@ -879,9 +886,15 @@ def test_declarations_and_disabled_composition_import_no_otel_runtime() -> None:
         class Dependencies(Provider):
             port = provide(Port, scope=Scope.REQUEST)
         unenabled = Composition(features=(Feature(
-            name="test", providers=[Dependencies], integrations=instrument(Port)
+            name="test", providers=[Dependencies], integrations=[instrument(Port)]
         ),)).check(FastAPI())
         assert [issue.code for issue in unenabled.issues] == ["canon.integrations.E001"]
+        Composition(
+            features=(Feature(
+                name="test", providers=[Dependencies], integrations=[instrument(Port)]
+            ),),
+            integrations=[Telemetry.disabled()],
+        ).build(FastAPI())
         assert not any(name.startswith("opentelemetry") for name in sys.modules)
         composition = Composition(integrations=[Telemetry()])
         report = composition.check(FastAPI())

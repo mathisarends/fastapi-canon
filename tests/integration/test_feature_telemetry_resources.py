@@ -88,7 +88,7 @@ async def test_http_request_shares_configuration_exclusions_and_resource_lifetim
                         name="resources",
                         providers=[Dependencies],
                         routers=[router],
-                        integrations=[*instrument(Service)],
+                        integrations=[instrument(Service)],
                     ),
                 ),
                 integrations=[

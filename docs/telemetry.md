@@ -32,40 +32,42 @@ tasks = Feature(
     name="tasks",
     routers=(router,),
     providers=(TaskProvider,),
-    instrumentation=instrument(
-        TaskRepository,
-        TaskService,
-        expected=(TaskNotFound,),
-    ),
+    integrations=[
+        instrument(TaskRepository),
+        instrument(TaskService, expected=(TaskNotFound,)),
+    ],
 )
 app = Composition(
     features=(tasks,),
-    telemetry=Telemetry(
-        tracer_provider=tracer_provider,
-        exclude=lambda scope: scope["path"] in {"/health", "/ready"},
-    ),
+    integrations=[
+        Telemetry(
+            tracer_provider=tracer_provider,
+            exclude=lambda scope: scope["path"] in {"/health", "/ready"},
+        ),
+    ],
 ).build(FastAPI())
 ```
 
 `instrument(Port, OtherPort, ...)` requires at least one positional port and
-returns a tuple of immutable `Instrumentation` declarations in input order,
-including for a single port. Pass that tuple directly to `Feature.instrumentation`.
-The keyword-only `expected` and `component` options apply to every port in the call.
-For ports with different settings, unpack multiple groups into one sequence:
+returns one immutable `Instrumentation` part, which goes into
+`Feature(integrations=[...])` like any other integration part. The keyword-only
+`expected` and `component` options apply to every port in the call. Use one call
+per group of ports with different settings:
 
 ```python
-instrumentation = [
-    *instrument(TaskRepository, AuditRepository),
-    *instrument(TaskService, expected=(TaskNotFound,)),
-    *instrument(BillingGateway, component="billing"),
+integrations = [
+    instrument(TaskRepository, AuditRepository),
+    instrument(TaskService, expected=(TaskNotFound,)),
+    instrument(BillingGateway, component="billing"),
 ]
 ```
 
 Dishka providers stay focused on their normal bindings.
-Existing `@provide` factory methods work too. Composition generates
-separate decorator providers only when `telemetry=Telemetry(...)` is supplied.
-With `telemetry=None`, the declarations add no DI dependencies or decorators and
-import no Canon OpenTelemetry runtime. Direct Dishka containers can use the same
+Existing `@provide` factory methods work too. Instrumentation requires
+`Telemetry` in `Composition(integrations=[...])`; a feature that instruments ports
+in a composition without it is rejected with `canon.integrations.E001`. Use
+`Telemetry.disabled()` to keep the declarations without producing telemetry; it
+adds no proxies or spans. Direct Dishka containers can use the same
 original providers without Canon. Features and provider instances can be reused
 across applications; their instrumentation runtime belongs to each composition.
 
@@ -109,7 +111,7 @@ out of longer-lived tokens; return detached identity data for those bindings.
 Replace `Feature(instrumentation=[instrument(Port)])` with
 `Feature(instrumentation=instrument(Port))`. Combine ports sharing settings with
 `instrument(FirstPort, SecondPort, expected=(ExpectedError,))`. Unpack each call
-with `*instrument(...)` when combining groups with different settings in a list
+with `instrument(...)` when combining groups with different settings in a list
 or tuple. Replace `instrument(port=Port)` with the positional `instrument(Port)`.
 
 ### Migration from 0.10

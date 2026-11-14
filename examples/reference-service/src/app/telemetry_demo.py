@@ -176,5 +176,5 @@ def _notification_feature() -> Feature:
         name="notifications",
         routers=(router,),
         providers=(NotifierProvider,),
-        integrations=[*instrument(NotificationGateway)],
+        integrations=[instrument(NotificationGateway)],
     )

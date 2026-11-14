@@ -99,7 +99,7 @@ async def test_typed_capability_authentication_over_instrumented_http(
         providers=[dependencies],
         integrations=[
             McpMount(server=server, namespace="tools"),
-            *instrument(ToolAccessRegistry),
+            instrument(ToolAccessRegistry),
         ],
     )
     with SpanCapture() as capture:

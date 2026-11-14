@@ -103,7 +103,7 @@ def _verify() -> None:
                     name="compatibility",
                     routers=[router],
                     providers=[provider],
-                    integrations=[*instrument(Ping)],
+                    integrations=[instrument(Ping)],
                 ),
             ),
             integrations=[options],

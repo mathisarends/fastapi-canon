@@ -495,7 +495,7 @@ def _observation_check(*, enabled: bool) -> None:
                 name="observed",
                 providers=[Dependencies],
                 routers=[router],
-                integrations=[*instrument(Ping)],
+                integrations=[instrument(Ping)],
             ),
         ),
         integrations=[Telemetry() if enabled else None],

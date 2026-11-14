@@ -121,7 +121,7 @@ async def scenario(
                     name="http",
                     providers=[provider],
                     routers=[router],
-                    integrations=[*instrument(UseCase, Repository)],
+                    integrations=[instrument(UseCase, Repository)],
                 ),
                 observations,
                 cancel_started,
