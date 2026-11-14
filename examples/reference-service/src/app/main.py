@@ -30,7 +30,7 @@ def create_app(  # smelt: ignore[SMT429] -- external API
         features=FEATURES,
         router_factory=lambda: APIRouter(prefix="/api/v1"),
         errors=ErrorOptions(type_base="https://api.example.test/problems"),
-        telemetry=telemetry,
+        integrations=[telemetry],
     )
     return composition.build(app)
 

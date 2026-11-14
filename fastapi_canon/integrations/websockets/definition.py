@@ -10,7 +10,6 @@ from urllib.parse import unquote
 
 from pydantic import BaseModel
 
-from fastapi_canon.contract_routes import RPC_ENDPOINT_ATTRIBUTE
 from fastapi_canon.error.catalog import app_registry
 from fastapi_canon.integrations.websockets.protocol import (
     RpcMethodDefinition,
@@ -55,7 +54,7 @@ from fastapi_canon.integrations.websockets.server import (
     RpcServer,
 )
 
-ENDPOINT_ATTRIBUTE = RPC_ENDPOINT_ATTRIBUTE
+ENDPOINT_ATTRIBUTE = "__canon_rpc_endpoint__"
 
 
 @dataclass(frozen=True, slots=True, eq=False)

@@ -18,6 +18,7 @@ from fastapi_canon.diagnostics import (
     ErrorInfo,
     FeatureInfo,
     OperationInfo,
+    qualified_name,
 )
 from fastapi_canon.error.contracts import (
     ErrorCatalog,
@@ -154,13 +155,6 @@ def http_routes(router: APIRouter) -> Iterator[_HttpRoute]:
                 original,
                 tuple(route.callbacks or ()),
             )
-
-
-def qualified_name(value: object) -> str:
-    subject = value if hasattr(value, "__qualname__") else type(value)
-    return (
-        f"{getattr(subject, '__module__', '')}.{getattr(subject, '__qualname__', '')}"
-    )
 
 
 @dataclass(frozen=True, slots=True)

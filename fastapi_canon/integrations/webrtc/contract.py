@@ -23,11 +23,11 @@ from starlette.routing import BaseRoute
 
 from fastapi_canon.contract_routes import iter_contract_routes
 from fastapi_canon.integrations.webrtc.declarations import (
+    DECLARATION_ATTRIBUTE,
     DataChannelSpec,
     SessionDeclaration,
 )
 from fastapi_canon.integrations.webrtc.protocol import PROTOCOL_VERSION, SUBPROTOCOL
-from fastapi_canon.integrations.webrtc.router import DECLARATION_ATTRIBUTE
 
 if TYPE_CHECKING:
     # FastAPI does not document Dependant. Only path_params, query_params and

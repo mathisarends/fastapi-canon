@@ -34,12 +34,14 @@ async def test_overlapping_requests_correlate_with_exported_server_spans(
         Composition(
             features=(Feature(name="tasks"),),
             request_logging=True,
-            telemetry=Telemetry(
-                tracer_provider=capture.provider,
-                metrics=False,
-                logs=False,
-                problem_details=problem_details,
-            ),
+            integrations=[
+                Telemetry(
+                    tracer_provider=capture.provider,
+                    metrics=False,
+                    logs=False,
+                    problem_details=problem_details,
+                )
+            ],
         ).build(app)
         async with (
             httpx.AsyncClient(

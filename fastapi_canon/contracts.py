@@ -1,26 +1,20 @@
 """Export the contracts of a composed application without starting its runtime."""
 
-from collections.abc import Sequence
-from dataclasses import dataclass
-from enum import StrEnum
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Any
 
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
-from fastapi_canon.contract_routes import (
-    RPC_ENDPOINT_ATTRIBUTE,
-    WEBRTC_DECLARATION_ATTRIBUTE,
-    iter_contract_routes,
-)
+from fastapi_canon.contract_routes import iter_contract_routes
 from fastapi_canon.feature import Feature, installed_contract_routes
+from fastapi_canon.integration import ContractExporter, attached_route
 from fastapi_canon.openapi import export_openapi
 
-
-class ContractKind(StrEnum):
-    OPENAPI = "openapi"
-    OPENRPC = "openrpc"
-    WEBRTC = "webrtc"
+OPENAPI = "openapi"
+"""The contract kind of the application's HTTP OpenAPI document."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,30 +59,38 @@ class ContractSelection:
 
 @dataclass(frozen=True, slots=True)
 class Contracts:
-    """An application contract snapshot; absent or unselected transports are None."""
+    """An application contract snapshot, keyed by contract kind.
 
-    openapi: dict[str, Any] | None = None
-    openrpc: dict[str, Any] | None = None
-    webrtc: dict[str, Any] | None = None
+    Kinds are ``openapi`` plus those of the integration routes that the
+    application registers, such as ``openrpc`` or ``webrtc``.
+    """
+
+    documents: Mapping[str, dict[str, Any]] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "documents", MappingProxyType(dict(self.documents)))
 
     @property
-    def documents(self) -> dict[str, dict[str, Any]]:
-        """Documents keyed by their stable export filenames without extensions."""
-        return {
-            kind: document
-            for kind in ("openapi", "openrpc", "webrtc")
-            if (document := getattr(self, kind)) is not None
-        }
+    def openapi(self) -> dict[str, Any] | None:
+        """The HTTP OpenAPI document, if selected."""
+        return self.documents.get(OPENAPI)
+
+    @property
+    def openrpc(self) -> dict[str, Any] | None:
+        """The WebSocket OpenRPC document, if any RPC endpoint is registered."""
+        return self.documents.get("openrpc")
 
 
 def export_contracts(
     app: FastAPI,
     *,
-    kinds: Sequence[ContractKind] = tuple(ContractKind),
+    kinds: Sequence[str] | None = None,
     selection: ContractSelection | None = None,
     base_url: str = "{baseUrl}",
 ) -> Contracts:
-    """Export registered HTTP/SSE, RPC and WebRTC declarations.
+    """Export OpenAPI and the contracts of registered integration routes.
+
+    ``kinds`` selects documents by kind; ``None`` exports every available kind.
 
     This never enters the lifespan or resolves dependencies. The application
     must already be composed. Its factory and module imports still execute
@@ -99,51 +101,55 @@ def export_contracts(
     """
     if not isinstance(app, FastAPI):
         raise TypeError("export_contracts requires a FastAPI application")
-    selected = tuple(kinds)
-    if (
+    selected = None if kinds is None else tuple(kinds)
+    if selected is not None and (
         not selected
         or len(set(selected)) != len(selected)
-        or any(not isinstance(kind, ContractKind) for kind in selected)
+        or any(not isinstance(kind, str) or not kind for kind in selected)
     ):
-        raise ValueError(
-            "kinds must select unique ContractKind members (openapi, openrpc or webrtc)"
-        )
+        raise ValueError("kinds must contain unique, nonempty contract kind names")
     if selection is not None and not isinstance(selection, ContractSelection):
         raise TypeError("selection must be a ContractSelection")
     routes = _select_routes(app, selected, selection) if selection is not None else None
-    documents: dict[str, Any] = {}
-    endpoints = tuple(
-        getattr(route, "endpoint", None)
-        for _, route in (iter_contract_routes(app.routes) if routes is None else routes)
-    )
-    if ContractKind.OPENAPI in selected:
+    candidates = tuple(iter_contract_routes(app.routes)) if routes is None else routes
+    documents: dict[str, dict[str, Any]] = {}
+    if selected is None or OPENAPI in selected:
         document = export_openapi(app)
         if routes is not None:
             _select_openapi(document, routes)
-        documents["openapi"] = document
-    if ContractKind.OPENRPC in selected and any(
-        hasattr(endpoint, RPC_ENDPOINT_ATTRIBUTE) for endpoint in endpoints
-    ):
-        from fastapi_canon.integrations.websockets.schema.application import (
-            export_rpc_contract,
-        )
+        documents[OPENAPI] = document
+    for kind, exporter in route_exporters(candidates).items():
+        if selected is not None and kind not in selected:
+            continue
+        exported = exporter.export(app, candidates, base_url=base_url)
+        if exported is not None:
+            documents[kind] = exported
+    return Contracts(documents)
 
-        documents["openrpc"] = export_rpc_contract(
-            app, base_url=base_url, registered_routes=routes
-        )
-    if ContractKind.WEBRTC in selected and any(
-        hasattr(endpoint, WEBRTC_DECLARATION_ATTRIBUTE) for endpoint in endpoints
-    ):
-        from fastapi_canon.integrations.webrtc.contract import build_contract
 
-        document = build_contract(app, registered_routes=routes)
-        if document["sessions"]:
-            documents["webrtc"] = document
-    return Contracts(**documents)
+def route_exporters(
+    routes: Sequence[tuple[str, Any]],
+) -> dict[str, ContractExporter]:
+    """Return the distinct contract exporters of *routes*, keyed by kind."""
+    exporters: dict[str, ContractExporter] = {}
+    for _, route in routes:
+        attached = attached_route(getattr(route, "endpoint", None))
+        exporter = attached.contract if attached is not None else None
+        if exporter is None:
+            continue
+        previous = exporters.setdefault(exporter.kind, exporter)
+        if previous is not exporter and type(previous) is not type(exporter):
+            raise ValueError(
+                f"Contract kind {exporter.kind!r} is exported by both "
+                f"{type(previous).__name__} and {type(exporter).__name__}"
+            )
+        if exporter.kind == OPENAPI:
+            raise ValueError("Contract kind 'openapi' is reserved for HTTP routes")
+    return exporters
 
 
 def _select_routes(
-    app: FastAPI, kinds: tuple[ContractKind, ...], selection: ContractSelection
+    app: FastAPI, kinds: tuple[str, ...] | None, selection: ContractSelection
 ) -> tuple[tuple[str, Any], ...]:
     features, owned = installed_contract_routes(app)
     requested = {id(feature) for feature in selection.features or ()}
@@ -169,18 +175,11 @@ def _select_routes(
     }
     eligible = []
     for path, route in iter_contract_routes(app.routes):
-        endpoint = getattr(route, "endpoint", None)
+        attached = attached_route(getattr(route, "endpoint", None))
+        exporter = attached.contract if attached is not None else None
         if (
-            (ContractKind.OPENAPI in kinds and _route_key(path, route) in root_http)
-            or (
-                ContractKind.OPENRPC in kinds
-                and hasattr(endpoint, RPC_ENDPOINT_ATTRIBUTE)
-            )
-            or (
-                ContractKind.WEBRTC in kinds
-                and hasattr(endpoint, WEBRTC_DECLARATION_ATTRIBUTE)
-            )
-        ):
+            (kinds is None or OPENAPI in kinds) and _route_key(path, route) in root_http
+        ) or (exporter is not None and (kinds is None or exporter.kind in kinds)):
             eligible.append((path, route))
     missing = set(selection.paths or ()) - {path for path, _ in eligible}
     if missing:

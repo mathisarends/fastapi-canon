@@ -13,10 +13,9 @@ from fastapi_canon import (
     Feature,
     export_contracts,
 )
-from fastapi_canon.contracts import ContractKind, ContractSelection
+from fastapi_canon.contracts import ContractSelection
 from fastapi_canon.integrations.sse.canon import CanonStreamRouter
-from fastapi_canon.integrations.webrtc import Session
-from fastapi_canon.integrations.webrtc.router import WebRtcRouter
+from fastapi_canon.integrations.webrtc import Session, WebRtcRouter
 from fastapi_canon.integrations.websockets import (
     CanonWebSocketRouter,
     Inject,
@@ -86,8 +85,8 @@ def test_export_matches_registered_http_sse_rpc_and_webrtc_paths() -> None:
         contracts.openrpc["x-rpckit-binary-streams"][0]["url"]
         == "wss://api.example.test" + prefix + "/frames"
     )
-    assert contracts.webrtc is not None
-    assert contracts.webrtc["sessions"][0]["path"] == prefix + "/webrtc"
+    assert "webrtc" in contracts.documents
+    assert contracts.documents["webrtc"]["sessions"][0]["path"] == prefix + "/webrtc"
     with (
         TestClient(app) as client,
         client.websocket_connect("/api/v1/projects/p/sessions/s/control") as socket,
@@ -122,7 +121,7 @@ def test_export_omits_unmounted_endpoints_and_keeps_service_contract_independent
     app = FastAPI()
     app.include_router(routes, prefix="/api")
 
-    document = export_contracts(app, kinds=[ContractKind.OPENRPC]).openrpc
+    document = export_contracts(app, kinds=["openrpc"]).openrpc
 
     assert document is not None
     assert [method["name"] for method in document["methods"]] == ["public.ping"]
@@ -154,7 +153,7 @@ def test_export_reads_custom_handlers_and_mounted_subapplications() -> None:
     app = FastAPI()
     app.mount("/backend", child)
 
-    document = export_contracts(app, kinds=[ContractKind.OPENRPC]).openrpc
+    document = export_contracts(app, kinds=["openrpc"]).openrpc
 
     assert document is not None
     assert document["servers"][0]["url"] == "{baseUrl}/backend/v1/rpc"
@@ -173,7 +172,7 @@ def test_export_rejects_ambiguous_multiple_mounts_with_both_paths() -> None:
     app.include_router(router, prefix="/v2")
 
     with pytest.raises(ProtocolDefinitionError, match="'/v1/rpc' and '/v2/rpc'"):
-        export_contracts(app, kinds=[ContractKind.OPENRPC])
+        export_contracts(app, kinds=["openrpc"])
 
 
 def test_export_never_enters_lifespan_and_absent_transports_are_none() -> None:
@@ -194,7 +193,7 @@ def test_export_never_enters_lifespan_and_absent_transports_are_none() -> None:
 
     assert set(contracts.documents) == {"openapi"}
     assert contracts.openrpc is None
-    assert contracts.webrtc is None
+    assert "webrtc" not in contracts.documents
     assert app.openapi()["openapi"] == "3.1.0"
 
 
@@ -227,7 +226,7 @@ def test_export_preserves_raw_sockets_and_composed_error_catalog(
 
     document = export_contracts(
         app,
-        kinds=[ContractKind.OPENRPC],
+        kinds=["openrpc"],
         selection=ContractSelection(features=(feature,)) if select_feature else None,
     ).openrpc
 
@@ -242,7 +241,7 @@ def test_export_preserves_raw_sockets_and_composed_error_catalog(
 
 @pytest.mark.parametrize(
     "kinds",
-    [[], [ContractKind.OPENAPI, ContractKind.OPENAPI], ["openapi"], ["unknown"]],
+    [[], ["openapi", "openapi"], [""], [1]],
 )
 def test_export_rejects_invalid_selection(kinds: list) -> None:
     with pytest.raises(ValueError, match="unique"):

@@ -8,7 +8,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi_canon.integrations.webrtc import Session
 from fastapi_canon.integrations.webrtc.contract import build_contract, dumps
-from fastapi_canon.integrations.webrtc.router import WebRtcRouter
+from fastapi_canon.integrations.webrtc.router import SessionRouter
 from tests.unit.integrations.webrtc import contract_app
 from tests.unit.integrations.webrtc.fake_engine import FakeEngine
 
@@ -85,7 +85,7 @@ def test_contract_serialization_is_deterministic() -> None:
 def test_contract_from_routes_and_empty_apps() -> None:
     assert build_contract(FastAPI())["sessions"] == []
     assert build_contract(FastAPI())["definitions"] == {}
-    rtc = WebRtcRouter(engine=FakeEngine())
+    rtc = SessionRouter(engine=FakeEngine())
 
     @rtc.session("/s")
     def only() -> Session:
@@ -95,8 +95,8 @@ def test_contract_from_routes_and_empty_apps() -> None:
 
 
 def test_duplicate_session_names_are_rejected() -> None:
-    first = WebRtcRouter(engine=FakeEngine())
-    second = WebRtcRouter(engine=FakeEngine())
+    first = SessionRouter(engine=FakeEngine())
+    second = SessionRouter(engine=FakeEngine())
 
     @first.session("/a", name="same")
     def a() -> Session:
@@ -117,7 +117,7 @@ def test_duplicate_session_names_are_rejected() -> None:
 
 def test_router_validates_its_arguments() -> None:
     with pytest.raises(ValueError, match="max_sessions"):
-        WebRtcRouter(engine=FakeEngine(), max_sessions=0)
+        SessionRouter(engine=FakeEngine(), max_sessions=0)
 
 
 def test_example_contract_is_current() -> None:
@@ -139,7 +139,7 @@ def test_admission_provider_receives_app_and_exports_detached_metadata() -> None
         seen.append(app)
         return errors
 
-    router = WebRtcRouter(engine=FakeEngine())
+    router = SessionRouter(engine=FakeEngine())
 
     @router.session("/s", admission_errors=admission)
     def session() -> Session:
@@ -156,6 +156,6 @@ def test_admission_provider_receives_app_and_exports_detached_metadata() -> None
 
 
 def test_admission_provider_must_be_callable() -> None:
-    router = WebRtcRouter(engine=FakeEngine())
+    router = SessionRouter(engine=FakeEngine())
     with pytest.raises(TypeError, match="contract provider"):
         router.session("/s", admission_errors=42)(lambda: Session())  # type: ignore[arg-type]

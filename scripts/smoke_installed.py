@@ -282,9 +282,9 @@ def _uploads_check() -> None:
 
 
 def _mcp_check(selected: set[str]) -> None:
-    from fastapi_canon.integrations.mcp import McpOptions
+    from fastapi_canon.integrations.mcp import Mcp
 
-    assert McpOptions().path == "/mcp"
+    assert Mcp().path == "/mcp"
     if "--mcp" not in selected:
         assert "fastmcp" not in sys.modules
         return
@@ -317,9 +317,9 @@ def _mcp_check(selected: set[str]) -> None:
     feature = Feature(
         name="installed-mcp",
         providers=[Services],
-        mcp=[McpMount(server=server, namespace="smoke")],
+        integrations=[McpMount(server=server, namespace="smoke")],
     )
-    app = Composition(features=[feature], mcp=McpOptions()).build(FastAPI())
+    app = Composition(features=[feature], integrations=[Mcp()]).build(FastAPI())
 
     def factory(**kwargs: object) -> httpx2.AsyncClient:
         return httpx2.AsyncClient(transport=StreamingASGITransport(app), **kwargs)
@@ -495,10 +495,10 @@ def _observation_check(*, enabled: bool) -> None:
                 name="observed",
                 providers=[Dependencies],
                 routers=[router],
-                instrumentation=instrument(Ping),
+                integrations=[*instrument(Ping)],
             ),
         ),
-        telemetry=Telemetry() if enabled else None,
+        integrations=[Telemetry() if enabled else None],
     ).build(FastAPI())
     with TestClient(app) as client:
         assert client.get("/observed").json() == "pong"
@@ -711,8 +711,12 @@ class _RecordingEngine:
 
 def _webrtc_router(engine):
     from fastapi import Query
-    from fastapi_canon import APIRouter, Error
-    from fastapi_canon.integrations.webrtc import DataChannelSpec, Session
+    from fastapi_canon import Error
+    from fastapi_canon.integrations.webrtc import (
+        DataChannelSpec,
+        Session,
+        WebRtcRouter,
+    )
 
     class AdmissionDenied(Exception):
         pass
@@ -724,13 +728,11 @@ def _webrtc_router(engine):
         title="Denied",
         type="https://example.test/problems/admission_denied",
     )
-    rtc = APIRouter(prefix="/rtc")
+    rtc = WebRtcRouter(prefix="/rtc", engine=engine, raises=[denied])
 
-    @rtc.webrtc(
+    @rtc.session(
         "/rooms/{room}",
-        engine=engine,
         data_channels=(DataChannelSpec(name="events", send_model=SocketOutput),),
-        raises=[denied],
     )
     def room(room: str, token: str = Query()) -> Session:
         if token != "ok":

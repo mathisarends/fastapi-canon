@@ -1,7 +1,7 @@
 # MCP and Dishka
 
 Install `fastapi-canon[mcp]` to expose explicitly selected feature contributions
-through one FastMCP HTTP endpoint. Core imports and `McpOptions` remain usable
+through one FastMCP HTTP endpoint. Core imports and `Mcp` remain usable
 without FastMCP. This integration targets FastMCP 4.1.3 through the latest 4.x
 and selects Pydantic >=2.12; core installations retain their Pydantic >=2.9 minimum.
 
@@ -10,7 +10,7 @@ from dishka import Provider, Scope, provide
 from fastapi import FastAPI
 
 from fastapi_canon import Composition, Feature
-from fastapi_canon.integrations.mcp import Inject, McpMount, McpOptions, McpServer
+from fastapi_canon.integrations.mcp import Inject, McpMount, Mcp, McpServer
 
 
 class PortfolioService:
@@ -42,26 +42,26 @@ portfolio_feature = Feature(
 
 app = Composition(
     features=[portfolio_feature],
-    mcp=McpOptions(),
+    mcp=Mcp(),
 ).build(FastAPI(title="Maximus"))
 ```
 
 The endpoint is `/mcp`; its server name defaults to `FastAPI.title` (`Maximus`).
 Clients see `portfolio_get_portfolio` with only `portfolio_id` in its input schema.
-`McpOptions(name="Agent API", path="/agent")` overrides the server identity and
+`Mcp(name="Agent API", path="/agent")` overrides the server identity and
 endpoint. Namespaces are explicit public API identifiers, independent of feature
 names. Duplicate namespaces or server instances fail during composition.
-Contributing mounts requires explicit `Composition(mcp=McpOptions())` activation.
+Contributing mounts requires explicit `Composition(mcp=Mcp())` activation.
 Mounts alone never open an endpoint. The activation is deliberate: authentication
-is configured only on `McpOptions(auth=...)` (a mounted server's own `auth` is
+is configured only on `Mcp(auth=...)` (a mounted server's own `auth` is
 rejected), so an endpoint created implicitly from a mount would be
 unauthenticated, and its path and ownership would be implicit. A feature
-that declares mounts without `McpOptions` fails composition with `Features with MCP
-mounts require Composition(mcp=McpOptions())`; add `mcp=McpOptions()` (or
-`McpOptions(auth=...)`) to the `Composition`.
+that declares mounts without `Mcp` fails composition with `Features with MCP
+mounts require Composition(mcp=Mcp())`; add `mcp=Mcp()` (or
+`Mcp(auth=...)`) to the `Composition`.
 
 When auth or root middleware depends on application services, use
-`McpOptions(auth_factory=..., middleware_factory=...)`. Each synchronous factory
+`Mcp(auth_factory=..., middleware_factory=...)`. Each synchronous factory
 receives the borrowed Dishka APP container and returns a native FastMCP
 `AuthProvider` or a sequence of native FastMCP middleware instances. Supply
 either `auth` or `auth_factory`. Factories require features with Dishka providers.
@@ -91,7 +91,7 @@ class PortfolioVerifier(TokenVerifier):
         return AccessToken(token=token, client_id=user_id, scopes=[])
 
 
-options = McpOptions(auth_factory=PortfolioVerifier)
+options = Mcp(auth_factory=PortfolioVerifier)
 ```
 
 Register the application's `TokenAuthentication` implementation at APP scope.
@@ -107,7 +107,7 @@ FastAPI app or reading `app.state`. Canon retains ownership of the container and
 closes it after MCP lifespan cleanup. Factory output failures report
 `canon.mcp.E002`.
 
-Configure the common root with `McpOptions(stateless_http=True,
+Configure the common root with `Mcp(stateless_http=True,
 mask_error_details=True, middleware=(audit_middleware,))` when replacing a
 custom FastMCP HTTP adapter. Both boolean options default to `None`, which
 preserves FastMCP's settings and environment configuration. Root middleware
@@ -169,7 +169,7 @@ than borrowing resources from its caller's transport scope. `McpScope` itself do
 not require FastMCP to be installed.
 
 FastAPI router dependencies and `RouterPolicy` do not protect mounted MCP routes.
-Pass a native FastMCP auth provider through `McpOptions(auth=...)` and enforce
+Pass a native FastMCP auth provider through `Mcp(auth=...)` and enforce
 domain authorization in shared application services. Auth configured on a child
 server is rejected because its HTTP authentication does not protect the common
 endpoint. HTTP request-bound providers are not portable MCP
@@ -180,7 +180,7 @@ Canon problem binding or generate MCP clients. A domain exception that HTTP maps
 through `raises=` to a Problem arrives from an MCP tool as a native `isError` result
 with FastMCP's text, not a Problem document. Unless the child server masks errors
 (`McpServer("Name", mask_error_details=True)`), that text includes the exception
-message, even when `McpOptions(mask_error_details=True)` is set, because the root
+message, even when `Mcp(mask_error_details=True)` is set, because the root
 option does not rewrite children. Mask child servers that call code raising
 internal exceptions, and raise `fastmcp.exceptions.ToolError` with a message safe
 for callers for expected failures; its text is still delivered when masking is on. Injected sync handlers, deferred

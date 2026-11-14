@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from functools import partial
 from inspect import iscoroutine
 from typing import TYPE_CHECKING
 
@@ -20,9 +21,8 @@ from dishka.integrations.fastapi import DishkaRoute
 from fastapi import APIRouter, FastAPI
 from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute
-from starlette.routing import Match, Route, WebSocketRoute, compile_path
+from starlette.routing import Route, WebSocketRoute, compile_path
 from starlette.types import ExceptionHandler
-from starlette.types import Scope as ASGIScope
 
 from fastapi_canon.contract_routes import iter_contract_routes
 from fastapi_canon.diagnostics import (
@@ -32,17 +32,25 @@ from fastapi_canon.diagnostics import (
     CheckResult,
     CompositionInfo,
     OperationInfo,
+    qualified_name,
 )
 from fastapi_canon.error import ErrorRegistry, installed_catalog
 from fastapi_canon.error.contributions import error_registries
 from fastapi_canon.exceptions import ErrorConfigurationError, FeatureConfigurationError
 from fastapi_canon.injected_route import InjectedRoute, endpoint_dependencies
 from fastapi_canon.injection import injected_resolver_dependency
+from fastapi_canon.integration import (
+    Installer,
+    Integration,
+    IntegrationContext,
+    IntegrationError,
+    RouteContext,
+    attached_route,
+)
 from fastapi_canon.introspection import (
     describe_composition,
     http_routes,
     operation_headers,
-    qualified_name,
 )
 from fastapi_canon.openapi import (
     install_openapi_contracts,
@@ -52,8 +60,6 @@ from fastapi_canon.router import CanonRouter, route_provenance
 
 if TYPE_CHECKING:
     from fastapi_canon.feature import Composition, Feature
-    from fastapi_canon.integrations.mcp.configuration import McpRuntime
-    from fastapi_canon.integrations.opentelemetry import Telemetry
 
 _DEFAULT_TYPE_BASE = "urn:fastapi-canon:problem"
 
@@ -66,7 +72,7 @@ class Preparation:
     container: AsyncContainer | None
     description: CompositionInfo | None
     missing_dependency: ModuleNotFoundError | None
-    mcp_runtime: McpRuntime | None
+    installers: tuple[Installer, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,23 +98,19 @@ def validate_runtime_options(app: FastAPI, composition: Composition) -> None:
         raise FeatureConfigurationError(
             "install features before generating or caching OpenAPI"
         )
-    mounts = tuple(mount for feature in composition.features for mount in feature.mcp)
-    if mounts or composition.mcp is not None:
-        try:
-            from fastapi_canon.integrations.mcp.runtime import validate_mounts
-        except ModuleNotFoundError as error:
-            if error.name != "fastmcp":
-                raise
-            raise FeatureConfigurationError(
-                "Install fastapi-canon[mcp] to enable MCP"
-            ) from error
-        validate_mounts(mounts, composition.mcp)
-        if app.middleware_stack is not None:
-            raise FeatureConfigurationError("install MCP before the app starts")
     if composition.request_logging and app.middleware_stack is not None:
         raise FeatureConfigurationError("install request logging before the app starts")
-    if composition.telemetry is not None:
-        composition.telemetry.validate_installation(app)
+    enabled = {type(integration) for integration in composition.integrations}
+    for feature in composition.features:
+        for part in feature.integrations:
+            if part.integration not in enabled:
+                name = part.integration.__name__
+                raise IntegrationError(
+                    "canon.integrations.E001",
+                    f"Feature {feature.name!r} gives {type(part).__name__} to the "
+                    f"{name} integration, but the composition does not enable it",
+                    f"Add {name}(...) to Composition(integrations=[...]).",
+                )
 
 
 def prepare_feature_routers(
@@ -157,29 +159,6 @@ def validate_websocket_paths(
             seen[key] = (owner, location, name)
 
 
-def validate_mcp_routes(
-    app: FastAPI, routers: tuple[APIRouter, ...], path: str
-) -> None:
-    for router in (app.router, *routers):
-        for route in router.routes:
-            for endpoint in (path, path + "/"):
-                for method in ("GET", "POST", "DELETE"):
-                    scope: ASGIScope = {
-                        "type": "http",
-                        "path": endpoint,
-                        "root_path": "",
-                        "method": method,
-                    }
-                    match, _ = route.matches(scope)
-                    if match is Match.FULL or (
-                        endpoint == path and match is Match.PARTIAL
-                    ):
-                        raise FeatureConfigurationError(
-                            f"MCP path {path!r} conflicts with an existing route "
-                            f"matching {method} {endpoint}"
-                        )
-
-
 def prepare_registry(
     app: FastAPI, composition: Composition, routers: tuple[APIRouter, ...] | None
 ) -> ErrorRegistry:
@@ -217,19 +196,13 @@ def prepare_container(app: FastAPI, composition: Composition) -> AsyncContainer 
     materialized = materialize_providers(flatten_provider_sources(composition.features))
     reject_duplicate_materialized_providers(materialized)
     providers = tuple(item.provider for item in materialized)
-    instrumentation = tuple(
-        (feature.name, spec)
-        for feature in composition.features
-        for spec in feature.instrumentation
-    )
-    if instrumentation:
-        from fastapi_canon.integrations.opentelemetry.declarations import (
-            instrumentation_providers,
-        )
-
+    feature_providers = providers
+    for integration in composition.integrations:
         providers = (
             *providers,
-            *instrumentation_providers(instrumentation, composition.telemetry),
+            *integration.providers(
+                integration_parts(composition, integration), feature_providers
+            ),
         )
     if composition.overrides:
         materialized_overrides = materialize_providers(
@@ -241,7 +214,7 @@ def prepare_container(app: FastAPI, composition: Composition) -> AsyncContainer 
         overrides = tuple(item.provider for item in materialized_overrides)
         reject_unmatched_overrides(providers, overrides)
         providers = (*providers, *overrides)
-    container = make_container(providers, composition.telemetry)
+    container = make_container(providers)
     if container is not None and app.middleware_stack is not None:
         raise FeatureConfigurationError(
             "features with providers must be installed before the app starts"
@@ -249,7 +222,18 @@ def prepare_container(app: FastAPI, composition: Composition) -> AsyncContainer 
     return container
 
 
-def check_rpc_dependencies(
+def integration_parts(
+    composition: Composition, integration: Integration
+) -> tuple[tuple[str, object], ...]:
+    return tuple(
+        (feature.name, part)
+        for feature in composition.features
+        for part in feature.integrations
+        if part.integration is type(integration)
+    )
+
+
+def check_integration_routes(
     app: FastAPI,
     features: tuple[Feature, ...],
     routers: tuple[APIRouter, ...],
@@ -257,11 +241,10 @@ def check_rpc_dependencies(
     issues: list[CheckIssue],
     checks: list[CheckResult],
 ) -> None:
-    attribute = "__canon_rpc_dependency_roots__"
     entries = [
         ("<application>", path, route.endpoint)
         for path, route in iter_contract_routes(app.router.routes, include_mounts=False)
-        if hasattr(getattr(route, "endpoint", None), attribute)
+        if attached_route(getattr(route, "endpoint", None)) is not None
     ]
     wrapper = APIRouter(prefix=app.router.prefix)
     for router in routers:
@@ -271,91 +254,12 @@ def check_rpc_dependencies(
         for feature in features
         for router in feature.routers
         for _, route in iter_contract_routes(router.routes, include_mounts=False)
-        if hasattr(getattr(route, "endpoint", None), attribute)
+        if attached_route(getattr(route, "endpoint", None)) is not None
     ]
     effective = [
         (path, route.endpoint)
         for path, route in iter_contract_routes(wrapper.routes, include_mounts=False)
-        if hasattr(getattr(route, "endpoint", None), attribute)
-    ]
-    entries.extend(
-        (owner, path, endpoint)
-        for owner, (path, endpoint) in zip(owners, effective, strict=True)
-    )
-    external_container = (
-        container is None and getattr(app.state, "dishka_container", None) is not None
-    )
-    for owner, path, endpoint in entries:
-        try:
-            requirements = getattr(endpoint, attribute)()
-        except Exception:
-            issues.append(
-                CheckIssue(
-                    "canon.providers.E002",
-                    f"RPC dependencies at {path!r} could not be inspected",
-                    "Check the mounted channel declarations and handler signatures.",
-                    feature_names=(owner,),
-                    locations=(f"WEBSOCKET {path}",),
-                )
-            )
-            checks.append(
-                CheckResult(f"rpc.method_dependencies:{owner}:{path}", "incomplete")
-            )
-            continue
-        for method, dependencies in requirements:
-            name = f"rpc.method_dependencies:{owner}:{path}:{method}"
-            if dependencies is None or (dependencies and external_container):
-                checks.append(CheckResult(name, "skipped"))
-                continue
-            missing = [
-                dependency
-                for dependency in dependencies
-                if not dependency_available(
-                    container, DependencyKey(dependency, ""), Scope.REQUEST
-                )
-            ]
-            for dependency in missing:
-                qualified = qualified_name(dependency)
-                issues.append(
-                    CheckIssue(
-                        "canon.providers.E002",
-                        f"RPC method {method!r} injects {qualified} without an APP/SESSION/REQUEST binding",
-                        "Register the default-component service in a feature provider, or configure an explicit resolver that owns it.",
-                        feature_names=(owner,),
-                        locations=(f"WEBSOCKET {path} ({method})", qualified),
-                    )
-                )
-            checks.append(CheckResult(name, "failed" if missing else "passed"))
-
-
-def check_webrtc_dependencies(
-    app: FastAPI,
-    features: tuple[Feature, ...],
-    routers: tuple[APIRouter, ...],
-    container: AsyncContainer | None,
-    issues: list[CheckIssue],
-    checks: list[CheckResult],
-) -> None:
-    attribute = "__canon_webrtc_dependency_roots__"
-    entries = [
-        ("<application>", path, route.endpoint)
-        for path, route in iter_contract_routes(app.router.routes, include_mounts=False)
-        if hasattr(getattr(route, "endpoint", None), attribute)
-    ]
-    wrapper = APIRouter(prefix=app.router.prefix)
-    for router in routers:
-        wrapper.include_router(router)
-    owners = [
-        feature.name
-        for feature in features
-        for router in feature.routers
-        for _, route in iter_contract_routes(router.routes, include_mounts=False)
-        if hasattr(getattr(route, "endpoint", None), attribute)
-    ]
-    effective = [
-        (path, route.endpoint)
-        for path, route in iter_contract_routes(wrapper.routes, include_mounts=False)
-        if hasattr(getattr(route, "endpoint", None), attribute)
+        if attached_route(getattr(route, "endpoint", None)) is not None
     ]
     entries.extend(
         (owner, path, endpoint)
@@ -365,28 +269,21 @@ def check_webrtc_dependencies(
         container is None and getattr(app.state, "dishka_container", None) is not None
     )
     for owner, path, endpoint in entries:
-        roots = getattr(endpoint, attribute)
-        name = f"webrtc.factory_dependencies:{owner}:{path}"
-        if roots is None or (roots and external):
-            checks.append(CheckResult(name, "skipped"))
-            continue
-        missing = [
-            key
-            for key in roots
-            if not dependency_available(container, key, Scope.SESSION)
-        ]
-        for key in missing:
-            qualified = qualified_name(key.type_hint)
-            issues.append(
-                CheckIssue(
-                    "canon.providers.E004",
-                    f"WebRTC factory {path!r} injects {qualified} without an APP/SESSION binding (component {key.component!r})",
-                    "Register the factory service at APP or SESSION scope; use a child REQUEST scope for per-message work.",
-                    feature_names=(owner,),
-                    locations=(f"WEBSOCKET {path}", qualified),
-                )
+        route = attached_route(endpoint)
+        assert route is not None
+        route.check(
+            RouteContext(
+                feature=owner,
+                path=path,
+                container=container,
+                external_container=external,
+                available=lambda key, scope: dependency_available(
+                    container, key, scope
+                ),
+                _issues=issues,
+                _checks=checks,
             )
-        checks.append(CheckResult(name, "failed" if missing else "passed"))
+        )
 
 
 def dependency_available(
@@ -918,34 +815,9 @@ def merge_errors(
         raise FeatureConfigurationError(msg) from error
 
 
-def make_container(
-    providers: tuple[Provider, ...], telemetry: Telemetry | None
-) -> AsyncContainer | None:
+def make_container(providers: tuple[Provider, ...]) -> AsyncContainer | None:
     if not providers:
         return None
-    from fastapi_canon.integrations.opentelemetry import Telemetry
-
-    for provider in providers:
-        if (
-            any(
-                factory.provides.type_hint is Telemetry
-                for factory in provider.factories
-            )
-            or any(alias.provides.type_hint is Telemetry for alias in provider.aliases)
-            or any(
-                variable.provides.type_hint is Telemetry
-                for variable in provider.context_vars
-            )
-        ):
-            raise FeatureConfigurationError(
-                "Telemetry is reserved by Composition; remove the custom binding"
-            )
-    options = telemetry if telemetry is not None else Telemetry.disabled()
-    components = dict.fromkeys(provider.component for provider in providers)
-    providers = (
-        *providers,
-        *(options.provider(component=component) for component in components),
-    )
     try:
         return make_async_container(*providers)
     except DishkaError as error:
@@ -1029,7 +901,7 @@ class _CheckComposition:
         self.registry: ErrorRegistry | None = None
         self.container: AsyncContainer | None = None
         self.description: CompositionInfo | None = None
-        self.mcp_runtime: McpRuntime | None = None
+        self.installers: list[Installer] = []
 
     def __call__(self) -> Preparation:
         steps = (
@@ -1044,14 +916,6 @@ class _CheckComposition:
                 self._prepare_routers,
                 code="canon.routing.E001",
                 hint="Contribute each router once and return a fresh empty application router.",
-            ),
-            _CheckStep(
-                "mcp.routes",
-                self._mcp_routes,
-                ("http.routers",),
-                code="canon.mcp.E001",
-                hint="Move the conflicting HTTP route or choose a different MCP path.",
-                enabled=lambda: self.composition.mcp is not None,
             ),
             _CheckStep(
                 "handlers",
@@ -1072,23 +936,20 @@ class _CheckComposition:
                 hint="Check the named provider sources and supply the missing Dishka bindings.",
             ),
             _CheckStep(
-                "rpc.method_dependencies",
-                self._rpc_dependencies,
+                "integration.routes",
+                self._integration_routes,
                 ("http.routers", "providers"),
             ),
-            _CheckStep(
-                "webrtc.factory_dependencies",
-                self._webrtc_dependencies,
-                ("http.routers", "providers"),
-            ),
-            _CheckStep(
-                "mcp.runtime",
-                self._prepare_mcp,
-                code="canon.mcp.E002",
-                hint="Use synchronous factories that borrow the APP container without starting resources.",
-                enabled=lambda: (
-                    self.composition.mcp is not None and not self._missing_dependencies
-                ),
+            *(
+                _CheckStep(
+                    f"integration.{type(integration).__name__}",
+                    partial(self._prepare_integration, integration),
+                    ("http.routers", "providers"),
+                    code="canon.integrations.E002",
+                    hint="Check the integration options and the routes and services it depends on.",
+                    enabled=lambda: not self._missing_dependencies,
+                )
+                for integration in self.composition.integrations
             ),
             _CheckStep(
                 "http.description",
@@ -1145,7 +1006,7 @@ class _CheckComposition:
             self.container,
             self.description,
             self._missing_dependencies[0] if self._missing_dependencies else None,
-            self.mcp_runtime,
+            tuple(self.installers),
         )
 
     def _record_failure(
@@ -1157,7 +1018,7 @@ class _CheckComposition:
             "providers": tuple(
                 f.name
                 for f in self.composition.features
-                if f.providers or f.instrumentation
+                if f.providers or f.integrations
             ),
             "handlers": tuple(
                 f.name for f in self.composition.features if f.exception_handlers
@@ -1171,9 +1032,9 @@ class _CheckComposition:
             error.issue
             if isinstance(error, WebSocketPathError)
             else CheckIssue(
-                step.code,
+                error.code if isinstance(error, IntegrationError) else step.code,
                 str(error),
-                step.hint,
+                error.hint if isinstance(error, IntegrationError) else step.hint,
                 feature_names=participants.get(
                     step.name, tuple(f.name for f in self.composition.features)
                 ),
@@ -1195,10 +1056,6 @@ class _CheckComposition:
     def _prepare_routers(self) -> None:
         self.routers = prepare_feature_routers(self.app, self.composition)
 
-    def _mcp_routes(self) -> None:
-        assert self.composition.mcp is not None and self.routers is not None
-        validate_mcp_routes(self.app, self.routers, self.composition.mcp.path)
-
     def _handlers(self) -> None:
         validate_handlers(self.app, self.composition.features)
 
@@ -1208,9 +1065,9 @@ class _CheckComposition:
     def _providers(self) -> None:
         self.container = prepare_container(self.app, self.composition)
 
-    def _rpc_dependencies(self) -> None:
+    def _integration_routes(self) -> None:
         assert self.routers is not None
-        check_rpc_dependencies(
+        check_integration_routes(
             self.app,
             self.composition.features,
             self.routers,
@@ -1219,22 +1076,18 @@ class _CheckComposition:
             self.checks,
         )
 
-    def _webrtc_dependencies(self) -> None:
+    def _prepare_integration(self, integration: Integration) -> None:
         assert self.routers is not None
-        check_webrtc_dependencies(
-            self.app,
-            self.composition.features,
-            self.routers,
-            self.container,
-            self.issues,
-            self.checks,
+        installer = integration.prepare(
+            IntegrationContext(
+                app=self.app,
+                parts=integration_parts(self.composition, integration),
+                routers=self.routers,
+                container=self.container,
+            )
         )
-
-    def _prepare_mcp(self) -> None:
-        from fastapi_canon.integrations.mcp.configuration import prepare_runtime
-
-        assert self.composition.mcp is not None
-        self.mcp_runtime = prepare_runtime(self.composition.mcp, self.container)
+        if installer is not None:
+            self.installers.append(installer)
 
     def _describe(self) -> None:
         assert self.routers is not None

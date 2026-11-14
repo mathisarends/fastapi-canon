@@ -99,7 +99,7 @@ service reference can remain concretely typed with
 `model_config = ConfigDict(arbitrary_types_allowed=True)` and
 `registry: ToolAccessRegistry = Field(exclude=True)` when the wrapped adapter is a
 `ToolAccessRegistry`. This also applies to FastMCP `AccessToken` subclasses returned
-by an `McpOptions(auth_factory=...)` verifier. Token validity, tool/turn scoping and
+by an `Mcp(auth_factory=...)` verifier. Token validity, tool/turn scoping and
 revocation remain the application's responsibility. Keep request-scoped services
 out of longer-lived tokens; return detached identity data for those bindings.
 

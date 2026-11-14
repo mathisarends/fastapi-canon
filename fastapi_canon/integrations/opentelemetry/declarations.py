@@ -5,15 +5,15 @@ from __future__ import annotations
 import inspect
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from starlette.types import Scope as ASGIScope
 
 from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.integration import Installer, Integration, IntegrationContext
 
 if TYPE_CHECKING:
     from dishka import Provider
-    from fastapi import FastAPI
     from opentelemetry._logs import LoggerProvider
     from opentelemetry.metrics import MeterProvider
     from opentelemetry.trace import TracerProvider
@@ -31,8 +31,9 @@ __all__ = [
 
 @dataclass(frozen=True, slots=True, init=False)
 class Instrumentation:
-    """An immutable declaration for one port binding."""
+    """An immutable declaration for one port binding, given to ``Telemetry``."""
 
+    integration: ClassVar[type[Integration]]
     port: type[Any]
     expected: tuple[type[Exception], ...]
     component: str
@@ -74,11 +75,12 @@ def instrument(
 ) -> tuple[Instrumentation, ...]:
     """Declare instrumentation for one or more ports or async callable use cases.
 
-    Pass the tuple directly to ``Feature(instrumentation=instrument(Port, ...))``.
+    Unpack the tuple into ``Feature(integrations=[*instrument(Port, ...)])``.
     Shared expected failures and the Dishka component apply to every port.
-    Unpack multiple calls into a sequence to combine differently configured groups.
-    No OpenTelemetry import or Dishka decorator is created until composition
-    enables telemetry. The default component is Dishka's empty component.
+    Unpack multiple calls to combine differently configured groups. The
+    composition must enable ``Telemetry``; no OpenTelemetry import or Dishka
+    decorator is created before it composes. The default component is Dishka's
+    empty component.
     """
     return tuple(
         Instrumentation(port=target, expected=expected, component=component)
@@ -87,8 +89,13 @@ def instrument(
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class Telemetry:
-    """Use application-owned providers, with FastAPI automatic exporters disabled."""
+class Telemetry(Integration):
+    """Use application-owned providers, with FastAPI automatic exporters disabled.
+
+    Enable it once with ``Composition(integrations=[Telemetry(...)])``. Every
+    Dishka component of the composition then binds this configuration, and
+    features instrument ports with ``instrument``.
+    """
 
     exclude: Callable[[ASGIScope], bool] | None = None
     operation_spans: bool = True
@@ -148,10 +155,30 @@ class Telemetry:
             meter_provider=self.meter_provider,
         )
 
-    def validate_installation(self, app: FastAPI) -> None:
+    def providers(
+        self,
+        parts: tuple[tuple[str, Instrumentation], ...],
+        providers: tuple[Provider, ...],
+    ) -> tuple[Provider, ...]:
+        """Bind this configuration per component and decorate instrumented ports."""
+        _reject_reserved_binding(providers)
+        instrumentation = instrumentation_providers(parts, self)
+        if not providers and not instrumentation:
+            return ()
+        components = dict.fromkeys(
+            provider.component for provider in (*providers, *instrumentation)
+        )
+        return (
+            *instrumentation,
+            *(self.provider(component=component) for component in components),
+        )
+
+    def prepare(self, context: IntegrationContext) -> Installer:
+        """Check FastAPI's native telemetry support; return the outer installer."""
         try:
             # lazy telemetry adapter factory
             from fastapi_canon.integrations.opentelemetry.native import (  # smelt: ignore[SMT104] -- factory cycle
+                install,
                 validate_app,
             )
         except ModuleNotFoundError as exc:
@@ -162,12 +189,16 @@ class Telemetry:
                 name=exc.name,
             ) from exc
 
-        validate_app(app)
+        validate_app(context.app)
+        return Installer(lambda app, container: install(app, self), before_routes=True)
+
+
+Instrumentation.integration = Telemetry
 
 
 def instrumentation_providers(
     registrations: tuple[tuple[str, Instrumentation], ...],
-    options: Telemetry | None,
+    options: Telemetry,
 ) -> tuple[Provider, ...]:
     seen: dict[tuple[str, type[Any]], str] = {}
     for feature, spec in registrations:
@@ -178,7 +209,7 @@ def instrumentation_providers(
                 f"component {spec.component!r} by features {seen[key]!r} and {feature!r}"
             )
         seen[key] = feature
-    if options is None or not registrations:
+    if not registrations:
         return ()
     from fastapi_canon.integrations.opentelemetry.ports import (
         create_instrumentation_providers,
@@ -195,3 +226,21 @@ def instrumented_methods(
         for name, method in inspect.getmembers(port, inspect.iscoroutinefunction)
         if name == "__call__" or not name.startswith("_")
     )
+
+
+def _reject_reserved_binding(providers: tuple[Provider, ...]) -> None:
+    for provider in providers:
+        if (
+            any(
+                factory.provides.type_hint is Telemetry
+                for factory in provider.factories
+            )
+            or any(alias.provides.type_hint is Telemetry for alias in provider.aliases)
+            or any(
+                variable.provides.type_hint is Telemetry
+                for variable in provider.context_vars
+            )
+        ):
+            raise FeatureConfigurationError(
+                "Telemetry is reserved by Composition; remove the custom binding"
+            )

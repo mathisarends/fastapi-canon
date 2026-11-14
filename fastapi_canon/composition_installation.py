@@ -21,6 +21,7 @@ from fastapi_canon.diagnostics import (
     CompositionInfo,
 )
 from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.integration import Installer
 from fastapi_canon.openapi import (
     validate_openapi_contracts,
 )
@@ -29,8 +30,6 @@ from fastapi_canon.scopes import install_scopes
 
 if TYPE_CHECKING:
     from fastapi_canon.feature import Composition, ErrorOptions, Feature
-    from fastapi_canon.integrations.mcp import McpOptions
-    from fastapi_canon.integrations.opentelemetry import Telemetry
 
 INSTALLATION_STATE_KEY = "_fastapi_canon_installation"
 type FeatureLifespan = Lifespan[FastAPI]
@@ -68,10 +67,8 @@ class Installation:
     errors: ErrorOptions
     router_factory: Callable[[], APIRouter] | None = field(compare=False)
     router_factory_id: int | None
-    telemetry: Telemetry | None = field(compare=False)
-    telemetry_id: int | None
+    integration_ids: tuple[int, ...]
     request_logging: bool
-    mcp: McpOptions | None
     override_ids: tuple[int, ...]
     container: AsyncContainer | None = field(compare=False)
     description: CompositionInfo | None = field(default=None, compare=False)
@@ -86,12 +83,10 @@ def apply_composition(app: FastAPI, composition: Composition) -> bool:
         msg = "app must be a FastAPI instance"
         raise FeatureConfigurationError(msg)
     requested = Installation(
-        mcp=composition.mcp,
+        integration_ids=tuple(
+            id(integration) for integration in composition.integrations
+        ),
         request_logging=composition.request_logging,
-        telemetry=composition.telemetry,
-        telemetry_id=id(composition.telemetry)
-        if composition.telemetry is not None
-        else None,
         features=composition.features,
         feature_ids=tuple(id(feature) for feature in composition.features),
         errors=composition.errors,
@@ -117,8 +112,6 @@ def apply_composition(app: FastAPI, composition: Composition) -> bool:
     raise_check_errors(prepared.report)
     if prepared.description is None:
         raise FeatureConfigurationError("Composition description is unavailable")
-    telemetry = composition.telemetry
-    mounts = tuple(mount for feature in composition.features for mount in feature.mcp)
     handlers = flatten_handlers(composition.features)
     lifespans = tuple(
         feature.lifespan
@@ -131,10 +124,10 @@ def apply_composition(app: FastAPI, composition: Composition) -> bool:
         raise FeatureConfigurationError("Composed error catalog is unavailable")
     container = prepared.container
 
-    if telemetry is not None:
-        from fastapi_canon.integrations.opentelemetry.native import install
-
-        install(app, telemetry)
+    lifespans = (
+        *lifespans,
+        *_install(app, container, prepared.installers, before_routes=True),
+    )
     original_lifespan = app.router.lifespan_context
     if container is not None:
         install_scopes(app, container)
@@ -160,15 +153,10 @@ def apply_composition(app: FastAPI, composition: Composition) -> bool:
         include_http_exceptions=composition.errors.include_http_exceptions,
         include_unhandled_error=composition.errors.include_unhandled_error,
     )
-    if composition.mcp is not None:
-        from fastapi_canon.integrations.mcp.runtime import install_mcp
-
-        if prepared.mcp_runtime is None:
-            raise FeatureConfigurationError("MCP runtime configuration is unavailable")
-        lifespans = (
-            *lifespans,
-            install_mcp(app, mounts, composition.mcp, container, prepared.mcp_runtime),
-        )
+    lifespans = (
+        *lifespans,
+        *_install(app, container, prepared.installers, before_routes=False),
+    )
     app.router.lifespan_context = compose_lifespan(
         original_lifespan,
         # include_router merged these into the app context after we captured
@@ -210,11 +198,10 @@ def validate_applied_composition(app: object, composition: Composition) -> None:
         else None
     )
     if not isinstance(installed, Installation) or (
-        installed.mcp != composition.mcp
+        installed.integration_ids
+        != tuple(id(integration) for integration in composition.integrations)
         or installed.feature_ids
         != tuple(id(feature) for feature in composition.features)
-        or installed.telemetry_id
-        != (id(composition.telemetry) if composition.telemetry is not None else None)
         or installed.errors != composition.errors
         or installed.request_logging != composition.request_logging
         or installed.override_ids
@@ -270,3 +257,19 @@ def compose_lifespan(
             yield merged_state
 
     return composed
+
+
+def _install(
+    app: FastAPI,
+    container: AsyncContainer | None,
+    installers: tuple[Installer, ...],
+    *,
+    before_routes: bool,
+) -> tuple[FeatureLifespan, ...]:
+    lifespans: list[FeatureLifespan] = []
+    for installer in installers:
+        if installer.before_routes is before_routes:
+            lifespan = installer.install(app, container)
+            if lifespan is not None:
+                lifespans.append(lifespan)
+    return tuple(lifespans)

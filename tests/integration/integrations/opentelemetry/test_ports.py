@@ -51,11 +51,12 @@ async def test_typed_model_retains_the_instrumented_dependency(
     dependencies = Provider()
     dependencies.provide(lambda: original, provides=Registry, scope=Scope.APP)
     feature = Feature(
-        name="registry", providers=[dependencies], instrumentation=instrument(Registry)
+        name="registry", providers=[dependencies], integrations=[*instrument(Registry)]
     )
     with SpanCapture() as capture:
         app = Composition(
-            features=[feature], telemetry=Telemetry(tracer_provider=capture.provider)
+            features=[feature],
+            integrations=[Telemetry(tracer_provider=capture.provider)],
         ).build(FastAPI())
         async with asyncio.timeout(5), app.router.lifespan_context(app):
             resolved = await app.state.dishka_container.get(Registry)
@@ -76,11 +77,12 @@ async def test_typed_model_rejects_an_instrumented_unrelated_implementation() ->
     dependencies = Provider()
     dependencies.provide(UnrelatedRegistry, provides=Registry, scope=Scope.APP)
     feature = Feature(
-        name="registry", providers=[dependencies], instrumentation=instrument(Registry)
+        name="registry", providers=[dependencies], integrations=[*instrument(Registry)]
     )
     with SpanCapture() as capture:
         app = Composition(
-            features=[feature], telemetry=Telemetry(tracer_provider=capture.provider)
+            features=[feature],
+            integrations=[Telemetry(tracer_provider=capture.provider)],
         ).build(FastAPI())
         async with asyncio.timeout(5), app.router.lifespan_context(app):
             resolved = await app.state.dishka_container.get(Registry)
@@ -96,11 +98,12 @@ async def test_port_methods_do_not_shadow_proxy_operations() -> None:
     feature = Feature(
         name="proxy-names",
         providers=[dependencies],
-        instrumentation=instrument(PortWithProxyMethodNames),
+        integrations=[*instrument(PortWithProxyMethodNames)],
     )
     with SpanCapture() as capture:
         app = Composition(
-            features=[feature], telemetry=Telemetry(tracer_provider=capture.provider)
+            features=[feature],
+            integrations=[Telemetry(tracer_provider=capture.provider)],
         ).build(FastAPI())
         async with asyncio.timeout(5), app.router.lifespan_context(app):
             resolved = await app.state.dishka_container.get(PortWithProxyMethodNames)

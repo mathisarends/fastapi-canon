@@ -3,8 +3,7 @@ from collections.abc import AsyncIterator
 from fastapi import FastAPI
 
 from fastapi_canon import APIRouter, Composition, Feature, export_contracts
-from fastapi_canon.contracts import ContractKind
-from fastapi_canon.integrations.webrtc import Session
+from fastapi_canon.integrations.webrtc import Session, WebRtcRouter
 from fastapi_canon.integrations.websockets import RpcChannel
 
 
@@ -38,13 +37,16 @@ def test_one_router_exports_http_sse_rpc_and_webrtc_with_effective_paths() -> No
     session.include_channel(tasks, namespace="tasks")
     router.include_channel(session, path="/{project_id}/session")
 
-    @router.webrtc("/{project_id}/media", name="project_media")
+    rtc = WebRtcRouter(prefix="/projects")
+
+    @rtc.session("/{project_id}/media", name="project_media")
     async def media(project_id: str) -> Session:
         called.append(project_id)
         return Session()
 
     parent = APIRouter(prefix="/v1")
     parent.include_router(router)
+    parent.include_router(rtc)
     app = Composition(features=[Feature(name="projects", routers=[parent])]).build(
         FastAPI()
     )
@@ -65,10 +67,13 @@ def test_one_router_exports_http_sse_rpc_and_webrtc_with_effective_paths() -> No
     assert contracts.openrpc["servers"][0]["url"] == (
         "{baseUrl}/v1/projects/{project_id}/session"
     )
-    assert contracts.webrtc is not None
-    assert contracts.webrtc["subprotocol"] == "fastapi-webrtc.v1"
-    assert contracts.webrtc["sessions"][0]["path"] == "/v1/projects/{project_id}/media"
-    assert contracts.webrtc["sessions"][0]["name"] == "project_media"
+    assert "webrtc" in contracts.documents
+    assert contracts.documents["webrtc"]["subprotocol"] == "fastapi-webrtc.v1"
+    assert (
+        contracts.documents["webrtc"]["sessions"][0]["path"]
+        == "/v1/projects/{project_id}/media"
+    )
+    assert contracts.documents["webrtc"]["sessions"][0]["name"] == "project_media"
 
 
 def test_multiple_channel_endpoints_with_the_same_suffix_export_separately() -> None:
@@ -88,7 +93,7 @@ def test_multiple_channel_endpoints_with_the_same_suffix_export_separately() -> 
     router.include_channel(tasks, path="/{project_id}/tasks/session", namespace="tasks")
     app = FastAPI()
     app.include_router(router)
-    contract = export_contracts(app, kinds=[ContractKind.OPENRPC]).openrpc
+    contract = export_contracts(app, kinds=["openrpc"]).openrpc
     assert contract is not None
     assert {server["url"] for server in contract["servers"]} == {
         "{baseUrl}/projects/{project_id}/session",

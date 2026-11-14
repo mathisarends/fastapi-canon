@@ -19,8 +19,8 @@ from fastapi_canon import Composition, Feature
 from fastapi_canon.exceptions import FeatureConfigurationError
 from fastapi_canon.integrations.mcp import (
     Inject,
+    Mcp,
     McpMount,
-    McpOptions,
     McpScope,
     McpServer,
 )
@@ -85,9 +85,9 @@ def application(server: FastMCP, events: list[str], path: str = "/mcp") -> FastA
     feature = Feature(
         name="portfolio",
         providers=[lambda: Services(events)],
-        mcp=[McpMount(server=server, namespace="portfolio")],
+        integrations=[McpMount(server=server, namespace="portfolio")],
     )
-    return Composition(features=[feature], mcp=McpOptions(path=path)).build(
+    return Composition(features=[feature], integrations=[Mcp(path=path)]).build(
         FastAPI(title="Maximus")
     )
 
@@ -187,22 +187,22 @@ async def test_resources_and_prompts_use_dishka() -> None:
 def test_mounts_require_explicit_composition_options() -> None:
     feature = Feature(
         name="portfolio",
-        mcp=[McpMount(server=FastMCP("Portfolio"), namespace="portfolio")],
+        integrations=[McpMount(server=FastMCP("Portfolio"), namespace="portfolio")],
     )
-    with pytest.raises(FeatureConfigurationError, match="McpOptions"):
+    with pytest.raises(FeatureConfigurationError, match="Mcp"):
         Composition(features=[feature]).build(FastAPI())
 
 
 def test_duplicate_namespaces_are_rejected() -> None:
     feature = Feature(
         name="portfolio",
-        mcp=[
+        integrations=[
             McpMount(server=FastMCP("First"), namespace="portfolio"),
             McpMount(server=FastMCP("Second"), namespace="portfolio"),
         ],
     )
     with pytest.raises(FeatureConfigurationError, match="Duplicate MCP"):
-        Composition(features=[feature], mcp=McpOptions()).build(FastAPI())
+        Composition(features=[feature], integrations=[Mcp()]).build(FastAPI())
 
 
 def test_background_tools_are_rejected_explicitly() -> None:
@@ -218,8 +218,10 @@ async def test_native_fastmcp_tools_need_no_providers() -> None:
     async def greet(name: str) -> str:
         return "Hello " + name
 
-    feature = Feature(name="native", mcp=[McpMount(server=server, namespace="native")])
-    app = Composition(features=[feature], mcp=McpOptions()).build(FastAPI())
+    feature = Feature(
+        name="native", integrations=[McpMount(server=server, namespace="native")]
+    )
+    app = Composition(features=[feature], integrations=[Mcp()]).build(FastAPI())
     async with connected(app) as client:
         result = await client.call_tool("native_greet", {"name": "Canon"})
         assert result.data == "Hello Canon"
@@ -243,14 +245,15 @@ async def test_mcp_lifespan_runs_once_inside_container_lifetime() -> None:
 
 async def test_composition_is_idempotent_with_mcp() -> None:
     feature = Feature(
-        name="native", mcp=[McpMount(server=FastMCP("Native"), namespace="native")]
+        name="native",
+        integrations=[McpMount(server=FastMCP("Native"), namespace="native")],
     )
-    composition = Composition(features=[feature], mcp=McpOptions())
+    composition = Composition(features=[feature], integrations=[Mcp()])
     app = composition.build(FastAPI())
     assert composition.build(app) is app
     assert [getattr(route, "path", None) for route in app.routes].count("/mcp") == 1
     with pytest.raises(FeatureConfigurationError, match="different composition"):
-        Composition(features=[feature], mcp=McpOptions(path="/other")).build(app)
+        Composition(features=[feature], integrations=[Mcp(path="/other")]).build(app)
 
 
 async def test_response_serialization_failure_rolls_back() -> None:
@@ -313,9 +316,9 @@ async def test_shared_database_transactions_commit_and_rollback() -> None:
     feature = Feature(
         name="store",
         providers=[StoreProvider],
-        mcp=[McpMount(server=server, namespace="store")],
+        integrations=[McpMount(server=server, namespace="store")],
     )
-    app = Composition(features=[database.feature, feature], mcp=McpOptions()).build(
+    app = Composition(features=[database.feature, feature], integrations=[Mcp()]).build(
         FastAPI()
     )
     async with connected(app) as client:
@@ -343,17 +346,17 @@ def test_child_http_auth_is_rejected_instead_of_silently_ignored() -> None:
         ),
     )
     feature = Feature(
-        name="protected", mcp=[McpMount(server=server, namespace="protected")]
+        name="protected", integrations=[McpMount(server=server, namespace="protected")]
     )
-    with pytest.raises(FeatureConfigurationError, match="McpOptions"):
-        Composition(features=[feature], mcp=McpOptions()).build(FastAPI())
+    with pytest.raises(FeatureConfigurationError, match="Mcp"):
+        Composition(features=[feature], integrations=[Mcp()]).build(FastAPI())
 
 
 async def test_root_http_auth_rejects_unauthenticated_requests() -> None:
     from fastmcp.server.auth.providers.jwt import StaticTokenVerifier
 
     auth = StaticTokenVerifier(tokens={"secret": {"client_id": "test", "scopes": []}})
-    app = Composition(mcp=McpOptions(auth=auth)).build(FastAPI())
+    app = Composition(integrations=[Mcp(auth=auth)]).build(FastAPI())
     async with (
         app.router.lifespan_context(app),
         httpx2.AsyncClient(
@@ -414,7 +417,7 @@ async def test_runtime_factories_borrow_each_app_container_without_opening_resou
     async def identify(identity: Inject[Identity]) -> str:
         return identity.name
 
-    options = McpOptions(
+    options = Mcp(
         auth_factory=Verifier, middleware_factory=lambda container: [Observe(container)]
     )
 
@@ -422,9 +425,9 @@ async def test_runtime_factories_borrow_each_app_container_without_opening_resou
         feature = Feature(
             name="identity",
             providers=[lambda: Identities(name)],
-            mcp=[McpMount(server=server, namespace="identity")],
+            integrations=[McpMount(server=server, namespace="identity")],
         )
-        composition = Composition(features=[feature], mcp=options)
+        composition = Composition(features=[feature], integrations=[options])
         app = FastAPI()
         assert not composition.check(app).has_errors
         return composition.build(app)
@@ -451,8 +454,8 @@ def test_invalid_runtime_factory_result_fails_before_app_mutation(
     parameter: str,
 ) -> None:
     feature = Feature(name="services", providers=[lambda: Services([])])
-    options = McpOptions(**{parameter: lambda container: object()})  # type: ignore[arg-type]  # Exercise invalid factory output.
-    composition = Composition(features=[feature], mcp=options)
+    options = Mcp(**{parameter: lambda container: object()})  # type: ignore[arg-type]  # Exercise invalid factory output.
+    composition = Composition(features=[feature], integrations=[options])
     app = FastAPI()
     routes = tuple(app.routes)
 
@@ -465,7 +468,9 @@ def test_invalid_runtime_factory_result_fails_before_app_mutation(
 
 
 def test_runtime_factory_requires_an_app_container() -> None:
-    composition = Composition(mcp=McpOptions(middleware_factory=lambda container: []))
+    composition = Composition(
+        integrations=[Mcp(middleware_factory=lambda container: [])]
+    )
 
     with pytest.raises(
         FeatureConfigurationError, match="requires features with Dishka providers"
@@ -566,7 +571,7 @@ async def test_failed_public_operation_scope_rolls_back_and_remains_reusable() -
 
 @pytest.mark.parametrize("stateless", [False, True])
 async def test_http_session_mode_is_explicitly_configurable(stateless: bool) -> None:
-    app = Composition(mcp=McpOptions(stateless_http=stateless)).build(FastAPI())
+    app = Composition(integrations=[Mcp(stateless_http=stateless)]).build(FastAPI())
     async with (
         app.router.lifespan_context(app),
         httpx2.AsyncClient(
@@ -617,11 +622,11 @@ async def test_root_middleware_wraps_children_before_dependency_cleanup() -> Non
     feature = Feature(
         name="portfolio",
         providers=[lambda: Services(events)],
-        mcp=[McpMount(server=server, namespace="portfolio")],
+        integrations=[McpMount(server=server, namespace="portfolio")],
     )
     app = Composition(
         features=[feature],
-        mcp=McpOptions(middleware=(Recording("root"),)),
+        integrations=[Mcp(middleware=(Recording("root"),))],
     ).build(FastAPI())
 
     async with connected(app) as client:
@@ -656,9 +661,12 @@ async def test_root_masks_forwarded_execution_failures_when_requested(
 
     app = Composition(
         features=[
-            Feature(name="native", mcp=[McpMount(server=server, namespace="native")])
+            Feature(
+                name="native",
+                integrations=[McpMount(server=server, namespace="native")],
+            )
         ],
-        mcp=McpOptions(mask_error_details=masked),
+        integrations=[Mcp(mask_error_details=masked)],
     ).build(FastAPI())
 
     async with connected(app) as client:
@@ -682,12 +690,12 @@ async def test_concatenated_tool_names_cannot_be_discovered(
 
     feature = Feature(
         name="collision",
-        mcp=[
+        integrations=[
             McpMount(server=first, namespace="a"),
             McpMount(server=second, namespace="a_b"),
         ],
     )
-    app = Composition(features=[feature], mcp=McpOptions()).build(FastAPI())
+    app = Composition(features=[feature], integrations=[Mcp()]).build(FastAPI())
 
     async with connected(app) as client:
         with pytest.raises(MCPError, match="Internal server error"):
@@ -711,12 +719,12 @@ async def test_ambiguous_tool_call_is_rejected_before_either_handler_runs() -> N
 
     feature = Feature(
         name="collision",
-        mcp=[
+        integrations=[
             McpMount(server=first, namespace="a"),
             McpMount(server=second, namespace="a_b"),
         ],
     )
-    app = Composition(features=[feature], mcp=McpOptions()).build(FastAPI())
+    app = Composition(features=[feature], integrations=[Mcp()]).build(FastAPI())
 
     async with connected(app) as client:
         with pytest.raises(MCPError, match="Internal server error"):
@@ -739,12 +747,12 @@ async def test_concatenated_prompt_names_cannot_be_discovered(
 
     feature = Feature(
         name="collision",
-        mcp=[
+        integrations=[
             McpMount(server=first, namespace="a"),
             McpMount(server=second, namespace="a_b"),
         ],
     )
-    app = Composition(features=[feature], mcp=McpOptions()).build(FastAPI())
+    app = Composition(features=[feature], integrations=[Mcp()]).build(FastAPI())
 
     async with connected(app) as client:
         with pytest.raises(MCPError, match="Internal server error"):
@@ -765,12 +773,12 @@ async def test_distinct_versions_of_a_public_tool_name_remain_supported() -> Non
 
     feature = Feature(
         name="versions",
-        mcp=[
+        integrations=[
             McpMount(server=first, namespace="a"),
             McpMount(server=second, namespace="a_b"),
         ],
     )
-    app = Composition(features=[feature], mcp=McpOptions()).build(FastAPI())
+    app = Composition(features=[feature], integrations=[Mcp()]).build(FastAPI())
 
     async with connected(app) as client:
         assert [tool.name for tool in await client.list_tools()] == ["a_b_c"]
@@ -788,12 +796,12 @@ async def test_late_tool_registration_cannot_introduce_an_ambiguous_call() -> No
 
     feature = Feature(
         name="dynamic",
-        mcp=[
+        integrations=[
             McpMount(server=first, namespace="a"),
             McpMount(server=second, namespace="a_b"),
         ],
     )
-    app = Composition(features=[feature], mcp=McpOptions()).build(FastAPI())
+    app = Composition(features=[feature], integrations=[Mcp()]).build(FastAPI())
 
     async with connected(app) as client:
         assert [tool.name for tool in await client.list_tools()] == ["a_b_c"]

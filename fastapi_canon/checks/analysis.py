@@ -1075,7 +1075,8 @@ class ContractAnalyzer:
 HTTP_ROUTE_METHODS = frozenset(
     {"get", "post", "put", "patch", "delete", "head", "options", "trace", "api_route"}
 )
-TRANSPORT_METHODS = frozenset({"sse", "webrtc"})
+TRANSPORT_METHODS = {"sse": "sse", "session": "webrtc"}
+"""Decorator names of non-HTTP route transports, mapped to their transport."""
 RPC_METHOD = "method"
 
 

@@ -8,7 +8,7 @@ from fastmcp.server.auth import AuthProvider
 from fastmcp.server.middleware import Middleware
 
 from fastapi_canon.exceptions import FeatureConfigurationError
-from fastapi_canon.integrations.mcp import McpOptions
+from fastapi_canon.integrations.mcp import Mcp
 
 
 @dataclass(frozen=True, slots=True)
@@ -17,9 +17,7 @@ class McpRuntime:
     middleware: tuple[Middleware, ...]
 
 
-def prepare_runtime(
-    options: McpOptions, container: AsyncContainer | None
-) -> McpRuntime:
+def prepare_runtime(options: Mcp, container: AsyncContainer | None) -> McpRuntime:
     auth = options.auth
     middleware: tuple[Middleware, ...] = ()
     if options.auth_factory is not None:

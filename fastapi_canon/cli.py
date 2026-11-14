@@ -1,10 +1,16 @@
-"""Canon commands with lazily loaded transport tools."""
+"""Canon commands with lazily loaded transport tools.
+
+Distributions add commands through the ``fastapi_canon.commands`` entry points.
+Each names a ``main(argv) -> int`` function whose docstring's first line is its
+help text; the module is imported only when the command runs or help is shown.
+"""
 
 import argparse
 import shutil
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextlib import ExitStack
+from importlib.metadata import entry_points
 from importlib.resources import as_file, files
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -20,20 +26,31 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
-    for name, description in (
+    builtin = (
         ("contracts", "Export contracts from the registered application routes"),
-        ("sse", "Export SSE contracts and generate Python or TypeScript clients"),
-        ("websockets", "Export OpenRPC contracts and generate WebSocket clients"),
-        ("webrtc", "Export WebRTC contracts and generate browser clients"),
         ("check", "Check source contracts or an imported application composition"),
         ("inspect", "Describe an installed application composition"),
         ("explain", "Explain a built-in source, composition or generation diagnostic"),
         ("generate", "Export contracts and run specialized or external generators"),
-        ("db", "Manage database revisions with Alembic"),
         ("skill", "Install the bundled backend-building skill in your project"),
-    ):
+    )
+    extensions = {
+        point.name: point
+        for point in entry_points(group=COMMANDS)
+        if point.name not in dict(builtin)
+    }
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    describe = not arguments or arguments[0] in {"-h", "--help"}
+    for name, description in builtin:
         commands.add_parser(name, help=description, add_help=False)
-    args, remaining = parser.parse_known_args(argv)
+    for name, point in sorted(extensions.items()):
+        commands.add_parser(
+            name, help=_describe(point.load) if describe else None, add_help=False
+        )
+    args, remaining = parser.parse_known_args(arguments)
+    if args.command in extensions:
+        command: Callable[[Sequence[str]], int] = extensions[args.command].load()
+        return command(remaining)
     if args.command == "contracts":
         from fastapi_canon.contract_cli import main as contracts_main
 
@@ -48,30 +65,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         return explain_main(remaining)
     elif args.command == "skill":
         return _skill_main(remaining)
-    elif args.command == "db":
-        from fastapi_canon.integrations.database.cli import main as database_main
-
-        return database_main(remaining)
     elif args.command == "generate":
         from fastapi_canon.codegen.cli import main as generate_main
 
         return generate_main(remaining)
-    elif args.command == "sse":
-        from fastapi_canon.integrations.sse.codegen.cli import main as sse_main
-
-        return sse_main(remaining)
-    elif args.command == "websockets":
-        from fastapi_canon.integrations.websockets.codegen.cli import (
-            main as websockets_main,
-        )
-
-        return websockets_main(remaining)
-    elif args.command == "webrtc":
-        from fastapi_canon.integrations.webrtc.codegen.cli import main as webrtc_main
-
-        return webrtc_main(remaining)
     else:
         return _check_main(remaining)
+
+
+COMMANDS = "fastapi_canon.commands"
+"""The entry-point group of ``fastapi-canon`` subcommands."""
+
+
+def _describe(load: Callable[[], object]) -> str:
+    try:
+        command = load()
+    except ImportError:
+        return "Unavailable; install the extra that provides this command"
+    summary = (getattr(command, "__doc__", None) or "").strip().splitlines()
+    return summary[0].rstrip(".") if summary else ""
 
 
 def _check_main(argv: Sequence[str]) -> int:

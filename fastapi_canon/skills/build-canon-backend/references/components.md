@@ -22,7 +22,7 @@ uv run python -c "import inspect; from fastapi_canon import Composition, Feature
 | `Database`, `AlembicMigrations` | Optional engine, sessions, transactions and migration configuration | `database.feature` before consuming features |
 | `ServiceScope[T]` | An independent short dependency graph for a worker/stream operation | APP-scoped provider; `async with scope() as service:` |
 | `Telemetry`, `instrument` | Optional tracing/metrics and observed application ports | `Composition(telemetry=...)`, `Feature(instrumentation=...)` |
-| `McpServer`, `McpMount`, `McpOptions` | Optional tools/resources/prompts on one app-owned MCP endpoint | `Feature(mcp=[...])`, `Composition(mcp=McpOptions())` |
+| `McpServer`, `McpMount`, `Mcp` | Optional tools/resources/prompts on one app-owned MCP endpoint | `Feature(mcp=[...])`, `Composition(mcp=Mcp())` |
 | `export_contracts`, CLI `contracts export`, `generate` | Export the composed API and generate Python/TypeScript clients | App/factory or saved contracts; explicit SDK configuration |
 
 Import core values from `fastapi_canon` or `fastapi_canon.error`. MCP and telemetry

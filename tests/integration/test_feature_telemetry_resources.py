@@ -88,16 +88,18 @@ async def test_http_request_shares_configuration_exclusions_and_resource_lifetim
                         name="resources",
                         providers=[Dependencies],
                         routers=[router],
-                        instrumentation=instrument(Service),
+                        integrations=[*instrument(Service)],
                     ),
                 ),
-                telemetry=Telemetry(
-                    tracer_provider=capture.provider,
-                    meter_provider=meter,
-                    port_metrics=True,
-                    logs=False,
-                    exclude=lambda scope: scope["path"] == "/excluded",
-                ),
+                integrations=[
+                    Telemetry(
+                        tracer_provider=capture.provider,
+                        meter_provider=meter,
+                        port_metrics=True,
+                        logs=False,
+                        exclude=lambda scope: scope["path"] == "/excluded",
+                    )
+                ],
             ).build(FastAPI())
             async with (
                 asyncio.timeout(5),

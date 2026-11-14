@@ -103,10 +103,10 @@ def _verify() -> None:
                     name="compatibility",
                     routers=[router],
                     providers=[provider],
-                    instrumentation=instrument(Ping),
+                    integrations=[*instrument(Ping)],
                 ),
             ),
-            telemetry=options,
+            integrations=[options],
         )
         composition.build(app)
         composition.build(app)

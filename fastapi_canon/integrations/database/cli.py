@@ -9,8 +9,11 @@ import tomllib
 from collections.abc import Sequence
 from pathlib import Path
 
+__all__ = ["main"]
+
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Manage database revisions with Alembic."""
     parser = argparse.ArgumentParser(prog="fastapi-canon db")
     parser.add_argument("--config", type=Path, default=Path("pyproject.toml"))
     parser.add_argument("--database", help="Override the configured module:attribute")

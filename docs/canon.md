@@ -46,7 +46,7 @@ scope.
 | Startup configuration errors | `fastapi_canon.exceptions.ConfigurationError` and its subclasses | [Problems](problems.md) |
 | Telemetry declarations | `fastapi_canon.integrations.opentelemetry.Telemetry`, `instrument` | [Telemetry](telemetry.md) |
 | SQLAlchemy engine instrumentation declaration | `fastapi_canon.integrations.opentelemetry.sqlalchemy.SqlAlchemyInstrumentation` | [Engine lifetime](database.md#engine-instrumentation-lifetime) |
-| MCP features | `fastapi_canon.integrations.mcp.McpServer`, `McpMount`, `McpScope`, `McpOptions`, `Inject` | [MCP](integrations/mcp/README.md) |
+| MCP features | `fastapi_canon.integrations.mcp.McpServer`, `McpMount`, `McpScope`, `Mcp`, `Inject` | [MCP](integrations/mcp/README.md) |
 
 Import application-building names from `fastapi_canon` and optional types from
 their integration facade. Other implementation modules are internal, even without

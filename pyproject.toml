@@ -57,6 +57,17 @@ mcp = [
 [project.scripts]
 fastapi-canon = "fastapi_canon.cli:main"
 
+[project.entry-points."fastapi_canon.commands"]
+db = "fastapi_canon.integrations.database.cli:main"
+sse = "fastapi_canon.integrations.sse.codegen.cli:main"
+webrtc = "fastapi_canon.integrations.webrtc.codegen.cli:main"
+websockets = "fastapi_canon.integrations.websockets.codegen.cli:main"
+
+[project.entry-points."fastapi_canon.generators"]
+sse = "fastapi_canon.integrations.sse.codegen.generator:GENERATOR"
+webrtc = "fastapi_canon.integrations.webrtc.codegen.generator:GENERATOR"
+websockets = "fastapi_canon.integrations.websockets.codegen.generator:GENERATOR"
+
 [project.urls]
 Homepage = "https://github.com/mathisarends/fastapi-canon"
 Repository = "https://github.com/mathisarends/fastapi-canon"

@@ -95,17 +95,17 @@ def callable_application(options: Telemetry) -> FastAPI:
                 providers=[Dependencies],
                 routers=[router],
                 errors=[Error(Missing, status=404, code="missing", title="Missing")],
-                instrumentation=instrument(
-                    Repository, CallableService, expected=(Missing,)
-                ),
+                integrations=[
+                    *instrument(Repository, CallableService, expected=(Missing,))
+                ],
             ),
         ),
-        telemetry=options,
+        integrations=[options],
         errors=ErrorOptions(type_base="https://example.test/problems"),
     ).build(FastAPI())
 
 
-def application(options: Telemetry | None, *, expected: bool = True) -> FastAPI:
+def application(options: Telemetry, *, expected: bool = True) -> FastAPI:
     class Dependencies(Provider):
         @provide(scope=Scope.REQUEST)
         async def repository(self) -> AsyncIterator[Repository]:
@@ -136,13 +136,13 @@ def application(options: Telemetry | None, *, expected: bool = True) -> FastAPI:
         name="items",
         providers=[Dependencies],
         routers=[router],
-        instrumentation=instrument(
-            Repository, Service, expected=[Missing] if expected else []
-        ),
+        integrations=[
+            *instrument(Repository, Service, expected=[Missing] if expected else [])
+        ],
     )
     composition = Composition(
         features=(feature,),
-        telemetry=options,
+        integrations=[options],
         errors=ErrorOptions(type_base="https://example.test/problems"),
     )
     app = composition.build(FastAPI())
@@ -316,7 +316,7 @@ def test_metrics_only_no_arguments_in_metric_labels() -> None:
 
 
 def test_disabled_metadata_keeps_original_instances() -> None:
-    app = application(None)
+    app = application(Telemetry.disabled())
     with TestClient(app) as client:
         assert client.get(f"/items/{UUID(int=1)}").status_code == 200
     assert isinstance(app.state.closed[0], MemoryRepository)
@@ -345,14 +345,15 @@ def test_combined_groups_keep_expected_failures_independent() -> None:
     feature = Feature(
         name="items",
         providers=[Dependencies],
-        instrumentation=[
+        integrations=[
             *instrument(Repository, expected=(Missing,)),
             *instrument(Service),
         ],
     )
     with SpanCapture() as capture:
         app = Composition(
-            features=(feature,), telemetry=Telemetry(tracer_provider=capture.provider)
+            features=(feature,),
+            integrations=[Telemetry(tracer_provider=capture.provider)],
         ).build(FastAPI())
 
         async def run() -> None:
@@ -374,7 +375,7 @@ def test_instrumentation_is_immutable_and_copied_by_feature() -> None:
     expected: list[type[Exception]] = [Missing]
     group = instrument(Repository, Service, expected=expected, component="named")
     declarations = list(group)
-    feature = Feature(name="items", instrumentation=declarations)
+    feature = Feature(name="items", integrations=[*declarations])
     expected.clear()
     declarations.clear()
 
@@ -383,7 +384,7 @@ def test_instrumentation_is_immutable_and_copied_by_feature() -> None:
     assert service.port is Service
     assert repository.expected == service.expected == (Missing,)
     assert repository.component == service.component == "named"
-    assert feature.instrumentation == group
+    assert feature.integrations == group
     with pytest.raises(FrozenInstanceError):
         repository.component = "other"  # type: ignore[misc]
     assert not hasattr(telemetry_api, "observe")
@@ -394,17 +395,21 @@ def test_feature_reuse_keeps_providers_and_app_telemetry_isolated() -> None:
     provider = Provider()
     provider.provide(lambda: original, provides=Repository, scope=Scope.APP)
     feature = Feature(
-        name="items", providers=[provider], instrumentation=instrument(Repository)
+        name="items", providers=[provider], integrations=[*instrument(Repository)]
     )
 
     with SpanCapture() as first, SpanCapture() as second:
         first_app = Composition(
-            features=(feature,), telemetry=Telemetry(tracer_provider=first.provider)
+            features=(feature,),
+            integrations=[Telemetry(tracer_provider=first.provider)],
         ).build(FastAPI())
         second_app = Composition(
-            features=(feature,), telemetry=Telemetry(tracer_provider=second.provider)
+            features=(feature,),
+            integrations=[Telemetry(tracer_provider=second.provider)],
         ).build(FastAPI())
-        disabled = Composition(features=(feature,)).build(FastAPI())
+        disabled = Composition(
+            features=(feature,), integrations=[Telemetry.disabled()]
+        ).build(FastAPI())
 
         async def resolve() -> None:
             direct = make_async_container(provider)
@@ -545,15 +550,15 @@ def test_async_call_metrics_only_and_request_exclusion(exclude: bool) -> None:
 def test_composition_guards() -> None:
     app = FastAPI()
     first = Telemetry()
-    Composition(telemetry=first).build(app)
+    Composition(integrations=[first]).build(app)
     with pytest.raises(FeatureConfigurationError, match="different composition"):
-        Composition(telemetry=Telemetry()).build(app)
+        Composition(integrations=[Telemetry()]).build(app)
     started = FastAPI()
     with (
         TestClient(started),
         pytest.raises(FeatureConfigurationError, match="before the app starts"),
     ):
-        Composition(telemetry=first).build(started)
+        Composition(integrations=[first]).build(started)
 
 
 def test_invalid_instrumentation() -> None:
@@ -571,10 +576,8 @@ def test_invalid_instrumentation() -> None:
         instrument(Repository, expected=[str])  # type: ignore[list-item]
     with pytest.raises(FeatureConfigurationError, match="component must be a string"):
         instrument(Repository, component=None)  # type: ignore[arg-type]
-    with pytest.raises(
-        FeatureConfigurationError, match=r"instrumentation.*Instrumentation"
-    ):
-        Feature(name="invalid", instrumentation=[Repository])  # type: ignore[list-item]
+    with pytest.raises(FeatureConfigurationError, match="integration part"):
+        Feature(name="invalid", integrations=[Repository])  # type: ignore[list-item]
 
 
 @pytest.mark.parametrize("enabled", [False, True])
@@ -584,21 +587,23 @@ def test_duplicate_instrumentation_is_rejected(
 ) -> None:
     features = (
         (
-            Feature(name="first", instrumentation=instrument(Repository)),
-            Feature(name="second", instrumentation=instrument(Repository)),
+            Feature(name="first", integrations=[*instrument(Repository)]),
+            Feature(name="second", integrations=[*instrument(Repository)]),
         )
         if across_features
         else (
             Feature(
                 name="duplicate",
-                instrumentation=instrument(Repository, Repository),
+                integrations=[*instrument(Repository, Repository)],
             ),
         )
     )
     app = FastAPI()
-    with pytest.raises(FeatureConfigurationError, match="instrumented more than once"):
+    # Without Telemetry, instrumentation itself is rejected before duplicates.
+    message = "instrumented more than once" if enabled else "does not enable it"
+    with pytest.raises(FeatureConfigurationError, match=message):
         Composition(
-            features=features, telemetry=Telemetry() if enabled else None
+            features=features, integrations=[Telemetry()] if enabled else []
         ).build(app)
     assert not app.user_middleware
 
@@ -624,7 +629,7 @@ def test_websocket_controllers_export_independent_traces_before_disconnect() -> 
         )
         app = Composition(
             features=(Feature(name="websocket", routers=[router]),),
-            telemetry=options,
+            integrations=[options],
         ).build(FastAPI())
         with TestClient(app) as client, client.websocket_connect("/rpc") as websocket:
             websocket.send_json({"jsonrpc": "2.0", "id": 1, "method": "tasks.ping"})
@@ -692,10 +697,10 @@ def test_provider_scopes_caching_and_original_cleanup() -> None:
                 Feature(
                     name="app",
                     providers=[Dependencies],
-                    instrumentation=instrument(Repository),
+                    integrations=[*instrument(Repository)],
                 ),
             ),
-            telemetry=Telemetry(tracer_provider=capture.provider),
+            integrations=[Telemetry(tracer_provider=capture.provider)],
         ).build(FastAPI())
 
         async def resolve() -> None:
@@ -796,7 +801,7 @@ def test_globals_set_in_lifespan_are_resolved_lazily() -> None:
             @app.get("/health")
             async def health():
                 return {"status": "ok"}
-            Composition(telemetry=Telemetry()).build(app)
+            Composition(integrations=[Telemetry()]).build(app)
             with TestClient(app) as client:
                 assert client.get("/health").status_code == 200
             capture.one("GET /health")
@@ -813,7 +818,7 @@ def test_globals_set_in_lifespan_are_resolved_lazily() -> None:
 
 def test_native_auto_export_is_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FASTAPI_OTEL_AUTO_CONFIGURE", "true")
-    app = Composition(telemetry=Telemetry()).build(FastAPI())
+    app = Composition(integrations=[Telemetry()]).build(FastAPI())
     assert app._telemetry["auto_configure"] is False
 
 
@@ -827,15 +832,15 @@ def test_named_components_keep_feature_ownership() -> None:
                 Feature(
                     name="default",
                     providers=[Dependencies],
-                    instrumentation=instrument(Repository),
+                    integrations=[*instrument(Repository)],
                 ),
                 Feature(
                     name="named",
                     providers=[lambda: Dependencies(component="named")],
-                    instrumentation=instrument(Repository, component="named"),
+                    integrations=[*instrument(Repository, component="named")],
                 ),
             ),
-            telemetry=Telemetry(tracer_provider=capture.provider),
+            integrations=[Telemetry(tracer_provider=capture.provider)],
         ).build(FastAPI())
 
         async def resolve() -> None:
@@ -873,14 +878,15 @@ def test_declarations_and_disabled_composition_import_no_otel_runtime() -> None:
             async def run(self): pass
         class Dependencies(Provider):
             port = provide(Port, scope=Scope.REQUEST)
-        Composition(features=(Feature(
-            name="test", providers=[Dependencies], instrumentation=instrument(Port)
-        ),)).build(FastAPI())
+        unenabled = Composition(features=(Feature(
+            name="test", providers=[Dependencies], integrations=instrument(Port)
+        ),)).check(FastAPI())
+        assert [issue.code for issue in unenabled.issues] == ["canon.integrations.E001"]
         assert not any(name.startswith("opentelemetry") for name in sys.modules)
-        composition = Composition(telemetry=Telemetry())
+        composition = Composition(integrations=[Telemetry()])
         report = composition.check(FastAPI())
         assert report.has_errors
-        assert report.issues[0].code == "canon.composition.E001"
+        assert report.issues[0].code == "canon.integrations.E002"
         assert "fastapi-canon[otel]" in report.issues[0].message
         try:
             composition.build(FastAPI())
