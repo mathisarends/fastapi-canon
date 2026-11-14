@@ -13,7 +13,7 @@ PyPI project or add further Python import changes.
 
 ## Upgrade to 0.21.0
 
-Version 0.21.0 is prepared, not published. Follow the 0.20.0 migration below
+Version 0.21.0 was published on 2026-11-14. Follow the 0.20.0 migration below
 for the FastAPI minimum, SSE naming and source-check changes when upgrading from
 an earlier release. Where APIs differ, the 0.21.0 instructions take precedence;
 older sections describe the API at that version. The changelog's

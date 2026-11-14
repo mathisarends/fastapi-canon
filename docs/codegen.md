@@ -87,7 +87,7 @@ allowance inputs. Check mode otherwise preserves contracts and generated clients
 ### Generator registration
 
 `generator` names an entry point in the `fastapi_canon.generators` group
-(0.21.0, unreleased). Canon registers `sse`, `websockets` and `webrtc`; register
+(Canon 0.21.0 and later). Canon registers `sse`, `websockets` and `webrtc`; register
 your own `fastapi_canon.codegen.generators.Generator` with:
 
 ```toml

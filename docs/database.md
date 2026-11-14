@@ -373,7 +373,7 @@ async def reserve(self, allocation_key: int) -> None:
     # Read and update the protected records using the injected session.
 ```
 
-The prepared 0.21.0 release adds this callable operation. `TransactionLocks`
+Canon 0.21.0 adds this callable operation. `TransactionLocks`
 remains an alias for the same dependency, and `acquire(key)` remains supported.
 Both names resolve to the same scoped instance.
 
