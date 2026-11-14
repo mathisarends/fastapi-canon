@@ -121,7 +121,10 @@ def export_contracts(
     for kind, exporter in route_exporters(candidates).items():
         if selected is not None and kind not in selected:
             continue
-        exported = exporter.export(app, candidates, base_url=base_url)
+        owned = tuple(
+            (path, route) for path, route in candidates if _exporter_kind(route) == kind
+        )
+        exported = exporter.export(app, owned, base_url=base_url)
         if exported is not None:
             documents[kind] = exported
     return Contracts(documents)
@@ -133,8 +136,7 @@ def route_exporters(
     """Return the distinct contract exporters of *routes*, keyed by kind."""
     exporters: dict[str, ContractExporter] = {}
     for _, route in routes:
-        attached = attached_route(getattr(route, "endpoint", None))
-        exporter = attached.contract if attached is not None else None
+        exporter = _exporter(route)
         if exporter is None:
             continue
         previous = exporters.setdefault(exporter.kind, exporter)
@@ -175,11 +177,10 @@ def _select_routes(
     }
     eligible = []
     for path, route in iter_contract_routes(app.routes):
-        attached = attached_route(getattr(route, "endpoint", None))
-        exporter = attached.contract if attached is not None else None
+        kind = _exporter_kind(route)
         if (
             (kinds is None or OPENAPI in kinds) and _route_key(path, route) in root_http
-        ) or (exporter is not None and (kinds is None or exporter.kind in kinds)):
+        ) or (kind is not None and (kinds is None or kind in kinds)):
             eligible.append((path, route))
     missing = set(selection.paths or ()) - {path for path, _ in eligible}
     if missing:
@@ -261,3 +262,13 @@ def _select_openapi(
             document["tags"] = tags
         else:
             del document["tags"]
+
+
+def _exporter_kind(route: object) -> str | None:
+    exporter = _exporter(route)
+    return exporter.kind if exporter is not None else None
+
+
+def _exporter(route: object) -> ContractExporter | None:
+    attached = attached_route(getattr(route, "endpoint", None))
+    return attached.contract if attached is not None else None
