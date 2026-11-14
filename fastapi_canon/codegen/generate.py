@@ -1,19 +1,21 @@
 import difflib
-import hashlib
 import io
 import json
 import shutil
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import dataclass
-from functools import partial
 from pathlib import Path
 from typing import Any
 
-from fastapi_canon._version import __version__
 from fastapi_canon.application_loading import load_application
-from fastapi_canon.codegen.config import Configuration, TargetConfig
+from fastapi_canon.codegen.config import Configuration
+from fastapi_canon.codegen.generators import (
+    TargetConfig,
+    contract_kinds,
+    load_generator,
+)
 from fastapi_canon.contracts import export_contracts
 
 
@@ -41,7 +43,7 @@ def generate(
     if not selected or set(targets) - {target.name for target in selected}:
         raise ValueError("Unknown generation target")
     root = config.path.parent
-    filenames = ("openapi", "openrpc", "webrtc")
+    filenames = contract_kinds()
     if offline:
         documents = {
             kind: json.loads(path.read_text(encoding="utf-8"))
@@ -52,12 +54,12 @@ def generate(
     else:
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             app = load_application(config.app, root=root)
-            documents = export_contracts(app).documents
+            documents = dict(export_contracts(app).documents)
         contracts = {
             config.contracts / f"{kind}.json": _json(documents[kind])
             if kind in documents
             else ""
-            for kind in filenames
+            for kind in sorted(filenames | documents.keys())
         }
     documents = {
         kind: json.loads(_json(document)) for kind, document in documents.items()
@@ -131,136 +133,14 @@ def generate(
 
 def _render(
     target: TargetConfig, documents: dict[str, Any], contracts: Path
-) -> tuple[dict[str, str], Callable[..., tuple[Path, ...]]]:
-    assert target.output is not None
-    kind = {"sse": "openapi", "websockets": "openrpc", "webrtc": "webrtc"}[
-        target.generator
-    ]
-    if kind not in documents:
-        raise ValueError(f"Target {target.name} needs a registered {kind} contract")
-    document = documents[kind]
-    match target.generator:
-        case "sse":
-            from fastapi_canon.integrations.sse.codegen.diagnostics import (
-                GenerationDiagnostic,
-                accepted_diagnostics,
-                emit_diagnostics,
-                write_diagnostics,
-            )
-            from fastapi_canon.integrations.sse.codegen.ir import build_ir
-            from fastapi_canon.integrations.sse.codegen.python import generate_python
-            from fastapi_canon.integrations.sse.codegen.typescript import (
-                generate_typescript,
-            )
-            from fastapi_canon.integrations.sse.codegen.writer import (
-                planned_files,
-                write_files,
-            )
-
-            diagnostics: list[GenerationDiagnostic] = []
-            contract = build_ir(
-                document,
-                target=target.language,
-                diagnostics=diagnostics,
-                include_operations=target.include_operations,
-            )
-            generation = {
-                "generator": "fastapi-canon",
-                "generator_version": __version__,
-                "schema_sha256": hashlib.sha256(
-                    json.dumps(
-                        document,
-                        sort_keys=True,
-                        separators=(",", ":"),
-                        ensure_ascii=False,
-                    ).encode("utf-8")
-                ).hexdigest(),
-                "schema_hash_encoding": "canonical-json-v1",
-                "target": target.language,
-                "python_http_client": target.http_client
-                if target.language == "python"
-                else None,
-            }
-            if target.diagnostics is not None:
-                write_diagnostics(target.diagnostics, diagnostics, set(), generation)
-            accepted = (
-                accepted_diagnostics(
-                    diagnostics,
-                    json.loads(target.allow_diagnostics.read_text(encoding="utf-8")),
-                )
-                if target.allow_diagnostics
-                else set()
-            )
-            if target.diagnostics is not None:
-                write_diagnostics(target.diagnostics, diagnostics, accepted, generation)
-            pending = [item for item in diagnostics if item.id not in accepted]
-            emit_diagnostics(pending)
-            if target.strict and pending:
-                raise ValueError(
-                    f"{len(pending)} unaccepted SSE generation diagnostics for {target.name}; review diagnostics and explicit allowances"
-                )
-            generated = (
-                generate_python(contract, http_client=target.http_client)
-                if target.language == "python"
-                else generate_typescript(contract)
-            )
-            return planned_files(generated, generation=generation), partial(
-                write_files, target.output, generated, generation=generation
-            )
-        case "websockets":
-            from fastapi_canon.integrations.websockets.codegen import (
-                PythonClientOptions,
-                TypeScriptClientOptions,
-                render_python_client,
-                render_typescript_client,
-            )
-            from fastapi_canon.integrations.websockets.codegen import (
-                write_files as write_rpc,
-            )
-
-            source = contracts / "openrpc.json"
-            generated = (
-                dict(
-                    render_python_client(
-                        document,
-                        PythonClientOptions(
-                            package=target.package,
-                            client_name=target.client_name,
-                            with_transport="websocket",
-                            source=source.name,
-                            contract=source,
-                        ),
-                    )
-                )
-                if target.language == "python"
-                else dict(
-                    render_typescript_client(
-                        document,
-                        TypeScriptClientOptions(
-                            client_name=target.client_name,
-                            with_transport="websocket",
-                            source=source.name,
-                            contract=source,
-                        ),
-                    )
-                )
-            )
-            return generated, partial(write_rpc, target.output, generated)
-        case "webrtc":
-            from fastapi_canon.integrations.webrtc.codegen.typescript import (
-                generate_typescript as render_rtc,
-            )
-            from fastapi_canon.integrations.webrtc.codegen.writer import (
-                write_files as write_rtc,
-            )
-
-            generated = render_rtc(document, client_name=target.client_name)
-            # Let the specialized writer produce its own ownership manifest.
-            manifest = ".fastapi-webrtc.json"
-            expected = {**generated, manifest: _json({"files": sorted(generated)})}
-            return expected, partial(write_rtc, target.output, generated)
-        case _:
-            raise ValueError("External targets do not render Canon clients")
+) -> tuple[Mapping[str, str], Callable[..., tuple[Path, ...]]]:
+    generator = load_generator(target.generator)
+    if generator.contract not in documents:
+        raise ValueError(
+            f"Target {target.name} needs a registered {generator.contract} contract"
+        )
+    rendering = generator.render(target, documents[generator.contract], contracts)
+    return rendering.files, rendering.write
 
 
 def _external(target: TargetConfig, root: Path, *, check: bool) -> StepResult:

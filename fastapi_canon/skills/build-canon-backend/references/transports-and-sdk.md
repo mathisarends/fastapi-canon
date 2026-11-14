@@ -46,8 +46,8 @@ methods. Follow the shared [operation naming rules](http-feature.md#operation-id
 including explicit overrides and collision handling.
 
 Declare channel operations before inclusion: each mount captures a snapshot.
-Use `@router.webrtc(...)` for managed media sessions after selecting the required
-engine and session options. See
+Use a `WebRtcRouter` with `@rtc.session(...)` for managed media sessions after
+selecting the required engine and session options; add it to `Feature(routers=[...])`. See
 [routers](https://github.com/mathisarends/fastapi_canon/blob/main/docs/routers.md)
 for full options; the protocols retain their own admission, scope and cleanup rules.
 
@@ -98,7 +98,7 @@ single JSON-RPC endpoint with `session = router.channel(path)`. See
 
 Install the `webrtc` extra and read
 [webrtc.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/webrtc.md)
-before choosing an engine for `@router.webrtc(...)`. Media and session lifetimes
+before choosing an engine for `WebRtcRouter(engine=...)`. Media and session lifetimes
 need explicit ownership; an SSE convention is not a WebRTC or binary-socket
 protocol.
 
@@ -127,8 +127,8 @@ not configure process-wide logging. See [request-logging.md](https://github.com/
 
 Telemetry is opt-in at composition. Import `Telemetry` and `instrument` from
 `fastapi_canon.integrations.opentelemetry`; declare
-`Feature(..., instrumentation=instrument(ProjectRepository, ProjectService))`.
-Pass application-owned providers to telemetry/composition as documented in
+`Feature(..., integrations=[instrument(ProjectRepository, ProjectService)])` and
+enable `Composition(integrations=[Telemetry(...)])`. Pass application-owned providers to `Telemetry` as documented in
 [telemetry.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/telemetry.md). Instrument declarations leave ordinary Dishka providers
 usable on their own. Engine/client instrumentation uses the explicit resource
 adapters, and the application owns exporter/provider shutdown.

@@ -18,8 +18,11 @@ from fastapi_canon.integrations.webrtc.codegen.typescript import (
 )
 from fastapi_canon.integrations.webrtc.codegen.writer import write_files
 
+__all__ = ["main"]
+
 
 def main(argv: list[str] | None = None) -> int:
+    """Export WebRTC contracts and generate browser clients."""
     parser = argparse.ArgumentParser(prog="fastapi-canon webrtc")
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)

@@ -4,16 +4,23 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Callable, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol, runtime_checkable
 
 from starlette.types import Scope as ASGIScope
 
 from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.integration import (
+    ErrorLookup,
+    Installer,
+    Integration,
+    IntegrationContext,
+    ProviderContext,
+)
 
 if TYPE_CHECKING:
     from dishka import Provider
-    from fastapi import FastAPI
     from opentelemetry._logs import LoggerProvider
     from opentelemetry.metrics import MeterProvider
     from opentelemetry.trace import TracerProvider
@@ -24,32 +31,62 @@ if TYPE_CHECKING:
 
 __all__ = [
     "Instrumentation",
+    "ResourceInstrumentation",
     "Telemetry",
     "instrument",
 ]
 
 
+@runtime_checkable
+class ResourceInstrumentation(Protocol):
+    """Instrument every Dishka-provided resource of an accepted type.
+
+    Register a zero-argument factory in the ``fastapi_canon.telemetry_resources``
+    entry-point group to enable it by default. ``instrument`` returns a context
+    that stays open for the resource's Dishka lifetime; it must not instrument
+    a resource that already has instrumentation.
+    """
+
+    def accepts(self, provided: type[Any]) -> bool:
+        """Return whether a provided type should be instrumented."""
+        ...
+
+    def instrument(
+        self, resource: Any, telemetry: Telemetry
+    ) -> AbstractContextManager[object]:
+        """Return the context that instruments *resource* while it is open."""
+        ...
+
+
 @dataclass(frozen=True, slots=True, init=False)
 class Instrumentation:
-    """An immutable declaration for one port binding."""
+    """An immutable instrumentation declaration for ports, given to ``Telemetry``.
 
-    port: type[Any]
+    Create it with ``instrument``; one declaration is one feature integration part.
+    """
+
+    integration: ClassVar[type[Integration]]
+    ports: tuple[type[Any], ...]
     expected: tuple[type[Exception], ...]
     component: str
 
     def __init__(
         self,
-        *,
-        port: type[Any],
+        *ports: type[Any],
         expected: Sequence[type[Exception]] = (),
         component: str = "",
     ) -> None:
-        if not isinstance(port, type):
-            raise FeatureConfigurationError("instrument port must be a class")
-        if not instrumented_methods(port):
-            raise FeatureConfigurationError(
-                f"{port.__name__}: instrument requires public async methods or async __call__"
-            )
+        if not ports:
+            raise FeatureConfigurationError("instrument requires at least one port")
+        for port in ports:
+            if not isinstance(port, type):
+                raise FeatureConfigurationError("instrument port must be a class")
+            if not instrumented_methods(port):
+                raise FeatureConfigurationError(
+                    f"{port.__name__}: instrument requires public async methods or async __call__"
+                )
+        if len(set(ports)) != len(ports):
+            raise FeatureConfigurationError("instrument ports must be unique")
         failures = tuple(expected)
         if any(
             not isinstance(cls, type) or not issubclass(cls, Exception)
@@ -60,7 +97,7 @@ class Instrumentation:
             )
         if not isinstance(component, str):
             raise FeatureConfigurationError("component must be a string")
-        object.__setattr__(self, "port", port)
+        object.__setattr__(self, "ports", ports)
         object.__setattr__(self, "expected", failures)
         object.__setattr__(self, "component", component)
 
@@ -71,24 +108,26 @@ def instrument(
     *more_ports: type[Any],
     expected: Sequence[type[Exception]] = (),
     component: str = "",
-) -> tuple[Instrumentation, ...]:
+) -> Instrumentation:
     """Declare instrumentation for one or more ports or async callable use cases.
 
-    Pass the tuple directly to ``Feature(instrumentation=instrument(Port, ...))``.
-    Shared expected failures and the Dishka component apply to every port.
-    Unpack multiple calls into a sequence to combine differently configured groups.
-    No OpenTelemetry import or Dishka decorator is created until composition
-    enables telemetry. The default component is Dishka's empty component.
+    Pass the result to ``Feature(integrations=[instrument(Port, ...)])``. Shared
+    expected failures and the Dishka component apply to every port; use one
+    call per differently configured group. The composition must enable
+    ``Telemetry``; no OpenTelemetry import or Dishka decorator is created before
+    it composes. The default component is Dishka's empty component.
     """
-    return tuple(
-        Instrumentation(port=target, expected=expected, component=component)
-        for target in (port, *more_ports)
-    )
+    return Instrumentation(port, *more_ports, expected=expected, component=component)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class Telemetry:
-    """Use application-owned providers, with FastAPI automatic exporters disabled."""
+class Telemetry(Integration):
+    """Use application-owned providers, with FastAPI automatic exporters disabled.
+
+    Enable it once with ``Composition(integrations=[Telemetry(...)])``. Every
+    Dishka component of the composition then binds this configuration, and
+    features instrument ports with ``instrument``.
+    """
 
     exclude: Callable[[ASGIScope], bool] | None = None
     operation_spans: bool = True
@@ -101,6 +140,7 @@ class Telemetry:
     tracer_provider: TracerProvider | None = None
     meter_provider: MeterProvider | None = None
     logger_provider: LoggerProvider | None = None
+    resources: Sequence[ResourceInstrumentation] | None = None
 
     def __post_init__(self) -> None:
         for name in (
@@ -116,6 +156,13 @@ class Telemetry:
                 raise FeatureConfigurationError(f"{name} must be a bool")
         if self.exclude is not None and not callable(self.exclude):
             raise FeatureConfigurationError("exclude must be callable or None")
+        if self.resources is not None:
+            resources = tuple(self.resources)
+            if not all(isinstance(item, ResourceInstrumentation) for item in resources):
+                raise FeatureConfigurationError(
+                    "resources must contain ResourceInstrumentation instances"
+                )
+            object.__setattr__(self, "resources", resources)
 
     @classmethod
     def disabled(cls) -> Telemetry:
@@ -148,10 +195,40 @@ class Telemetry:
             meter_provider=self.meter_provider,
         )
 
-    def validate_installation(self, app: FastAPI) -> None:
+    def providers(self, context: ProviderContext) -> tuple[Provider, ...]:
+        """Bind this configuration per component; decorate ports and resources.
+
+        ``resources=None`` uses every installed ``fastapi_canon.telemetry_resources``
+        entry point; ``resources=[]`` instruments no resource.
+        """
+        providers = context.providers
+        _reject_reserved_binding(providers)
+        instrumentation = (
+            *instrumentation_providers(context.parts, self, context.errors),
+            *self._resource_providers(providers),
+        )
+        if not providers and not instrumentation:
+            return ()
+        components = dict.fromkeys(
+            provider.component for provider in (*providers, *instrumentation)
+        )
+        return (
+            *instrumentation,
+            *(self.provider(component=component) for component in components),
+        )
+
+    def prepare(self, context: IntegrationContext) -> Installer | None:
+        """Check FastAPI's native telemetry support; return the outer installer.
+
+        A configuration that records nothing, such as ``Telemetry.disabled()``,
+        installs nothing and imports no OpenTelemetry package.
+        """
+        if not (self.tracing or self.metrics or self.logs or self.port_metrics):
+            return None
         try:
             # lazy telemetry adapter factory
             from fastapi_canon.integrations.opentelemetry.native import (  # smelt: ignore[SMT104] -- factory cycle
+                install,
                 validate_app,
             )
         except ModuleNotFoundError as exc:
@@ -162,29 +239,52 @@ class Telemetry:
                 name=exc.name,
             ) from exc
 
-        validate_app(app)
+        validate_app(context.app)
+        return Installer(lambda app, container: install(app, self), before_routes=True)
+
+    def _resource_providers(
+        self, providers: tuple[Provider, ...]
+    ) -> tuple[Provider, ...]:
+        if not (self.tracing or self.metrics) or self.resources == ():
+            return ()
+        from fastapi_canon.integrations.opentelemetry.resources import (
+            default_resources,
+            resource_providers,
+        )
+
+        adapters = default_resources() if self.resources is None else self.resources
+        return resource_providers(providers, adapters, self)
+
+
+Instrumentation.integration = Telemetry
 
 
 def instrumentation_providers(
     registrations: tuple[tuple[str, Instrumentation], ...],
-    options: Telemetry | None,
+    options: Telemetry,
+    errors: ErrorLookup | None = None,
 ) -> tuple[Provider, ...]:
+    ports = tuple(
+        (feature, port, spec) for feature, spec in registrations for port in spec.ports
+    )
     seen: dict[tuple[str, type[Any]], str] = {}
-    for feature, spec in registrations:
-        key = (spec.component, spec.port)
+    for feature, port, spec in ports:
+        key = (spec.component, port)
         if key in seen:
             raise FeatureConfigurationError(
-                f"port {spec.port.__name__} is instrumented more than once in "
+                f"port {port.__name__} is instrumented more than once in "
                 f"component {spec.component!r} by features {seen[key]!r} and {feature!r}"
             )
         seen[key] = feature
-    if options is None or not registrations:
+    if not ports or not (
+        (options.tracing and options.port_spans) or options.port_metrics
+    ):
         return ()
     from fastapi_canon.integrations.opentelemetry.ports import (
         create_instrumentation_providers,
     )
 
-    return create_instrumentation_providers(registrations, options)
+    return create_instrumentation_providers(ports, options, errors)
 
 
 def instrumented_methods(
@@ -195,3 +295,21 @@ def instrumented_methods(
         for name, method in inspect.getmembers(port, inspect.iscoroutinefunction)
         if name == "__call__" or not name.startswith("_")
     )
+
+
+def _reject_reserved_binding(providers: tuple[Provider, ...]) -> None:
+    for provider in providers:
+        if (
+            any(
+                factory.provides.type_hint is Telemetry
+                for factory in provider.factories
+            )
+            or any(alias.provides.type_hint is Telemetry for alias in provider.aliases)
+            or any(
+                variable.provides.type_hint is Telemetry
+                for variable in provider.context_vars
+            )
+        ):
+            raise FeatureConfigurationError(
+                "Telemetry is reserved by Composition; remove the custom binding"
+            )

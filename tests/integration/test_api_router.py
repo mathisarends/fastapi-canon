@@ -1,7 +1,7 @@
 import asyncio
 import json
 from collections.abc import AsyncIterator
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import asynccontextmanager
 from typing import Any
 from uuid import UUID
 
@@ -20,11 +20,7 @@ from fastapi_canon import (
     Feature,
     export_contracts,
 )
-from fastapi_canon.contracts import ContractKind
 from fastapi_canon.exceptions import ConfigurationError
-from fastapi_canon.integrations.webrtc import SUBPROTOCOL, Session
-from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine
-from fastapi_canon.integrations.webrtc.events import SessionEvent, SessionEventKind
 from fastapi_canon.integrations.websockets import (
     Inject,
     ProtocolDefinitionError,
@@ -313,7 +309,7 @@ def test_mounting_snapshots_and_reuses_a_channel_at_different_paths() -> None:
             assert (await _receive(outgoing))["result"] == "later"
 
     asyncio.run(scenario())
-    document = export_contracts(app, kinds=[ContractKind.OPENRPC]).openrpc
+    document = export_contracts(app, kinds=["openrpc"]).openrpc
     assert document is not None
     assert {method["name"] for method in document["methods"]} == {
         "first.first",
@@ -564,47 +560,6 @@ def test_sse_raises_registers_terminal_errors() -> None:
     assert "private failure" not in response.text
 
 
-def test_webrtc_uses_real_engine_and_closes_factory_dependencies() -> None:
-    lifecycle: list[str] = []
-    observed: list[SessionEvent] = []
-    router = APIRouter(prefix="/projects")
-
-    @router.webrtc(
-        "/{project_id}/media", engine=AiortcEngine(), on_event=observed.append
-    )
-    async def media(project_id: str) -> AsyncIterator[Session]:
-        lifecycle.append(f"open {project_id}")
-        try:
-            yield Session()
-        finally:
-            lifecycle.append(f"close {project_id}")
-
-    app = Composition(features=[Feature(name="projects", routers=[router])]).build(
-        FastAPI()
-    )
-
-    async def scenario() -> None:
-        async with (
-            app.router.lifespan_context(app),
-            _connection(app, "/projects/42/media", [SUBPROTOCOL]) as (
-                _incoming,
-                outgoing,
-            ),
-        ):
-            message = await _receive(outgoing)
-            assert message["type"] == "session"
-            assert message["name"] == "media"
-            assert lifecycle == ["open 42"]
-        assert lifecycle == ["open 42", "close 42"]
-        assert [event.kind for event in observed] == [
-            SessionEventKind.ADMITTED,
-            SessionEventKind.CLOSED,
-        ]
-
-    asyncio.run(scenario())
-    assert lifecycle == ["open 42", "close 42"]
-
-
 def test_binary_streams_and_typed_sockets_are_declared_on_the_router() -> None:
     class Stores(Provider):
         @provide(scope=Scope.REQUEST)
@@ -631,7 +586,7 @@ def test_binary_streams_and_typed_sockets_are_declared_on_the_router() -> None:
         with client.websocket_connect("/projects/7/rename") as socket:
             socket.send_json({"title": "Draft"})
             assert socket.receive_json() == {"title": "Draft (3)"}
-    document = export_contracts(app, kinds=(ContractKind.OPENRPC,)).documents["openrpc"]
+    document = export_contracts(app, kinds=("openrpc",)).documents["openrpc"]
     assert [
         (stream["name"], stream["url"], stream["contentType"])
         for stream in document["x-rpckit-binary-streams"]
@@ -732,39 +687,6 @@ def test_separate_websocket_urls_and_shared_http_urls_remain_reachable() -> None
 
     asyncio.run(scenario())
     assert not composition.check(app).has_errors
-
-
-def test_application_shutdown_closes_active_webrtc_sessions() -> None:
-    closed: list[str] = []
-    router = APIRouter()
-
-    @router.webrtc("/media", engine=AiortcEngine())
-    async def media() -> AsyncIterator[Session]:
-        try:
-            yield Session()
-        finally:
-            closed.append("factory closed")
-
-    app = Composition(features=[Feature(name="media", routers=[router])]).build(
-        FastAPI()
-    )
-
-    async def scenario() -> Message:
-        async with AsyncExitStack() as connections:
-            async with app.router.lifespan_context(app):
-                _incoming, outgoing = await connections.enter_async_context(
-                    _connection(app, "/media", [SUBPROTOCOL])
-                )
-                assert (await _receive(outgoing))["type"] == "session"
-            message = await outgoing.get()
-            return message
-
-    assert asyncio.run(scenario()) == {
-        "type": "websocket.close",
-        "code": 1001,
-        "reason": "shutdown",
-    }
-    assert closed == ["factory closed"]
 
 
 @asynccontextmanager

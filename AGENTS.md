@@ -66,6 +66,9 @@ Shared errors and common generation are documented in `docs/problems.md` and
 
 ## Documentation
 
+- Keep guides short: a reader should get the overview in a minute. Prefer one
+  sentence and one example over explanation; cut rationale, restated rules and
+  edge cases a reader does not need to act. Agents tend to over-explain here.
 - Write for people who need to choose, install or use Canon. Lead with the task,
   show one small working example, then explain only the behavior needed to use it.
 - Keep the README to an overview, installation and one example. Put walkthroughs

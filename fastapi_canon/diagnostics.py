@@ -148,6 +148,14 @@ class CheckContext:
 type FeatureCheck = Callable[[CheckContext], tuple[CheckIssue, ...] | list[CheckIssue]]
 
 
+def qualified_name(value: object) -> str:
+    """Return the ``module.qualname`` used to locate a finding's subject."""
+    subject = value if hasattr(value, "__qualname__") else type(value)
+    return (
+        f"{getattr(subject, '__module__', '')}.{getattr(subject, '__qualname__', '')}"
+    )
+
+
 def _freeze_sequences(instance: object, *names: str) -> None:
     for name in names:
         object.__setattr__(instance, name, tuple(getattr(instance, name)))

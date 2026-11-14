@@ -1,4 +1,4 @@
-"""Canon admission contracts for WebRTC sessions."""
+"""``WebRtcRouter``: declare WebRTC sessions with Canon admission contracts."""
 
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, TypeVar, Unpack
@@ -25,23 +25,26 @@ from fastapi_canon.integrations.webrtc.declarations import (
 from fastapi_canon.integrations.webrtc.engine import Engine
 from fastapi_canon.integrations.webrtc.events import EventHook
 from fastapi_canon.integrations.webrtc.ice import IceServerSource
-from fastapi_canon.integrations.webrtc.router import WebRtcRouter
+from fastapi_canon.integrations.webrtc.router import SessionRouter
 from fastapi_canon.policy import normalize_raises as _normalize_raises
 from fastapi_canon.router import CanonRouter, RouterOptions, distinct_errors
 
-__all__ = [
-    "CanonWebRtcRouter",
-]
+__all__ = ["WebRtcRouter"]
 
 Factory = TypeVar("Factory", bound=Callable[..., Any])
 
 
-class CanonWebRtcRouter(CanonRouter, WebRtcRouter):
-    """Reuse Canon errors for pre-accept HTTP admission contracts.
+class WebRtcRouter(CanonRouter, SessionRouter):
+    """A router whose ``session`` decorator declares WebRTC sessions.
+
+    Each session is a WebSocket signaling endpoint with managed admission, limits
+    and cleanup; the engine owns the peer connection. Contribute the router with
+    ``Feature(routers=[rtc])``.
 
     Declare errors from dependencies and the factory with ``raises``. This
-    registers and documents failures; it is not an exception allowlist.
-    Once accepted, failures use WebRTC's protocol and lifecycle instead of HTTP.
+    registers and documents pre-accept HTTP admission failures; it is not an
+    exception allowlist. Once accepted, failures use WebRTC's protocol and
+    lifecycle instead of HTTP.
     """
 
     def __init__(
@@ -56,7 +59,7 @@ class CanonWebRtcRouter(CanonRouter, WebRtcRouter):
         **options: Unpack[RouterOptions],
     ) -> None:
         # Cooperative initialization passes WebRTC options through CanonRouter
-        # to WebRtcRouter without adding transport keywords to the HTTP API.
+        # to SessionRouter without adding transport keywords to the HTTP API.
         forwarded: dict[str, Any] = {
             **options,
             "engine": engine,
@@ -84,7 +87,7 @@ class CanonWebRtcRouter(CanonRouter, WebRtcRouter):
         raises: Sequence[AnyError] = (),
     ) -> Callable[[Factory], Factory]:
         if admission_errors is not None:
-            msg = "CanonWebRtcRouter derives admission_errors from raises"
+            msg = "WebRtcRouter derives admission_errors from raises"
             raise ErrorConfigurationError(msg)
         declared = distinct_errors(
             (

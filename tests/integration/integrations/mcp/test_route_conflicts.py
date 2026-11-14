@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from fastapi_canon import Composition, Feature
 from fastapi_canon.exceptions import FeatureConfigurationError
-from fastapi_canon.integrations.mcp import McpOptions
+from fastapi_canon.integrations.mcp import Mcp
 
 
 @pytest.mark.parametrize("path", ["/mcp", "/mcp/", "/{rest:path}"])
@@ -21,7 +21,7 @@ def test_http_routes_cannot_shadow_mcp(path: str, on_app: bool) -> None:
         app.include_router(router)
     composition = Composition(
         features=[] if on_app else [Feature(name="conflict", routers=[router])],
-        mcp=McpOptions(),
+        integrations=[Mcp()],
     )
     routes = tuple(app.routes)
 
@@ -44,7 +44,7 @@ def test_conflicts_include_router_factory_prefixes() -> None:
     composition = Composition(
         features=[Feature(name="conflict", routers=[router])],
         router_factory=lambda: APIRouter(prefix="/api"),
-        mcp=McpOptions(path="/api/v1/mcp"),
+        integrations=[Mcp(path="/api/v1/mcp")],
     )
 
     with pytest.raises(FeatureConfigurationError, match=r"MCP path.*conflicts"):
@@ -56,7 +56,7 @@ def test_existing_parent_mount_cannot_shadow_mcp() -> None:
     app.mount("/", FastAPI())
 
     with pytest.raises(FeatureConfigurationError, match=r"MCP path.*conflicts"):
-        Composition(mcp=McpOptions()).build(app)
+        Composition(integrations=[Mcp()]).build(app)
 
 
 def test_another_http_method_cannot_block_the_slashless_mcp_redirect() -> None:
@@ -67,7 +67,7 @@ def test_another_http_method_cannot_block_the_slashless_mcp_redirect() -> None:
         return "wrong endpoint"
 
     composition = Composition(
-        features=[Feature(name="conflict", routers=[router])], mcp=McpOptions()
+        features=[Feature(name="conflict", routers=[router])], integrations=[Mcp()]
     )
 
     with pytest.raises(FeatureConfigurationError, match=r"MCP path.*conflicts"):
@@ -82,7 +82,7 @@ def test_neighboring_http_route_remains_accessible() -> None:
         return "ready"
 
     composition = Composition(
-        features=[Feature(name="status", routers=[router])], mcp=McpOptions()
+        features=[Feature(name="status", routers=[router])], integrations=[Mcp()]
     )
     app = FastAPI()
     assert not composition.check(app).has_errors

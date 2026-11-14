@@ -83,7 +83,7 @@ client generators a stable contract identifier; the `Project` return annotation
 supplies its typed result and validates the server's returned data.
 
 A feature can also contribute Dishka `providers=`, a `lifespan=` and optional
-`instrumentation=`. Composition owns installation and cleanup. Shared
+`integrations=` parts such as `instrument(...)`. Composition owns installation and cleanup. Shared
 `RouterPolicy` declarations reduce repeated authentication, dependencies and
 error contracts. See the [core API guide](composition.md),
 [router policies](composition.md#router-policies) and

@@ -66,9 +66,21 @@ _EXPLANATIONS = {
         "Assign distinct effective WebSocket paths or remove duplicate registration. HTTP and WebSocket routes have separate ASGI scopes.",
         _CHECKS,
     ),
+    "canon.integrations.E001": _Explanation(
+        "A feature contributes a part to an integration that the composition does not enable.",
+        "Feature(integrations=[McpMount(server=server)]) is composed without Mcp() in Composition(integrations=[...]).",
+        "Enable the owning integration explicitly, for example Composition(integrations=[Mcp(path='/mcp')]), or remove the part from the feature.",
+        _DOCS + "composition.md#integrations",
+    ),
+    "canon.integrations.E002": _Explanation(
+        "An enabled integration rejected the prepared composition or is missing its optional dependencies.",
+        "Telemetry() is enabled, but the opentelemetry extra is not installed.",
+        "Install the integration's extra and correct the options, routes or services named by the finding before startup.",
+        _DOCS + "composition.md#integrations",
+    ),
     "canon.mcp.E001": _Explanation(
         "An application or feature HTTP route shadows the configured MCP endpoint.",
-        "An HTTP /mcp route overlaps the endpoint configured by McpOptions(path='/mcp').",
+        "An HTTP /mcp route overlaps the endpoint configured by Mcp(path='/mcp').",
         "Move the conflicting HTTP route or choose a distinct MCP path, then rerun composition preflight.",
         _CHECKS,
     ),
@@ -110,7 +122,7 @@ _EXPLANATIONS = {
     ),
     "canon.providers.E004": _Explanation(
         "A WebRTC factory injects a service unavailable through its WebSocket APP/SESSION lifetime.",
-        "@router.webrtc('/media') uses Inject[Store], while Store is bound only at REQUEST scope.",
+        "@rtc.session('/media') uses Inject[Store], while Store is bound only at REQUEST scope.",
         "Register factory services at APP or SESSION scope and use explicit child REQUEST scopes for per-message work. Review external-container and nested-dependency limits.",
         _DOCS + "system-checks.md#webrtc-factory-dependency-preflight",
     ),

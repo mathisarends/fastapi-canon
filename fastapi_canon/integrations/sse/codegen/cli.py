@@ -24,6 +24,8 @@ from fastapi_canon.integrations.sse.codegen.writer import planned_files, write_f
 if TYPE_CHECKING:
     from fastapi_canon.integrations.sse.codegen.diagnostics import GenerationDiagnostic
 
+__all__ = ["main"]
+
 _CONFIG_KEYS = {"app", "schema", "clients"}
 _CONFIG_TABLE = "tool.fastapi-canon.sse"
 _CLIENT_KEYS = {
@@ -38,6 +40,7 @@ _CLIENT_KEYS = {
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Export SSE contracts and generate Python or TypeScript clients."""
     parser = argparse.ArgumentParser(prog="fastapi-canon sse")
     commands = parser.add_subparsers(dest="command", required=True)
     schema = commands.add_parser("schema", help="Export and validate OpenAPI 3.2")

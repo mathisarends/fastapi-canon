@@ -29,7 +29,7 @@ from aiortc.contrib.media import MediaRelay
 from fastapi import Depends, FastAPI, HTTPException, Query
 from pydantic import BaseModel
 
-from fastapi_canon import APIRouter, Composition, Feature
+from fastapi_canon import Composition, Feature
 from fastapi_canon.integrations.webrtc import (
     DataChannelSpec,
     Direction,
@@ -37,6 +37,7 @@ from fastapi_canon.integrations.webrtc import (
     MediaPolicy,
     Peer,
     Session,
+    WebRtcRouter,
 )
 from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine
 
@@ -61,12 +62,11 @@ def lesson_access(lesson_id: str, token: Annotated[str, Query()]) -> str:
     return lesson_id
 
 
-router = APIRouter(prefix="/rtc")
+rtc = WebRtcRouter(prefix="/rtc", engine=AiortcEngine())
 
 
-@router.webrtc(
+@rtc.session(
     "/lessons/{lesson_id}",
-    engine=AiortcEngine(),
     name="practice",
     media=MediaPolicy(audio=Direction.SEND_RECEIVE),
     data_channels=(MESSAGES,),
@@ -86,7 +86,7 @@ def practice(lesson: Annotated[str, Depends(lesson_access)]) -> Session:
     return Session(on_track=on_track, on_message={MESSAGES: on_prompt})
 
 
-app = Composition(features=[Feature(name="lessons", routers=[router])]).build(FastAPI())
+app = Composition(features=[Feature(name="lessons", routers=[rtc])]).build(FastAPI())
 ```
 
 A `Session` is assembled from handlers:
@@ -187,7 +187,7 @@ your application. Two WebSocket properties need attention:
 
 - **Origins.** CORS does not apply to WebSocket handshakes, and browsers attach
   cookies to cross-site handshakes. If admission relies on cookies, pass
-  `@router.webrtc(..., allowed_origins=["https://app.example.com"])`. Handshakes from
+  `WebRtcRouter(..., allowed_origins=["https://app.example.com"])`. Handshakes from
   other origins are refused with HTTP 403 before the session factory runs.
   Requests without an `Origin` header come from non-browser clients and are not
   restricted by this check.

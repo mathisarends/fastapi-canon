@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from starlette.routing import compile_path
 from starlette.types import ASGIApp, Message, Scope
 
-from fastapi_canon.contract_routes import RPC_ENDPOINT_ATTRIBUTE, iter_contract_routes
+from fastapi_canon.contract_routes import iter_contract_routes
 from fastapi_canon.error import Problem
 from fastapi_canon.integrations.websockets.adapters.fastapi import CanonWebSocketRouter
 from fastapi_canon.integrations.websockets.connection import (
@@ -24,6 +24,7 @@ from fastapi_canon.integrations.websockets.connection import (
     RpcRejections,
 )
 from fastapi_canon.integrations.websockets.definition import (
+    ENDPOINT_ATTRIBUTE,
     RpcAnyEndpoint,
     RpcDefinition,
     RpcSocketEndpoint,
@@ -673,7 +674,7 @@ class _ASGIService:
             getattr(self.app, "routes", ())
         ):
             endpoint = getattr(
-                getattr(route, "endpoint", None), RPC_ENDPOINT_ATTRIBUTE, None
+                getattr(route, "endpoint", None), ENDPOINT_ATTRIBUTE, None
             )
             matched = compile_path(effective_path)[0].fullmatch(path)
             if endpoint is not None and matched is not None:

@@ -19,6 +19,12 @@ _API_ROUTERS = frozenset(
     {"fastapi_canon.APIRouter", "fastapi_canon.api_router.APIRouter"}
 )
 _CANON_ROUTERS = frozenset({"fastapi_canon.router.CanonRouter", *_API_ROUTERS})
+_WEBRTC_ROUTERS = frozenset(
+    {
+        "fastapi_canon.integrations.webrtc.WebRtcRouter",
+        "fastapi_canon.integrations.webrtc.canon.WebRtcRouter",
+    }
+)
 _ERROR = "fastapi_canon.Error"
 _ERRORS = frozenset(
     {_ERROR, "fastapi_canon.error.Error", "fastapi_canon.error.error.Error"}
@@ -121,7 +127,7 @@ class _CheckContracts:
                     function.name,
                     str(self.source.paths[function.module]),
                     decorator.lineno,
-                    transport=method if method in TRANSPORT_METHODS else "http",
+                    transport=TRANSPORT_METHODS.get(method, "http"),
                 )
                 if id(function.node) in nested:
                     operations.append(operation)
@@ -136,8 +142,15 @@ class _CheckContracts:
                     else None
                 )
                 supported = (
-                    _API_ROUTERS if method in TRANSPORT_METHODS else _CANON_ROUTERS
+                    _WEBRTC_ROUTERS
+                    if method == "session"
+                    else _API_ROUTERS
+                    if method in TRANSPORT_METHODS
+                    else _CANON_ROUTERS
                 )
+                if method == "session" and constructor not in supported:
+                    # ``session`` is a common method name; only WebRTC routers declare.
+                    continue
                 if constructor not in supported:
                     if constructor in {
                         "fastapi.APIRouter",

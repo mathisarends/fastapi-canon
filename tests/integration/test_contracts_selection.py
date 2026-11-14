@@ -12,9 +12,8 @@ from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 
 from fastapi_canon import Composition, Feature, export_contracts
-from fastapi_canon.contracts import ContractKind, ContractSelection
-from fastapi_canon.integrations.webrtc import Session
-from fastapi_canon.integrations.webrtc.router import WebRtcRouter
+from fastapi_canon.contracts import ContractSelection
+from fastapi_canon.integrations.webrtc import Session, WebRtcRouter
 from fastapi_canon.integrations.websockets import (
     CanonWebSocketRouter,
     ProtocolDefinitionError,
@@ -42,16 +41,16 @@ def test_feature_selection_precedes_rpc_contract_validation(
     ).build(FastAPI())
 
     with pytest.raises(ProtocolDefinitionError, match=conflict):
-        export_contracts(app, kinds=(ContractKind.OPENRPC,))
+        export_contracts(app, kinds=("openrpc",))
 
     first_contract = export_contracts(
         app,
-        kinds=(ContractKind.OPENRPC,),
+        kinds=("openrpc",),
         selection=ContractSelection(features=(first,)),
     ).openrpc
     second_contract = export_contracts(
         app,
-        kinds=(ContractKind.OPENRPC,),
+        kinds=("openrpc",),
         selection=ContractSelection(features=(second,)),
     ).openrpc
 
@@ -99,7 +98,7 @@ def test_feature_selection_preserves_http_methods_schema_closure_and_app_cache()
 
     exported = export_contracts(
         app,
-        kinds=(ContractKind.OPENAPI,),
+        kinds=("openapi",),
         selection=ContractSelection(features=(feature,)),
     ).openapi
 
@@ -138,7 +137,7 @@ def test_openapi_selection_keeps_only_tags_and_components_it_uses() -> None:
     def openapi(feature: Feature) -> dict[str, Any]:
         document = export_contracts(
             app,
-            kinds=(ContractKind.OPENAPI, ContractKind.OPENRPC),
+            kinds=("openapi", "openrpc"),
             selection=ContractSelection(features=(feature,)),
         ).openapi
         assert document is not None
@@ -163,13 +162,13 @@ def test_feature_references_select_all_mounts_and_paths_narrow_the_occurrence() 
     with pytest.raises(ProtocolDefinitionError, match="'/v1/rpc' and '/v2/rpc'"):
         export_contracts(
             parent,
-            kinds=(ContractKind.OPENRPC,),
+            kinds=("openrpc",),
             selection=ContractSelection(features=(feature,)),
         )
 
     document = export_contracts(
         parent,
-        kinds=(ContractKind.OPENRPC,),
+        kinds=("openrpc",),
         selection=ContractSelection(features=(feature,), paths=("/v2/rpc",)),
     ).openrpc
 
@@ -184,7 +183,7 @@ def test_path_selection_supports_applications_without_composition() -> None:
 
     document = export_contracts(
         app,
-        kinds=(ContractKind.OPENRPC,),
+        kinds=("openrpc",),
         selection=ContractSelection(paths=("/api/rpc",)),
     ).openrpc
 
@@ -203,7 +202,7 @@ def test_uninstalled_feature_objects_are_rejected_even_with_the_same_name(
     with pytest.raises(ValueError, match="exact Feature instances"):
         export_contracts(
             app,
-            kinds=(ContractKind.OPENRPC,),
+            kinds=("openrpc",),
             selection=ContractSelection(features=(foreign,)),
         )
 
@@ -217,7 +216,7 @@ def test_selection_rejects_unknown_paths_and_empty_intersections(path: str) -> N
     with pytest.raises(ValueError, match=r"[Nn]o .*routes"):
         export_contracts(
             app,
-            kinds=(ContractKind.OPENRPC,),
+            kinds=("openrpc",),
             selection=ContractSelection(features=(http,), paths=(path,)),
         )
 
@@ -235,7 +234,7 @@ def test_openapi_selection_retains_mounted_application_boundaries() -> None:
     with pytest.raises(ValueError, match="separate OpenAPI documents"):
         export_contracts(
             parent,
-            kinds=(ContractKind.OPENAPI,),
+            kinds=("openapi",),
             selection=ContractSelection(paths=("/backend/health",)),
         )
 
@@ -269,7 +268,7 @@ def test_feature_routers_with_mounts_keep_route_ownership(
     def selected_paths(feature: Feature) -> list[str]:
         document = export_contracts(
             app,
-            kinds=(ContractKind.OPENAPI,),
+            kinds=("openapi",),
             selection=ContractSelection(features=(feature,)),
         ).openapi
         assert document is not None
@@ -303,7 +302,7 @@ def test_openapi_selection_preserves_discriminator_mapping_schema_references() -
 
     document = export_contracts(
         app,
-        kinds=(ContractKind.OPENAPI,),
+        kinds=("openapi",),
         selection=ContractSelection(paths=("/animal",)),
     ).openapi
 
@@ -329,13 +328,13 @@ def test_webrtc_selection_precedes_duplicate_session_name_validation() -> None:
     app = Composition(features=(first, second)).build(FastAPI())
 
     with pytest.raises(ValueError, match="declared more than once"):
-        export_contracts(app, kinds=(ContractKind.WEBRTC,))
+        export_contracts(app, kinds=("webrtc",))
 
     document = export_contracts(
         app,
-        kinds=(ContractKind.WEBRTC,),
+        kinds=("webrtc",),
         selection=ContractSelection(features=(first,)),
-    ).webrtc
+    ).documents.get("webrtc")
 
     assert document is not None
     assert [(session["name"], session["path"]) for session in document["sessions"]] == [

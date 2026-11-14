@@ -21,6 +21,7 @@ from fastapi_canon.integrations.webrtc import (
     SessionLimits,
     TurnRestCredentials,
     WebRtcError,
+    WebRtcRouter,
 )
 from fastapi_canon.integrations.webrtc.declarations import (
     SessionContext,
@@ -34,7 +35,6 @@ from fastapi_canon.integrations.webrtc.engine import (
 from fastapi_canon.integrations.webrtc.engines import ConnectionState
 from fastapi_canon.integrations.webrtc.errors import close_code, default_message
 from fastapi_canon.integrations.webrtc.ice import resolve_ice_servers
-from fastapi_canon.integrations.webrtc.router import WebRtcRouter
 from fastapi_canon.integrations.webrtc.sdp import summarize
 from pydantic import BaseModel
 

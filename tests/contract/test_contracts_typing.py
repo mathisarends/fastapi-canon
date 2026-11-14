@@ -5,9 +5,8 @@ import pytest
 
 # Each consumer: (kinds expression, features expression, type-checks cleanly).
 _CONSUMERS = {
-    "object_references": ("ContractKind.OPENRPC", "feature", True),
-    "string_kind": ('"openrpc"', "feature", False),
-    "feature_name": ("ContractKind.OPENRPC", '"browser"', False),
+    "object_references": ('"openrpc"', "feature", True),
+    "feature_name": ('"openrpc"', '"browser"', False),
 }
 
 
@@ -19,7 +18,7 @@ def mypy_report(tmp_path_factory: pytest.TempPathFactory) -> str:
         (root / f"{name}.py").write_text(
             "from fastapi import FastAPI\n"
             "from fastapi_canon import Composition, Feature, export_contracts\n"
-            "from fastapi_canon.contracts import ContractKind, ContractSelection\n"
+            "from fastapi_canon.contracts import ContractSelection\n"
             'feature = Feature(name="browser")\n'
             "app = Composition(features=(feature,)).build(FastAPI())\n"
             f"export_contracts(app, kinds=({kinds},), "

@@ -10,7 +10,7 @@ from fastapi_canon.integrations.webrtc import (
     Role,
     Session,
 )
-from fastapi_canon.integrations.webrtc.router import WebRtcRouter
+from fastapi_canon.integrations.webrtc.router import SessionRouter
 from pydantic import BaseModel, Field
 
 from tests.unit.integrations.webrtc.fake_engine import FakeEngine
@@ -53,7 +53,7 @@ def token(token: Annotated[str, Query()]) -> str:
     return token
 
 
-rtc = WebRtcRouter(engine=FakeEngine(), prefix="/rtc")
+rtc = SessionRouter(engine=FakeEngine(), prefix="/rtc")
 
 
 @rtc.session(

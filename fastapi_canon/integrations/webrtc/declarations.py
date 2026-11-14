@@ -33,6 +33,9 @@ if TYPE_CHECKING:
     from fastapi_canon.integrations.webrtc.peer import IncomingTrack, Peer
 
 
+DECLARATION_ATTRIBUTE = "__canon_webrtc__"
+"""Endpoint attribute that holds the endpoint's ``SessionDeclaration``."""
+
 type AdmissionErrors = Callable[[FastAPI | None], Sequence[Mapping[str, Any]]]
 """Export HTTP denial contracts before acceptance; never maps runtime failures.
 

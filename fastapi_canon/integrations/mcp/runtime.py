@@ -2,13 +2,14 @@ from collections.abc import Sequence
 from typing import Any
 
 from dishka import AsyncContainer
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastmcp import FastMCP
 from fastmcp.server.middleware import Middleware, MiddlewareContext
-from starlette.types import Lifespan
+from starlette.routing import Match
+from starlette.types import Lifespan, Scope
 
 from fastapi_canon.exceptions import FeatureConfigurationError
-from fastapi_canon.integrations.mcp import McpMount, McpOptions, McpScope
+from fastapi_canon.integrations.mcp import Mcp, McpMount, McpScope
 from fastapi_canon.integrations.mcp.component_validation import ComponentValidation
 from fastapi_canon.integrations.mcp.configuration import McpRuntime
 
@@ -16,7 +17,7 @@ from fastapi_canon.integrations.mcp.configuration import McpRuntime
 def install_mcp(
     app: FastAPI,
     mounts: Sequence[McpMount],
-    options: McpOptions,
+    options: Mcp,
     container: AsyncContainer | None,
     configuration: McpRuntime,
 ) -> Lifespan[FastAPI]:
@@ -38,17 +39,13 @@ def install_mcp(
     return mcp_app.lifespan
 
 
-def validate_mounts(mounts: Sequence[McpMount], options: McpOptions | None) -> None:
-    if mounts and options is None:
-        raise FeatureConfigurationError(
-            "Features with MCP mounts require Composition(mcp=McpOptions())"
-        )
+def validate_mounts(mounts: Sequence[McpMount]) -> None:
     namespaces: set[str] = set()
     servers: set[int] = set()
     for mount in mounts:
         if mount.server.auth is not None:
             raise FeatureConfigurationError(
-                "Configure MCP HTTP authentication on McpOptions(auth=...), not a mounted feature server"
+                "Configure MCP HTTP authentication on Mcp(auth=...), not a mounted feature server"
             )
         if mount.namespace in namespaces or id(mount.server) in servers:
             raise FeatureConfigurationError(
@@ -56,6 +53,27 @@ def validate_mounts(mounts: Sequence[McpMount], options: McpOptions | None) -> N
             )
         namespaces.add(mount.namespace)
         servers.add(id(mount.server))
+
+
+def validate_routes(app: FastAPI, routers: tuple[APIRouter, ...], path: str) -> None:
+    for router in (app.router, *routers):
+        for route in router.routes:
+            for endpoint in (path, path + "/"):
+                for method in ("GET", "POST", "DELETE"):
+                    scope: Scope = {
+                        "type": "http",
+                        "path": endpoint,
+                        "root_path": "",
+                        "method": method,
+                    }
+                    match, _ = route.matches(scope)
+                    if match is Match.FULL or (
+                        endpoint == path and match is Match.PARTIAL
+                    ):
+                        raise FeatureConfigurationError(
+                            f"MCP path {path!r} conflicts with an existing route "
+                            f"matching {method} {endpoint}"
+                        )
 
 
 class _DishkaScope(Middleware):

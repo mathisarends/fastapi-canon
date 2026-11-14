@@ -25,16 +25,6 @@ from fastapi_canon.router import RouterOptions as RouterOptions
 
 if TYPE_CHECKING:
     from fastapi_canon.error import AnyError
-    from fastapi_canon.integrations.webrtc import (
-        DataChannelSpec,
-        EventHook,
-        IceServerSource,
-        MediaPolicy,
-        Role,
-        SessionCapacity,
-        SessionLimits,
-    )
-    from fastapi_canon.integrations.webrtc.engines import Engine
     from fastapi_canon.integrations.websockets import (
         RpcBeforeAccept,
         RpcChannel,
@@ -95,22 +85,8 @@ class ChannelOptions(TypedDict, total=False):
     before_accept: RpcBeforeAccept | None
 
 
-class SessionOptions(TypedDict, total=False):
-    """Session options accepted by ``APIRouter.webrtc()``."""
-
-    name: str | None
-    role: Role
-    media: MediaPolicy | None
-    data_channels: Sequence[DataChannelSpec]
-    limits: SessionLimits | None
-    max_sessions: int | None
-    capacity: SessionCapacity | None
-    dependencies: Sequence[Depends] | None
-    raises: Sequence[AnyError]
-
-
 class APIRouter(CanonRouter):
-    """Compose HTTP, SSE, WebSocket channels, streams, sockets and WebRTC by feature.
+    """Compose HTTP, SSE, WebSocket channels, streams and sockets by feature.
 
     HTTP and SSE endpoints resolve ``Inject[T]`` and ``FromDishka[T]`` parameters
     without ``route_class=DishkaRoute`` or ``@inject``. An explicit
@@ -380,38 +356,6 @@ class APIRouter(CanonRouter):
                 register(endpoint)
             self.include_router(adapter)
             return endpoint
-
-        return decorate
-
-    def webrtc[Factory: Callable[..., Any]](
-        self,
-        path: str,
-        *,
-        engine: Engine | None = None,
-        ice_servers: IceServerSource | None = None,
-        on_event: EventHook | None = None,
-        allowed_origins: Sequence[str] | None = None,
-        **options: Unpack[SessionOptions],
-    ) -> Callable[[Factory], Factory]:
-        """Declare a WebRTC session factory with managed signaling and cleanup.
-
-        A factory may also supply its session's engine.
-        """
-        from fastapi_canon.integrations.webrtc.canon import CanonWebRtcRouter
-
-        adapter = CanonWebRtcRouter(
-            raises=self.raises,
-            engine=engine,
-            ice_servers=ice_servers,
-            on_event=on_event,
-            allowed_origins=allowed_origins,
-        )
-        register = adapter.session(path, **options)
-
-        def decorate(factory: Factory) -> Factory:
-            register(factory)
-            self.include_router(adapter)
-            return factory
 
         return decorate
 

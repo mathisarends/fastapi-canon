@@ -99,32 +99,14 @@ isolation mode with this transaction handling.
 
 ## Engine instrumentation lifetime
 
-Pass `engine_context` to attach engine-local instrumentation without an additional
-Dishka decorator:
+`Telemetry` instruments the `Database` engine automatically; see
+[HTTP clients and database engines](telemetry.md#http-clients-and-database-engines).
+For other engine-local listeners, pass `engine_context`, a factory taking the
+created `AsyncEngine` and returning a synchronous context manager:
 
 ```python
-from fastapi_canon.integrations.database import Database
-from fastapi_canon.integrations.opentelemetry.sqlalchemy import (
-    SqlAlchemyInstrumentation,
-)
-from app.telemetry import telemetry
-
-database = Database(
-    url=settings.database_url,
-    engine_context=SqlAlchemyInstrumentation(
-        telemetry=telemetry,
-        pool_name="backend",
-    ),
-)
+database = Database(url=settings.database_url, engine_context=attach_listeners)
 ```
-
-Install the `otel-sqlalchemy` extra for this telemetry adapter. The hook itself
-has no OpenTelemetry dependency: it accepts any synchronous context-manager
-factory taking the created `AsyncEngine`. `SqlAlchemyInstrumentation` is an
-immutable declaration with `telemetry`, `pool_name`, `pool_metrics` and
-`capture_statement` options. It creates a fresh context for each engine and can
-be reused across independent engine lifetimes. Direct `instrument_sqlalchemy`
-context managers remain available for application-owned engines.
 
 Custom factories must return a fresh context manager for each invocation. Its
 yielded value is ignored; Canon owns the original engine.

@@ -110,7 +110,11 @@ def test_webrtc_factory_errors_need_raises(
 ) -> None:
     report = analyze(
         f"""
-@router.webrtc('/sessions/{{session_id}}', {declaration})
+from fastapi_canon.integrations.webrtc import WebRtcRouter
+
+rtc = WebRtcRouter()
+
+@rtc.session('/sessions/{{session_id}}', {declaration})
 async def session(session_id: str) -> object:
     raise Missing()
 """,

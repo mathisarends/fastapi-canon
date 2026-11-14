@@ -8,10 +8,9 @@ import pytest
 from fastapi import APIRouter as FastAPIRouter
 
 from fastapi_canon import APIRouter
-from fastapi_canon.api_router import ChannelOptions, SessionOptions, StreamOptions
+from fastapi_canon.api_router import ChannelOptions, StreamOptions
 from fastapi_canon.exceptions import ConfigurationError
 from fastapi_canon.integrations.sse.canon import CanonStreamRouter
-from fastapi_canon.integrations.webrtc.canon import CanonWebRtcRouter
 from fastapi_canon.integrations.websockets import CanonWebSocketRouter
 from fastapi_canon.router import (
     APIRouteOptions,
@@ -52,13 +51,6 @@ def test_channel_options_match_the_websocket_adapter() -> None:
     accepted = _keywords(CanonWebSocketRouter.__init__) - {"path", "channels", "prefix"}
 
     assert set(ChannelOptions.__annotations__) == accepted
-
-
-def test_session_options_match_the_webrtc_adapter() -> None:
-    # Canon derives admission errors from raises=.
-    accepted = _keywords(CanonWebRtcRouter.session) - {"path", "admission_errors"}
-
-    assert set(SessionOptions.__annotations__) == accepted
 
 
 def test_stream_options_are_route_options() -> None:

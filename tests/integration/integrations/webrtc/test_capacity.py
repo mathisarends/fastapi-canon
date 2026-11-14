@@ -2,13 +2,14 @@
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from fastapi_canon import APIRouter, Composition, Feature
+from fastapi_canon import Composition, Feature
 from fastapi_canon.integrations.webrtc import (
     ErrorCode,
     Session,
     SessionCapacity,
     SessionEvent,
     SessionEventKind,
+    WebRtcRouter,
 )
 from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine
 
@@ -17,14 +18,14 @@ def test_shared_capacity_refuses_until_the_open_session_closes() -> None:
     capacity = SessionCapacity(max_sessions=1)
     events: list[SessionEvent] = []
     engine = AiortcEngine()
-    voice = APIRouter(prefix="/voice")
-    video = APIRouter(prefix="/video")
+    voice = WebRtcRouter(prefix="/voice", engine=engine, on_event=events.append)
+    video = WebRtcRouter(prefix="/video", engine=engine, on_event=events.append)
 
-    @voice.webrtc("/rtc", engine=engine, capacity=capacity, on_event=events.append)
+    @voice.session("/rtc", capacity=capacity)
     def talk() -> Session:
         return Session()
 
-    @video.webrtc("/rtc", engine=engine, capacity=capacity, on_event=events.append)
+    @video.session("/rtc", capacity=capacity)
     def watch() -> Session:
         return Session()
 

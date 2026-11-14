@@ -6,18 +6,23 @@ from typing import Protocol
 
 from examples.webrtc.remote_video.engine import RemoteVideoEngine, VideoLease
 from fastapi import FastAPI
-from fastapi_canon import APIRouter
-from fastapi_canon.integrations.webrtc import Direction, MediaPolicy, Role, Session
+from fastapi_canon.integrations.webrtc import (
+    Direction,
+    MediaPolicy,
+    Role,
+    Session,
+    WebRtcRouter,
+)
 
 
 class VideoService(Protocol):
     def subscribe(self, browser_id: str) -> AbstractAsyncContextManager[VideoLease]: ...
 
 
-def create_router(service: VideoService) -> APIRouter:
-    router = APIRouter()
+def create_router(service: VideoService) -> WebRtcRouter:
+    router = WebRtcRouter()
 
-    @router.webrtc(
+    @router.session(
         "/browser/{browser_id}/video",
         role=Role.OFFERER,
         media=MediaPolicy(video=Direction.SEND),

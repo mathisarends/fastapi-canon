@@ -10,7 +10,7 @@ from aiortc import AudioStreamTrack
 from dishka import FromDishka, Provider, Scope, provide
 from fastapi import FastAPI, Header, HTTPException
 from fastapi_canon import APIRouter, Composition, Feature, Inject
-from fastapi_canon.integrations.webrtc import ErrorCode, Peer, Session
+from fastapi_canon.integrations.webrtc import ErrorCode, Peer, Session, WebRtcRouter
 from fastapi_canon.integrations.webrtc.contract import build_contract
 from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine
 
@@ -109,8 +109,8 @@ async def test_factory_forms_share_session_resources_until_after_cleanup(
     }
     factory = factories[kind]
     original = dict(vars(factory))
-    router = APIRouter(prefix="/items")
-    router.webrtc("/{item_id}/media", engine=AiortcEngine(), name="media")(factory)
+    router = WebRtcRouter(prefix="/items", engine=AiortcEngine())
+    router.session("/{item_id}/media", name="media")(factory)
     parent = APIRouter(prefix="/api")
     parent.include_router(router)
     composition = Composition(
@@ -191,9 +191,9 @@ def test_factory_preflight_checks_session_scope_without_resolving_services(
 
         provider.provide(resource, scope=binding)
         providers.append(provider)
-    router = APIRouter(prefix="/items")
+    router = WebRtcRouter(prefix="/items")
 
-    @router.webrtc("/{item_id}/media")
+    @router.session("/{item_id}/media")
     async def media(item_id: int, resource: Inject[Resource]) -> Session:
         calls.append("factory")
         return Session()

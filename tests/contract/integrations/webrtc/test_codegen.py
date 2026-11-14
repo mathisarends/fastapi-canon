@@ -9,7 +9,7 @@ from typing import Annotated, Any
 
 import pytest
 from fastapi import Depends, FastAPI, Query
-from fastapi_canon.integrations.webrtc import Session
+from fastapi_canon.integrations.webrtc import Session, WebRtcRouter
 from fastapi_canon.integrations.webrtc.codegen.cli import main
 from fastapi_canon.integrations.webrtc.codegen.typescript import (
     ContractError,
@@ -18,7 +18,6 @@ from fastapi_canon.integrations.webrtc.codegen.typescript import (
 )
 from fastapi_canon.integrations.webrtc.codegen.writer import MANIFEST, write_files
 from fastapi_canon.integrations.webrtc.contract import build_contract
-from fastapi_canon.integrations.webrtc.router import WebRtcRouter
 from pydantic import BaseModel, Field
 from tests.unit.integrations.webrtc import contract_app
 from tests.unit.integrations.webrtc.fake_engine import FakeEngine

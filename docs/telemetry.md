@@ -32,40 +32,43 @@ tasks = Feature(
     name="tasks",
     routers=(router,),
     providers=(TaskProvider,),
-    instrumentation=instrument(
-        TaskRepository,
-        TaskService,
-        expected=(TaskNotFound,),
-    ),
+    integrations=[
+        instrument(TaskRepository),
+        instrument(TaskService, expected=(TaskNotFound,)),
+    ],
 )
 app = Composition(
     features=(tasks,),
-    telemetry=Telemetry(
-        tracer_provider=tracer_provider,
-        exclude=lambda scope: scope["path"] in {"/health", "/ready"},
-    ),
+    integrations=[
+        Telemetry(
+            tracer_provider=tracer_provider,
+            exclude=lambda scope: scope["path"] in {"/health", "/ready"},
+        ),
+    ],
 ).build(FastAPI())
 ```
 
 `instrument(Port, OtherPort, ...)` requires at least one positional port and
-returns a tuple of immutable `Instrumentation` declarations in input order,
-including for a single port. Pass that tuple directly to `Feature.instrumentation`.
-The keyword-only `expected` and `component` options apply to every port in the call.
-For ports with different settings, unpack multiple groups into one sequence:
+returns one immutable `Instrumentation` part, which goes into
+`Feature(integrations=[...])` like any other integration part. The keyword-only
+`expected` and `component` options apply to every port in the call. Declared
+Canon errors with a status below 500 count as expected without listing them. Use
+one call per group of ports with different settings:
 
 ```python
-instrumentation = [
-    *instrument(TaskRepository, AuditRepository),
-    *instrument(TaskService, expected=(TaskNotFound,)),
-    *instrument(BillingGateway, component="billing"),
+integrations = [
+    instrument(TaskRepository, AuditRepository),
+    instrument(TaskService, expected=(TaskNotFound,)),
+    instrument(BillingGateway, component="billing"),
 ]
 ```
 
 Dishka providers stay focused on their normal bindings.
-Existing `@provide` factory methods work too. Composition generates
-separate decorator providers only when `telemetry=Telemetry(...)` is supplied.
-With `telemetry=None`, the declarations add no DI dependencies or decorators and
-import no Canon OpenTelemetry runtime. Direct Dishka containers can use the same
+Existing `@provide` factory methods work too. Instrumentation requires
+`Telemetry` in `Composition(integrations=[...])`; a feature that instruments ports
+in a composition without it is rejected with `canon.integrations.E001`. Use
+`Telemetry.disabled()` to keep the declarations without producing telemetry; it
+adds no proxies or spans. Direct Dishka containers can use the same
 original providers without Canon. Features and provider instances can be reused
 across applications; their instrumentation runtime belongs to each composition.
 
@@ -99,26 +102,13 @@ service reference can remain concretely typed with
 `model_config = ConfigDict(arbitrary_types_allowed=True)` and
 `registry: ToolAccessRegistry = Field(exclude=True)` when the wrapped adapter is a
 `ToolAccessRegistry`. This also applies to FastMCP `AccessToken` subclasses returned
-by an `McpOptions(auth_factory=...)` verifier. Token validity, tool/turn scoping and
+by an `Mcp(auth_factory=...)` verifier. Token validity, tool/turn scoping and
 revocation remain the application's responsibility. Keep request-scoped services
 out of longer-lived tokens; return detached identity data for those bindings.
 
-### Migration from 0.11
+### Migration from 0.20
 
-`instrument(Port)` now returns a tuple rather than a single declaration.
-Replace `Feature(instrumentation=[instrument(Port)])` with
-`Feature(instrumentation=instrument(Port))`. Combine ports sharing settings with
-`instrument(FirstPort, SecondPort, expected=(ExpectedError,))`. Unpack each call
-with `*instrument(...)` when combining groups with different settings in a list
-or tuple. Replace `instrument(port=Port)` with the positional `instrument(Port)`.
-
-### Migration from 0.10
-
-`observe()` has been removed, without an alias. Move its declarations out of
-Provider classes into `Feature(instrumentation=instrument(Port, OtherPort))`. Remove
-separate telemetry-only providers/features. Keep `expected=(...)` on the new
-declaration, and supply `component=` explicitly for named Dishka bindings.
-SDK configuration and ownership remain unchanged.
+See the [0.21.0 upgrade guide](package-migration.md#upgrade-to-0210).
 
 ## Configuration and ownership
 
@@ -140,8 +130,8 @@ exporters, sets global providers, or flushes/shuts down application providers.
 The application may install global providers in its lifespan before requests
 start; both FastAPI and the port tracer resolve them lazily. Explicit providers
 should be created before composition and shut down by an application lifespan.
-Without a Canon telemetry option, FastAPI keeps its own constructor/environment
-configuration; `telemetry=None` does not disable an independently configured
+Without an enabled `Telemetry`, FastAPI keeps its own constructor/environment
+configuration; omitting `Telemetry` does not disable an independently configured
 FastAPI pipeline.
 
 ### HTTP exclusion and suppression
@@ -167,13 +157,13 @@ configuration remains explicit as described below.
 
 ### Injecting configuration into infrastructure
 
-Each Composition-owned Dishka container binds the same immutable `Telemetry`
-instance at `Scope.APP`, in every contributed Dishka component. Infrastructure
+With `Telemetry` enabled, each Composition-owned Dishka container binds the same
+immutable `Telemetry` instance at `Scope.APP`, in every contributed Dishka component. Infrastructure
 providers can depend directly on `Telemetry`. Composition reserves that binding;
 remove custom bindings of the same type rather than overriding it.
 
-With `Composition(features=features, telemetry=None)`, infrastructure receives
-`Telemetry.disabled()`: tracing, metrics and logs are off, and the adapters below
+Enable `Composition(integrations=[Telemetry.disabled()])` to keep this binding
+without recording: tracing, metrics and logs are off, and the adapters below
 leave resources untouched without importing their optional runtimes. This does
 not disable an independently configured FastAPI pipeline. Without contributed
 providers Composition still avoids creating an otherwise unused DI container.
@@ -189,73 +179,49 @@ container = make_async_container(Infrastructure(), Telemetry.disabled().provider
 `options.provider(component="billing")` selects a named Dishka component. These
 providers return the borrowed configuration; they never create or close SDKs.
 
-### Explicit resource adapters
+### HTTP clients and database engines
 
-Install `fastapi-canon[otel-httpx]` plus the HTTPX or HTTPX2 client library you use,
-and `fastapi-canon[otel-sqlalchemy]` plus your database driver. The SQLAlchemy extra
-includes its asyncio dependencies, including greenlet, for sync/async engine
-support across supported SQLAlchemy versions. The core `otel`
-extra does not install client libraries, SQLAlchemy or the SDK.
+With `Telemetry` enabled, Canon instruments every HTTPX/HTTPX2 client and
+SQLAlchemy engine that a Dishka provider returns. Install
+`fastapi-canon[otel-httpx]` or `fastapi-canon[otel-sqlalchemy]`; providers stay
+plain:
 
 ```python
-from collections.abc import AsyncIterator
-
-import httpx2
-from dishka import Provider, Scope, provide
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-
-from fastapi_canon.integrations.opentelemetry import Telemetry
-from fastapi_canon.integrations.opentelemetry.httpx import instrument_httpx
-from fastapi_canon.integrations.opentelemetry.sqlalchemy import instrument_sqlalchemy
-
-
 class Infrastructure(Provider):
     @provide(scope=Scope.APP)
-    async def client(self, telemetry: Telemetry) -> AsyncIterator[httpx2.AsyncClient]:
+    async def client(self) -> AsyncIterator[httpx2.AsyncClient]:
         async with httpx2.AsyncClient(timeout=10) as client:
-            with instrument_httpx(client, telemetry):
-                yield client
-
-    @provide(scope=Scope.APP)
-    async def engine(self, telemetry: Telemetry) -> AsyncIterator[AsyncEngine]:
-        engine = create_async_engine("sqlite+aiosqlite:///application.db")
-        try:
-            with instrument_sqlalchemy(engine, telemetry, pool_name="primary"):
-                yield engine
-        finally:
-            await engine.dispose()
+            yield client
 ```
 
-Both context managers also support synchronous resources and return the original
-instance. Their scope must outlive in-flight operations. They detach on normal
-exit, failure and cancellation, without closing resources or borrowed providers.
-Tracing and metrics follow their respective application switches independently.
-Both-off configurations are no-ops, including without optional packages installed.
-
-For Canon-owned database engines, pass a reusable declaration to the engine
-context hook:
+Configure or disable adapters with `resources`:
 
 ```python
-from fastapi_canon.integrations.database import Database
-from fastapi_canon.integrations.opentelemetry.sqlalchemy import (
-    SqlAlchemyInstrumentation,
-)
+from fastapi_canon.integrations.opentelemetry.httpx import HttpxClients
+from fastapi_canon.integrations.opentelemetry.sqlalchemy import SqlAlchemyEngines
 
-database = Database(
-    url=settings.database_url,
-    engine_context=SqlAlchemyInstrumentation(
-        telemetry=telemetry,
-        pool_name="backend",
-    ),
+Telemetry(
+    resources=[HttpxClients(capture_url=False), SqlAlchemyEngines(pool_name="primary")]
 )
+Telemetry(resources=[])  # no resource instrumentation
 ```
 
-`SqlAlchemyInstrumentation` is immutable and accepts the same telemetry options
-as `instrument_sqlalchemy`: `pool_name`, `pool_metrics` and `capture_statement`.
-It creates a fresh context for each engine. Canon detaches the instrumentation
-before disposing its pool, including failed startup and cancellation. Custom
-providers can also use `with instrumentation(engine):` with a configured
-declaration. Engines and SDK providers remain owned by their original owner.
+Omitting `resources` uses every installed `fastapi_canon.telemetry_resources`
+entry point. A third-party `ResourceInstrumentation` implements
+`accepts(provided_type)` and `instrument(resource, telemetry)`.
+
+For resources outside Dishka, or a per-instance setting, use the context managers.
+Automatic instrumentation skips these instances:
+
+```python
+with instrument_httpx(client, telemetry, capture_url=True):
+    ...
+with instrument_sqlalchemy(engine, telemetry, pool_name="reports"):
+    ...
+```
+
+Instrumentation detaches before the resource closes and never closes resources
+or borrowed providers.
 
 HTTPX uses contrib's public `instrument_client` / `uninstrument_client` API for
 the supplied client only. Already instrumented clients are rejected so another
@@ -373,7 +339,7 @@ router.include_channel(
 )
 app = Composition(
     features=(Feature(name="browser", routers=[router]),),
-    telemetry=telemetry,
+    integrations=[telemetry],
 ).build(FastAPI())
 ```
 

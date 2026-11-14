@@ -148,6 +148,31 @@ def test_old_configuration_fails_before_writing(project: Path) -> None:
     assert not (project / "contracts").exists()
 
 
+@pytest.mark.parametrize(
+    ("old", "new", "message"),
+    [
+        ('generator = "sse"', 'generator = "missing"', "Unknown generator 'missing'"),
+        (
+            'client-name = "ProjectsClient"',
+            'client-name = "ProjectsClient"\nstrict = true',
+            "does not accept",
+        ),
+    ],
+    ids=["unknown-generator", "foreign-generator-key"],
+)
+def test_generator_registry_rejects_targets_before_writing(
+    project: Path, old: str, new: str, message: str
+) -> None:
+    path = project / "fastapi-canon.toml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(old, new), encoding="utf-8"
+    )
+    result = _run(project)
+    assert result.returncode == 2
+    assert message in json.loads(result.stdout)["error"]
+    assert not (project / "contracts").exists()
+
+
 def test_strict_sse_diagnostics_can_be_reviewed_before_any_generation(
     project: Path,
 ) -> None:

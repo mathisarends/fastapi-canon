@@ -2,7 +2,7 @@
 
 Import `APIRouter` from `fastapi_canon` and `RpcChannel` from
 `fastapi_canon.integrations.websockets`. One application router
-can contribute HTTP calls, typed SSE, JSON-RPC channels and WebRTC sessions:
+can contribute HTTP calls, typed SSE and JSON-RPC channels:
 
 | Declaration | Endpoint behavior |
 | --- | --- |
@@ -13,7 +13,10 @@ can contribute HTTP calls, typed SSE, JSON-RPC channels and WebRTC sessions:
 | `@router.binary_stream(path)` | A binary stream on its own WebSocket; the signature sets the direction |
 | `@router.socket(path)` | A typed or raw message socket on its own WebSocket |
 | `@router.websocket(...)` | Native FastAPI WebSocket handler and application protocol |
-| `@router.webrtc(...)` | WebRTC session factory, signaling, admission and cleanup |
+
+WebRTC sessions use their own router: declare them with `@rtc.session(...)` on a
+`WebRtcRouter` from `fastapi_canon.integrations.webrtc` and add it to the same
+feature's `routers`.
 
 These additions are available in this checkout. Select the `sse`, `websockets`
 or `webrtc` extra for the transports you use. `aiortc` selects the reference
@@ -329,12 +332,13 @@ See [WebSocket streams](integrations/websockets/README.md) for controls, limits,
 error mappings, dependency lifetimes and generated resource APIs. Operation names
 and endpoint names must be unique within their exported transport contract.
 
-## Typed SSE and WebRTC on the same router
+## Typed SSE and WebRTC in the same feature
 
-With the relevant extras installed, extend the router above:
+With the relevant extras installed, extend the router above and add a
+`WebRtcRouter` for media sessions:
 
 ```python
-from fastapi_canon.integrations.webrtc import Session
+from fastapi_canon.integrations.webrtc import Session, WebRtcRouter
 from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine
 
 
@@ -343,9 +347,15 @@ async def project_events(project_id: str) -> AsyncIterator[str]:
     yield f"Updated {project_id}"
 
 
-@router.webrtc("/{project_id}/media", engine=AiortcEngine())
+rtc = WebRtcRouter(prefix="/projects", engine=AiortcEngine())
+
+
+@rtc.session("/{project_id}/media")
 async def project_media(project_id: str) -> Session:
     return Session()
+
+
+projects = Feature(name="projects", routers=[router, rtc])
 ```
 
 Make these declarations before composing the application. SSE infers its item
@@ -355,10 +365,10 @@ both pre-response failures and terminal stream failures with `raises=`. Errors
 are registered automatically; no separate registry entry is required.
 Perform admission checks in dependencies, before generator execution starts.
 
-`webrtc()` accepts the session options, typed as `SessionOptions`: `name`, `role`,
-`media`, `data_channels`, `limits`, `max_sessions`, `capacity`, `dependencies` and
-`raises`. Engine, ICE-server, event-hook and origin options are also accepted on
-the decorator; the factory may supply an engine through its returned `Session`.
+`session()` accepts `name`, `role`, `media`, `data_channels`, `limits`,
+`max_sessions`, `capacity`, `dependencies` and `raises`. Engine, ICE-server,
+event-hook, origin, `raises` and HTTP router options belong to the `WebRtcRouter`;
+the factory may supply an engine through its returned `Session`.
 `max_sessions` bounds one declaration. Pass one `SessionCapacity` to several
 declarations, also on different routers, to share a process-wide budget:
 
@@ -366,14 +376,16 @@ declarations, also on different routers, to share a process-wide budget:
 from fastapi_canon.integrations.webrtc import SessionCapacity
 
 MEDIA = SessionCapacity(max_sessions=50)
+voice = WebRtcRouter(prefix="/voice", engine=ENGINE)
+video = WebRtcRouter(prefix="/video", engine=ENGINE)
 
 
-@voice.webrtc("/calls/{call_id}", engine=ENGINE, capacity=MEDIA)
+@voice.session("/calls/{call_id}", capacity=MEDIA)
 def call(call_id: str) -> Session:
     return Session()
 
 
-@video.webrtc("/rooms/{room_id}", engine=ENGINE, capacity=MEDIA)
+@video.session("/rooms/{room_id}", capacity=MEDIA)
 def room(room_id: str) -> Session:
     return Session()
 ```

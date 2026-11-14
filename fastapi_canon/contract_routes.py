@@ -6,9 +6,6 @@ from typing import Any
 from fastapi.routing import iter_route_contexts
 from starlette.routing import BaseRoute, Mount
 
-RPC_ENDPOINT_ATTRIBUTE = "__canon_rpc_endpoint__"
-WEBRTC_DECLARATION_ATTRIBUTE = "__canon_webrtc__"
-
 
 def iter_contract_routes(
     routes: Sequence[BaseRoute], *, prefix: str = "", include_mounts: bool = True

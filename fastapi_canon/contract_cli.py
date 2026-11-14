@@ -8,7 +8,8 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from fastapi_canon.application_loading import load_application
-from fastapi_canon.contracts import ContractKind, export_contracts
+from fastapi_canon.codegen.generators import contract_kinds
+from fastapi_canon.contracts import export_contracts
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -23,7 +24,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="module:attribute of an app or zero-argument app factory",
     )
     export.add_argument("--output-dir", required=True, type=Path)
-    export.add_argument("--kind", choices=tuple(ContractKind), action="append")
+    export.add_argument(
+        "--kind",
+        action="append",
+        help="Contract kind such as openapi, openrpc or webrtc; repeat for several",
+    )
     export.add_argument(
         "--base-url", default="{baseUrl}", help="Public RPC origin or template"
     )
@@ -36,11 +41,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         app = load_application(args.app, root=Path.cwd())
-        kinds = (
-            tuple(ContractKind(kind) for kind in args.kind)
-            if args.kind
-            else tuple(ContractKind)
-        )
+        kinds = tuple(args.kind) if args.kind else None
         contracts = export_contracts(app, kinds=kinds, base_url=args.base_url)
         if contracts.openapi is not None:
             from fastapi_canon.integrations.sse.codegen.openapi import validate_contract
@@ -61,7 +62,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         }
         # The selected stable filenames belong to this export directory. Removing
         # a transport must not leave a stale contract available to offline SDKs.
-        for kind in set(kinds) - contracts.documents.keys():
+        owned = set(kinds) if kinds is not None else contract_kinds()
+        for kind in sorted(owned - contracts.documents.keys()):
             path = args.output_dir / f"{kind}.json"
             if path.exists():
                 outputs[path] = ""
