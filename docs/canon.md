@@ -34,7 +34,7 @@ scope.
 | Application composition and Dishka lifecycle | `fastapi_canon.Composition`, `Feature` | [Composition](composition.md#feature-composition) |
 | Typed transport dependencies and context hooks | `fastapi_canon.Inject` | [Dependency injection](integrations/websockets/dependencies.md) |
 | Composition checks and installed HTTP descriptions | `Composition.check(app)`, `fastapi_canon.inspect_app(app)`; values `fastapi_canon.diagnostics.CheckReport`, `CheckIssue`, `CheckContext`, `CompositionInfo`, `FeatureInfo`, `OperationInfo` | [System checks](system-checks.md) |
-| Database ownership, migrations and locks | `fastapi_canon.integrations.database.Database`, `AlembicMigrations`, `TransactionLocks` | [Databases](database.md) |
+| Database ownership, migrations and locks | `fastapi_canon.integrations.database.Database`, `AlembicMigrations`, `AcquireTransactionLock` (`TransactionLocks` alias) | [Databases](database.md) |
 | Short service scopes | `fastapi_canon.Scoped`, `ServiceScope` | [Databases](database.md) |
 | HTTP routes and contracts | `fastapi_canon.APIRouter`, `RouterPolicy`, `Error`, `ErrorOptions`, `CanonResponse`; `Problem`; `fastapi_canon.error.ErrorRegistry` for manual assembly without `Composition` | [HTTP contracts](composition.md#error-contracts) |
 | Typed SSE | `APIRouter.sse()` | [SSE contracts](streams.md) |
@@ -63,6 +63,11 @@ from fastapi_canon.integrations.websockets import RpcChannel
 Composition owns the application Dishka container and feature installation.
 Applications own authentication, business resources and telemetry providers.
 See [composition](composition.md) and the integration guides for lifecycle rules.
+
+In the prepared 0.21.0 release, optional arguments select their default only for
+`None`. Explicit empty values and callable objects with false truthiness retain
+their meaning; for example, `message=""` preserves an empty error message and
+an empty path-parameter mapping overrides the handshake parameters.
 
 ## Commands and generated artifacts
 

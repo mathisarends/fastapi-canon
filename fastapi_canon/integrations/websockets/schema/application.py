@@ -1,12 +1,12 @@
 from collections.abc import Sequence
 from dataclasses import replace
+from itertools import chain
 from typing import Any
 
 from fastapi import FastAPI
 
 from fastapi_canon.contract_routes import iter_contract_routes
-from fastapi_canon.error.catalog import registry_scope
-from fastapi_canon.error.contracts import INSTALLED_REGISTRY_STATE_KEY
+from fastapi_canon.error import installed_catalog, registry_scope
 from fastapi_canon.integrations.websockets.channel import request_name
 from fastapi_canon.integrations.websockets.contract import contract_from_endpoints
 from fastapi_canon.integrations.websockets.definition import (
@@ -17,7 +17,14 @@ from fastapi_canon.integrations.websockets.definition import (
     RpcStreamEndpoint,
 )
 from fastapi_canon.integrations.websockets.errors import ProtocolDefinitionError
-from fastapi_canon.integrations.websockets.protocol import RpcProtocol
+from fastapi_canon.integrations.websockets.protocol import (
+    RpcMethodDefinition,
+    RpcNotificationDefinition,
+    RpcProtocol,
+    RpcSocketDefinition,
+    RpcStreamDefinition,
+    RpcSubscriptionDefinition,
+)
 
 
 def export_rpc_contract(
@@ -59,9 +66,9 @@ def export_rpc_contract(
             "Mounted RPC endpoints use different protocol versions"
         )
 
-    methods = []
-    notifications = []
-    subscriptions = []
+    methods: list[RpcMethodDefinition] = []
+    notifications: list[RpcNotificationDefinition] = []
+    subscriptions: list[RpcSubscriptionDefinition] = []
     notification_types: dict[str, Any] = {}
     streams = []
     sockets = []
@@ -98,7 +105,13 @@ def export_rpc_contract(
             case RpcSocketEndpoint():
                 sockets.append(replace(endpoint.socket, server=endpoint.name))
     names: set[str] = set()
-    for operation in (*methods, *notifications, *subscriptions, *streams, *sockets):
+    for operation in chain[
+        RpcMethodDefinition
+        | RpcNotificationDefinition
+        | RpcSubscriptionDefinition
+        | RpcStreamDefinition
+        | RpcSocketDefinition
+    ](methods, notifications, subscriptions, streams, sockets):
         if operation.name in names:
             raise ProtocolDefinitionError(
                 f"Duplicate mounted RPC operation {operation.name!r}"
@@ -126,7 +139,7 @@ def export_rpc_contract(
         description=app.description,
         base_url=base_url,
     )
-    with registry_scope(getattr(app.state, INSTALLED_REGISTRY_STATE_KEY, None)):
+    with registry_scope(installed_catalog(app)):
         # RpcContract.to_openrpc installs its own registry context; render directly
         # here to preserve the application's catalog for canonical error schemas.
         from fastapi_canon.integrations.websockets.schema import render_openrpc

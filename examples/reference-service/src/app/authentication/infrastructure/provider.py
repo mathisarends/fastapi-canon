@@ -6,10 +6,12 @@ from app.authentication.infrastructure.verifier import LocalTokenVerifier
 
 
 class AuthenticationProvider(Provider):
-    @provide(scope=Scope.APP)
-    def settings(self) -> AuthenticationSettings:
-        return AuthenticationSettings()
-
-    @provide(scope=Scope.APP)
-    def token_verifier(self, settings: AuthenticationSettings) -> TokenVerifier:
-        return LocalTokenVerifier(settings)
+    # Pydantic's environment controls are configuration, not DI dependencies.
+    settings = provide(
+        staticmethod(lambda: AuthenticationSettings()),
+        provides=AuthenticationSettings,
+        scope=Scope.APP,
+    )
+    token_verifier = provide(
+        LocalTokenVerifier, provides=TokenVerifier, scope=Scope.APP
+    )

@@ -22,6 +22,50 @@ from fastapi_canon.checks.source import (  # smelt: ignore[SMT107] -- Timing pha
 _ROOT = Path(__file__).resolve().parents[1]
 
 
+def _main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--features", type=int, default=100)
+    parser.add_argument("--routes-per-feature", type=int, default=10)
+    parser.add_argument("--depth", type=int, default=5)
+    parser.add_argument("--rounds", type=int, default=5)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--compare", type=Path)
+    parser.add_argument("--profile", type=Path)
+    args = parser.parse_args()
+    if min(args.features, args.routes_per_feature, args.rounds) < 1 or args.depth < 0:
+        parser.error(
+            "features, routes and rounds must be positive; depth must be nonnegative"
+        )
+    (_ROOT / "dist").mkdir(exist_ok=True)
+    results = {
+        "python": sys.version,
+        "platform": platform.platform(),
+        "rounds": args.rounds,
+        "features": args.features,
+        "routes_per_feature": args.routes_per_feature,
+        "depth": args.depth,
+        "scenarios": {
+            "reference": _measure(
+                _ROOT / "examples/reference-service/src", args.rounds, None
+            )
+        },
+    }
+    with tempfile.TemporaryDirectory(
+        prefix="canon-check-benchmark-", dir=_ROOT / "dist"
+    ) as temporary:
+        root = Path(temporary)
+        _project(root, args.features, args.routes_per_feature, args.depth)
+        results["scenarios"]["synthetic"] = _measure(root, args.rounds, args.profile)
+    if args.compare:
+        before = json.loads(args.compare.read_text("utf-8"))
+        for name, scenario in results["scenarios"].items():
+            if scenario["fingerprint"] != before["scenarios"][name]["fingerprint"]:
+                raise RuntimeError(f"analysis results changed for {name}")
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(results, indent=2))
+
+
 def _project(root: Path, features: int, routes: int, depth: int) -> None:
     (root / "errors.py").write_text(
         "from fastapi_canon import Error, Feature\n"
@@ -139,50 +183,6 @@ def _measure(root: Path, rounds: int, profile: Path | None) -> dict:
             name: statistics.median(values) for name, values in samples.items()
         },
     }
-
-
-def _main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--features", type=int, default=100)
-    parser.add_argument("--routes-per-feature", type=int, default=10)
-    parser.add_argument("--depth", type=int, default=5)
-    parser.add_argument("--rounds", type=int, default=5)
-    parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--compare", type=Path)
-    parser.add_argument("--profile", type=Path)
-    args = parser.parse_args()
-    if min(args.features, args.routes_per_feature, args.rounds) < 1 or args.depth < 0:
-        parser.error(
-            "features, routes and rounds must be positive; depth must be nonnegative"
-        )
-    (_ROOT / "dist").mkdir(exist_ok=True)
-    results = {
-        "python": sys.version,
-        "platform": platform.platform(),
-        "rounds": args.rounds,
-        "features": args.features,
-        "routes_per_feature": args.routes_per_feature,
-        "depth": args.depth,
-        "scenarios": {
-            "reference": _measure(
-                _ROOT / "examples/reference-service/src", args.rounds, None
-            )
-        },
-    }
-    with tempfile.TemporaryDirectory(
-        prefix="canon-check-benchmark-", dir=_ROOT / "dist"
-    ) as temporary:
-        root = Path(temporary)
-        _project(root, args.features, args.routes_per_feature, args.depth)
-        results["scenarios"]["synthetic"] = _measure(root, args.rounds, args.profile)
-    if args.compare:
-        before = json.loads(args.compare.read_text("utf-8"))
-        for name, scenario in results["scenarios"].items():
-            if scenario["fingerprint"] != before["scenarios"][name]["fingerprint"]:
-                raise RuntimeError(f"analysis results changed for {name}")
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps(results, indent=2))
 
 
 if __name__ == "__main__":

@@ -13,6 +13,15 @@ REQUEST_METADATA_CAPABILITY = {
 }
 
 
+def observed_request_metadata(request: object) -> Mapping[str, str] | None:
+    if not isinstance(request, dict) or "meta" not in request:
+        return None
+    try:
+        return MappingProxyType(validate_request_metadata(request["meta"]))
+    except ValueError:
+        return None
+
+
 def validate_request_metadata(value: object) -> dict[str, str]:
     if not isinstance(value, Mapping) or any(
         key not in REQUEST_METADATA_KEYS or not isinstance(item, str)
@@ -29,12 +38,3 @@ def validate_request_metadata(value: object) -> dict[str, str]:
     if size > REQUEST_METADATA_MAX_BYTES:
         raise ValueError("Request meta exceeds 4096 UTF-8 bytes")
     return result
-
-
-def observed_request_metadata(request: object) -> Mapping[str, str] | None:
-    if not isinstance(request, dict) or "meta" not in request:
-        return None
-    try:
-        return MappingProxyType(validate_request_metadata(request["meta"]))
-    except ValueError:
-        return None

@@ -2,6 +2,7 @@ import json
 import keyword
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
+from itertools import chain
 from typing import Any
 
 from fastapi_canon.codegen.problems import problem_runtime
@@ -263,7 +264,7 @@ def _render_runtime_init(ir: ClientIr, options: PythonClientOptions) -> str:
     body = render_template(
         "python/package_init.py.j2",
         filters={"literal": _literal},
-        exports=sorted(exported),
+        exports=sorted(exported, key=lambda name: (not name.isupper(), name)),
     ).rstrip()
     return _module(options, imports, body)
 
@@ -271,10 +272,6 @@ def _render_runtime_init(ir: ClientIr, options: PythonClientOptions) -> str:
 def _render_runtime_module(options: PythonClientOptions, name: str) -> str:
     body = render_template(f"python/runtime/{name}.py.j2").rstrip()
     return _module(options, _Imports(), body)
-
-
-def _runtime_module(options: PythonClientOptions) -> str:
-    return f"{options.package}.internal"
 
 
 def _render_models(ir: ClientIr, options: PythonClientOptions) -> str:
@@ -428,40 +425,6 @@ def _render_sockets(ir: ClientIr, options: PythonClientOptions) -> str:
     return _module(options, imports, body)
 
 
-def _add_socket_imports(
-    imports: _Imports,
-    options: PythonClientOptions,
-    sockets: Iterable[SocketDecl],
-    bound: Mapping[str, SocketBinding],
-) -> None:
-    imports.add("contextlib", "AbstractAsyncContextManager")
-    imports.add(
-        f"{options.package}.sockets",
-        "SOCKETS",
-        "SocketName",
-        "open_socket",
-        "resolve_socket_endpoint",
-    )
-    for socket in sockets:
-        for message in (socket.client_message, socket.server_message):
-            if message is not None:
-                imports.add(f"{options.package}.models", *_model_names(message))
-        binding = _socket_binding(socket, bound)
-        if binding is None:
-            imports.add(f"{options.package}.sockets", "Socket")
-        else:
-            imports.add(
-                f"{options.package}.bindings",
-                f"{binding.module} as _socket_binding_{binding.module}",
-            )
-
-
-def _socket_binding(
-    socket: SocketDecl, bound: Mapping[str, SocketBinding]
-) -> SocketBinding | None:
-    return None if socket.protocol is None else bound.get(socket.protocol.name)
-
-
 def _server_subprotocols(server: ServerDecl) -> str:
     if server.transport is None:
         return "()"
@@ -481,7 +444,7 @@ def _render_errors(ir: ClientIr, options: PythonClientOptions) -> str:
     )
     errors = []
     seen: set[str] = set()
-    for route in (*ir.operations, *ir.notifications):
+    for route in chain[RouteDecl | NotificationDecl](ir.operations, ir.notifications):
         for error in route.errors:
             if error.name is None or error.name in seen:
                 continue
@@ -498,25 +461,6 @@ def _render_errors(ir: ClientIr, options: PythonClientOptions) -> str:
     )
     body = _collapse_blank_lines(body.lstrip("\n"))
     return _module(options, imports, body)
-
-
-def _add_notification_imports(
-    event: NotificationDecl, imports: _Imports, options: PythonClientOptions
-) -> None:
-    if event.subscription:
-        imports.add(_runtime_module(options), "RpcStream")
-    else:
-        imports.add("collections.abc", "AsyncIterator")
-    imports.add(f"{options.package}.models", *_model_names(event.payload))
-    if event.params_model is not None:
-        imports.add(f"{options.package}.models", _schema_name(event.params_model))
-    for parameter in event.params:
-        imports.add(f"{options.package}.models", *_model_names(parameter.type))
-        _parameter_annotation(parameter, imports, options)
-    if event.params_model is not None:
-        imports.add(f"{options.package}.models", _schema_name(event.params_model))
-    imports.add(f"{options.package}.routes", _constant(event.rpc_name))
-    _annotation(event.payload, imports)
 
 
 def _render_api(
@@ -567,7 +511,7 @@ def _render_namespaces_init(
     body = render_template(
         "python/package_init.py.j2",
         filters={"literal": _literal},
-        exports=sorted(exported),
+        exports=sorted(exported, key=lambda name: (not name.isupper(), name)),
     ).rstrip()
     return _module(options, imports, body)
 
@@ -667,11 +611,66 @@ def _render_client(
     return _module(options, imports, body)
 
 
+def _add_socket_imports(
+    imports: _Imports,
+    options: PythonClientOptions,
+    sockets: Iterable[SocketDecl],
+    bound: Mapping[str, SocketBinding],
+) -> None:
+    imports.add("contextlib", "AbstractAsyncContextManager")
+    imports.add(
+        f"{options.package}.sockets",
+        "SOCKETS",
+        "SocketName",
+        "open_socket",
+        "resolve_socket_endpoint",
+    )
+    for socket in sockets:
+        for message in (socket.client_message, socket.server_message):
+            if message is not None:
+                imports.add(f"{options.package}.models", *_model_names(message))
+        binding = _socket_binding(socket, bound)
+        if binding is None:
+            imports.add(f"{options.package}.sockets", "Socket")
+        else:
+            imports.add(
+                f"{options.package}.bindings",
+                f"{binding.module} as _socket_binding_{binding.module}",
+            )
+
+
+def _socket_binding(
+    socket: SocketDecl, bound: Mapping[str, SocketBinding]
+) -> SocketBinding | None:
+    return None if socket.protocol is None else bound.get(socket.protocol.name)
+
+
+def _add_notification_imports(
+    event: NotificationDecl, imports: _Imports, options: PythonClientOptions
+) -> None:
+    if event.subscription:
+        imports.add(_runtime_module(options), "RpcStream")
+    else:
+        imports.add("collections.abc", "AsyncIterator")
+    imports.add(f"{options.package}.models", *_model_names(event.payload))
+    if event.params_model is not None:
+        imports.add(f"{options.package}.models", _schema_name(event.params_model))
+    for parameter in event.params:
+        imports.add(f"{options.package}.models", *_model_names(parameter.type))
+        _parameter_annotation(parameter, imports, options)
+    if event.params_model is not None:
+        imports.add(f"{options.package}.models", _schema_name(event.params_model))
+    imports.add(f"{options.package}.routes", _constant(event.rpc_name))
+    _annotation(event.payload, imports)
+
+
 def _connect_variables(ir: ClientIr) -> tuple[ServerVariableDecl, ...]:
     """The server URL variables ``connect`` accepts; streams inherit them too."""
     declared = {variable.name for server in ir.servers for variable in server.variables}
     merged: dict[str, ServerVariableDecl] = {}
-    for declaration in (*ir.servers, *ir.binary_streams, *ir.sockets):
+    for declaration in chain[ServerDecl | BinaryStreamDecl | SocketDecl](
+        ir.servers, ir.binary_streams, ir.sockets
+    ):
         for variable in declaration.variables:
             if variable.name not in declared:
                 continue
@@ -834,7 +833,7 @@ def _render_package_init(
     body = render_template(
         "python/package_init.py.j2",
         filters={"literal": _literal},
-        exports=sorted(exported),
+        exports=sorted(exported, key=lambda name: (not name.isupper(), name)),
     ).rstrip()
     return _module(options, imports, body)
 
@@ -916,6 +915,18 @@ def _wrap_constructor(statement: str) -> str:
     return f"{prefix} = (\n{body}\n)"
 
 
+def _parameter_annotation(
+    parameter: Any,
+    imports: _Imports,
+    options: PythonClientOptions,
+) -> str:
+    annotation = _annotation(parameter.type, imports)
+    if parameter.required:
+        return annotation
+    imports.add(_runtime_module(options), "UNSET", "UnsetType")
+    return f"{_union((annotation, 'UnsetType'))} = UNSET"
+
+
 def _annotation(expression: TypeExpr, imports: _Imports) -> str:
     if isinstance(expression, PrimitiveType):
         return _primitive_annotation(expression.primitive, imports)
@@ -958,18 +969,6 @@ def _primitive_annotation(primitive: Primitive, imports: _Imports) -> str:
         Primitive.BOOLEAN: "bool",
         Primitive.NULL: "None",
     }[primitive]
-
-
-def _parameter_annotation(
-    parameter: Any,
-    imports: _Imports,
-    options: PythonClientOptions,
-) -> str:
-    annotation = _annotation(parameter.type, imports)
-    if parameter.required:
-        return annotation
-    imports.add(_runtime_module(options), "UNSET", "UnsetType")
-    return f"{_union((annotation, 'UnsetType'))} = UNSET"
 
 
 def _stream_connection(
@@ -1089,7 +1088,9 @@ def _validate(
         if len(ir.servers) > 1:
             unassigned = [
                 item.rpc_name
-                for item in (*ir.operations, *ir.notifications)
+                for item in chain[RouteDecl | NotificationDecl](
+                    ir.operations, ir.notifications
+                )
                 if item.server is None
             ]
             if unassigned:
@@ -1263,7 +1264,9 @@ def _validate_nodes(nodes: tuple[NamespaceViewNode, ...]) -> None:
         )
         values.extend(
             (stream.rpc_name, _identifier(stream.operation_name))
-            for stream in (*node.streams, *node.sockets)
+            for stream in chain[BinaryStreamDecl | SocketDecl](
+                node.streams, node.sockets
+            )
         )
         assert_unique_names(f"API path {'.'.join(node.path)}", values)
         _validate_nodes(node.children)
@@ -1278,19 +1281,6 @@ def _assert_class_name(value: str, option: str) -> None:
         raise UnsupportedSchemaError(
             f"{option} must be a valid Python identifier: {value!r}"
         )
-
-
-def _identifier(value: str) -> str:
-    identifier = snake_case(value)
-    if not identifier:
-        raise UnsupportedSchemaError(
-            f"Cannot derive a Python identifier from {value!r}"
-        )
-    if identifier[0].isdigit():
-        identifier = f"_{identifier}"
-    if keyword.iskeyword(identifier):
-        identifier = f"{identifier}_"
-    return identifier
 
 
 def _schema_name(value: str) -> str:
@@ -1328,6 +1318,19 @@ def _api_file(node: NamespaceViewNode) -> str:
     return f"namespaces/{_identifier(node.path[0])}.py"
 
 
+def _identifier(value: str) -> str:
+    identifier = snake_case(value)
+    if not identifier:
+        raise UnsupportedSchemaError(
+            f"Cannot derive a Python identifier from {value!r}"
+        )
+    if identifier[0].isdigit():
+        identifier = f"_{identifier}"
+    if keyword.iskeyword(identifier):
+        identifier = f"{identifier}_"
+    return identifier
+
+
 def _walk(nodes: tuple[NamespaceViewNode, ...]) -> Iterable[NamespaceViewNode]:
     for node in nodes:
         yield node
@@ -1348,7 +1351,7 @@ def _named_errors(ir: ClientIr) -> bool:
 
 def _named_error_codes(ir: ClientIr) -> tuple[str, ...]:
     codes: dict[str, None] = {}
-    for route in (*ir.operations, *ir.notifications):
+    for route in chain[RouteDecl | NotificationDecl](ir.operations, ir.notifications):
         for error in route.errors:
             if error.name is not None:
                 codes.setdefault(error.code, None)
@@ -1361,6 +1364,10 @@ def _render_websocket_transport(options: PythonClientOptions) -> str:
         runtime_module=_runtime_module(options),
     ).rstrip()
     return _module(options, _Imports(), body)
+
+
+def _runtime_module(options: PythonClientOptions) -> str:
+    return f"{options.package}.internal"
 
 
 def _collapse(expression: UnionType) -> TypeExpr:

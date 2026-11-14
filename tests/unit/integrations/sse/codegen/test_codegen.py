@@ -77,19 +77,19 @@ def test_cli_export_generate_and_check(tmp_path):
     schema = tmp_path / "schema.json"
     output = tmp_path / "sdk"
     args = ["schema", "--app", "examples.sse.agent_runs:app", "--output", str(schema)]
-    assert main(args + ["--check"]) == 1
+    assert main([*args, "--check"]) == 1
     assert not schema.exists()
     assert main(args) == 0
-    assert main(args + ["--check"]) == 0
+    assert main([*args, "--check"]) == 0
     args = ["generate", "--schema", str(schema), "--output", str(output)]
-    assert main(args + ["--check"]) == 1
+    assert main([*args, "--check"]) == 1
     assert not output.exists()
     assert main(args) == 0
-    assert main(args + ["--check"]) == 0
+    assert main([*args, "--check"]) == 0
     (output / "types.ts").write_text("stale")
-    assert main(args + ["--check"]) == 1
+    assert main([*args, "--check"]) == 1
     assert main(args) == 0
-    assert main(args + ["--check"]) == 0
+    assert main([*args, "--check"]) == 0
 
 
 def test_writer_removes_only_owned_files_and_checks_stale(tmp_path):

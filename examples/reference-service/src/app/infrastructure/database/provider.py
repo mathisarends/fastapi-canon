@@ -12,9 +12,12 @@ from app.settings import DatabaseSettings
 
 
 class DatabaseProvider(Provider):
-    @provide(scope=Scope.APP)
-    def settings(self) -> DatabaseSettings:
-        return DatabaseSettings()
+    # Pydantic's environment controls are configuration, not DI dependencies.
+    settings = provide(
+        staticmethod(lambda: DatabaseSettings()),
+        provides=DatabaseSettings,
+        scope=Scope.APP,
+    )
 
     @provide(scope=Scope.APP)
     async def engine(self, settings: DatabaseSettings) -> AsyncIterator[AsyncEngine]:

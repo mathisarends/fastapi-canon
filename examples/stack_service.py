@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+from enum import StrEnum
 from typing import Literal
 
 from dishka import Provider, Scope, provide
@@ -21,11 +22,11 @@ class Counter:
         self.calls_closed = 0
 
 
-class Operations:
+class IncrementCounter:
     def __init__(self, counter: Counter) -> None:
         self._counter = counter
 
-    def increment(self) -> int:
+    def __call__(self) -> int:
         self._counter.value += 1
         return self._counter.value
 
@@ -38,13 +39,19 @@ class StackProvider(Provider):
         counter.closed = True
 
     @provide(scope=Scope.REQUEST)
-    async def operations(self, counter: Counter) -> AsyncIterator[Operations]:
-        yield Operations(counter)
+    async def increment_counter(
+        self, counter: Counter
+    ) -> AsyncIterator[IncrementCounter]:
+        yield IncrementCounter(counter)
         counter.calls_closed += 1
 
 
+class CounterEventType(StrEnum):
+    COUNTER_CHANGED = "counter.changed"
+
+
 class CounterEvent(BaseModel):
-    type: Literal["counter.changed"] = "counter.changed"
+    type: Literal[CounterEventType.COUNTER_CHANGED] = CounterEventType.COUNTER_CHANGED
     value: int
 
 
@@ -57,16 +64,20 @@ def create_app() -> FastAPI:
     channel = RpcChannel("counter")
 
     @router.post("/counter", operation_id="increment_counter")
-    async def increment_http(operations: Inject[Operations]) -> IncrementResult:
-        return IncrementResult(value=operations.increment())
+    async def increment_http(
+        increment_counter: Inject[IncrementCounter],
+    ) -> IncrementResult:
+        return IncrementResult(value=increment_counter())
 
     @router.sse("/counter/events", operation_id="counter_events")
     async def events(counter: Inject[Counter]) -> AsyncIterator[CounterEvent]:
         yield CounterEvent(value=counter.value)
 
     @channel.method("increment")
-    async def increment_rpc(operations: Inject[Operations]) -> IncrementResult:
-        return IncrementResult(value=operations.increment())
+    async def increment_rpc(
+        increment_counter: Inject[IncrementCounter],
+    ) -> IncrementResult:
+        return IncrementResult(value=increment_counter())
 
     router.include_channel(channel, path="/rpc")
     feature = Feature(name="counter", routers=[router], providers=[StackProvider])

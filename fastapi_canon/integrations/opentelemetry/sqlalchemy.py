@@ -12,7 +12,7 @@ from weakref import WeakKeyDictionary, WeakSet, ref
 
 from fastapi_canon.exceptions import FeatureConfigurationError
 from fastapi_canon.integrations.opentelemetry.declarations import Telemetry
-from fastapi_canon.integrations.opentelemetry.resources import _claim
+from fastapi_canon.integrations.opentelemetry.resources import claim_resource
 
 if TYPE_CHECKING:
     from opentelemetry.metrics import CallbackOptions, Meter, Observation
@@ -48,15 +48,15 @@ def instrument_sqlalchemy[T](
         )
     if not pool_name:
         raise FeatureConfigurationError("pool_name must not be empty")
-    with _claim(target):
+    with claim_resource(target):
         observer = _EngineInstrumentation(
             target, telemetry, pool_name, pool_metrics, capture_statement
         )
         try:
-            observer._install()
+            observer.install()
             yield engine
         finally:
-            observer._remove()
+            observer.remove()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -121,9 +121,9 @@ class _EngineInstrumentation:
         self._pool_state = _PoolState(engine, pool_name)
         self._pool_metrics = meter is not None and pool_metrics
         if self._pool_metrics and meter is not None:
-            _pool_observations(meter)._add(self._pool_state)
+            _pool_observations(meter).add(self._pool_state)
 
-    def _install(self) -> None:
+    def install(self) -> None:
         from sqlalchemy import event
 
         listeners: list[tuple[str, Callable[..., Any]]] = [
@@ -144,7 +144,7 @@ class _EngineInstrumentation:
             event.listen(self._engine, name, callback)
             self._listeners.append((name, callback))
 
-    def _remove(self) -> None:
+    def remove(self) -> None:
         from sqlalchemy import event
 
         self._pool_state.active = False
@@ -254,6 +254,10 @@ class _PoolState:
             self._connections.discard(id(record))
             self._used.discard(id(record))
 
+    @property
+    def identity(self) -> tuple[tuple[str, str], ...]:
+        return tuple(sorted(self._attributes.items()))
+
     def observe(self, options: CallbackOptions) -> Iterator[Observation]:
         from opentelemetry.metrics import Observation
 
@@ -282,10 +286,10 @@ class _PoolObservations:
         self._states: WeakSet[_PoolState] = WeakSet()
         self._lock = Lock()
 
-    def _add(self, state: _PoolState) -> None:
+    def add(self, state: _PoolState) -> None:
         with self._lock:
             if any(
-                existing.active and existing._attributes == state._attributes
+                existing.active and existing.identity == state.identity
                 for existing in self._states
             ):
                 raise FeatureConfigurationError(
@@ -293,7 +297,7 @@ class _PoolObservations:
                 )
             self._states.add(state)
 
-    def _observe(self, options: CallbackOptions) -> Iterator[Observation]:
+    def observe(self, options: CallbackOptions) -> Iterator[Observation]:
         with self._lock:
             states = tuple(self._states)
         for state in states:
@@ -312,7 +316,7 @@ def _pool_observations(meter: Meter) -> _PoolObservations:
             meter.create_observable_gauge(
                 "db.client.connection.count",
                 unit="{connection}",
-                callbacks=[observer._observe],
+                callbacks=[observer.observe],
             )
             _POOL_OBSERVATIONS[meter] = observer
         return observer

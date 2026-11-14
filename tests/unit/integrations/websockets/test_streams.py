@@ -91,7 +91,7 @@ def test_direction_is_derived_from_the_handler_signature() -> None:
 def test_generator_with_input_points_to_the_coroutine_form() -> None:
     channel = RpcChannel("media")
 
-    with pytest.raises(ProtocolDefinitionError, match="await output.send"):
+    with pytest.raises(ProtocolDefinitionError, match=r"await output.send"):
 
         @channel.stream()
         async def invalid(frames: Inject[RpcBinaryInput]) -> AsyncIterator[bytes]:

@@ -22,7 +22,7 @@ def _main() -> None:
     )
     parser.add_argument("--report-dir", type=Path)
     args = parser.parse_args()
-    runner = _Runner(args.report_dir)
+    runner = _RunCheck(args.report_dir)
     gates = (
         ("architecture", "lint", "types", "test", "clients")
         if args.gate == "all"
@@ -31,7 +31,7 @@ def _main() -> None:
     for gate in gates:
         runner.gate = gate
         if gate == "architecture":
-            runner.run(
+            runner(
                 _ROOT,
                 "uv",
                 "run",
@@ -45,18 +45,18 @@ def _main() -> None:
                 python=False,
             )
         elif gate == "lint":
-            runner.run(_ROOT, "scripts/check_documentation.py")
+            runner(_ROOT, "scripts/check_documentation.py")
             # Moving configs can leave stale import classifications in Ruff's cache.
-            runner.run(_ROOT, "-m", "ruff", "check", "--no-cache", ".")
-            runner.run(_ROOT, "-m", "ruff", "format", "--no-cache", "--check", ".")
+            runner(_ROOT, "-m", "ruff", "check", "--no-cache", ".")
+            runner(_ROOT, "-m", "ruff", "format", "--no-cache", "--check", ".")
             for transport in _TRANSPORTS:
                 source = f"fastapi_canon/integrations/{transport}"
                 config = (
                     "--config",
                     f"fastapi_canon/integrations/{transport}/.ruff.toml",
                 )
-                runner.run(_ROOT, "-m", "ruff", "check", "--no-cache", *config, source)
-                runner.run(
+                runner(_ROOT, "-m", "ruff", "check", "--no-cache", *config, source)
+                runner(
                     _ROOT,
                     "-m",
                     "ruff",
@@ -71,7 +71,7 @@ def _main() -> None:
             # Materialize them from saved contracts without rewriting those inputs,
             # then verify live drift before checking the consumer's types.
             example = "examples/canonical_errors/fastapi-canon.toml"
-            runner.run(
+            runner(
                 _ROOT,
                 "-m",
                 "fastapi_canon",
@@ -80,11 +80,11 @@ def _main() -> None:
                 example,
                 "--offline",
             )
-            runner.run(
+            runner(
                 _ROOT, "-m", "fastapi_canon", "generate", "--config", example, "--check"
             )
-            runner.run(_ROOT, "-m", "mypy")
-            runner.run(
+            runner(_ROOT, "-m", "mypy")
+            runner(
                 _ROOT,
                 "-m",
                 "pyright",
@@ -93,7 +93,7 @@ def _main() -> None:
                 "--pythonpath",
                 sys.executable,
             )
-            runner.run(
+            runner(
                 _ROOT,
                 "-m",
                 "pylint",
@@ -101,13 +101,11 @@ def _main() -> None:
                 "pyproject.toml",
                 "fastapi_canon/integrations/sse",
             )
-            runner.run(
-                _ROOT, "uv", "build", "--out-dir", "dist/typecheck", python=False
-            )
+            runner(_ROOT, "uv", "build", "--out-dir", "dist/typecheck", python=False)
             metadata = tomllib.loads((_ROOT / "pyproject.toml").read_text("utf-8"))
             version = metadata["project"]["version"]
             (wheel,) = (_ROOT / "dist/typecheck").glob(f"fastapi_canon-{version}-*.whl")
-            runner.run(
+            runner(
                 _ROOT / "dist/typecheck",
                 "uv",
                 "run",
@@ -124,7 +122,7 @@ def _main() -> None:
                 str(_ROOT / "scripts/websockets/verify_types.py"),
                 python=False,
             )
-            runner.run(_REFERENCE, "-m", "mypy", "src", "tests")
+            runner(_REFERENCE, "-m", "mypy", "src", "tests")
             _check_webrtc_types(runner)
         elif gate == "test":
             reports = (
@@ -132,7 +130,7 @@ def _main() -> None:
                 if runner.directory
                 else ()
             )
-            runner.run(
+            runner(
                 _ROOT,
                 "-m",
                 "pytest",
@@ -148,10 +146,10 @@ def _main() -> None:
                 if runner.directory
                 else ()
             )
-            runner.run(_REFERENCE, "-m", "pytest", "-q", *reference_reports)
+            runner(_REFERENCE, "-m", "pytest", "-q", *reference_reports)
         elif gate == "clients":
             for name in ("generated_clients", "socket_protocol", "typed_socket"):
-                runner.run(
+                runner(
                     _ROOT,
                     "-m",
                     "fastapi_canon.integrations.websockets.codegen.cli",
@@ -160,10 +158,10 @@ def _main() -> None:
                     f"examples/websockets/{name}/rpcgen.toml",
                     "--check",
                 )
-            runner.run(_ROOT, "scripts/sse/codegen.py", "--check")
+            runner(_ROOT, "scripts/sse/codegen.py", "--check")
             cli = ("-m", "fastapi_canon.integrations.webrtc.codegen.cli")
             contract = "examples/webrtc/practice/contract.json"
-            runner.run(
+            runner(
                 _ROOT,
                 *cli,
                 "contract",
@@ -173,7 +171,7 @@ def _main() -> None:
                 contract,
                 "--check",
             )
-            runner.run(
+            runner(
                 _ROOT,
                 *cli,
                 "generate",
@@ -186,16 +184,14 @@ def _main() -> None:
                 "--check",
             )
             for task in ("typecheck", "test:coverage"):
-                runner.run(_ROOT, _pnpm(), "run", task, python=False)
+                runner(_ROOT, _pnpm(), "run", task, python=False)
         elif gate == "browser":
             environment = {**os.environ, "FASTAPI_WEBRTC_PYTHON": sys.executable}
-            runner.run(
-                _ROOT, _pnpm(), "run", "test:browser", python=False, env=environment
-            )
+            runner(_ROOT, _pnpm(), "run", "test:browser", python=False, env=environment)
 
 
-def _check_webrtc_types(runner: "_Runner") -> None:
-    # The root mypy profile excludes transport code; this profile checks it.
+def _check_webrtc_types(runner: "_RunCheck") -> None:
+    # SSE uses pyright and WebSockets uses root mypy; WebRTC has this scoped profile.
     config = """[tool.mypy]
 python_version = "3.12"
 strict = true
@@ -212,7 +208,7 @@ ignore_missing_imports = true
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / "webrtc.toml"
         path.write_text(config, encoding="utf-8")
-        runner.run(
+        runner(
             _ROOT,
             "-m",
             "mypy",
@@ -235,7 +231,7 @@ def _pnpm() -> str:
     return pnpm
 
 
-class _Runner:
+class _RunCheck:
     def __init__(self, directory: Path | None) -> None:
         self.directory = directory.resolve() if directory else None
         self.gate = ""
@@ -243,7 +239,7 @@ class _Runner:
         if self.directory:
             self.directory.mkdir(parents=True, exist_ok=True)
 
-    def run(
+    def __call__(
         self,
         root: Path,
         *arguments: str,

@@ -479,24 +479,6 @@ def _retain_success_content(response: dict[str, Any], media_type: object) -> Non
     response["content"] = {media_type: content[media_type]}
 
 
-def _base_problem_schema() -> dict[str, Any]:
-    return {
-        "type": "object",
-        "title": "Problem",
-        "description": "RFC 9457 Problem Details with a stable application code.",
-        "properties": {
-            "type": {"type": "string", "format": "uri-reference"},
-            "title": {"type": "string"},
-            "status": {"type": "integer", "minimum": 100, "maximum": 599},
-            "code": {"type": "string", "pattern": "^[a-z][a-z0-9_]{2,}$"},
-            "detail": {"type": "string"},
-            "instance": {"type": "string", "format": "uri-reference"},
-        },
-        "required": ["type", "title", "status", "code"],
-        "additionalProperties": True,
-    }
-
-
 def _response_for_contracts(
     errors: Sequence[AnyError], *, http_status: int | None
 ) -> OpenAPIResponse:
@@ -550,10 +532,6 @@ def _response_for_contracts(
     return response
 
 
-def _http_component_name(status: int) -> str:
-    return f"Http{status}Problem"
-
-
 def _identify_problem_types(
     path: str, response: dict[str, Any], components: dict[str, Any]
 ) -> None:
@@ -592,6 +570,10 @@ def _http_problem_schema(status: int) -> dict[str, Any]:
         }
     )
     return schema
+
+
+def _http_component_name(status: int) -> str:
+    return f"Http{status}Problem"
 
 
 def _merge_error_responses(
@@ -690,16 +672,6 @@ def _request_validation_schema(registry: ErrorCatalog) -> dict[str, Any]:
     cast(list[str], schema["required"]).append("errors")
     schema["title"] = "RequestValidationProblem"
     return schema
-
-
-def _add_component(
-    components: dict[str, Any], name: str, schema: dict[str, Any]
-) -> None:
-    existing = components.get(name)
-    if existing is not None and existing != schema:
-        msg = f"OpenAPI component {name!r} already exists with another schema"
-        raise ErrorConfigurationError(msg)
-    components[name] = schema
 
 
 def _rewrite_local_definitions(value: Any, component: str) -> Any:
@@ -835,6 +807,16 @@ def _compile_stream_contract(
         }
 
 
+def _add_component(
+    components: dict[str, Any], name: str, schema: dict[str, Any]
+) -> None:
+    existing = components.get(name)
+    if existing is not None and existing != schema:
+        msg = f"OpenAPI component {name!r} already exists with another schema"
+        raise ErrorConfigurationError(msg)
+    components[name] = schema
+
+
 def _add_builtin_response(
     components: dict[str, Any],
     responses: dict[str, Any],
@@ -904,3 +886,21 @@ def _internal_error_schema(registry: ErrorCatalog) -> dict[str, Any]:
         }
     )
     return schema
+
+
+def _base_problem_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "title": "Problem",
+        "description": "RFC 9457 Problem Details with a stable application code.",
+        "properties": {
+            "type": {"type": "string", "format": "uri-reference"},
+            "title": {"type": "string"},
+            "status": {"type": "integer", "minimum": 100, "maximum": 599},
+            "code": {"type": "string", "pattern": "^[a-z][a-z0-9_]{2,}$"},
+            "detail": {"type": "string"},
+            "instance": {"type": "string", "format": "uri-reference"},
+        },
+        "required": ["type", "title", "status", "code"],
+        "additionalProperties": True,
+    }

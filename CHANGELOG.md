@@ -4,6 +4,63 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## Unreleased
 
+## 0.21.0 - Unreleased
+
+### Breaking changes
+
+- Optional arguments now use their default only when passed `None`. Empty error
+  messages, empty path-parameter overrides and callable objects with false
+  truthiness are preserved rather than replaced by inherited defaults. Pass
+  `None` to request a default; replace empty endpoint names with a valid name or
+  `None` to derive the name from its path.
+
+- `RpcInputEndMessage.type` now uses the narrow enum literal
+  `RpcInputMessageType.END`. Construct typed control messages with
+  `RpcInputEndMessage(type=RpcInputMessageType.END)` instead of a raw Python
+  string. The JSON control frame remains `{"type":"end"}`.
+
+- WebSocket generation now rejects corrupt ownership manifests and unsafe output
+  paths instead of ignoring them. Generated paths must be relative POSIX paths
+  without backslashes, colons or parent traversal. Restore a corrupt
+  `.rpcgen/manifest.json` from version control, or review and remove the old
+  generated output before regenerating into a clean directory. Handwritten files
+  are preserved; writes atomically replace each changed file. SSE and WebRTC use
+  the same validated writer and retain their existing manifest formats.
+
+- A new `Composition.build()` executes feature checks once during preparation;
+  repeated builds still validate the installed application and rerun feature
+  checks. Keep checks free of side effects and remove assumptions about duplicate
+  execution during the first build.
+
+### Fixed
+
+- Error registry contributions survive router inclusion through a typed
+  router/endpoint contract.
+
+### Added
+
+- `AcquireTransactionLock` provides callable transaction lock acquisition.
+  `TransactionLocks` remains an alias, with its existing `acquire()` operation.
+- `fastapi_canon.error` exposes the read-only `ErrorCatalog` and `AnyError`
+  types, `installed_catalog()`, `registry_scope()` and `resolved_registry()` for
+  custom transport adapters.
+
+### Development
+
+- Include WebSockets implementation in root strict mypy, alongside the installed
+  API-completeness check. Split concurrent RPC, stream and socket state into
+  sessions, and separate feature declarations, checks and installation.
+- Make shared CLI, source-analysis and telemetry interfaces explicit and reject
+  private symbol imports with Ruff. Keep route provenance in a typed immutable
+  record, request admission in a dedicated component, and engine callbacks and
+  sender cleanup under the WebRTC runtime's ownership. `IncomingTrack.stop()`
+  allows a handler to stop one incoming track before session teardown.
+- Declare composition check prerequisites explicitly. Align transport lint rules
+  and document reasons for type suppressions. Regenerate committed clients.
+- Order callers before their helpers while preserving eager binding dependencies.
+  Enforce the enabled Smelt source conventions as warnings in CI and pre-commit,
+  including optional defaults, callable operations and facade ownership.
+
 ## 0.20.0 - 2026-11-13
 
 ### Added

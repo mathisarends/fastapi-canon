@@ -13,10 +13,42 @@ import tempfile
 import time
 import tracemalloc
 from collections.abc import AsyncIterator
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Literal
 
 _ROOT = Path(__file__).resolve().parents[2]
+
+
+class EventType(StrEnum):
+    TOKEN = "token"
+    BATCH = "batch"
+
+
+def _main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source-dir", type=Path, default=_ROOT)
+    parser.add_argument(
+        "--runtime", choices=("all", "python", "typescript"), default="all"
+    )
+    parser.add_argument("--events", type=int, default=100)
+    parser.add_argument("--iterations", type=int, default=10)
+    parser.add_argument("--rounds", type=int, default=5)
+    parser.add_argument(
+        "--memory", action="store_true", help="Separate Python peak-memory sample"
+    )
+    parser.add_argument("--output", type=Path)
+    args = parser.parse_args()
+    if min(args.events, args.iterations, args.rounds) < 1:
+        parser.error("events, iterations and rounds must be positive")
+    with tempfile.TemporaryDirectory(prefix="streams-benchmark-") as temporary:
+        report = asyncio.run(_benchmark(args, Path(temporary)))
+    content = json.dumps(report, indent=2) + "\n"
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(content, encoding="utf-8", newline="\n")
+    else:
+        print(content, end="")
 
 
 async def _benchmark(args, directory):
@@ -36,7 +68,7 @@ async def _benchmark(args, directory):
     from pydantic import BaseModel, Field
 
     class Token(BaseModel):
-        type: Literal["token"]
+        type: Literal[EventType.TOKEN]
         text: str
 
     class Item(BaseModel):
@@ -44,7 +76,7 @@ async def _benchmark(args, directory):
         values: list[float]
 
     class Batch(BaseModel):
-        type: Literal["batch"]
+        type: Literal[EventType.BATCH]
         items: list[Item]
 
     event_type = Annotated[Token | Batch, Field(discriminator="type")]
@@ -54,7 +86,7 @@ async def _benchmark(args, directory):
         run_id: Annotated[str, PathParameter(pattern=r"^run_[a-z0-9]+$")],
         limit: Annotated[int, Query(ge=1, le=1000)] = 100,
     ):
-        yield Token(type="token", text=run_id[:limit])
+        yield Token(type=EventType.TOKEN, text=run_id[:limit])
 
     events.__annotations__["return"] = AsyncIterator[event_type]
     router.stream("/runs/{run_id}/events", operation_id="events", tags=["bench"])(
@@ -230,32 +262,6 @@ async def _benchmark(args, directory):
         )
         report["runtimes"]["typescript"] = json.loads(result.stdout)
     return report
-
-
-def _main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source-dir", type=Path, default=_ROOT)
-    parser.add_argument(
-        "--runtime", choices=("all", "python", "typescript"), default="all"
-    )
-    parser.add_argument("--events", type=int, default=100)
-    parser.add_argument("--iterations", type=int, default=10)
-    parser.add_argument("--rounds", type=int, default=5)
-    parser.add_argument(
-        "--memory", action="store_true", help="Separate Python peak-memory sample"
-    )
-    parser.add_argument("--output", type=Path)
-    args = parser.parse_args()
-    if min(args.events, args.iterations, args.rounds) < 1:
-        parser.error("events, iterations and rounds must be positive")
-    with tempfile.TemporaryDirectory(prefix="streams-benchmark-") as temporary:
-        report = asyncio.run(_benchmark(args, Path(temporary)))
-    content = json.dumps(report, indent=2) + "\n"
-    if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(content, encoding="utf-8", newline="\n")
-    else:
-        print(content, end="")
 
 
 async def _measure(operation, iterations, args, units):

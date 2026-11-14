@@ -1,17 +1,14 @@
 from collections.abc import Callable
 from typing import Any, cast
 
-from jinja2 import Environment, PackageLoader, StrictUndefined
+from jinja2 import Environment
+
+from fastapi_canon.codegen.templating import template_environment
 
 
 def environment() -> Environment:
-    return Environment(
-        loader=PackageLoader("fastapi_canon.integrations.sse.codegen", "templates"),
-        undefined=StrictUndefined,
-        autoescape=False,
-        keep_trailing_newline=True,
-        trim_blocks=True,
-        lstrip_blocks=True,
+    return template_environment(
+        "fastapi_canon.integrations.sse.codegen", trim_blocks=True
     )
 
 

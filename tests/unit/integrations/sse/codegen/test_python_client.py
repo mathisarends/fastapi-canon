@@ -425,9 +425,9 @@ def test_python_codegen_cli_and_snapshot(tmp_path):
         str(tmp_path / "sdk"),
     ]
     assert main(args) == 0
-    assert main(args + ["--check"]) == 0
+    assert main([*args, "--check"]) == 0
     (tmp_path / "sdk/models.py").write_text("stale")
-    assert main(args + ["--check"]) == 1
+    assert main([*args, "--check"]) == 1
     assert (
         TypeAdapter(RunEvent)
         .validate_json('{"type":"token.delta","text":"typed"}')

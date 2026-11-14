@@ -28,7 +28,7 @@ class RpcInjectedParameter:
     dependency: type[Any]
 
 
-class EmptyResolver:
+class EmptyResolver(RpcResolver):
     async def resolve[DependencyT](self, dependency: type[DependencyT]) -> DependencyT:
         raise LookupError(
             f"No RPC resolver is configured for dependency {dependency!r}"
@@ -38,26 +38,16 @@ class EmptyResolver:
 type RpcResolverLike = RpcResolver | Callable[[type[Any]], Awaitable[Any] | Any]
 
 
-class FunctionResolver:
+class FunctionResolver(RpcResolver):
     def __init__(self, function: Callable[[type[Any]], Awaitable[Any] | Any]) -> None:
         self._function = function
 
     async def resolve[DependencyT](self, dependency: type[DependencyT]) -> DependencyT:
         value = self._function(dependency)
-        return await value if inspect.isawaitable(value) else value
+        return cast(DependencyT, await value if inspect.isawaitable(value) else value)
 
 
-def as_resolver(value: RpcResolverLike | None) -> RpcResolver:
-    if value is None:
-        return EmptyResolver()
-    if hasattr(value, "resolve"):
-        return value  # type: ignore[return-value]
-    if callable(value):
-        return FunctionResolver(value)
-    raise TypeError("resolver must implement resolve() or be callable")
-
-
-class ContextResolver:
+class ContextResolver(RpcResolver):
     def __init__(
         self,
         resolver: RpcResolver,
@@ -76,7 +66,7 @@ class ContextResolver:
 
     async def resolve[DependencyT](self, dependency: type[DependencyT]) -> DependencyT:
         if dependency in self._values:
-            return self._values[dependency]  # type: ignore[return-value]
+            return cast(DependencyT, self._values[dependency])
         return await self._resolver.resolve(dependency)
 
     @asynccontextmanager
@@ -92,6 +82,16 @@ def resolver_with_context(
     resolved = as_resolver(resolver)
     values = context_values(context)
     return ContextResolver(resolved, values) if values else resolved
+
+
+def as_resolver(value: RpcResolverLike | None) -> RpcResolver:
+    if value is None:
+        return EmptyResolver()
+    if hasattr(value, "resolve"):
+        return cast(RpcResolver, value)
+    if callable(value):
+        return FunctionResolver(value)
+    raise TypeError("resolver must implement resolve() or be callable")
 
 
 @asynccontextmanager

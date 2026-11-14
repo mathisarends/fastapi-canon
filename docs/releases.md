@@ -13,6 +13,12 @@ generated SSE namespace access and makes package re-exported error paths visible
 to source checking. Follow the [migration](package-migration.md#upgrade-to-0200)
 and [changelog](../CHANGELOG.md#0200---2026-11-13) before upgrading.
 
+**Prepared: 0.21.0 (unpublished).** It strengthens generated-file ownership
+validation and runs feature checks once per new build. Follow the
+[0.21.0 migration](package-migration.md#upgrade-to-0210) and
+[changelog](../CHANGELOG.md#0210---unreleased). Exact-source CI and a release
+dry run must pass after preparation is merged to `main`.
+
 Published artifacts, manifests and run results are linked below. They record
 verified publications; prepared source versions are not publication evidence.
 Historical links retain their original repositories.

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from fastapi_canon.exceptions import FeatureConfigurationError
 from fastapi_canon.integrations.opentelemetry.declarations import Telemetry
-from fastapi_canon.integrations.opentelemetry.resources import _claim
+from fastapi_canon.integrations.opentelemetry.resources import claim_resource
 
 if TYPE_CHECKING:
     from opentelemetry.trace import TracerProvider
@@ -31,7 +31,9 @@ def instrument_httpx[T](
     from opentelemetry.metrics import NoOpMeterProvider
     from opentelemetry.trace import NoOpTracerProvider
 
-    from fastapi_canon.integrations.opentelemetry.httpx_tracing import _HttpProvider
+    from fastapi_canon.integrations.opentelemetry.httpx_tracing import (
+        HttpInstrumentationProvider,
+    )
 
     adapter = import_module("opentelemetry.instrumentation.httpx")
     instrumentor = None
@@ -57,11 +59,11 @@ def instrument_httpx[T](
     if getattr(client, "_is_instrumented_by_opentelemetry", False):
         raise FeatureConfigurationError("the HTTP client is already instrumented")
     provider: TracerProvider = (
-        _HttpProvider(telemetry.tracer_provider, capture_url=capture_url)
+        HttpInstrumentationProvider(telemetry.tracer_provider, capture_url=capture_url)
         if telemetry.tracing
         else NoOpTracerProvider()
     )
-    with _claim(client):
+    with claim_resource(client):
         try:
             instrumentor.instrument_client(
                 client,

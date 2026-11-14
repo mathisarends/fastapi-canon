@@ -8,8 +8,10 @@ class Entity:
         id: UUID | None = None,
         created_time: datetime | None = None,
     ) -> None:
-        self._id = id or uuid4()
-        self._created_at = created_time or datetime.now(UTC)
+        self._id = id if id is not None else uuid4()
+        self._created_at = (
+            created_time if created_time is not None else datetime.now(UTC)
+        )
 
     @property
     def id(self) -> UUID:

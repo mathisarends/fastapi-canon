@@ -59,7 +59,7 @@ def test_closed_allof_with_new_fields_fails_explicitly(closed_first):
     }
     extension = {"type": "object", "properties": {"y": {"type": "integer"}}}
     members = [closed, extension] if closed_first else [extension, closed]
-    with pytest.raises(ContractError, match="Closed-object allOf.*y"):
+    with pytest.raises(ContractError, match=r"Closed-object allOf.*y"):
         generate_python(schema_contract({"allOf": members}))
 
 

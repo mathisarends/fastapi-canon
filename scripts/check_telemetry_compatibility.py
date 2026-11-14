@@ -63,8 +63,8 @@ def _verify() -> None:
         InMemorySpanExporter,
     )
 
-    class Port:
-        async def ping(self) -> str:
+    class Ping:
+        async def __call__(self) -> str:
             return "pong"
 
     exporter = InMemorySpanExporter()
@@ -76,13 +76,13 @@ def _verify() -> None:
     calls = []
     try:
         provider = Provider()
-        provider.provide(Port, scope=Scope.REQUEST)
+        provider.provide(Ping, scope=Scope.REQUEST)
         router = APIRouter()
 
         @router.get("/{name}")
         @inject
-        async def endpoint(name: str, port: FromDishka[Port]) -> str:
-            return await port.ping()
+        async def endpoint(name: str, port: FromDishka[Ping]) -> str:
+            return await port()
 
         def exclude(scope) -> bool:
             calls.append(scope["path"])
@@ -103,7 +103,7 @@ def _verify() -> None:
                     name="compatibility",
                     routers=[router],
                     providers=[provider],
-                    instrumentation=instrument(Port),
+                    instrumentation=instrument(Ping),
                 ),
             ),
             telemetry=options,
@@ -119,7 +119,7 @@ def _verify() -> None:
             assert client.get("/included").json() == "pong"
         spans = exporter.get_finished_spans()
         assert len([span for span in spans if span.name == "GET /{name}"]) == 1
-        assert len([span for span in spans if span.name == "Port.ping"]) == 1
+        assert len([span for span in spans if span.name == "Ping.__call__"]) == 1
         data = reader.get_metrics_data()
         assert data is not None
         counts = {

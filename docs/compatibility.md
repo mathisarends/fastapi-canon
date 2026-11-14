@@ -1,5 +1,15 @@
 # Compatibility
 
+## Canon 0.21.0 (prepared, unpublished)
+
+This preparation strengthens WebSocket generator ownership checks. See the
+[migration](package-migration.md#upgrade-to-0210). Local Windows validation passed
+both 20-combination installed-wheel matrices: minimum direct dependencies on
+Python 3.12 and current dependencies on Python 3.14. Installed SSE CLI/backend
+and WebRTC client checks passed, alongside strict WebSockets implementation
+typing, generated-client runtime checks and Chromium/WebRTC scenarios.
+Exact-source CI is still required before publication.
+
 ## Canon 0.20.0
 
 Core and telemetry require FastAPI >=0.143.1,<1. Included WebSocket routes in

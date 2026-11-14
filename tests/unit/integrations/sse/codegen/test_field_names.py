@@ -39,5 +39,5 @@ def test_escaped_field_collisions_fail_explicitly():
             "properties": {"list": {"type": "string"}, "list_": {"type": "string"}},
         }
     )
-    with pytest.raises(ContractError, match="Python field name collision.*list_"):
+    with pytest.raises(ContractError, match=r"Python field name collision.*list_"):
         generate_python(contract)

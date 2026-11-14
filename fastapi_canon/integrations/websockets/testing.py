@@ -4,7 +4,7 @@ from collections import deque
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Self, cast
 from urllib.parse import unquote, urlsplit
 
 from fastapi import APIRouter as FastAPIRouter
@@ -31,7 +31,10 @@ from fastapi_canon.integrations.websockets.definition import (
 )
 from fastapi_canon.integrations.websockets.dependencies import RpcResolverLike
 from fastapi_canon.integrations.websockets.server import RpcErrorMapper
-from fastapi_canon.integrations.websockets.streams import RpcInputEndMessage
+from fastapi_canon.integrations.websockets.streams import (
+    RpcInputEndMessage,
+    RpcInputMessageType,
+)
 from fastapi_canon.integrations.websockets.websocket import (
     CLOSE_CODES,
     REJECTION_CLOSE_CODES,
@@ -40,14 +43,14 @@ from fastapi_canon.integrations.websockets.websocket import (
 _CLOSED = object()
 
 __all__ = [
-    "InMemorySocket",
     "InMemoryClientSocket",
+    "InMemorySocket",
     "InMemorySocketFactory",
     "RpcTestClient",
     "RpcTestConnectionClosed",
     "RpcTestError",
-    "RpcTestStream",
     "RpcTestHandshakeRejected",
+    "RpcTestStream",
     "SocketFaults",
 ]
 
@@ -113,22 +116,24 @@ class SocketFaults:
     def unblock(self) -> None:
         self._send_gate.set()
 
-    def _bind(self) -> None:
+    def bind(self) -> None:
         if self._bound:
             raise ValueError("Use separate SocketFaults instances per socket direction")
         self._bound = True
 
-    def _close(self) -> None:
+    def close(self) -> None:
         self._held.clear()
         self._closed.set()
         self._send_gate.set()
 
-    async def _wait(self, operation: Awaitable[None], socket: "InMemorySocket") -> None:
+    async def _wait(
+        self, operation: Awaitable[object], socket: "InMemorySocket"
+    ) -> None:
         waiting = asyncio.ensure_future(operation)
         closing = asyncio.create_task(self._closed.wait())
         try:
             await asyncio.wait((waiting, closing), return_when=asyncio.FIRST_COMPLETED)
-            socket._check_open()
+            socket.ensure_open()
             await waiting
         finally:
             for task in (waiting, closing):
@@ -136,18 +141,18 @@ class SocketFaults:
                     task.cancel()
             await asyncio.gather(waiting, closing, return_exceptions=True)
 
-    async def _send(
+    async def deliver(
         self, socket: "InMemorySocket", queue: asyncio.Queue[Any], frame: str | bytes
     ) -> None:
-        socket._check_open()
+        socket.ensure_open()
         if not self._send_gate.is_set():
             self.blocked.set()
             await self._wait(self._send_gate.wait(), socket)
         if self.drop_after == 0 or (
             self.drop_when is not None and self.drop_when(frame)
         ):
-            socket._disconnect(RpcDisconnect(self.close_code, self.reason))
-            socket._check_open()
+            socket.disconnect(RpcDisconnect(self.close_code, self.reason))
+            socket.ensure_open()
         duration = self.delay(frame) if callable(self.delay) else self.delay
         if duration < 0:
             raise ValueError("Frame delay must be non-negative")
@@ -161,7 +166,7 @@ class SocketFaults:
             else:
                 queue.put_nowait(frame)
         if self.drop_after is not None and self.frames_sent >= self.drop_after:
-            socket._disconnect(RpcDisconnect(self.close_code, self.reason))
+            socket.disconnect(RpcDisconnect(self.close_code, self.reason))
 
 
 class InMemorySocket:
@@ -177,8 +182,8 @@ class InMemorySocket:
     ) -> None:
         self._handshake = RpcHandshake(
             path=path,
-            headers=headers or {},
-            query_params=query_params or {},
+            headers=headers if headers is not None else {},
+            query_params=query_params if query_params is not None else {},
             subprotocols=tuple(subprotocols),
         )
         self._incoming: asyncio.Queue[Any] = asyncio.Queue()
@@ -188,10 +193,14 @@ class InMemorySocket:
         self.rejection: tuple[RpcRejection, str] | None = None
         self.closed: tuple[RpcConnectionClose, str] | None = None
         self.disconnect_error: RpcDisconnect | None = None
-        self.client_to_server = client_to_server or SocketFaults()
-        self.server_to_client = server_to_client or SocketFaults()
-        self.client_to_server._bind()
-        self.server_to_client._bind()
+        self.client_to_server = (
+            client_to_server if client_to_server is not None else SocketFaults()
+        )
+        self.server_to_client = (
+            server_to_client if server_to_client is not None else SocketFaults()
+        )
+        self.client_to_server.bind()
+        self.server_to_client.bind()
         self._handshake_complete = asyncio.Event()
         self.client = InMemoryClientSocket(self)
 
@@ -200,7 +209,7 @@ class InMemorySocket:
         return self._handshake
 
     async def accept(self, subprotocol: str | None = None) -> None:
-        self._check_open()
+        self.ensure_open()
         self.accepted = True
         self.subprotocol = subprotocol
         self._handshake_complete.set()
@@ -213,24 +222,27 @@ class InMemorySocket:
         headers: Mapping[str, str] | None = None,
     ) -> None:
         self.rejection = (rejection, reason)
-        self._disconnect(RpcDisconnect(REJECTION_CLOSE_CODES[rejection], reason))
+        self.disconnect(RpcDisconnect(REJECTION_CLOSE_CODES[rejection], reason))
 
     async def receive(self) -> str | bytes:
         return await self._receive(self._incoming)
 
+    async def wait_handshake(self) -> None:
+        await self._handshake_complete.wait()
+
     async def send(self, message: str) -> None:
-        await self.server_to_client._send(self, self._outgoing, message)
+        await self.server_to_client.deliver(self, self._outgoing, message)
 
     async def send_bytes(self, data: bytes) -> None:
-        await self.server_to_client._send(self, self._outgoing, data)
+        await self.server_to_client.deliver(self, self._outgoing, data)
 
     async def close(self, close: RpcConnectionClose, reason: str) -> None:
         if self.closed is None:
             self.closed = (close, reason)
-        self._disconnect(RpcDisconnect(close, reason))
+        self.disconnect(RpcDisconnect(close, reason))
 
     async def client_send(self, message: str | bytes) -> None:
-        await self.client_to_server._send(self, self._incoming, message)
+        await self.client_to_server.deliver(self, self._incoming, message)
 
     async def client_receive(self) -> str | bytes:
         return await self._receive(self._outgoing)
@@ -240,9 +252,9 @@ class InMemorySocket:
         code: RpcConnectionClose | int = RpcConnectionClose.NORMAL,
         reason: str = "",
     ) -> None:
-        self._disconnect(RpcDisconnect(code, reason))
+        self.disconnect(RpcDisconnect(code, reason))
 
-    def _check_open(self) -> None:
+    def ensure_open(self) -> None:
         if self.disconnect_error is not None:
             error = self.disconnect_error
             raise RpcDisconnect(
@@ -250,23 +262,23 @@ class InMemorySocket:
                 error.reason,
             )
 
-    def _disconnect(self, error: RpcDisconnect) -> None:
+    def disconnect(self, error: RpcDisconnect) -> None:
         if self.disconnect_error is not None:
             return
         self.disconnect_error = error
-        self.client_to_server._close()
-        self.server_to_client._close()
+        self.client_to_server.close()
+        self.server_to_client.close()
         self._incoming.put_nowait(error)
         self._outgoing.put_nowait(error)
         self._handshake_complete.set()
 
     async def _receive(self, queue: asyncio.Queue[Any]) -> str | bytes:
         if queue.empty():
-            self._check_open()
+            self.ensure_open()
         value = await queue.get()
         if isinstance(value, RpcDisconnect):
-            self._check_open()
-        return value
+            self.ensure_open()
+        return cast(str | bytes, value)
 
 
 class InMemoryClientSocket:
@@ -365,7 +377,7 @@ class InMemorySocketFactory:
         socket = InMemorySocket(
             unquote(urlsplit(url).path) or "/",
             headers=additional_headers,
-            subprotocols=subprotocols or (),
+            subprotocols=subprotocols if subprotocols is not None else (),
         )
         if self.configure is not None:
             self.configure(socket, self.attempts)
@@ -376,7 +388,7 @@ class InMemorySocketFactory:
             )
         )
         self._tasks.append(serving)
-        handshake = asyncio.create_task(socket._handshake_complete.wait())
+        handshake = asyncio.create_task(socket.wait_handshake())
         try:
             await asyncio.wait(
                 (serving, handshake), return_when=asyncio.FIRST_COMPLETED
@@ -387,7 +399,7 @@ class InMemorySocketFactory:
                 raise RpcTestHandshakeRejected(
                     close_code=socket.client.close_code, reason=socket.rejection[1]
                 )
-            socket._check_open()
+            socket.ensure_open()
             return socket.client
         except BaseException:
             await socket.client_disconnect()
@@ -462,8 +474,8 @@ class RpcTestClient:
         self.error_mapper = error_mapper
         self.limits = limits
         self.rejections = rejections
-        self._task: asyncio.Task | None = None
-        self._reader: asyncio.Task | None = None
+        self._task: asyncio.Task[None] | None = None
+        self._reader: asyncio.Task[None] | None = None
         self._id = 0
         self._notifications: asyncio.Queue[object] = asyncio.Queue()
         self._pending: dict[int, asyncio.Future[dict[str, Any]]] = {}
@@ -475,7 +487,7 @@ class RpcTestClient:
             endpoint.stream.has_input
         )
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> Self:
         self._task = asyncio.create_task(
             self.service.serve(
                 self.socket,
@@ -520,7 +532,7 @@ class RpcTestClient:
                         "jsonrpc": "2.0",
                         "id": request_id,
                         "method": method,
-                        "params": dict(params or {}),
+                        "params": dict(params if params is not None else {}),
                     }
                 )
             )
@@ -547,7 +559,11 @@ class RpcTestClient:
     ) -> None:
         await self.socket.client_send(
             json.dumps(
-                {"jsonrpc": "2.0", "method": method, "params": dict(params or {})}
+                {
+                    "jsonrpc": "2.0",
+                    "method": method,
+                    "params": dict(params if params is not None else {}),
+                }
             )
         )
 
@@ -559,7 +575,7 @@ class RpcTestClient:
         if item is _CLOSED:
             self._notifications.put_nowait(_CLOSED)
             raise self._connection_closed()
-        return item  # type: ignore[return-value]
+        return cast(tuple[str, Any], item)
 
     async def next_message(self) -> str | bytes:
         """Receive the next text or binary message of a socket endpoint."""
@@ -597,7 +613,9 @@ class RpcTestClient:
     async def end_input(self) -> None:
         if not self._input:
             raise TypeError("end_input() is only available for streams with input")
-        await self.socket.client_send(RpcInputEndMessage(type="end").model_dump_json())
+        await self.socket.client_send(
+            RpcInputEndMessage(type=RpcInputMessageType.END).model_dump_json()
+        )
 
     async def closed(self) -> tuple[RpcConnectionClose, str] | None:
         """Wait until the server finished the connection and return its close."""
@@ -615,7 +633,7 @@ class RpcTestClient:
                 if "method" in value:
                     await self._notifications.put((value["method"], value["params"]))
                 else:
-                    response = self._pending.get(value.get("id"))
+                    response = self._pending.get(cast(int, value.get("id")))
                     if response is not None and not response.done():
                         response.set_result(value)
         except RpcDisconnect:
@@ -731,7 +749,7 @@ class _ASGIConnection:
                     message.get("code", 1000), message.get("reason", "")
                 )
                 self.socket.closed = (error.code, error.reason)
-                self.socket._disconnect(error)
+                self.socket.disconnect(error)
             case "websocket.http.response.start":
                 self._status = message["status"]
             case "websocket.http.response.body":

@@ -3,6 +3,7 @@ import posixpath
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
+from itertools import chain
 
 from fastapi_canon.codegen.problems import problem_runtime
 from fastapi_canon.integrations.websockets.codegen.bindings import (
@@ -113,6 +114,9 @@ def _esm_imports(content: str, path: str, files: Mapping[str, str]) -> str:
     return re.sub(r'(\bfrom\s+)["\']([^"\']+)["\'](;?)', module, content)
 
 
+_TS_WIDTH = 80
+
+
 class _Renderer:
     def __init__(
         self,
@@ -132,69 +136,9 @@ class _Renderer:
         self.root_events = root_events
         self.root_streams = root_streams
         self.root_sockets = root_sockets
-        self._bound = bound or {}
+        self._bound = bound if bound is not None else {}
         self.options = options
         self.client_name = client_name
-
-    def module(self, body: str) -> str:
-        while "\n\n\n" in body:
-            body = body.replace("\n\n\n", "\n\n")
-        return render_template(
-            "typescript/module.ts.j2",
-            source=self.options.source,
-            body=body,
-        )
-
-    def _template(self, name: str, **context: object) -> str:
-        return render_template(
-            f"typescript/{name}.ts.j2",
-            filters=self._filters(),
-            **context,
-        ).rstrip()
-
-    def _filters(self) -> dict[str, object]:
-        return {
-            "all_optional": lambda parameters: (
-                not any(parameter.required for parameter in parameters)
-            ),
-            "api_class": _api_class,
-            "array": _array,
-            "comment": _comment,
-            "compact_notification": self._compact_notification,
-            "message_signature": self._message_stream_signature,
-            "message_call": self._message_stream_call,
-            "enum_decl": lambda declaration: isinstance(declaration, EnumDecl),
-            "enum_type_alias": _enum_type_alias,
-            "identifier": _identifier,
-            "literal": _ts_literal,
-            "model_decl": lambda declaration: isinstance(declaration, ModelDecl),
-            "null_type": _is_null,
-            "operation_signature": self._operation_signature,
-            "operation_call": self._operation_call,
-            "optional_field": lambda field: (
-                not field.required and not _is_discriminator(field.name, field.type)
-            ),
-            "property": _property,
-            "socket_handle_endpoint": _socket_handle_endpoint,
-            "schema_array": _schema_array,
-            "socket_handle_signature": self._socket_handle_signature,
-            "socket_handle_connect": self._socket_handle_connect,
-            "route_access": lambda route: f"routes.{_route_key(route)}",
-            "route_key": _route_key,
-            "route_params": lambda route: (
-                "undefined"
-                if route.params_model is None
-                else _schema_name(route.params_model)
-            ),
-            "schema_name": _schema_name,
-            "server_variable_type": _server_variable_type,
-            "stream_endpoint": _stream_endpoint,
-            "stream_signature": _stream_signature,
-            "stream_connection": _stream_connection,
-            "subprotocols": _server_subprotocols,
-            "type": self._type,
-            "union_alias": _union_alias,
-        }
 
     def models(self) -> str:
         return self.module(self._template("models", declarations=self._ir.declarations))
@@ -316,34 +260,6 @@ class _Renderer:
             nodes=tuple(_walk_postorder((root_node,))),
         )
         return self.module(body)
-
-    def _compact_notification(
-        self,
-        event: NotificationDecl,
-        root: bool,
-    ) -> bool:
-        receiver = "this.#rpc"
-        call = (
-            f"    return {receiver}.notifications(notifications.{_route_key(event)});"
-        )
-        return len(call) <= 80
-
-    def _socket_binding(self, socket: SocketDecl) -> SocketBinding | None:
-        if socket.protocol is None:
-            return None
-        return self._bound.get(socket.protocol.name)
-
-    def _binding_imports(self, sockets: Iterable[SocketDecl], root: str) -> list[str]:
-        modules: dict[str, SocketBinding] = {}
-        for socket in sockets:
-            binding = self._socket_binding(socket)
-            if binding is not None:
-                modules.setdefault(binding.module, binding)
-        return [
-            f"import * as socketBinding_{binding.module} "
-            f'from "{root}bindings/{binding.module}";'
-            for binding in modules.values()
-        ]
 
     def client(self) -> str:
         core_imports = [
@@ -472,7 +388,9 @@ class _Renderer:
     def errors(self) -> str:
         named = {
             error.name: error
-            for route in (*self._ir.operations, *self._ir.notifications)
+            for route in chain[RouteDecl | NotificationDecl](
+                self._ir.operations, self._ir.notifications
+            )
             for error in route.errors
             if error.name is not None
         }
@@ -506,6 +424,89 @@ class _Renderer:
         )
         return self.module(body)
 
+    def module(self, body: str) -> str:
+        while "\n\n\n" in body:
+            body = body.replace("\n\n\n", "\n\n")
+        return render_template(
+            "typescript/module.ts.j2",
+            source=self.options.source,
+            body=body,
+        )
+
+    def _template(self, name: str, **context: object) -> str:
+        return render_template(
+            f"typescript/{name}.ts.j2",
+            filters=self._filters(),
+            **context,
+        ).rstrip()
+
+    def _filters(self) -> dict[str, object]:
+        return {
+            "all_optional": lambda parameters: (
+                not any(parameter.required for parameter in parameters)
+            ),
+            "api_class": _api_class,
+            "array": _array,
+            "comment": _comment,
+            "compact_notification": self._compact_notification,
+            "message_signature": self._message_stream_signature,
+            "message_call": self._message_stream_call,
+            "enum_decl": lambda declaration: isinstance(declaration, EnumDecl),
+            "enum_type_alias": _enum_type_alias,
+            "identifier": _identifier,
+            "literal": _ts_literal,
+            "model_decl": lambda declaration: isinstance(declaration, ModelDecl),
+            "null_type": _is_null,
+            "operation_signature": self._operation_signature,
+            "operation_call": self._operation_call,
+            "optional_field": lambda field: (
+                not field.required and not _is_discriminator(field.name, field.type)
+            ),
+            "property": _property,
+            "socket_handle_endpoint": _socket_handle_endpoint,
+            "schema_array": _schema_array,
+            "socket_handle_signature": self._socket_handle_signature,
+            "socket_handle_connect": self._socket_handle_connect,
+            "route_access": lambda route: f"routes.{_route_key(route)}",
+            "route_key": _route_key,
+            "route_params": lambda route: (
+                "undefined"
+                if route.params_model is None
+                else _schema_name(route.params_model)
+            ),
+            "schema_name": _schema_name,
+            "server_variable_type": _server_variable_type,
+            "stream_endpoint": _stream_endpoint,
+            "stream_signature": _stream_signature,
+            "stream_connection": _stream_connection,
+            "subprotocols": _server_subprotocols,
+            "type": self._type,
+            "union_alias": _union_alias,
+        }
+
+    def _compact_notification(
+        self,
+        event: NotificationDecl,
+        root: bool,
+    ) -> bool:
+        receiver = "this.#rpc"
+        call = (
+            f"    return {receiver}.notifications(notifications.{_route_key(event)});"
+        )
+        return len(call) <= 80
+
+    def _binding_imports(self, sockets: Iterable[SocketDecl], root: str) -> list[str]:
+        modules: dict[str, SocketBinding] = {}
+        for socket in sockets:
+            binding = self._socket_binding(socket)
+            if binding is not None:
+                modules.setdefault(binding.module, binding)
+        return [
+            f"import * as socketBinding_{binding.module} "
+            f'from "{root}bindings/{binding.module}";'
+            for binding in modules.values()
+        ]
+
     def _socket_handle_signature(self, socket: SocketDecl) -> str:
         binding = self._socket_binding(socket)
         session = (
@@ -514,6 +515,7 @@ class _Renderer:
             else f"socketBinding_{binding.module}.{binding.session}"
         )
         if binding is None and socket.client_message is not None:
+            assert socket.server_message is not None
             session = (
                 f"Socket<{self._type(socket.server_message)}, "
                 f"{self._type(socket.client_message)}>"
@@ -525,6 +527,7 @@ class _Renderer:
         binding = self._socket_binding(socket)
         create = "new Socket(transport, endpoint)"
         if socket.client_message is not None:
+            assert socket.server_message is not None
             create = (
                 f"new Socket<{self._type(socket.server_message)}, "
                 f"{self._type(socket.client_message)}>(transport, endpoint, true)"
@@ -545,6 +548,11 @@ class _Renderer:
         if len(inline) <= _TS_WIDTH:
             return inline
         return f"      (transport, endpoint) =>\n        {open_binding}({create}),"
+
+    def _socket_binding(self, socket: SocketDecl) -> SocketBinding | None:
+        if socket.protocol is None:
+            return None
+        return self._bound.get(socket.protocol.name)
 
     def _message_stream_signature(self, event: NotificationDecl) -> str:
         parameters = []
@@ -644,7 +652,9 @@ def _connect_variables(ir: ClientIr) -> tuple[ServerVariableDecl, ...]:
     """The server URL variables `connect` accepts; streams inherit them too."""
     declared = {variable.name for server in ir.servers for variable in server.variables}
     merged: dict[str, ServerVariableDecl] = {}
-    for declaration in (*ir.servers, *ir.binary_streams, *ir.sockets):
+    for declaration in chain[ServerDecl | BinaryStreamDecl | SocketDecl](
+        ir.servers, ir.binary_streams, ir.sockets
+    ):
         for variable in declaration.variables:
             if variable.name not in declared:
                 continue
@@ -684,7 +694,9 @@ def _validate(
         if len(ir.servers) > 1:
             unassigned = [
                 item.rpc_name
-                for item in (*ir.operations, *ir.notifications)
+                for item in chain[RouteDecl | NotificationDecl](
+                    ir.operations, ir.notifications
+                )
                 if item.server is None
             ]
             if unassigned:
@@ -814,7 +826,9 @@ def _validate_nodes(nodes: tuple[NamespaceViewNode, ...]) -> None:
         )
         values.extend(
             (stream.rpc_name, _identifier(stream.operation_name))
-            for stream in (*node.streams, *node.sockets)
+            for stream in chain[BinaryStreamDecl | SocketDecl](
+                node.streams, node.sockets
+            )
         )
         assert_unique_names(f"API path {'.'.join(node.path)}", values)
         _validate_nodes(node.children)
@@ -824,39 +838,11 @@ def _client_name(ir: ClientIr, options: TypeScriptClientOptions) -> str:
     return options.client_name or f"{pascal_case(ir.title)}Client"
 
 
-def _identifier(value: str) -> str:
-    identifier = camel_case(value)
-    if not identifier:
-        raise UnsupportedSchemaError(
-            f"Cannot derive a TypeScript identifier from {value!r}"
-        )
-    if identifier[0].isdigit():
-        identifier = f"_{identifier}"
-    if identifier in _RESERVED_WORDS:
-        identifier = f"{identifier}_"
-    return identifier
-
-
-def _schema_name(value: str) -> str:
-    name = pascal_case(value)
-    if not name:
-        raise UnsupportedSchemaError(
-            f"Cannot derive a TypeScript class name from {value!r}"
-        )
-    if name[0].isdigit():
-        name = f"_{name}"
-    return name
-
-
-def _model_names(expression: TypeExpr) -> set[str]:
-    return {_schema_name(name) for name in named_types(expression)}
-
-
 def _property(value: str) -> str:
     return value if _VALID_IDENTIFIER.fullmatch(value) else json.dumps(value)
 
 
-def _route_key(route: RouteDecl) -> str:
+def _route_key(route: RouteDecl | NotificationDecl) -> str:
     return _identifier(route.rpc_name)
 
 
@@ -877,19 +863,15 @@ def _route_model_names(routes: Iterable[RouteDecl]) -> set[str]:
     return names
 
 
+def _model_names(expression: TypeExpr) -> set[str]:
+    return {_schema_name(name) for name in named_types(expression)}
+
+
 def _notification_type(ir: ClientIr) -> TypeExpr | None:
     if not ir.notifications:
         return None
     members = tuple(item.payload for item in ir.notifications)
     return members[0] if len(members) == 1 else UnionType(members)
-
-
-def _stream_connection(stream: BinaryStreamDecl) -> str:
-    if stream.direction == "client-to-server":
-        return "BinarySender"
-    if stream.direction == "bidirectional":
-        return "BinaryChannel"
-    return "BinaryReceiver"
 
 
 def _stream_connections(streams: Iterable[BinaryStreamDecl]) -> list[str]:
@@ -928,10 +910,6 @@ def _union_alias(name: str, values: Iterable[str]) -> str:
     return f"export type {name} =\n" + "\n".join(f"  | {m}" for m in members) + ";"
 
 
-def _array(values: Iterable[object]) -> str:
-    return "[" + ", ".join(_ts_literal(value) for value in values) + "]"
-
-
 def _schema_array(schemas: Iterable[str]) -> str:
     """A protocol's ``schemas`` property, laid out as Prettier would."""
     values = [_ts_literal(value) for value in schemas]
@@ -945,6 +923,14 @@ def _schema_array(schemas: Iterable[str]) -> str:
 def _stream_signature(stream: BinaryStreamDecl) -> str:
     """A stream method's opening line, laid out as Prettier would."""
     return _socket_signature(stream, f"Promise<{_stream_connection(stream)}>")
+
+
+def _stream_connection(stream: BinaryStreamDecl) -> str:
+    if stream.direction == "client-to-server":
+        return "BinarySender"
+    if stream.direction == "bidirectional":
+        return "BinaryChannel"
+    return "BinaryReceiver"
 
 
 def _socket_signature(stream: BinaryStreamDecl | SocketDecl, returns: str) -> str:
@@ -978,6 +964,17 @@ def _enum_type_alias(name: str) -> str:
     return inline if len(inline) <= _TS_WIDTH else f"{prefix}\n  {target}"
 
 
+def _schema_name(value: str) -> str:
+    name = pascal_case(value)
+    if not name:
+        raise UnsupportedSchemaError(
+            f"Cannot derive a TypeScript class name from {value!r}"
+        )
+    if name[0].isdigit():
+        name = f"_{name}"
+    return name
+
+
 def _stream_endpoint(stream: BinaryStreamDecl, rpc: str) -> str:
     """The ``resolveStreamEndpoint(...)`` argument, laid out as Prettier would."""
     return _socket_endpoint(
@@ -995,6 +992,19 @@ def _socket_handle_endpoint(socket: SocketDecl, rpc: str) -> str:
         rpc,
         "resolveSocketEndpoint",
     )
+
+
+def _identifier(value: str) -> str:
+    identifier = camel_case(value)
+    if not identifier:
+        raise UnsupportedSchemaError(
+            f"Cannot derive a TypeScript identifier from {value!r}"
+        )
+    if identifier[0].isdigit():
+        identifier = f"_{identifier}"
+    if identifier in _RESERVED_WORDS:
+        identifier = f"{identifier}_"
+    return identifier
 
 
 def _socket_endpoint(
@@ -1021,9 +1031,6 @@ def _socket_endpoint(
     return f"{indent}{function}(\n{args}{indent}  {{\n{body}{indent}  }},\n{indent}),"
 
 
-_TS_WIDTH = 80
-
-
 def _server_variable_type(variable: ServerVariableDecl) -> str:
     if variable.enum:
         return " | ".join(_ts_literal(value) for value in variable.enum)
@@ -1034,6 +1041,10 @@ def _server_subprotocols(server: ServerDecl) -> str:
     if server.transport is None:
         return "[]"
     return _array(server.transport.subprotocols)
+
+
+def _array(values: Iterable[object]) -> str:
+    return "[" + ", ".join(_ts_literal(value) for value in values) + "]"
 
 
 def _ts_literal(value: object) -> str:
@@ -1075,7 +1086,9 @@ def _walk_postorder(
 def _named_errors(ir: ClientIr) -> bool:
     return any(
         error.name is not None
-        for route in (*ir.operations, *ir.notifications)
+        for route in chain[RouteDecl | NotificationDecl](
+            ir.operations, ir.notifications
+        )
         for error in route.errors
     )
 

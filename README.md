@@ -16,6 +16,8 @@ Python 3.12–3.14 is supported. Add extras for the features you use, for exampl
 **Published: 0.20.0 (2026-11-13).**
 Follow the [migration guide](docs/package-migration.md#upgrade-to-0200) when upgrading.
 See the [release and verified artifacts](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.20.0).
+This checkout prepares unpublished 0.21.0; see its
+[migration steps](docs/package-migration.md#upgrade-to-0210).
 
 ## Shared error handling
 

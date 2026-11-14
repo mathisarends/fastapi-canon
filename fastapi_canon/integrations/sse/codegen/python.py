@@ -224,7 +224,7 @@ class _Models:
         *,
         field_name: Callable[[str], str] | None = None,
     ) -> None:
-        self.field_name = field_name or _field_name
+        self.field_name = field_name if field_name is not None else _field_name
         self._custom_fields = field_name is not None
         self._python_patterns: set[str] = set()
         if collisions := _MODEL_SYMBOLS & {
@@ -234,171 +234,6 @@ class _Models:
         self.declarations = {
             declaration.name: declaration.type for declaration in declarations
         }
-
-    def add(self, name: str, type_: Type) -> Reference:
-        if isinstance(type_, Reference):
-            return type_
-        while name in self.declarations:
-            name += "Value"
-        self.declarations[name] = type_
-        return Reference(name)
-
-    def render_type(self, type_: Type, *, hint: str, prefix: str = "") -> str:
-        match type_:
-            case Scalar(name="JsonValue"):
-                return "JsonValue"
-            case Scalar(name="never"):
-                raise ContractError(
-                    "The Python generator does not support never schemas"
-                )
-            case Scalar(name=name, constraints=constraints):
-                annotation = {
-                    "string": "str",
-                    "integer": "int",
-                    "number": "float",
-                    "boolean": "bool",
-                    "null": "None",
-                }[name]
-                if constraints:
-                    from pydantic import Field as PydanticField
-                    from pydantic import TypeAdapter
-                    from pydantic_core import SchemaError
-
-                    if name == "string" and any(
-                        key == "pattern" for key, _ in constraints
-                    ):
-                        from typing import Annotated
-
-                        pattern = dict(constraints)["pattern"]
-                        assert isinstance(pattern, str)
-                        try:
-                            TypeAdapter(Annotated[str, PydanticField(pattern=pattern)])
-                        except SchemaError:
-                            # Pydantic's own Decimal JSON schemas use lookarounds.
-                            # A compiled pattern selects its Python regex engine,
-                            # including in standalone TypeAdapters and type aliases.
-                            try:
-                                re.compile(pattern)
-                            except re.error as exc:
-                                raise ContractError(
-                                    f"Unsupported string pattern: {exc}"
-                                ) from exc
-                            self._python_patterns.add(pattern)
-                    arguments = ", ".join(
-                        f"pattern=_re.compile({value!r})"
-                        if key == "pattern" and value in self._python_patterns
-                        else f"{key}={value!r}"
-                        for key, value in constraints
-                    )
-                    return f"Annotated[{annotation}, Field({arguments})]"
-                return annotation
-            case LiteralType(value=None):
-                return "None"
-            case LiteralType(value=value):
-                return f"Literal[{value!r}]"
-            case EnumValue(enum=enum, member=member):
-                return f"Literal[{prefix}{enum}.{member}]"
-            case EnumAlias(target=target):
-                return prefix + target
-            case StringEnum():
-                raise ContractError("Enums must be named declarations")
-            case Reference(name=name):
-                return prefix + name
-            case Array(item=item):
-                return (
-                    f"list[{self.render_type(item, hint=hint + 'Item', prefix=prefix)}]"
-                )
-            case Union(members=members, discriminator=discriminator):
-                if members and all(isinstance(part, EnumValue) for part in members):
-                    values = ", ".join(
-                        f"{prefix}{part.enum}.{part.member}"
-                        for part in members
-                        if isinstance(part, EnumValue)
-                    )
-                    return f"Literal[{values}]"
-                union = " | ".join(
-                    self.render_type(member, hint=hint + str(index), prefix=prefix)
-                    for index, member in enumerate(members)
-                )
-                if discriminator:
-                    discriminator = _field_name(discriminator)
-                    return f"Annotated[{union}, Field(discriminator={discriminator!r})]"
-                return union if len(members) == 1 else f"({union})"
-            case Object() | Intersection():
-                reference = self.add(hint, type_)
-                return prefix + reference.name
-
-    def _nullable(self, type_: Type, seen: frozenset[str] = frozenset()) -> bool:
-        match type_:
-            case Scalar(name="null" | "JsonValue") | LiteralType(value=None):
-                return True
-            case Union(members=members):
-                return any(self._nullable(member, seen) for member in members)
-            case Reference(name=name) if name not in seen:
-                return self._nullable(self.declarations[name], seen | {name})
-            case _:
-                return False
-
-    def _object(self, type_: Type, seen: frozenset[str] = frozenset()) -> Object:
-        match type_:
-            case Object():
-                return type_
-            case Reference(name=name) if name not in seen:
-                return self._object(self.declarations[name], seen | {name})
-            case Intersection(members=members):
-                fields: dict[str, Field] = {}
-                additional: Type | None = None
-                objects = [self._object(member, seen) for member in members]
-                for obj in objects:
-                    for field in obj.fields:
-                        if (
-                            field.name in fields
-                            and fields[field.name].type != field.type
-                        ):
-                            raise ContractError(
-                                f"Conflicting allOf field: {field.name}"
-                            )
-                        previous = fields.get(field.name)
-                        fields[field.name] = replace(
-                            field,
-                            required=field.required
-                            or bool(previous and previous.required),
-                        )
-                    if obj.additional is not None and obj.additional != Scalar(
-                        "JsonValue"
-                    ):
-                        if additional not in (
-                            None,
-                            Scalar("JsonValue"),
-                            obj.additional,
-                        ):
-                            raise ContractError(
-                                "Conflicting allOf additionalProperties schemas"
-                            )
-                        additional = obj.additional
-                    elif additional is None:
-                        additional = obj.additional
-                forbidden = any(obj.additional_forbidden for obj in objects)
-                for obj in objects:
-                    undeclared = set(fields) - {field.name for field in obj.fields}
-                    if obj.additional_forbidden and undeclared:
-                        raise ContractError(
-                            "Closed-object allOf cannot introduce fields forbidden by "
-                            f"another member: {sorted(undeclared)}"
-                        )
-                    if obj.additional not in (None, Scalar("JsonValue")) and any(
-                        fields[name].type != obj.additional for name in undeclared
-                    ):
-                        raise ContractError(
-                            "Conflicting allOf additionalProperties field types"
-                        )
-                return Object(
-                    tuple(fields[name] for name in sorted(fields)),
-                    None if forbidden else additional,
-                    forbidden,
-                )
-            case _:
-                raise ContractError("Python allOf supports object intersections only")
 
     def render(self) -> str:
         blocks: dict[str, str] = {}
@@ -587,6 +422,171 @@ class _Models:
             )
             + "\n"
         )
+
+    def render_type(self, type_: Type, *, hint: str, prefix: str = "") -> str:
+        match type_:
+            case Scalar(name="JsonValue"):
+                return "JsonValue"
+            case Scalar(name="never"):
+                raise ContractError(
+                    "The Python generator does not support never schemas"
+                )
+            case Scalar(name=name, constraints=constraints):
+                annotation = {
+                    "string": "str",
+                    "integer": "int",
+                    "number": "float",
+                    "boolean": "bool",
+                    "null": "None",
+                }[name]
+                if constraints:
+                    from pydantic import Field as PydanticField
+                    from pydantic import TypeAdapter
+                    from pydantic_core import SchemaError
+
+                    if name == "string" and any(
+                        key == "pattern" for key, _ in constraints
+                    ):
+                        from typing import Annotated
+
+                        pattern = dict(constraints)["pattern"]
+                        assert isinstance(pattern, str)
+                        try:
+                            TypeAdapter(Annotated[str, PydanticField(pattern=pattern)])
+                        except SchemaError:
+                            # Pydantic's own Decimal JSON schemas use lookarounds.
+                            # A compiled pattern selects its Python regex engine,
+                            # including in standalone TypeAdapters and type aliases.
+                            try:
+                                re.compile(pattern)
+                            except re.error as exc:
+                                raise ContractError(
+                                    f"Unsupported string pattern: {exc}"
+                                ) from exc
+                            self._python_patterns.add(pattern)
+                    arguments = ", ".join(
+                        f"pattern=_re.compile({value!r})"
+                        if key == "pattern" and value in self._python_patterns
+                        else f"{key}={value!r}"
+                        for key, value in constraints
+                    )
+                    return f"Annotated[{annotation}, Field({arguments})]"
+                return annotation
+            case LiteralType(value=None):
+                return "None"
+            case LiteralType(value=value):
+                return f"Literal[{value!r}]"
+            case EnumValue(enum=enum, member=member):
+                return f"Literal[{prefix}{enum}.{member}]"
+            case EnumAlias(target=target):
+                return prefix + target
+            case StringEnum():
+                raise ContractError("Enums must be named declarations")
+            case Reference(name=name):
+                return prefix + name
+            case Array(item=item):
+                return (
+                    f"list[{self.render_type(item, hint=hint + 'Item', prefix=prefix)}]"
+                )
+            case Union(members=members, discriminator=discriminator):
+                if members and all(isinstance(part, EnumValue) for part in members):
+                    values = ", ".join(
+                        f"{prefix}{part.enum}.{part.member}"
+                        for part in members
+                        if isinstance(part, EnumValue)
+                    )
+                    return f"Literal[{values}]"
+                union = " | ".join(
+                    self.render_type(member, hint=hint + str(index), prefix=prefix)
+                    for index, member in enumerate(members)
+                )
+                if discriminator:
+                    discriminator = _field_name(discriminator)
+                    return f"Annotated[{union}, Field(discriminator={discriminator!r})]"
+                return union if len(members) == 1 else f"({union})"
+            case Object() | Intersection():
+                reference = self.add(hint, type_)
+                return prefix + reference.name
+
+    def _nullable(self, type_: Type, seen: frozenset[str] = frozenset()) -> bool:
+        match type_:
+            case Scalar(name="null" | "JsonValue") | LiteralType(value=None):
+                return True
+            case Union(members=members):
+                return any(self._nullable(member, seen) for member in members)
+            case Reference(name=name) if name not in seen:
+                return self._nullable(self.declarations[name], seen | {name})
+            case _:
+                return False
+
+    def _object(self, type_: Type, seen: frozenset[str] = frozenset()) -> Object:
+        match type_:
+            case Object():
+                return type_
+            case Reference(name=name) if name not in seen:
+                return self._object(self.declarations[name], seen | {name})
+            case Intersection(members=members):
+                fields: dict[str, Field] = {}
+                additional: Type | None = None
+                objects = [self._object(member, seen) for member in members]
+                for obj in objects:
+                    for field in obj.fields:
+                        if (
+                            field.name in fields
+                            and fields[field.name].type != field.type
+                        ):
+                            raise ContractError(
+                                f"Conflicting allOf field: {field.name}"
+                            )
+                        previous = fields.get(field.name)
+                        fields[field.name] = replace(
+                            field,
+                            required=field.required
+                            or bool(previous and previous.required),
+                        )
+                    if obj.additional is not None and obj.additional != Scalar(
+                        "JsonValue"
+                    ):
+                        if additional not in (
+                            None,
+                            Scalar("JsonValue"),
+                            obj.additional,
+                        ):
+                            raise ContractError(
+                                "Conflicting allOf additionalProperties schemas"
+                            )
+                        additional = obj.additional
+                    elif additional is None:
+                        additional = obj.additional
+                forbidden = any(obj.additional_forbidden for obj in objects)
+                for obj in objects:
+                    undeclared = set(fields) - {field.name for field in obj.fields}
+                    if obj.additional_forbidden and undeclared:
+                        raise ContractError(
+                            "Closed-object allOf cannot introduce fields forbidden by "
+                            f"another member: {sorted(undeclared)}"
+                        )
+                    if obj.additional not in (None, Scalar("JsonValue")) and any(
+                        fields[name].type != obj.additional for name in undeclared
+                    ):
+                        raise ContractError(
+                            "Conflicting allOf additionalProperties field types"
+                        )
+                return Object(
+                    tuple(fields[name] for name in sorted(fields)),
+                    None if forbidden else additional,
+                    forbidden,
+                )
+            case _:
+                raise ContractError("Python allOf supports object intersections only")
+
+    def add(self, name: str, type_: Type) -> Reference:
+        if isinstance(type_, Reference):
+            return type_
+        while name in self.declarations:
+            name += "Value"
+        self.declarations[name] = type_
+        return Reference(name)
 
 
 def _field_name(value: str) -> str:

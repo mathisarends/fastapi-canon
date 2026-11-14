@@ -1,15 +1,19 @@
 import re
 from collections.abc import Iterable
 from enum import Enum
+from itertools import chain
 from types import UnionType
 from typing import Any, TypeAliasType, get_args, get_origin
 
 from pydantic import BaseModel, TypeAdapter
+from pydantic.json_schema import JsonSchemaMode
 
 from fastapi_canon.integrations.websockets.errors import ProtocolDefinitionError
 from fastapi_canon.integrations.websockets.protocol import (
+    RpcMethodDefinition,
     RpcNotificationDefinition,
     RpcProtocol,
+    RpcSubscriptionDefinition,
 )
 
 EMPTY_PARAMS_SCHEMA: dict[str, Any] = {
@@ -23,7 +27,7 @@ def components(protocol: RpcProtocol) -> dict[str, Any]:
     """Build the JSON Schema components referenced by the OpenRPC document."""
     annotations = _annotations(protocol)
     _assert_unique_wire_names(annotations.values())
-    adapters = [
+    adapters: list[tuple[str, JsonSchemaMode, TypeAdapter[Any]]] = [
         (name, "serialization", TypeAdapter(annotation))
         for name, annotation in annotations.items()
     ]
@@ -44,7 +48,7 @@ def components(protocol: RpcProtocol) -> dict[str, Any]:
                 ]
             )
     roots, root = TypeAdapter.json_schemas(adapters, by_alias=True)
-    definitions = root.get("$defs", {})
+    definitions: dict[str, Any] = root.get("$defs", {})
     for method in protocol.methods:
         definitions[method.request_name] = _request_schema(
             method.name, method.request_name, method.params, method.summary
@@ -54,10 +58,11 @@ def components(protocol: RpcProtocol) -> dict[str, Any]:
         definitions[name] = _notification_schema(notification, name)
     for socket in protocol.sockets:
         if socket.message_contract is not None:
-            for direction, mode in (
+            directions: tuple[tuple[str, JsonSchemaMode], ...] = (
                 ("client", "validation"),
                 ("server", "serialization"),
-            ):
+            )
+            for direction, mode in directions:
                 name = socket_message_schema_name(socket.name, direction)
                 if name in definitions:
                     raise ProtocolDefinitionError(
@@ -107,12 +112,10 @@ def _annotations(protocol: RpcProtocol) -> dict[str, Any]:
         _add_result_types(annotations, subscription.payload)
     for notification_type in protocol.notification_types:
         _add(annotations, notification_type.payload)
-    for method in (
-        *protocol.methods,
-        *protocol.notifications,
-        *protocol.subscriptions,
-    ):
-        for error in method.raises:
+    for operation in chain[
+        RpcMethodDefinition | RpcNotificationDefinition | RpcSubscriptionDefinition
+    ](protocol.methods, protocol.notifications, protocol.subscriptions):
+        for error in operation.raises:
             if error.details_type is not None:
                 _add(annotations, error.details_type)
     return annotations

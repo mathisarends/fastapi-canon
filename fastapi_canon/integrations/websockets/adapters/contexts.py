@@ -30,10 +30,10 @@ class ContextDependencies:
         self._provided: dict[Callable[..., Any], tuple[type[Any], ...]] = {}
         self._adapt = adapt
 
-        async def preparation(websocket: WebSocket) -> AsyncGenerator[_Preparation]:
+        async def preparation(websocket: WebSocket) -> AsyncGenerator[Preparation]:
             async with AsyncExitStack() as stack:
                 resolver = await stack.enter_async_context(scope(websocket))
-                yield _Preparation(resolver, stack)
+                yield Preparation(resolver, stack)
 
         self._preparation = preparation
         for hook in hooks:
@@ -94,12 +94,12 @@ class ContextDependencies:
             inspect.Parameter(
                 scope_name,
                 inspect.Parameter.KEYWORD_ONLY,
-                annotation=Annotated[_Preparation, Depends(self._preparation)],
+                annotation=Annotated[Preparation, Depends(self._preparation)],
             )
         )
 
         async def invoke(**arguments: Any) -> Any:
-            preparation: _Preparation = arguments.pop(scope_name)
+            preparation: Preparation = arguments.pop(scope_name)
             result = (
                 await adapted(**arguments)
                 if inspect.iscoroutinefunction(adapted)
@@ -128,7 +128,7 @@ class ContextDependencies:
         if dependency not in self._getters:
 
             async def resolve(
-                preparation: Annotated[_Preparation, Depends(self._preparation)],
+                preparation: Annotated[Preparation, Depends(self._preparation)],
             ) -> Any:
                 return await preparation.resolver.resolve(dependency)
 
@@ -137,7 +137,7 @@ class ContextDependencies:
 
 
 @dataclass
-class _Preparation:
+class Preparation:
     resolver: RpcResolver
     stack: AsyncExitStack
     values: dict[type[Any], object] = field(default_factory=dict)

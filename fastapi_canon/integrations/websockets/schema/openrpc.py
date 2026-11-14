@@ -1,18 +1,23 @@
 from collections.abc import Iterable, Mapping
 from copy import deepcopy
-from typing import Any
+from itertools import chain
+from typing import Any, cast
 
 from pydantic import TypeAdapter
 
-from fastapi_canon.error.catalog import problem_schema, resolved_registry
+from fastapi_canon.error import resolved_registry
+from fastapi_canon.error.catalog import problem_schema
 from fastapi_canon.integrations.websockets.errors import (
+    CanonBinding,
     ProtocolDefinitionError,
-    _CanonBinding,
+    RpcError,
     contract_of,
 )
 from fastapi_canon.integrations.websockets.protocol import (
     RpcMethodDefinition,
+    RpcNotificationDefinition,
     RpcProtocol,
+    RpcSubscriptionDefinition,
 )
 from fastapi_canon.integrations.websockets.request_metadata import (
     REQUEST_METADATA_CAPABILITY,
@@ -44,14 +49,12 @@ def render_openrpc(
     server_lookup = _server_lookup(server_documents)
     _validate_server_references(protocol, server_lookup)
     raw_schemas = components(protocol)
-    for operation in (
-        *protocol.methods,
-        *protocol.notifications,
-        *protocol.subscriptions,
-    ):
+    for operation in chain[
+        RpcMethodDefinition | RpcNotificationDefinition | RpcSubscriptionDefinition
+    ](protocol.methods, protocol.notifications, protocol.subscriptions):
         for error in operation.raises:
             binding = contract_of(error)
-            if not isinstance(binding, _CanonBinding):
+            if not isinstance(binding, CanonBinding):
                 continue
             name = binding.definition.effective_schema_name
             schema = problem_schema(
@@ -159,17 +162,17 @@ def render_openrpc(
     streams = [dict(stream) for stream in binary_streams]
     if streams:
         document["x-rpckit-binary-streams"] = streams
-    sockets = [dict(socket) for socket in sockets]
+    socket_documents = [dict(socket) for socket in sockets]
     definitions = {socket.name: socket for socket in protocol.sockets}
-    for socket in sockets:
+    for socket in socket_documents:
         definition = definitions.get(socket["name"])
         if definition is not None and definition.message_contract is not None:
             socket["messages"] = {
                 direction: _ref(socket_message_schema_name(definition.name, direction))
                 for direction in ("client", "server")
             }
-    if sockets:
-        document["x-rpckit-sockets"] = sockets
+    if socket_documents:
+        document["x-rpckit-sockets"] = socket_documents
     return document
 
 
@@ -181,7 +184,7 @@ def _method(
     document: dict[str, Any] = {"name": method.name}
     if method.idempotent:
         document["x-rpc-idempotent"] = True
-    if method._has_timeout:
+    if method.has_timeout:
         document["x-rpc-request-timeout"] = method.timeout
     if method.summary is not None:
         document["summary"] = method.summary
@@ -200,14 +203,14 @@ def _method(
     return document
 
 
-def _error(error: type) -> dict[str, Any]:
+def _error(error: type[RpcError]) -> dict[str, Any]:
     document: dict[str, Any] = {
         "code": int(error.rpc_code),
         "message": error.message,
         "x-rpckit-code": error.code,
     }
     binding = contract_of(error)
-    if isinstance(binding, _CanonBinding):
+    if isinstance(binding, CanonBinding):
         document["x-canon-problem-schema"] = _ref(
             binding.definition.effective_schema_name
         )
@@ -302,7 +305,7 @@ def _payload_schema(annotation: Any, components: dict[str, Any]) -> dict[str, An
         mode="serialization",
     )
     schema.pop("$defs", None)
-    return _rewrite_refs(schema)
+    return cast(dict[str, Any], _rewrite_refs(schema))
 
 
 def _ref(name: str) -> dict[str, str]:

@@ -18,7 +18,7 @@ from fastapi_canon.integrations.websockets.request_metadata import (
     validate_request_metadata,
 )
 
-JSONRPC_VERSION = "2.0"
+JSONRPC_VERSION: Literal["2.0"] = "2.0"
 
 type RpcRequestId = str | int | None
 
@@ -67,6 +67,17 @@ class RpcErrorPayload(RpcSchema):
     details: Any = None
     _details_annotation: Any = PrivateAttr(default=None)
 
+    @classmethod
+    def with_details_annotation(
+        cls,
+        code: str,
+        details: Any,
+        annotation: Any,
+    ) -> Self:
+        payload = cls(code=code, details=details)
+        payload._details_annotation = annotation
+        return payload
+
     @field_serializer("details")
     def _serialize_details(self, details: Any, info: Any) -> Any:
         if details is None or self._details_annotation is None:
@@ -83,7 +94,7 @@ class RpcSuccess(RpcSchema):
     _result_annotation: Any = PrivateAttr(default=None)
 
     @classmethod
-    def _with_result_annotation(
+    def with_result_annotation(
         cls,
         request_id: RpcRequestId,
         result: Any,
@@ -115,8 +126,11 @@ class RpcFailure(RpcSchema):
         if error.problem is not None:
             payload = RpcProblemPayload(problem=error.problem)
         else:
-            payload = RpcErrorPayload(code=error.code, details=error.details)
-            payload._details_annotation = error.details_type
+            payload = RpcErrorPayload.with_details_annotation(
+                error.code,
+                error.details,
+                error.details_type,
+            )
         return cls(
             id=request_id,
             error=RpcErrorData(
@@ -132,7 +146,7 @@ class RpcNotification(RpcSchema):
     _payload_annotation: Any = PrivateAttr(default=None)
 
     @classmethod
-    def _with_payload_annotation(
+    def with_payload_annotation(
         cls,
         method: str,
         payload: Any,

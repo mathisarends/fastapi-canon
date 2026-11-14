@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from enum import StrEnum, auto
+from enum import StrEnum
 from typing import Any
 
 from fastapi import FastAPI
@@ -18,9 +18,9 @@ from fastapi_canon.openapi import export_openapi
 
 
 class ContractKind(StrEnum):
-    OPENAPI = auto()
-    OPENRPC = auto()
-    WEBRTC = auto()
+    OPENAPI = "openapi"
+    OPENRPC = "openrpc"
+    WEBRTC = "webrtc"
 
 
 @dataclass(frozen=True, slots=True)

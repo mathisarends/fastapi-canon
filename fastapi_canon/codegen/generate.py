@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi_canon._version import __version__
-from fastapi_canon.application_loading import _load_application
+from fastapi_canon.application_loading import load_application
 from fastapi_canon.codegen.config import Configuration, TargetConfig
 from fastapi_canon.contracts import export_contracts
 
@@ -51,7 +51,7 @@ def generate(
         contracts: dict[Path, str] = {}
     else:
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            app = _load_application(config.app, root=root)
+            app = load_application(config.app, root=root)
             documents = export_contracts(app).documents
         contracts = {
             config.contracts / f"{kind}.json": _json(documents[kind])
@@ -304,6 +304,13 @@ def _json(value: Any) -> str:
     )
 
 
+def _changed(path: Path, expected: str) -> bool:
+    _regular(path)
+    if not expected:
+        return path.exists()
+    return not path.is_file() or path.read_bytes() != expected.encode("utf-8")
+
+
 def _regular(path: Path) -> None:
     if any(parent.is_symlink() for parent in (path, *path.parents)) or (
         path.exists() and not path.is_file()
@@ -311,13 +318,6 @@ def _regular(path: Path) -> None:
         raise ValueError(
             f"Generated output must be a regular file without symlinks: {path}"
         )
-
-
-def _changed(path: Path, expected: str) -> bool:
-    _regular(path)
-    if not expected:
-        return path.exists()
-    return not path.is_file() or path.read_bytes() != expected.encode("utf-8")
 
 
 def _diff(expected: dict[Path, str], changed: tuple[Path, ...]) -> str:

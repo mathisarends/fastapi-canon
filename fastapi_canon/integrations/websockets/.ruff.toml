@@ -1,10 +1,15 @@
 line-length = 88
 target-version = "py312"
 [lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "TID251"]
+preview = true
+explicit-preview-rules = true
+select = ["E", "F", "I", "UP", "B", "SIM", "TID251", "PGH003", "RUF", "PLC2701"]
 [lint.flake8-tidy-imports.banned-api]
 "fastapi._compat".msg = "Use FastAPI's documented public API."
 "fastapi.dependencies.utils".msg = "Declare dependencies with the public Depends API."
 "fastapi.routing.APIWebSocketRoute".msg = "Register routes with APIRouter.websocket()."
 [format]
 quote-style = "double"
+
+[lint.flake8-tidy-imports.banned-api."starlette._utils"]
+msg = "Use public Starlette APIs instead."

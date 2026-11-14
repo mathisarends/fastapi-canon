@@ -7,7 +7,7 @@ from types import MappingProxyType
 from typing import Self, cast
 
 from fastapi_canon.error.contracts import SUCCESS_EXTENSION
-from fastapi_canon.error.error import _freeze_json_mapping, _validate_header_name
+from fastapi_canon.error.error import freeze_json_mapping, validate_header_name
 from fastapi_canon.error.types import (
     JsonValue,
     OpenAPIHeader,
@@ -205,7 +205,7 @@ def _normalize_schema(
     if not isinstance(raw_value, Mapping):
         msg = "schema must be a mapping or None"
         raise ErrorConfigurationError(msg)
-    return _freeze_json_mapping(raw_value, path="response schema")
+    return freeze_json_mapping(raw_value, path="response schema")
 
 
 def _normalize_headers(value: ResponseHeaders) -> Mapping[str, OpenAPIHeader]:
@@ -223,7 +223,7 @@ def _normalize_headers(value: ResponseHeaders) -> Mapping[str, OpenAPIHeader]:
 
     seen: set[str] = set()
     for name, definition in items:
-        header_name = _validate_header_name(name, path="response headers")
+        header_name = validate_header_name(name, path="response headers")
         normalized_name = header_name.lower()
         if normalized_name in seen:
             msg = f"response headers contain duplicate name {header_name!r}"
@@ -232,7 +232,7 @@ def _normalize_headers(value: ResponseHeaders) -> Mapping[str, OpenAPIHeader]:
         if not isinstance(definition, Mapping):
             msg = f"response header {header_name!r} must be a mapping"
             raise ErrorConfigurationError(msg)
-        definitions[header_name] = _freeze_json_mapping(
+        definitions[header_name] = freeze_json_mapping(
             definition,
             path=f"response headers.{header_name}",
         )

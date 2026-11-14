@@ -1,10 +1,13 @@
 import asyncio
 from enum import StrEnum
-from typing import Literal, Self
+from typing import Literal, Self, cast
 
 from pydantic import BaseModel, ConfigDict
 
-from fastapi_canon.integrations.websockets.activity import _Activity, notify_activity
+from fastapi_canon.integrations.websockets.activity import (
+    NotifyActivity,
+    notify_activity,
+)
 from fastapi_canon.integrations.websockets.connection import (
     RpcConnection,
     RpcConnectionClose,
@@ -21,12 +24,16 @@ class RpcStreamDirection(StrEnum):
     BIDIRECTIONAL = "bidirectional"
 
 
+class RpcInputMessageType(StrEnum):
+    END = "end"
+
+
 class RpcInputEndMessage(BaseModel):
     """The text message a client sends to end its input; output keeps flowing."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    type: Literal["end"]
+    type: Literal[RpcInputMessageType.END]
 
 
 class RpcInputEnded(Exception):
@@ -44,6 +51,9 @@ class RpcBinaryInput:
     """Frames the client sends; iteration ends when the client ends its input."""
 
     __slots__ = ("_ended", "_queue")
+
+    _ended: bool
+    _queue: asyncio.Queue[object]
 
     def __init__(self) -> None:
         raise TypeError("RpcBinaryInput instances are created by Canon")
@@ -68,36 +78,41 @@ class RpcBinaryInput:
         if item is _END:
             self._ended = True
             raise RpcInputEnded("The client ended its binary input")
-        return item  # type: ignore[return-value]
+        return cast(bytes, item)
 
     @classmethod
-    def _create(cls, max_queue_size: int) -> Self:
+    def create(cls, max_queue_size: int) -> Self:
         self = cls.__new__(cls)
         self._queue = asyncio.Queue[object](max_queue_size)
         self._ended = False
         return self
 
-    async def _put(self, frame: bytes) -> None:
+    async def enqueue(self, frame: bytes) -> None:
         await self._queue.put(frame)
 
-    async def _end(self) -> None:
+    async def end_input(self) -> None:
         await self._queue.put(_END)
 
 
 class RpcBinaryOutput:
     """Frames the server sends; waits while the socket applies backpressure."""
 
-    __slots__ = ("_connection", "_socket", "_lock", "_activity")
+    __slots__ = ("_activity", "_connection", "_lock", "_socket")
+
+    _connection: RpcConnection
+    _socket: RpcWebSocket
+    _lock: asyncio.Lock
+    _activity: NotifyActivity | None
 
     def __init__(self) -> None:
         raise TypeError("RpcBinaryOutput instances are created by Canon")
 
     @classmethod
-    def _create(
+    def create(
         cls,
         socket: RpcWebSocket,
         connection: RpcConnection,
-        activity: _Activity | None = None,
+        activity: NotifyActivity | None = None,
     ) -> Self:
         self = cls.__new__(cls)
         self._socket = socket

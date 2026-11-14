@@ -3,8 +3,7 @@ from dataclasses import dataclass
 
 from fastapi.params import Depends
 
-from fastapi_canon.error import Error, ErrorConfigurationError
-from fastapi_canon.error.registry import AnyError
+from fastapi_canon.error import AnyError, Error, ErrorConfigurationError
 from fastapi_canon.error.validation import unique_instances
 
 

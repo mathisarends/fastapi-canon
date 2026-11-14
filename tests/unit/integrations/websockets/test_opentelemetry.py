@@ -441,7 +441,7 @@ async def test_requests_have_separate_spans_with_transport_parent(providers):
 async def test_handshake_is_linked_without_parenting_calls_or_recording_unknown_names(
     providers,
 ):
-    tracer, meter, exporter, reader = providers
+    tracer, meter, exporter, _reader = providers
     channel = RpcChannel("demo")
 
     @channel.method()

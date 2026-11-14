@@ -34,7 +34,7 @@ from fastapi_canon.integrations.websockets.middleware import (
     RpcRequestContext,
     RpcRequestOutcome,
     RpcRequestScope,
-    _middleware_scope,
+    middleware_scope,
 )
 from fastapi_canon.integrations.websockets.protocol import (
     RpcMethodDefinition,
@@ -52,17 +52,30 @@ type RpcResponse = RpcSuccess | RpcFailure
 type RpcResponseMessage = RpcResponse | list[RpcResponse] | None
 
 logger: logging.Logger = logging.getLogger(LOGGER_NAME)
-_CLIENT_CANCEL = object()
+CLIENT_CANCEL = object()
 
 
 class RpcServer:
     """Serve decoded or encoded JSON-RPC messages over any transport."""
 
+    _protocol: RpcProtocol
+    _dispatcher: RpcDispatcher
+    _error_mapper: RpcErrorMapper | None
+    _middleware: tuple[RpcMiddlewareLike, ...]
+    _endpoint: "RpcEndpoint[Any] | None"
+    _connection: RpcConnection | None
+    _codec: RpcCodec
+    _limits: RpcLimits
+    _semaphore: asyncio.Semaphore
+    _strict_errors: bool
+    _methods: dict[str, RpcMethodDefinition]
+    _scope_methods: dict[str, RpcMethodDefinition]
+
     def __init__(self) -> None:
         raise TypeError("RpcServer instances are created by RpcChannel.create_server()")
 
     @classmethod
-    def _from_channel(
+    def from_channel(
         cls,
         protocol: RpcProtocol,
         *,
@@ -82,7 +95,7 @@ class RpcServer:
         server._endpoint = endpoint
         server._connection = connection
         server._codec = RpcCodec()
-        server._limits = limits or RpcLimits()
+        server._limits = limits if limits is not None else RpcLimits()
         server._semaphore = asyncio.Semaphore(server._limits.max_concurrency)
         server._strict_errors = strict_errors
         server._methods = {method.name: method for method in protocol.methods}
@@ -108,18 +121,29 @@ class RpcServer:
     def protocol(self) -> RpcProtocol:
         return self._protocol
 
+    async def handle_json(self, message: str | bytes | bytearray) -> str | None:
+        """Decode, serve, and encode one JSON-RPC message."""
+        try:
+            request = self._codec.decode(message)
+        except RpcParseError as error:
+            failure_response = await self.handle_failure(message, error)
+            assert failure_response is not None
+            return self._codec.encode(failure_response)
+        response = await self.handle(request)
+        return None if response is None else self._codec.encode(response)
+
     async def handle(self, raw_request: object) -> RpcResponseMessage:
         """Serve one decoded request or batch."""
         if isinstance(raw_request, list):
             if not raw_request or len(raw_request) > self._limits.max_batch_size:
-                return await self._handle_failure(raw_request, RpcInvalidRequestError())
+                return await self.handle_failure(raw_request, RpcInvalidRequestError())
             responses = await asyncio.gather(
-                *(self._handle_one_bounded(item) for item in raw_request)
+                *(self.handle_one_bounded(item) for item in raw_request)
             )
             return [response for response in responses if response is not None] or None
-        return await self._handle_one_bounded(raw_request)
+        return await self.handle_one_bounded(raw_request)
 
-    async def _handle_one_bounded(
+    async def handle_one_bounded(
         self,
         raw_request: object,
         *,
@@ -131,15 +155,9 @@ class RpcServer:
                 raw_request, scope=scope, envelope=envelope
             )
 
-        return await self._run_bounded(raw_request, dispatch, admitted_at=admitted_at)
+        return await self.run_bounded(raw_request, dispatch, admitted_at=admitted_at)
 
-    def _request_timeout(self, raw_request: object) -> float | None:
-        method = self._methods.get(_request_method(raw_request) or "")
-        if method is not None and method._has_timeout:
-            return method.timeout
-        return self._limits.request_timeout
-
-    async def _run_bounded(
+    async def run_bounded(
         self,
         raw_request: object,
         operation: Callable[[RpcRequestScope | None], Awaitable[RpcResponse | None]],
@@ -160,7 +178,7 @@ class RpcServer:
                 return RpcRequestTimeoutError()
             if (
                 error.args
-                and error.args[0] is _CLIENT_CANCEL
+                and error.args[0] is CLIENT_CANCEL
                 and (self._connection is None or self._connection.close_code is None)
             ):
                 return RpcRequestCancelledError()
@@ -175,6 +193,7 @@ class RpcServer:
                 response = self._failure_response(raw_request, error, scope=scope)
                 observed = True
 
+        failure: RpcError | None
         try:
             async with (
                 waiting if waiting is not None else nullcontext(),
@@ -196,14 +215,83 @@ class RpcServer:
                 raise
         return response if observed else self._failure_response(raw_request, failure)
 
-    async def handle_json(self, message: str | bytes | bytearray) -> str | None:
-        """Decode, serve, and encode one JSON-RPC message."""
-        try:
-            request = self._codec.decode(message)
-        except RpcParseError as error:
-            return self._codec.encode(await self._handle_failure(message, error))
-        response = await self.handle(request)
-        return None if response is None else self._codec.encode(response)
+    async def handle_failure(
+        self, raw_request: object, error: Exception
+    ) -> RpcResponse | None:
+        return await self._handle_one(raw_request, failure=error)
+
+    def failure(
+        self,
+        request_id: RpcRequestId,
+        error: Exception,
+        *,
+        method: str | None = None,
+        declared: tuple[type[RpcError], ...] = (),
+    ) -> RpcFailure:
+        rpc_error = self.map_error(error, method, declared=declared)
+        return RpcFailure.from_error(request_id, rpc_error)
+
+    def map_error(
+        self,
+        error: Exception,
+        method: str | None = None,
+        *,
+        declared: tuple[type[RpcError], ...] = (),
+    ) -> RpcError:
+        mapped: RpcError | None
+        if isinstance(error, RpcError):
+            mapped = error
+        elif (
+            contract := contract_for(
+                error,
+                bind_contracts(
+                    contract
+                    for declared_error in declared
+                    if (contract := contract_of(declared_error)) is not None
+                ),
+            )
+        ) is not None:
+            try:
+                mapped = contract.to_error(error)
+            except Exception:
+                logger.exception(
+                    "RPC error binding %s failed for method %s", contract.code, method
+                )
+                return _internal_error(declared)
+        else:
+            try:
+                mapped = (
+                    self._error_mapper(error)
+                    if self._error_mapper is not None
+                    else None
+                )
+                if mapped is not None and not isinstance(mapped, RpcError):
+                    raise TypeError("RPC error mapper must return RpcError or None")
+            except Exception:
+                logger.exception("RPC error mapper failed for method %s", method)
+                return _internal_error(declared)
+        if mapped is not None:
+            if (
+                self._strict_errors
+                and method is not None
+                and not mapped.is_builtin
+                and not isinstance(mapped, declared)
+            ):
+                logger.error(
+                    "RPC method %s raised undeclared error %s",
+                    method,
+                    type(mapped).__name__,
+                )
+                return _internal_error(declared)
+            return mapped
+        logger.error("RPC method %s failed", method, exc_info=error)
+        return _internal_error(declared)
+
+    def _request_timeout(self, raw_request: object) -> float | None:
+        method = self._methods.get(_request_method(raw_request) or "")
+        if method is not None and method.has_timeout:
+            return method.timeout
+        return self._limits.request_timeout
 
     @asynccontextmanager
     async def _request_scope(
@@ -236,7 +324,7 @@ class RpcServer:
                     scope.outcome, duration=time.perf_counter() - started
                 )
 
-        async with _middleware_scope(
+        async with middleware_scope(
             self._middleware, "request", scope, on_error=interrupted
         ):
             try:
@@ -246,11 +334,11 @@ class RpcServer:
                 raise
             finally:
                 previous = scope.outcome
-                error = caught if previous is None else previous.error or caught
+                outcome_error = caught if previous is None else previous.error or caught
                 scope.outcome = RpcRequestOutcome(
                     response=None if previous is None else previous.response,
                     duration=time.perf_counter() - started,
-                    error=error,
+                    error=outcome_error,
                     cancelled=isinstance(caught, asyncio.CancelledError)
                     or (previous is not None and previous.cancelled),
                     error_code=None if previous is None else previous.error_code,
@@ -290,7 +378,7 @@ class RpcServer:
             )
         else:
             response = (
-                RpcSuccess._with_result_annotation(
+                RpcSuccess.with_result_annotation(
                     invocation.request.id, result, invocation.method.result
                 )
                 if invocation.request.expects_response
@@ -308,7 +396,7 @@ class RpcServer:
         scope: RpcRequestScope | None = None,
         declared: tuple[type[RpcError], ...] = (),
     ) -> RpcFailure | None:
-        mapped = self._rpc_error(
+        mapped = self.map_error(
             error,
             _request_method(raw_request) if scope is None else scope.request.method,
             declared=declared,
@@ -335,77 +423,6 @@ class RpcServer:
                 error_code=str(mapped.rpc_code),
             )
         return response
-
-    async def _handle_failure(
-        self, raw_request: object, error: Exception
-    ) -> RpcResponse | None:
-        return await self._handle_one(raw_request, failure=error)
-
-    def failure(
-        self,
-        request_id: RpcRequestId,
-        error: Exception,
-        *,
-        method: str | None = None,
-        declared: tuple[type[RpcError], ...] = (),
-    ) -> RpcFailure:
-        rpc_error = self._rpc_error(error, method, declared=declared)
-        return RpcFailure.from_error(request_id, rpc_error)
-
-    def _rpc_error(
-        self,
-        error: Exception,
-        method: str | None = None,
-        *,
-        declared: tuple[type[RpcError], ...] = (),
-    ) -> RpcError:
-        if isinstance(error, RpcError):
-            mapped = error
-        elif (
-            contract := contract_for(
-                error,
-                bind_contracts(
-                    contract
-                    for declared_error in declared
-                    if (contract := contract_of(declared_error)) is not None
-                ),
-            )
-        ) is not None:
-            try:
-                mapped = contract.to_error(error)
-            except Exception:
-                logger.exception(
-                    "RPC error binding %s failed for method %s", contract.code, method
-                )
-                return _internal_error(declared)
-        else:
-            try:
-                mapped = (
-                    self._error_mapper(error)
-                    if self._error_mapper is not None
-                    else None
-                )
-                if mapped is not None and not isinstance(mapped, RpcError):
-                    raise TypeError("RPC error mapper must return RpcError or None")
-            except Exception:
-                logger.exception("RPC error mapper failed for method %s", method)
-                return _internal_error(declared)
-        if mapped is not None:
-            if (
-                self._strict_errors
-                and method is not None
-                and not mapped._builtin
-                and not isinstance(mapped, declared)
-            ):
-                logger.error(
-                    "RPC method %s raised undeclared error %s",
-                    method,
-                    type(mapped).__name__,
-                )
-                return _internal_error(declared)
-            return mapped
-        logger.error("RPC method %s failed", method, exc_info=error)
-        return _internal_error(declared)
 
 
 def _request_id(raw_request: object) -> RpcRequestId:
@@ -434,18 +451,19 @@ def _looks_like_notification(raw_request: object) -> bool:
 
 
 def _internal_error(declared: tuple[type[RpcError], ...]) -> RpcError:
-    from fastapi_canon.error.catalog import internal_problem, resolved_registry
-    from fastapi_canon.integrations.websockets.errors import _CanonBinding
+    from fastapi_canon.error import resolved_registry
+    from fastapi_canon.error.catalog import internal_problem
+    from fastapi_canon.integrations.websockets.errors import CanonBinding
 
     error = RpcInternalError()
     binding = next(
         (
             contract_of(item)
             for item in declared
-            if isinstance(contract_of(item), _CanonBinding)
+            if isinstance(contract_of(item), CanonBinding)
         ),
         None,
     )
-    if isinstance(binding, _CanonBinding):
+    if isinstance(binding, CanonBinding):
         error.problem = internal_problem(resolved_registry(binding.registry))
     return error

@@ -2,6 +2,7 @@ import inspect
 from collections import Counter
 from collections.abc import AsyncGenerator, AsyncIterator, Iterable
 from dataclasses import dataclass
+from itertools import chain
 from types import FunctionType, UnionType
 from typing import (
     Annotated,
@@ -68,6 +69,11 @@ class RpcMethodDefinition:
     def __post_init__(self) -> None:
         if type(self.idempotent) is not bool:
             raise ProtocolDefinitionError("Method idempotent must be a bool")
+
+    @property
+    def has_timeout(self) -> bool:
+        """Whether the declaration overrides the inherited request timeout."""
+        return self._has_timeout
 
 
 @dataclass(frozen=True, slots=True)
@@ -185,7 +191,9 @@ class RpcProtocol:
                     raise ProtocolDefinitionError(
                         f"RPC stream control collides with an operation: {control}"
                     )
-        for operation in (*self.methods, *self.notifications, *self.subscriptions):
+        for operation in chain[
+            RpcMethodDefinition | RpcNotificationDefinition | RpcSubscriptionDefinition
+        ](self.methods, self.notifications, self.subscriptions):
             bind_contracts(
                 (
                     contract
@@ -415,27 +423,6 @@ def notification_definition(
     )
 
 
-def stream_payload(function: FunctionType) -> Any:
-    annotation = get_type_hints(function, include_extras=True).get("return")
-    annotation = _stream_annotation(annotation)
-    if get_origin(annotation) not in (AsyncIterator, AsyncGenerator) or not get_args(
-        annotation
-    ):
-        raise ProtocolDefinitionError("RPC stream must return AsyncIterator[Payload]")
-    payload = _resolve_alias(get_args(annotation)[0])
-    normalized = _stream_annotation(payload)
-    if normalized is Any or (
-        get_origin(normalized) in (Union, UnionType)
-        and any(
-            _stream_annotation(item) in (bytes, Any) for item in get_args(normalized)
-        )
-    ):
-        raise ProtocolDefinitionError(
-            "Stream payload must unambiguously declare bytes or serializable messages"
-        )
-    return bytes if normalized is bytes else payload
-
-
 def subscription_definition(
     *,
     name: str,
@@ -539,10 +526,35 @@ def stream_definition(
         injected_parameters=injected,
         resolver_scope=resolver_scope,
         direction=direction,
-        input_content_type=(input_content_type or content_type) if has_input else None,
+        input_content_type=(
+            input_content_type if input_content_type is not None else content_type
+        )
+        if has_input
+        else None,
         path_parameters=tuple(parameter.name for parameter in path_parameters),
         path_model=_path_model(function, hints, path_parameters),
     )
+
+
+def stream_payload(function: FunctionType) -> Any:
+    annotation = get_type_hints(function, include_extras=True).get("return")
+    annotation = _stream_annotation(annotation)
+    if get_origin(annotation) not in (AsyncIterator, AsyncGenerator) or not get_args(
+        annotation
+    ):
+        raise ProtocolDefinitionError("RPC stream must return AsyncIterator[Payload]")
+    payload = _resolve_alias(get_args(annotation)[0])
+    normalized = _stream_annotation(payload)
+    if normalized is Any or (
+        get_origin(normalized) in (Union, UnionType)
+        and any(
+            _stream_annotation(item) in (bytes, Any) for item in get_args(normalized)
+        )
+    ):
+        raise ProtocolDefinitionError(
+            "Stream payload must unambiguously declare bytes or serializable messages"
+        )
+    return bytes if normalized is bytes else payload
 
 
 def socket_definition(
@@ -597,7 +609,7 @@ def socket_definition(
         payload_types = (incoming, result)
         message_parameter = parameter.name
     else:
-        parameter, annotation = socket_parameters[0]
+        socket_parameter, annotation = socket_parameters[0]
         arguments = get_args(annotation)
         if arguments:
             if len(arguments) != 2:
@@ -606,7 +618,7 @@ def socket_definition(
                 )
             payload_types = arguments
         injected = tuple(
-            RpcInjectedParameter(p.name, RpcSocket) if p is parameter else p
+            RpcInjectedParameter(p.name, RpcSocket) if p is socket_parameter else p
             for p in injected
         )
         if result is not None and result is not type(None):

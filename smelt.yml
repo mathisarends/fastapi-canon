@@ -49,6 +49,8 @@ architecture:
     fastapi_canon.openapi: adapters
     fastapi_canon.router: routing
     fastapi_canon.feature: composition
+    fastapi_canon.composition_checks: composition
+    fastapi_canon.composition_installation: composition
     fastapi_canon.api_router: composition
     fastapi_canon.diagnostics: values
     fastapi_canon.introspection: composition
@@ -300,16 +302,17 @@ rules:
   private-class-constant: error
   redundant-str-enum-value: error
   prefer-package-import: error
-  prefer-str-enum-discriminator: hint
-  implicit-optional-default: hint
-  deep-object-navigation: hint
+  facade-export-gap: warning
+  prefer-str-enum-discriminator: warning
+  implicit-optional-default: warning
+  deep-object-navigation: warning
   no-base-class-prefix: error
   no-base-class-suffix: error
   secret-settings-field: warning
-  redundant-dishka-provider: hint
-  caller-before-callee: hint
-  prefer-callable-instance: hint
-  redundant-module-name: hint
+  redundant-dishka-provider: warning
+  caller-before-callee: warning
+  prefer-callable-instance: warning
+  redundant-module-name: warning
   package-only-dunder-all: off
   unnecessary-future-annotations: warning
   prefer-match-type-dispatch: warning

@@ -96,6 +96,78 @@ def _generate_one(arguments: argparse.Namespace) -> int:
     return _report_generation(changed, check=arguments.check)
 
 
+def _generate_config(path: Path, *, check: bool) -> int:
+    try:
+        config = tomllib.loads(path.read_text(encoding="utf-8"))
+        if config.get("version") != 1:
+            raise ValueError("version must be 1")
+        clients = config["clients"]
+        if not isinstance(clients, list) or not clients:
+            raise ValueError("clients must be a non-empty array of tables")
+    except (OSError, KeyError, TypeError, ValueError, tomllib.TOMLDecodeError) as error:
+        print(f"error: Invalid client config {path}: {error}", file=sys.stderr)
+        return 2
+
+    try:
+        contract = config.get("contract")
+        contract_job = (
+            _config_contract(path.parent, contract) if contract is not None else None
+        )
+    except (KeyError, TypeError, ValueError, ProtocolReferenceError) as error:
+        print(f"error: Invalid contract config: {error}", file=sys.stderr)
+        return 2
+
+    arguments_list: list[argparse.Namespace] = []
+    for index, client in enumerate(clients, start=1):
+        try:
+            arguments_list.append(
+                _config_arguments(
+                    path.parent,
+                    client,
+                    check=check,
+                    default_schema=(contract_job[0] if contract_job else None),
+                )
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            print(f"error: Invalid clients[{index}]: {error}", file=sys.stderr)
+            return 2
+
+    contract_document = json.loads(contract_job[1]) if contract_job else None
+    rendered: list[tuple[argparse.Namespace, dict[str, str]]] = []
+    # Bindings named as module:attr resolve relative to the config file.
+    sys.path.insert(0, str(path.parent.resolve()))
+    try:
+        for arguments in arguments_list:
+            document = (
+                contract_document
+                if contract_job is not None and arguments.schema == contract_job[0]
+                else json.loads(arguments.schema.read_text(encoding="utf-8"))
+            )
+            assert document is not None
+            try:
+                rendered.append((arguments, _render_client(arguments, document)))
+            except (OSError, SyntaxError, UnsupportedSchemaError, ValueError) as error:
+                print(f"error: Invalid client: {error}", file=sys.stderr)
+                return 2
+    finally:
+        sys.path.pop(0)
+
+    changed_contract: tuple[Path, ...] = ()
+    if contract_job is not None:
+        output, content = contract_job
+        changed_contract = write_files(
+            output.parent, {output.name: content}, check=check
+        )
+    failed = bool(changed_contract)
+    if check:
+        _report_check(changed_contract, subject="Contract")
+    for arguments, files in rendered:
+        changed = write_files(arguments.output, files, check=check)
+        failed = bool(changed) or failed
+        _report_generation(changed, check=check)
+    return int(check and failed)
+
+
 def _render_client(
     arguments: argparse.Namespace,
     document: dict[str, object],
@@ -120,7 +192,7 @@ def _render_client(
         )
         return dict(render_python_client(document, options))
     else:
-        options = TypeScriptClientOptions(
+        ts_options = TypeScriptClientOptions(
             client_name=arguments.client_name,
             transport_module=arguments.transport_module,
             api_root=arguments.api_root,
@@ -130,7 +202,7 @@ def _render_client(
             bindings=bindings,
             contract=arguments.schema,
         )
-        return dict(render_typescript_client(document, options))
+        return dict(render_typescript_client(document, ts_options))
 
 
 def _extra_python_files(
@@ -181,77 +253,6 @@ def _report_generation(changed: Sequence[Path], *, check: bool) -> int:
     if not changed:
         print("Client is up to date")
     return 0
-
-
-def _generate_config(path: Path, *, check: bool) -> int:
-    try:
-        config = tomllib.loads(path.read_text(encoding="utf-8"))
-        if config.get("version") != 1:
-            raise ValueError("version must be 1")
-        clients = config["clients"]
-        if not isinstance(clients, list) or not clients:
-            raise ValueError("clients must be a non-empty array of tables")
-    except (OSError, KeyError, TypeError, ValueError, tomllib.TOMLDecodeError) as error:
-        print(f"error: Invalid client config {path}: {error}", file=sys.stderr)
-        return 2
-
-    try:
-        contract = config.get("contract")
-        contract_job = (
-            _config_contract(path.parent, contract) if contract is not None else None
-        )
-    except (KeyError, TypeError, ValueError, ProtocolReferenceError) as error:
-        print(f"error: Invalid contract config: {error}", file=sys.stderr)
-        return 2
-
-    arguments_list: list[argparse.Namespace] = []
-    for index, client in enumerate(clients, start=1):
-        try:
-            arguments_list.append(
-                _config_arguments(
-                    path.parent,
-                    client,
-                    check=check,
-                    default_schema=(contract_job[0] if contract_job else None),
-                )
-            )
-        except (KeyError, TypeError, ValueError) as error:
-            print(f"error: Invalid clients[{index}]: {error}", file=sys.stderr)
-            return 2
-
-    contract_document = json.loads(contract_job[1]) if contract_job else None
-    rendered: list[tuple[argparse.Namespace, dict[str, str]]] = []
-    # Bindings named as module:attr resolve relative to the config file.
-    sys.path.insert(0, str(path.parent.resolve()))
-    try:
-        for arguments in arguments_list:
-            document = (
-                contract_document
-                if contract_job is not None and arguments.schema == contract_job[0]
-                else json.loads(arguments.schema.read_text(encoding="utf-8"))
-            )
-            try:
-                rendered.append((arguments, _render_client(arguments, document)))
-            except (OSError, SyntaxError, UnsupportedSchemaError, ValueError) as error:
-                print(f"error: Invalid client: {error}", file=sys.stderr)
-                return 2
-    finally:
-        sys.path.pop(0)
-
-    changed_contract: tuple[Path, ...] = ()
-    if contract_job is not None:
-        output, content = contract_job
-        changed_contract = write_files(
-            output.parent, {output.name: content}, check=check
-        )
-    failed = bool(changed_contract)
-    if check:
-        _report_check(changed_contract, subject="Contract")
-    for arguments, files in rendered:
-        changed = write_files(arguments.output, files, check=check)
-        failed = bool(changed) or failed
-        _report_generation(changed, check=check)
-    return int(check and failed)
 
 
 def _config_contract(base: Path, contract: object) -> tuple[Path, str]:
@@ -375,7 +376,9 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _add_schema_command(commands: argparse._SubParsersAction) -> None:
+def _add_schema_command(
+    commands: "argparse._SubParsersAction[argparse.ArgumentParser]",
+) -> None:
     schema = commands.add_parser(
         "schema",
         help="Render the contract of a protocol.",
@@ -413,7 +416,9 @@ def _add_schema_command(commands: argparse._SubParsersAction) -> None:
     )
 
 
-def _add_generate_command(commands: argparse._SubParsersAction) -> None:
+def _add_generate_command(
+    commands: "argparse._SubParsersAction[argparse.ArgumentParser]",
+) -> None:
     generate = commands.add_parser("generate", help="Generate a client package.")
     generate.add_argument(
         "schema", nargs="?", type=Path, help="OpenRPC document to read."

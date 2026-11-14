@@ -62,32 +62,33 @@ def _frame(request_id: int, method: str, length: int) -> str:
     )
 
 
-async def _connection():
-    socket = InMemorySocket("/rpc")
-    task = asyncio.create_task(service.serve(socket))
-    await asyncio.sleep(0)
-    return socket, task
-
-
-async def _close(socket: InMemorySocket, task: asyncio.Task) -> None:
-    await socket.client_disconnect()
-    await asyncio.gather(task, return_exceptions=True)
-
-
-async def _sequential(method: str, count: int, length: int) -> float:
-    """Median round-trip microseconds for one request at a time."""
-    socket, task = await _connection()
-    frames = [_frame(index, method, length) for index in range(count)]
-    samples = []
-    try:
-        for frame in frames:
-            started = time.perf_counter()
-            await socket.client_send(frame)
-            await socket.client_receive()
-            samples.append(time.perf_counter() - started)
-    finally:
-        await _close(socket, task)
-    return statistics.median(samples) * 1e6
+def _main() -> None:
+    parser = argparse.ArgumentParser(description="Measure RPC request throughput")
+    parser.add_argument("--requests", type=int, default=5_000)
+    parser.add_argument("--window", type=int, default=64)
+    parser.add_argument("--repeat", type=int, default=5, help="median of N runs")
+    parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--profile", action="store_true", help="print the top cProfile entries"
+    )
+    args = parser.parse_args()
+    if min(args.requests, args.window, args.repeat) < 1:
+        parser.error("--requests, --window and --repeat must be positive")
+    if args.profile:
+        profiler = cProfile.Profile()
+        profiler.enable()
+        asyncio._run(_pipelined("bench.echo", args.requests, 16, args.window))
+        profiler.disable()
+        stream = io.StringIO()
+        pstats.Stats(profiler, stream=stream).sort_stats("tottime").print_stats(25)
+        print(stream.getvalue())
+        return
+    report = asyncio._run(_run(args))
+    encoded = json.dumps(report, indent=2) + "\n"
+    if args.output is not None:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(encoded, encoding="utf-8")
+    print(encoded, end="")
 
 
 async def _pipelined(method: str, count: int, length: int, window: int) -> float:
@@ -153,33 +154,32 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
     }
 
 
-def _main() -> None:
-    parser = argparse.ArgumentParser(description="Measure RPC request throughput")
-    parser.add_argument("--requests", type=int, default=5_000)
-    parser.add_argument("--window", type=int, default=64)
-    parser.add_argument("--repeat", type=int, default=5, help="median of N runs")
-    parser.add_argument("--output", type=Path)
-    parser.add_argument(
-        "--profile", action="store_true", help="print the top cProfile entries"
-    )
-    args = parser.parse_args()
-    if min(args.requests, args.window, args.repeat) < 1:
-        parser.error("--requests, --window and --repeat must be positive")
-    if args.profile:
-        profiler = cProfile.Profile()
-        profiler.enable()
-        asyncio._run(_pipelined("bench.echo", args.requests, 16, args.window))
-        profiler.disable()
-        stream = io.StringIO()
-        pstats.Stats(profiler, stream=stream).sort_stats("tottime").print_stats(25)
-        print(stream.getvalue())
-        return
-    report = asyncio._run(_run(args))
-    encoded = json.dumps(report, indent=2) + "\n"
-    if args.output is not None:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(encoded, encoding="utf-8")
-    print(encoded, end="")
+async def _sequential(method: str, count: int, length: int) -> float:
+    """Median round-trip microseconds for one request at a time."""
+    socket, task = await _connection()
+    frames = [_frame(index, method, length) for index in range(count)]
+    samples = []
+    try:
+        for frame in frames:
+            started = time.perf_counter()
+            await socket.client_send(frame)
+            await socket.client_receive()
+            samples.append(time.perf_counter() - started)
+    finally:
+        await _close(socket, task)
+    return statistics.median(samples) * 1e6
+
+
+async def _connection():
+    socket = InMemorySocket("/rpc")
+    task = asyncio.create_task(service.serve(socket))
+    await asyncio.sleep(0)
+    return socket, task
+
+
+async def _close(socket: InMemorySocket, task: asyncio.Task) -> None:
+    await socket.client_disconnect()
+    await asyncio.gather(task, return_exceptions=True)
 
 
 if __name__ == "__main__":

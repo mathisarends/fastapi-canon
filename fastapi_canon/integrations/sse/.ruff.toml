@@ -2,4 +2,12 @@ target-version = "py312"
 line-length = 88
 extend-exclude = ["../../../examples/sse/agent_runs/generated_python", "../../../tests/fixtures/sse/generated_python"]
 [lint]
-select = ["E", "F", "I", "UP", "B", "SIM"]
+preview = true
+explicit-preview-rules = true
+select = ["E", "F", "I", "UP", "B", "SIM", "PGH003", "RUF", "TID251", "PLC2701"]
+
+[lint.flake8-tidy-imports.banned-api]
+"fastapi._compat".msg = "Use FastAPI's documented public API."
+"fastapi.dependencies.utils".msg = "Declare dependencies with the public Depends API."
+"fastapi.routing.APIWebSocketRoute".msg = "Register routes with APIRouter.websocket()."
+"starlette._utils".msg = "Use public Starlette APIs instead."

@@ -28,11 +28,11 @@ class SqlItemRepository(ItemRepository):
         await self._session.flush()
 
 
-class ItemService:
+class CreateItem:
     def __init__(self, item_repository: ItemRepository) -> None:
         self._item_repository = item_repository
 
-    async def create(self, item: Item) -> Item:
+    async def __call__(self, item: Item) -> Item:
         await self._item_repository.add(item.name)
         return item
 
@@ -40,15 +40,15 @@ class ItemService:
 class ItemProvider(Provider):
     scope = Scope.REQUEST
     item_repository = provide(SqlItemRepository, provides=ItemRepository)
-    item_service = provide(ItemService)
+    create_item = provide(CreateItem)
 
 
 router = APIRouter(prefix="/items")
 
 
 @router.post("", status_code=201)
-async def create_item(item: Item, item_service: Inject[ItemService]) -> Item:
-    return await item_service.create(item)
+async def create_item(item: Item, create: Inject[CreateItem]) -> Item:
+    return await create(item)
 
 
 app = Composition(

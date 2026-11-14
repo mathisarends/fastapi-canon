@@ -4,6 +4,7 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
+from itertools import chain
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlsplit
@@ -425,7 +426,7 @@ def type_expression(  # smelt: ignore[SMT429] -- external API
 
 
 def ref_name(schema: dict[str, Any]) -> str:
-    return schema["$ref"].rsplit("/", 1)[-1]
+    return str(schema["$ref"].rsplit("/", 1)[-1])
 
 
 _STREAM_DIRECTIONS = ("server-to-client", "client-to-server", "bidirectional")
@@ -986,7 +987,7 @@ def _validate_server_references(
     missing = sorted(
         {
             item.server
-            for item in (*routes, *notifications)
+            for item in chain[RouteDecl | NotificationDecl](routes, notifications)
             if item.server is not None and item.server not in declared
         }
     )

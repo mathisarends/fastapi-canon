@@ -372,12 +372,16 @@ class RpcClientCore:
                         )
                         if (
                             self._closed
-                            or isinstance(failure, _AttemptFailure)
-                            and not failure.retryable
+                            or (
+                                isinstance(failure, _AttemptFailure)
+                                and not failure.retryable
+                            )
                             or attempt > self._retry_attempts
                             or not (
-                                isinstance(error, RpcConnectionLostError)
-                                and not error.sent
+                                (
+                                    isinstance(error, RpcConnectionLostError)
+                                    and not error.sent
+                                )
                                 or route.idempotent
                             )
                         ):

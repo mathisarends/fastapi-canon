@@ -50,7 +50,7 @@ async def test_unregistered_middleware_allocates_no_operation_scopes(monkeypatch
     @channel.method()
     async def ping() -> str:
         # Verify context-variable restoration across nested scopes and cancellation.
-        scope = middleware_module._current_serving()  # smelt: ignore[SMT420] -- ctx
+        scope = middleware_module.current_serving()
         assert scope is None
         return "pong"
 
@@ -61,7 +61,7 @@ async def test_unregistered_middleware_allocates_no_operation_scopes(monkeypatch
     @channel.stream()
     async def frames() -> AsyncIterator[bytes]:
         # Verify context-variable restoration across nested scopes and cancellation.
-        scope = middleware_module._current_serving()  # smelt: ignore[SMT420] -- ctx
+        scope = middleware_module.current_serving()
         assert scope is None
         yield b"frame"
 
@@ -94,7 +94,7 @@ async def test_nested_uninstrumented_connection_restores_outer_scope():
     @child_channel.method()
     async def ping() -> str:
         # Verify context-variable restoration across nested scopes and cancellation.
-        scope = middleware_module._current_serving()  # smelt: ignore[SMT420] -- ctx
+        scope = middleware_module.current_serving()
         assert scope is None
         return "pong"
 
@@ -106,14 +106,12 @@ async def test_nested_uninstrumented_connection_restores_outer_scope():
     @channel.stream()
     async def frames() -> AsyncIterator[bytes]:
         # Verify context-variable restoration across nested scopes and cancellation.
-        outer = (
-            middleware_module._current_serving()  # smelt: ignore[SMT420] -- unit seam
-        )
+        outer = middleware_module.current_serving()
         connection = outer.scope.connection
         async with RpcTestClient(child_service, "/child") as client:
             assert await client.request("child.ping") == "pong"
         # Verify context-variable restoration across nested scopes and cancellation.
-        scope = middleware_module._current_serving()  # smelt: ignore[SMT420] -- ctx
+        scope = middleware_module.current_serving()
         assert scope is outer
         assert outer.scope.connection is connection
         yield b"frame"
@@ -125,7 +123,7 @@ async def test_nested_uninstrumented_connection_restores_outer_scope():
         await asyncio.wait_for(client.closed(), 1)
     assert recorder.connections[0].outcome.error is None
     # Verify context-variable restoration across nested scopes and cancellation.
-    scope = middleware_module._current_serving()  # smelt: ignore[SMT420] -- ctx
+    scope = middleware_module.current_serving()
     assert scope is None
 
 
@@ -154,7 +152,7 @@ async def test_uninstrumented_fastapi_rejection_does_not_update_outer_scope():
         "/outer", channels=[RpcChannel("outer")]
     )
     # Verify context-variable restoration across nested scopes and cancellation.
-    async with middleware_module._serving_scope(  # smelt: ignore[SMT420] -- unit seam
+    async with middleware_module.serving_scope(
         outer, InMemorySocket("/outer")
     ) as state:
         await web(
@@ -601,7 +599,7 @@ def test_custom_handlers_support_activity_callbacks_on_middleware(with_instrumen
     async def handler(websocket: WebSocket) -> None:
         if not with_instrumentation:
             # Verify context-variable restoration across nested scopes and cancellation.
-            scope = middleware_module._current_serving()  # smelt: ignore[SMT420] -- ctx
+            scope = middleware_module.current_serving()
             assert scope is None
             assert websocket.send.__func__ is WebSocket.send
             assert websocket.receive.__func__ is WebSocket.receive

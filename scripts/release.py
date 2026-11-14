@@ -47,21 +47,6 @@ class Package:
     tag_prefix: str
 
 
-def packages(root: Path = ROOT) -> dict[str, Package]:
-    configuration = _toml(root / "release.toml")
-    selected = {entry["name"]: Package(**entry) for entry in configuration["package"]}
-    if set(selected) != _ALLOWED or len(configuration["package"]) != len(_ALLOWED):
-        raise ValueError("Only the Canon library distribution may be release targets")
-    for name, package in selected.items():
-        if package.directory != ".":
-            raise ValueError(f"Invalid package directory for {name}")
-        if package.module != name.replace("-", "_"):
-            raise ValueError(f"Invalid import module for {name}")
-        if package.tag_prefix != f"{name}-v":
-            raise ValueError(f"Invalid tag prefix for {name}")
-    return selected
-
-
 def validate_release(
     name: str,
     version: str,
@@ -160,6 +145,21 @@ def validate_release(
     return report
 
 
+def packages(root: Path = ROOT) -> dict[str, Package]:
+    configuration = _toml(root / "release.toml")
+    selected = {entry["name"]: Package(**entry) for entry in configuration["package"]}
+    if set(selected) != _ALLOWED or len(configuration["package"]) != len(_ALLOWED):
+        raise ValueError("Only the Canon library distribution may be release targets")
+    for name, package in selected.items():
+        if package.directory != ".":
+            raise ValueError(f"Invalid package directory for {name}")
+        if package.module != name.replace("-", "_"):
+            raise ValueError(f"Invalid import module for {name}")
+        if package.tag_prefix != f"{name}-v":
+            raise ValueError(f"Invalid tag prefix for {name}")
+    return selected
+
+
 def artifact_hashes(
     name: str, version: str, directory: Path, root: Path = ROOT
 ) -> dict[str, str]:
@@ -203,23 +203,6 @@ def artifact_hashes(
         filename: hashlib.sha256((directory / filename).read_bytes()).hexdigest()
         for filename in sorted(expected)
     }
-
-
-def publication_state(report: dict[str, Any]) -> str:
-    document = _pypi(report["package"], report["version"])
-    if document is None:
-        return "absent"
-    published = {
-        item["filename"]: item["digests"]["sha256"] for item in document["urls"]
-    }
-    expected = report["artifacts"]
-    if not published or any(
-        expected.get(name) != digest for name, digest in published.items()
-    ):
-        raise ValueError(
-            "PyPI already contains unexpected files or different artifact hashes"
-        )
-    return "complete" if published == expected else "partial"
 
 
 def verify_published(report: dict[str, Any], root: Path = ROOT) -> None:
@@ -298,6 +281,23 @@ def verify_published(report: dict[str, Any], root: Path = ROOT) -> None:
                 ],
                 cwd=Path(temporary),
             )
+
+
+def publication_state(report: dict[str, Any]) -> str:
+    document = _pypi(report["package"], report["version"])
+    if document is None:
+        return "absent"
+    published = {
+        item["filename"]: item["digests"]["sha256"] for item in document["urls"]
+    }
+    expected = report["artifacts"]
+    if not published or any(
+        expected.get(name) != digest for name, digest in published.items()
+    ):
+        raise ValueError(
+            "PyPI already contains unexpected files or different artifact hashes"
+        )
+    return "complete" if published == expected else "partial"
 
 
 def _main() -> None:
@@ -414,17 +414,6 @@ def _check_pin(dependencies: list[str], name: str, version: str) -> None:
         raise ValueError(f"Dependency pin must be {name}=={version}")
 
 
-def _changelog(path: Path, version: str) -> str:
-    text = path.read_text("utf-8")
-    matches = list(
-        re.finditer(rf"^## {re.escape(version)}(?:\s[^\n]*)?$", text, re.MULTILINE)
-    )
-    if len(matches) != 1:
-        raise ValueError(f"Changelog must contain exactly one section for {version}")
-    tail = text[matches[0].start() :]
-    return re.split(r"\n## ", tail, maxsplit=1)[0].strip()
-
-
 def _release_notes(root: Path, package: Package, version: str, commit: str) -> str:
     path = root / package.directory / "CHANGELOG.md"
     section = _changelog(path, version)
@@ -457,6 +446,17 @@ def _release_notes(root: Path, package: Package, version: str, commit: str) -> s
         ),
         section,
     )
+
+
+def _changelog(path: Path, version: str) -> str:
+    text = path.read_text("utf-8")
+    matches = list(
+        re.finditer(rf"^## {re.escape(version)}(?:\s[^\n]*)?$", text, re.MULTILINE)
+    )
+    if len(matches) != 1:
+        raise ValueError(f"Changelog must contain exactly one section for {version}")
+    tail = text[matches[0].start() :]
+    return re.split(r"\n## ", tail, maxsplit=1)[0].strip()
 
 
 def _check_breaking_version(path: Path, version: str, section: str) -> None:
@@ -512,17 +512,6 @@ def _pypi(name: str, version: str) -> dict[str, Any] | None:
         raise
 
 
-def _check_remote_tag(repository: str, tag: str, commit: str) -> None:
-    ref = _gh(f"repos/{repository}/git/ref/tags/{tag}", missing_ok=True)
-    if ref is None:
-        return
-    target = ref["object"]
-    while target["type"] == "tag":
-        target = _gh(f"repos/{repository}/git/tags/{target['sha']}")["object"]
-    if target["type"] != "commit" or target["sha"] != commit:
-        raise ValueError("Release tag already points to a different commit")
-
-
 def _finish(report: dict[str, Any], directory: Path, manifest: Path) -> None:
     repository = _toml(ROOT / "release.toml")["repository"]
     _check_remote_tag(repository, report["tag"], report["commit"])
@@ -551,6 +540,17 @@ def _finish(report: dict[str, Any], directory: Path, manifest: Path) -> None:
     command.extend(str(directory / filename) for filename in report["artifacts"])
     command.append(str(manifest))
     _run(command)
+
+
+def _check_remote_tag(repository: str, tag: str, commit: str) -> None:
+    ref = _gh(f"repos/{repository}/git/ref/tags/{tag}", missing_ok=True)
+    if ref is None:
+        return
+    target = ref["object"]
+    while target["type"] == "tag":
+        target = _gh(f"repos/{repository}/git/tags/{target['sha']}")["object"]
+    if target["type"] != "commit" or target["sha"] != commit:
+        raise ValueError("Release tag already points to a different commit")
 
 
 def _gh(endpoint: str, *, missing_ok: bool = False) -> Any:

@@ -109,7 +109,7 @@ class WebRtcError(Exception):
 
     def __init__(self, code: ErrorCode, message: str | None = None) -> None:
         self.code = ErrorCode(code)
-        self.message = message or default_message(self.code)
+        self.message = message if message is not None else default_message(self.code)
         super().__init__(f"{self.code.value}: {self.message}")
 
 

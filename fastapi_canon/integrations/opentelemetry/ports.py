@@ -5,7 +5,7 @@ from contextlib import nullcontext
 from contextvars import ContextVar
 from functools import wraps
 from time import perf_counter
-from typing import Any
+from typing import Any, cast
 
 from dishka import Provider
 
@@ -22,7 +22,7 @@ except ModuleNotFoundError as exc:
 from fastapi_canon.integrations.opentelemetry.declarations import (
     Instrumentation,
     Telemetry,
-    _instrumented_methods,
+    instrumented_methods,
 )
 
 excluded: ContextVar[bool] = ContextVar("canon.telemetry.excluded", default=False)
@@ -41,8 +41,14 @@ class _InstrumentedProxy:
     def __getattr__(self, name: str) -> Any:
         return getattr(self._instance, name)
 
+    def target_method(self, name: str) -> Callable[..., Any]:
+        return cast(Callable[..., Any], getattr(self._instance, name))
 
-class _Observer:
+    def adapter_name(self) -> str:
+        return type(self._instance).__name__
+
+
+class _InstrumentPort:
     def __init__(
         self, registrations: tuple[tuple[str, Instrumentation], ...], options: Telemetry
     ) -> None:
@@ -63,13 +69,13 @@ class _Observer:
                 (_InstrumentedProxy,),
                 {
                     name: self._wrapper(spec, feature, name, method)
-                    for name, method in _instrumented_methods(spec.port)
+                    for name, method in instrumented_methods(spec.port)
                 },
             )
             for feature, spec in registrations
         }
 
-    def wrap(self, spec: Instrumentation, instance: Any) -> Any:
+    def __call__(self, spec: Instrumentation, instance: Any) -> Any:
         if not self.spans and self._histogram is None:
             return instance
         return self._proxies[spec](instance)
@@ -89,10 +95,14 @@ class _Observer:
 
         @wraps(method)
         async def call(proxy: _InstrumentedProxy, *args: Any, **kwargs: Any) -> Any:
-            target = getattr(proxy._instance, name)
+            # Port methods can have the same names as proxy operations.
+            target = _InstrumentedProxy.target_method(proxy, name)
             if excluded.get() or not is_instrumentation_enabled():
                 return await target(*args, **kwargs)
-            attributes = {**registered, "canon.adapter": type(proxy._instance).__name__}
+            attributes = {
+                **registered,
+                "canon.adapter": _InstrumentedProxy.adapter_name(proxy),
+            }
             started = perf_counter()
             outcome = dict(registered)
             with (
@@ -132,16 +142,16 @@ class _Observer:
         return call
 
 
-def _providers(
+def create_instrumentation_providers(
     registrations: tuple[tuple[str, Instrumentation], ...], options: Telemetry
 ) -> tuple[Provider, ...]:
-    observer = _Observer(registrations, options)
+    observer = _InstrumentPort(registrations, options)
     return tuple(_provider(spec, observer) for _, spec in registrations)
 
 
-def _provider(spec: Instrumentation, observer: _Observer) -> Provider:
+def _provider(spec: Instrumentation, observer: _InstrumentPort) -> Provider:
     def wrap(instance: Any) -> Any:
-        return observer.wrap(spec, instance)
+        return observer(spec, instance)
 
     wrap.__annotations__ = {"instance": spec.port, "return": spec.port}
     provider = Provider(component=spec.component)

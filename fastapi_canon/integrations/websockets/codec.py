@@ -15,7 +15,7 @@ class RpcCodec:
         except (ValueError, RecursionError) as error:
             raise RpcParseError() from error
 
-    def encode(self, message: BaseModel | list[BaseModel]) -> str:
+    def encode[ModelT: BaseModel](self, message: ModelT | list[ModelT]) -> str:
         if isinstance(message, list):
             value: Any = [
                 item.model_dump(mode="json", by_alias=True) for item in message

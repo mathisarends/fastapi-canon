@@ -101,6 +101,13 @@ workflow does not merge models, rename operations across protocols or rewrite
 generated bindings. It preserves handwritten files and removes stale files only
 when the specialized generator's manifest owns them.
 
+Native writers validate all new and stale paths before changing output and replace
+changed files atomically. Corrupt ownership manifests fail generation and check
+mode. Restore the manifest from version control or review the old owned output
+before regenerating into a clean directory. Custom generated paths must use
+relative POSIX syntax without backslashes, colons or parent traversal. See the
+[0.21.0 migration](package-migration.md#upgrade-to-0210).
+
 Check mode first compares freshly exported contracts with the saved documents.
 If they differ, clients are reported as `blocked`: checking them against a stale
 saved contract could give a misleading result. Regenerate, review and commit the

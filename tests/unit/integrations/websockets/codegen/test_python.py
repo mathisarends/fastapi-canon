@@ -433,7 +433,7 @@ def test_python_name_collisions_fail_with_both_wire_names(
     second["name"] = "greeting.openTab"
     collision["methods"] = [first, second]
 
-    with pytest.raises(UnsupportedSchemaError, match="greeting.open-tab") as error:
+    with pytest.raises(UnsupportedSchemaError, match=r"greeting.open-tab") as error:
         render_python_client(collision, options)
 
     assert "greeting.openTab" in str(error.value)

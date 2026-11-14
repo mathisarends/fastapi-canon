@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -14,36 +16,8 @@ from fastapi_canon.integrations.websockets.connection import (
 )
 
 
-@dataclass(eq=False)
-class _DrainSession:
-    task: asyncio.Task
-    connection: RpcConnection | None = None
-    begin: Callable[[], Awaitable[None]] | None = None
-    ready: asyncio.Event = field(default_factory=asyncio.Event)
-    finished: asyncio.Event = field(default_factory=asyncio.Event)
-
-    async def finish(self) -> None:
-        await self.ready.wait()
-        if self.finished.is_set():
-            return
-        if self.begin is not None:
-            await self.begin()
-        await self.finished.wait()
-
-    def stop(self) -> None:
-        if self.connection is not None and self.connection.close_code is None:
-            self.connection._close_code = RpcConnectionClose.SERVICE_RESTART
-            self.connection._close_reason = "Server restarting"
-        self.task.cancel()
-
-
-_session: ContextVar[_DrainSession | None] = ContextVar(
-    "fastapi_canon.integrations.websockets.drain", default=None
-)
-
-
-def _current_drain_session() -> _DrainSession | None:
-    return _session.get()
+def current_drain_session() -> _DrainSession | None:
+    return _active_session.get()
 
 
 class RpcDrain:
@@ -69,6 +43,27 @@ class RpcDrain:
             self._task = asyncio.create_task(self._drain(timeout))
             self._task.add_done_callback(_consume)
         await asyncio.shield(self._task)
+
+    @asynccontextmanager
+    async def session(
+        self, socket: RpcWebSocket
+    ) -> AsyncIterator[_DrainSession | None]:
+        if self.draining:
+            await socket.reject(RpcRejection.UNAVAILABLE, "Server restarting")
+            yield None
+            return
+        task = asyncio.current_task()
+        assert task is not None
+        session = _DrainSession(task)
+        self._sessions.add(session)
+        token = _active_session.set(session)
+        try:
+            yield session
+        finally:
+            _active_session.reset(token)
+            self._sessions.discard(session)
+            session.finished.set()
+            session.ready.set()
 
     async def _drain(self, timeout: float) -> None:
         deadline = asyncio.get_running_loop().time() + timeout
@@ -99,28 +94,36 @@ class RpcDrain:
                 task.cancel()
                 task.add_done_callback(_consume)
 
-    @asynccontextmanager
-    async def _session(
-        self, socket: RpcWebSocket
-    ) -> AsyncIterator[_DrainSession | None]:
-        if self.draining:
-            await socket.reject(RpcRejection.UNAVAILABLE, "Server restarting")
-            yield None
+
+@dataclass(eq=False)
+class _DrainSession:
+    task: asyncio.Task[None]
+    connection: RpcConnection | None = None
+    begin: Callable[[], Awaitable[None]] | None = None
+    ready: asyncio.Event = field(default_factory=asyncio.Event)
+    finished: asyncio.Event = field(default_factory=asyncio.Event)
+
+    async def finish(self) -> None:
+        await self.ready.wait()
+        if self.finished.is_set():
             return
-        task = asyncio.current_task()
-        assert task is not None
-        session = _DrainSession(task)
-        self._sessions.add(session)
-        token = _session.set(session)
-        try:
-            yield session
-        finally:
-            _session.reset(token)
-            self._sessions.discard(session)
-            session.finished.set()
-            session.ready.set()
+        if self.begin is not None:
+            await self.begin()
+        await self.finished.wait()
+
+    def stop(self) -> None:
+        if self.connection is not None and self.connection.close_code is None:
+            self.connection.record_close(
+                RpcConnectionClose.SERVICE_RESTART, "Server restarting"
+            )
+        self.task.cancel()
 
 
-def _consume(task: asyncio.Task) -> None:
+_active_session: ContextVar[_DrainSession | None] = ContextVar(
+    "fastapi_canon.integrations.websockets.drain", default=None
+)
+
+
+def _consume(task: asyncio.Task[None]) -> None:
     if not task.cancelled():
         task.exception()

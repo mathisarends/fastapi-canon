@@ -2,13 +2,12 @@ import json
 import re
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Self
 
-from fastapi_canon.error import ErrorRegistry
-from fastapi_canon.error.catalog import registry_scope
+from fastapi_canon.error import ErrorCatalog, registry_scope
 from fastapi_canon.integrations.websockets.errors import (
     ProtocolDefinitionError,
     RpcErrorBinding,
@@ -22,7 +21,10 @@ from fastapi_canon.integrations.websockets.websocket import (
 )
 
 if TYPE_CHECKING:
-    from fastapi_canon.integrations.websockets.definition import RpcAnyEndpoint
+    from fastapi_canon.integrations.websockets.definition import (
+        RpcAnyEndpoint,
+        RpcDefinition,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,7 +64,7 @@ class RpcContract:
     servers: tuple[Mapping[str, Any], ...] = ()
     binary_streams: tuple[Mapping[str, Any], ...] = ()
     sockets: tuple[Mapping[str, Any], ...] = ()
-    _error_registry: ErrorRegistry | None = field(
+    _error_registry: ErrorCatalog | None = field(
         default=None, repr=False, compare=False
     )
 
@@ -78,6 +80,9 @@ class RpcContract:
                     for item in getattr(self, name)
                 ),
             )
+
+    def with_error_catalog(self, catalog: ErrorCatalog | None) -> Self:
+        return replace(self, _error_registry=catalog)
 
     def to_openrpc(self) -> dict[str, Any]:
         from fastapi_canon.integrations.websockets.schema import render_openrpc
@@ -100,7 +105,7 @@ class RpcContract:
 
 
 def contract_from_service(
-    service,
+    service: "RpcDefinition",
     *,
     title: str,
     base_url: str,
@@ -145,7 +150,7 @@ def contract_from_endpoints(
     elif base_url.startswith("http://"):
         base_url = "ws://" + base_url.removeprefix("http://")
     base_url = base_url.rstrip("/")
-    supplied = dict(variables or {})
+    supplied = dict(variables if variables is not None else {})
     used: set[str] = set()
     servers = []
     streams = []
@@ -239,8 +244,8 @@ def _close(binding: RpcErrorBinding[Any]) -> dict[str, Any]:
         "x-rpckit-code": binding.code,
     }
     # A computed reason depends on the exception, so only a fixed one is known.
-    if not callable(binding._message):
-        close["reason"] = close_reason(binding.error_type.message)
+    if (reason := binding.static_message) is not None:
+        close["reason"] = close_reason(reason)
     return close
 
 

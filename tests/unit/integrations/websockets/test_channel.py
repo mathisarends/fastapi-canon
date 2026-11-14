@@ -44,9 +44,9 @@ def test_method_deadline_keeps_inheritance_distinct_from_explicit_none():
     async def bounded() -> None: ...
 
     first, second, third = channel.freeze().methods
-    assert first.timeout is None and not first._has_timeout
-    assert second.timeout is None and second._has_timeout
-    assert third.timeout == 5 and third._has_timeout
+    assert first.timeout is None and not first.has_timeout
+    assert second.timeout is None and second.has_timeout
+    assert third.timeout == 5 and third.has_timeout
 
 
 def test_control_method_prefix_is_reserved():

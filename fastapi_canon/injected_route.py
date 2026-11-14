@@ -59,7 +59,7 @@ def inject_endpoint[EndpointT: Callable[..., Any]](endpoint: EndpointT) -> Endpo
     return wrapped
 
 
-def _endpoint_dependencies(endpoint: Callable[..., Any]) -> tuple[DependencyKey, ...]:
+def endpoint_dependencies(endpoint: Callable[..., Any]) -> tuple[DependencyKey, ...]:
     retained = getattr(endpoint, "__canon_http_dependency_roots__", None)
     if retained is not None:
         return cast("tuple[DependencyKey, ...]", retained)
@@ -175,13 +175,6 @@ def _adapt_endpoint(
     return adapted
 
 
-def _parse_dependency(parameter: Parameter, hint: Any) -> DependencyKey | None:
-    dependency = injected_dependency(hint)
-    if dependency is not None:
-        return DependencyKey(dependency, DEFAULT_COMPONENT)
-    return default_parse_dependency(parameter, hint)
-
-
 def _inject_async[EndpointT: Callable[..., Any]](
     endpoint: EndpointT, parameters: Any
 ) -> EndpointT:
@@ -237,14 +230,21 @@ def _inject_sync[EndpointT: Callable[..., Any]](
 
         wrapper = function
     functools.update_wrapper(wrapper, endpoint)
-    wrapper.__signature__ = inspect.signature(endpoint).replace(  # type: ignore[attr-defined]
+    wrapper.__dict__["__signature__"] = inspect.signature(endpoint).replace(
         parameters=replaced
     )
     wrapper.__annotations__ = annotations
-    wrapper.__dict__["__canon_http_dependency_roots__"] = _endpoint_dependencies(
+    wrapper.__dict__["__canon_http_dependency_roots__"] = endpoint_dependencies(
         endpoint
     )
-    return wrapper  # type: ignore[return-value]
+    return cast(EndpointT, wrapper)
+
+
+def _parse_dependency(parameter: Parameter, hint: Any) -> DependencyKey | None:
+    dependency = injected_dependency(hint)
+    if dependency is not None:
+        return DependencyKey(dependency, DEFAULT_COMPONENT)
+    return default_parse_dependency(parameter, hint)
 
 
 def _resolver(dependency: DependencyKey) -> Callable[[Request], Any]:

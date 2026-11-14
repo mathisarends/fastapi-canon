@@ -14,8 +14,10 @@ uv run --frozen smelt explain SMT423
 ```
 
 The full check runs in CI, `scripts/check.py all` and pre-commit.
-Warnings fail. Use `--show-hints` for advisory findings and `--show-coverage`
-for the source inventory. Changed-file checks still enforce complete coverage.
+Warnings fail, including the enabled source conventions for definition order,
+optional defaults, callable operations, discriminators, provider registrations
+and facade ownership. Use `--show-coverage` for the source inventory.
+Changed-file checks still enforce complete coverage.
 
 The `information-hiding` group checks implementation functions, constants and
 attributes, including APIs used only by tests. Existing error-level checks remain
@@ -23,12 +25,15 @@ errors. Private literal class constants belong at module scope. Repository-owned
 YAML uses `.yml`, and Compose files use `compose` as their basename; pnpm's
 lockfile and the agent skill's `openai.yaml` retain their required names.
 
-Callable-instance, redundant-module-name, optional-default and deep-navigation
-reviews are hints. Inspect public contracts and falsy inputs before changing
+Declare `StrEnum` members with explicit string literals. Their wire and public
+values must remain visible and independent of Python member names; do not use
+`auto()` for these enums.
+
+Inspect public contracts and falsy inputs before changing
 names, dependency lifetimes or defaults; syntax alone cannot establish that a
-change preserves compatibility. The named acquisition operation on
-`TransactionLocks`, for example, is a supported API, even though it is the
-class's only public method.
+change preserves compatibility. `AcquireTransactionLock`, for example, provides
+a callable operation while retaining the supported `TransactionLocks` alias and
+named `acquire` operation.
 
 ## Change the policy
 
@@ -38,8 +43,9 @@ changing package roles or test structure.
 
 Fix a finding or document a narrow, concrete exception beside the affected code.
 Do not add debt baselines, broad exclusions or weaker rules to pass checks.
-Unused suppressions fail. Advisory findings alone do not justify changing public
-APIs or adding exports.
+Unused suppressions fail. Preserve public compatibility while correcting a
+finding. Shared exports must have a consumer contract; retain supported aliases
+when an operation acquires a clearer callable interface.
 
 Tests must assert observable outcomes, use bounded waits and subprocesses, and
 avoid private production access. Integration and contract tests prohibit mocks;

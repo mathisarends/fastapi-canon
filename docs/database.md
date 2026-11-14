@@ -380,16 +380,20 @@ those cases locally; CI also runs them. See the
 
 ## Transaction locks
 
-Repositories can inject `TransactionLocks` alongside their session:
+Repositories can inject `AcquireTransactionLock` alongside their session:
 
 ```python
-from fastapi_canon.integrations.database import TransactionLocks
+from fastapi_canon.integrations.database import AcquireTransactionLock
 
 
 async def reserve(self, allocation_key: int) -> None:
-    await self._transaction_locks.acquire(allocation_key)
+    await self._acquire_lock(allocation_key)
     # Read and update the protected records using the injected session.
 ```
+
+The prepared 0.21.0 release adds this callable operation. `TransactionLocks`
+remains an alias for the same dependency, and `acquire(key)` remains supported.
+Both names resolve to the same scoped instance.
 
 PostgreSQL uses transaction advisory locks on the session's current connection.
 They coordinate separate processes and are released by commit or rollback,

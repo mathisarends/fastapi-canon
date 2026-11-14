@@ -42,9 +42,9 @@ factories to inspect their configuration. Keep these factories free of resource
 acquisition and other startup work.
 
 `build` uses the same preparation and checks, and raises
-`FeatureConfigurationError` for errors before installation. After installing, it
-checks the installed application again, including custom checks and OpenAPI, and
-returns it. A separate `check` invocation is optional. Calling `check` followed by
+`FeatureConfigurationError` for errors before installation. A new build runs
+feature checks once during preparation, validates installed OpenAPI and returns
+the application. A separate `check` invocation is optional. Calling `check` followed by
 `build` performs two separate preparations, so factories execute once in each
 call. A check of an already installed composition reuses its installation snapshot
 and does not rematerialize providers. Building the same composition again only

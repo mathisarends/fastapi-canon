@@ -2,11 +2,14 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, ValidationError
 
-from fastapi_canon.integrations.websockets.activity import _Activity, notify_activity
+from fastapi_canon.integrations.websockets.activity import (
+    NotifyActivity,
+    notify_activity,
+)
 from fastapi_canon.integrations.websockets.adapter import adapter
 from fastapi_canon.integrations.websockets.codec import RpcCodec
 from fastapi_canon.integrations.websockets.envelopes import (
@@ -46,7 +49,7 @@ class SubscriptionSession:
         *,
         limit: int,
         server: RpcServer,
-        activity: _Activity | None = None,
+        activity: NotifyActivity | None = None,
     ) -> None:
         self._definitions = {item.name: item for item in definitions}
         self._methods = frozenset(
@@ -83,7 +86,7 @@ class SubscriptionSession:
 
         token = self._responded.set(False)
         try:
-            response = await self._server._run_bounded(
+            response = await self._server.run_bounded(
                 request.model_dump(exclude_unset=True),
                 handshake,
                 admitted_at=admitted_at,
@@ -142,14 +145,14 @@ class SubscriptionSession:
             self._tasks[subscription_id] = (definition.name, task)
             task.add_done_callback(lambda _: self._tasks.pop(subscription_id, None))
             return
-        subscription_id = request.params.get("streamId")
-        if isinstance(subscription_id, str) and subscription_id not in self._tasks:
+        requested_id = request.params.get("streamId")
+        if isinstance(requested_id, str) and requested_id not in self._tasks:
             await self._respond(request, RpcSuccess(id=request.id, result=None))
             return
         if (
-            not isinstance(subscription_id, str)
-            or subscription_id not in self._tasks
-            or self._tasks[subscription_id][0] != name[: -len(".cancel")]
+            not isinstance(requested_id, str)
+            or requested_id not in self._tasks
+            or self._tasks[requested_id][0] != name[: -len(".cancel")]
         ):
             await self._respond(
                 request,
@@ -159,7 +162,7 @@ class SubscriptionSession:
                 ),
             )
             return
-        _, task = self._tasks[subscription_id]
+        _, task = self._tasks[requested_id]
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
         await self._respond(request, RpcSuccess(id=request.id, result=None))
@@ -276,6 +279,6 @@ def _params(
             return definition.params_origin.model_validate(
                 validated.model_dump(by_alias=False), by_name=True
             )
-        return validated
+        return cast(BaseModel, validated)
     except ValidationError as error:
         raise RpcInvalidParamsError.from_validation_error(error) from error

@@ -3,11 +3,13 @@ import inspect
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager, nullcontext, suppress
+from itertools import chain
 from types import NoneType
 from typing import (
     Annotated,
     Any,
     Protocol,
+    cast,
     get_args,
     get_origin,
     get_type_hints,
@@ -27,8 +29,11 @@ from fastapi.websockets import WebSocketState
 from pydantic import BaseModel
 from starlette.types import Message
 
-from fastapi_canon.error.catalog import registry_scope
-from fastapi_canon.error.contracts import INSTALLED_REGISTRY_STATE_KEY
+from fastapi_canon.error import installed_catalog, registry_scope
+from fastapi_canon.error.contributions import (
+    RegistryContributions,
+    attach_error_registries,
+)
 from fastapi_canon.integrations.websockets.activity import notify_activity
 from fastapi_canon.integrations.websockets.adapters.contexts import ContextDependencies
 from fastapi_canon.integrations.websockets.channel import RpcChannel
@@ -66,20 +71,25 @@ from fastapi_canon.integrations.websockets.dependencies import (
 )
 from fastapi_canon.integrations.websockets.drain import RpcDrain
 from fastapi_canon.integrations.websockets.errors import (
+    ProtocolDefinitionError,
     RpcErrorBinding,
     contract_rejections,
     rejecting_contracts,
 )
 from fastapi_canon.integrations.websockets.middleware import (
     RpcMiddlewareLike,
-    _current_serving,
-    _record_error,
-    _record_rejection,
-    _serving_scope,
-    _ServingState,
+    ServingState,
+    current_serving,
+    record_error,
+    record_rejection,
+    serving_scope,
 )
-from fastapi_canon.integrations.websockets.protocol import RpcProtocol
-from fastapi_canon.integrations.websockets.runtime import _rejection
+from fastapi_canon.integrations.websockets.protocol import (
+    RpcNotificationDefinition,
+    RpcProtocol,
+    RpcSubscriptionDefinition,
+)
+from fastapi_canon.integrations.websockets.runtime import map_rejection
 from fastapi_canon.integrations.websockets.server import RpcErrorMapper
 from fastapi_canon.integrations.websockets.websocket import (
     CLOSE_CODES,
@@ -137,7 +147,9 @@ class FastApiSocket:
                 message.get("code") or 1000, str(message.get("reason", ""))
             )
         value = message.get("text")
-        return value if value is not None else message.get("bytes", b"")
+        return cast(
+            str | bytes, value if value is not None else message.get("bytes", b"")
+        )
 
     async def send(self, message: str) -> None:
         try:
@@ -168,7 +180,7 @@ async def _reject(
                 reason,
                 status_code=_HTTP_STATUS[rejection],
                 media_type="text/plain",
-                headers=dict(headers or {}),
+                headers=dict(headers if headers is not None else {}),
             )
         )
     else:
@@ -190,7 +202,7 @@ async def serve_websocket(
     active = websocket.scope.get("fastapi_canon.integrations.websockets.serving")
     socket = (
         active.socket
-        if isinstance(active, _ServingState) and active.scope.endpoint is endpoint
+        if isinstance(active, ServingState) and active.scope.endpoint is endpoint
         else FastApiSocket(websocket)
     )
 
@@ -228,8 +240,8 @@ async def serve_websocket(
                 middleware=middleware,
             )
 
-    state = getattr(websocket.scope.get("app"), "state", None)
-    with registry_scope(getattr(state, INSTALLED_REGISTRY_STATE_KEY, None)):
+    catalog = installed_catalog(websocket.scope.get("app"))
+    with registry_scope(catalog):
         serving = asyncio.create_task(serve())
     task = asyncio.current_task()
     cancelling = task.cancelling() if task is not None else 0
@@ -287,6 +299,7 @@ class CanonWebSocketRouter(APIRouter):
         before_accept: RpcBeforeAccept | None = None,
     ) -> None:
         super().__init__(prefix=prefix)
+        self.error_registries: RegistryContributions = ()
         if (path is None) != (channels is None):
             raise ValueError("CanonWebSocketRouter needs path and channels together")
         self._definition = RpcDefinition(
@@ -423,6 +436,24 @@ class CanonWebSocketRouter(APIRouter):
     ) -> RpcEndpoint[ContextT]: ...
 
     @overload
+    def socket(
+        self,
+        path: str,
+        handler: Callable[..., Any],
+        /,
+        *,
+        name: str | None = None,
+        middleware: Sequence[RpcMiddlewareLike] = (),
+        limits: RpcLimits | None = None,
+        subprotocol: str | None = None,
+        summary: str | None = None,
+        before_accept: RpcBeforeAccept | None = None,
+        context: type[None] = NoneType,
+        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        serve: Callable[..., Awaitable[None]] | None = None,
+    ) -> RpcSocketEndpoint[None]: ...
+
+    @overload
     def socket[ContextT](
         self,
         path: str,
@@ -435,7 +466,7 @@ class CanonWebSocketRouter(APIRouter):
         subprotocol: str | None = None,
         summary: str | None = None,
         before_accept: RpcBeforeAccept | None = None,
-        context: type[ContextT] = NoneType,
+        context: type[ContextT],
         rejects: Sequence[RpcErrorBinding[Any]] = (),
         serve: Callable[..., Awaitable[None]] | None = None,
     ) -> RpcSocketEndpoint[ContextT]: ...
@@ -452,16 +483,50 @@ class CanonWebSocketRouter(APIRouter):
         **options: Any,
     ) -> RpcEndpoint[Any] | RpcSocketEndpoint[Any]:
         options.setdefault("before_accept", self._before_accept)
-        endpoint = self._definition.socket(
-            self.prefix + path,
-            handler,
-            channels=channels,
-            context=context or self._context_type or NoneType,
-            **options,
-        )
+        endpoint: RpcEndpoint[Any] | RpcSocketEndpoint[Any]
+        selected_context = context or self._context_type or NoneType
+        if handler is None:
+            # RpcDefinition owns validation of a missing/empty channel sequence.
+            endpoint = self._definition.socket(
+                self.prefix + path,
+                channels=channels if channels is not None else (),
+                context=selected_context,
+                **options,
+            )
+        elif channels is None:
+            endpoint = self._definition.socket(
+                self.prefix + path,
+                handler,
+                context=selected_context,
+                **options,
+            )
+        else:
+            raise ProtocolDefinitionError(
+                "RPC sockets accept either channels or a handler"
+            )
         self.mount(endpoint, handler=serve)
         return endpoint
 
+    @overload
+    def stream(
+        self,
+        path: str,
+        stream: Callable[..., Any],
+        /,
+        *,
+        name: str | None = None,
+        middleware: Sequence[RpcMiddlewareLike] = (),
+        limits: RpcLimits | None = None,
+        subprotocol: str | None = None,
+        summary: str | None = None,
+        before_accept: RpcBeforeAccept | None = None,
+        error_mapper: RpcErrorMapper | None = None,
+        context: type[None] = NoneType,
+        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        serve: Callable[..., Awaitable[None]] | None = None,
+    ) -> RpcStreamEndpoint[None]: ...
+
+    @overload
     def stream[ContextT](
         self,
         path: str,
@@ -475,10 +540,28 @@ class CanonWebSocketRouter(APIRouter):
         summary: str | None = None,
         before_accept: RpcBeforeAccept | None = None,
         error_mapper: RpcErrorMapper | None = None,
-        context: type[ContextT] = NoneType,
+        context: type[ContextT],
         rejects: Sequence[RpcErrorBinding[Any]] = (),
         serve: Callable[..., Awaitable[None]] | None = None,
-    ) -> RpcStreamEndpoint[ContextT]:
+    ) -> RpcStreamEndpoint[ContextT]: ...
+
+    def stream(
+        self,
+        path: str,
+        stream: Callable[..., Any],
+        /,
+        *,
+        name: str | None = None,
+        middleware: Sequence[RpcMiddlewareLike] = (),
+        limits: RpcLimits | None = None,
+        subprotocol: str | None = None,
+        summary: str | None = None,
+        before_accept: RpcBeforeAccept | None = None,
+        error_mapper: RpcErrorMapper | None = None,
+        context: type[Any] = NoneType,
+        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        serve: Callable[..., Awaitable[None]] | None = None,
+    ) -> RpcStreamEndpoint[Any]:
         endpoint = self._definition.stream(
             self.prefix + path,
             stream,
@@ -487,7 +570,9 @@ class CanonWebSocketRouter(APIRouter):
             limits=limits,
             subprotocol=subprotocol,
             summary=summary,
-            before_accept=before_accept or self._before_accept,
+            before_accept=before_accept
+            if before_accept is not None
+            else self._before_accept,
             error_mapper=error_mapper,
             context=self._context_type
             if context is NoneType and self._context_type is not None
@@ -497,7 +582,7 @@ class CanonWebSocketRouter(APIRouter):
         self.mount(endpoint, handler=serve)
         return endpoint
 
-    def mount[ContextT](
+    def mount[ContextT](  # type: ignore[override]  # Canon mounts typed endpoints; inherited ASGI mounts are not supported.
         self,
         endpoint: (
             RpcEndpoint[ContextT]
@@ -542,7 +627,7 @@ class CanonWebSocketRouter(APIRouter):
             name=endpoint.name,
             dependencies=dependencies,
         )(handler_function)
-        contributions = list(getattr(self, "_canon_error_registries", ()))
+        contributions = list(self.error_registries)
 
         def collect(channel: Any) -> None:
             if channel.error_registry is not None:
@@ -552,8 +637,8 @@ class CanonWebSocketRouter(APIRouter):
 
         for channel in endpoint.channels if isinstance(endpoint, RpcEndpoint) else ():
             collect(channel)
-        self._canon_error_registries = tuple(contributions)  # type: ignore[attr-defined]
-        handler_function.__dict__["_canon_error_registries"] = tuple(contributions)
+        self.error_registries = tuple(contributions)
+        attach_error_registries(handler_function, contributions)
         self._mounted.add(endpoint)
 
     def _dependency_roots(
@@ -598,7 +683,9 @@ class CanonWebSocketRouter(APIRouter):
             )
         roots.extend(
             (operation.name, None)
-            for operation in (*protocol.notifications, *protocol.subscriptions)
+            for operation in chain[
+                RpcNotificationDefinition | RpcSubscriptionDefinition
+            ](protocol.notifications, protocol.subscriptions)
             if operation.injected_parameters
         )
         return tuple(roots)
@@ -695,7 +782,7 @@ class CanonWebSocketRouter(APIRouter):
                     annotation=Annotated[Any, Depends(self._context)],
                 )
             )
-        handler.__signature__ = inspect.Signature(parameters)  # type: ignore[attr-defined]
+        handler.__dict__["__signature__"] = inspect.Signature(parameters)
         return handler
 
     def _custom_handler(
@@ -793,7 +880,7 @@ class CanonWebSocketRouter(APIRouter):
                     )
                 await function(**arguments)
 
-        handler.__signature__ = inspect.Signature(parameters)  # type: ignore[attr-defined]
+        handler.__dict__["__signature__"] = inspect.Signature(parameters)
         handler.__annotations__ = {
             parameter.name: parameter.annotation for parameter in parameters
         }
@@ -835,7 +922,7 @@ def _reject_failures(
         try:
             yield
         except Exception as error:
-            state = _current_serving()
+            state = current_serving()
             if (
                 state is None
                 or websocket.scope.get("fastapi_canon.integrations.websockets.serving")
@@ -843,8 +930,8 @@ def _reject_failures(
             ):
                 state = None
             if state is not None:
-                _record_error(error)
-            rejected = _rejection(error, rejections)
+                record_error(error)
+            rejected = map_rejection(error, rejections)
             if rejected is None:
                 raise
             observe = websocket.scope.get(_OBSERVED_SOCKET_KEY)
@@ -852,7 +939,7 @@ def _reject_failures(
                 websocket = await observe()
             if websocket.application_state is WebSocketState.CONNECTING:
                 if state is not None:
-                    _record_rejection(rejected.rejection)
+                    record_rejection(rejected.rejection)
                 await _reject(
                     websocket,
                     rejected.rejection,
@@ -861,9 +948,12 @@ def _reject_failures(
                 )
             elif websocket.application_state is WebSocketState.CONNECTED:
                 if state is not None and state.scope.connection is not None:
-                    state.scope.connection._close_code = REJECTION_CLOSES[
-                        rejected.rejection
-                    ]
+                    observed_connection = state.scope.connection
+                    observed_connection.record_close(
+                        REJECTION_CLOSES[rejected.rejection],
+                        observed_connection.close_reason,
+                        observed_connection.raw_close_code,
+                    )
                 await websocket.close(
                     CLOSE_CODES[REJECTION_CLOSES[rejected.rejection]],
                     close_reason(rejected.reason),
@@ -879,7 +969,7 @@ def _middleware_dependency(
     custom: bool = False,
 ) -> Callable[[WebSocket], AsyncGenerator[None, None]]:
     async def dependency(websocket: WebSocket) -> AsyncGenerator[None, None]:
-        async with _serving_scope(
+        async with serving_scope(
             endpoint, FastApiSocket(websocket), middleware
         ) as state:
             if state is None:
@@ -901,7 +991,7 @@ def _middleware_dependency(
 
 @asynccontextmanager
 async def _custom_connection(
-    websocket: WebSocket, state: _ServingState
+    websocket: WebSocket, state: ServingState
 ) -> AsyncGenerator[None, None]:
     original_send, original_receive = websocket.send, websocket.receive
     connection: RpcConnection | None = None
@@ -909,10 +999,8 @@ async def _custom_connection(
     def disconnected(code: int, reason: str) -> None:
         if connection is not None and not connection.closed:
             close = RpcDisconnect(code, reason)
-            connection._close_code = close.code
-            connection._raw_close_code = close.raw_close_code
-            connection._close_reason = close.reason
-            connection._closed = True
+            connection.record_close(close.code, close.reason, close.raw_close_code)
+            connection.mark_closed()
 
     async def send(message: Message) -> None:
         nonlocal connection
@@ -923,8 +1011,8 @@ async def _custom_connection(
             raise
         # Delegated serving prepares its own connection and sends its callbacks.
         if message["type"] == "websocket.accept" and state.scope.connection is None:
-            connection = RpcConnection._create(state.scope.endpoint, state.socket)
-            connection._accepted = True
+            connection = RpcConnection.create(state.scope.endpoint.name, state.socket)
+            connection.mark_accepted()
             state.scope.connection = connection
             state.accepted_at = time.perf_counter()
             await notify_activity(state.activity, "connection_opened", connection)
@@ -947,8 +1035,8 @@ async def _custom_connection(
             websocket.application_state is WebSocketState.CONNECTED
             and state.scope.connection is None
         ):
-            connection = RpcConnection._create(state.scope.endpoint, state.socket)
-            connection._accepted = True
+            connection = RpcConnection.create(state.scope.endpoint.name, state.socket)
+            connection.mark_accepted()
             state.scope.connection = connection
             state.accepted_at = time.perf_counter()
             await notify_activity(state.activity, "connection_opened", connection)
@@ -965,7 +1053,7 @@ async def _custom_connection(
         raise
     except BaseException as error:
         if connection is not None and not connection.closed:
-            connection._close_code = (
+            connection.record_close(
                 RpcConnectionClose.SHUTDOWN
                 if isinstance(error, asyncio.CancelledError)
                 else RpcConnectionClose.INTERNAL_ERROR
@@ -974,4 +1062,4 @@ async def _custom_connection(
     finally:
         websocket.scope.pop(_OBSERVED_SOCKET_KEY, None)
         if connection is not None:
-            connection._closed = True
+            connection.mark_closed()

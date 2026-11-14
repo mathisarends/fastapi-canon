@@ -35,7 +35,7 @@ from fastapi_canon.integrations.websockets.middleware import (
     RpcMiddleware,
     RpcRequestScope,
     RpcStreamScope,
-    _current_serving,
+    current_serving,
 )
 from fastapi_canon.integrations.websockets.request_metadata import (
     validate_request_metadata,
@@ -339,7 +339,7 @@ class OpenTelemetry(RpcMiddleware):
                         self._stream_duration.record(outcome.duration, result)
 
     async def connection_opened(self, connection: RpcConnection) -> None:
-        state = _current_serving()
+        state = current_serving()
         if self._metrics and not self._excluded.get() and state is not None:
             attributes = _endpoint_attributes(state.scope)
             self._active_connections.add(1, attributes)
@@ -356,12 +356,12 @@ class OpenTelemetry(RpcMiddleware):
             self._notifications.add(1, {"rpc.method": name})
 
     async def slow_consumer_closed(self, connection: RpcConnection) -> None:
-        state = _current_serving()
+        state = current_serving()
         if self._metrics and not self._excluded.get() and state is not None:
             self._slow_consumers.add(1, _endpoint_attributes(state.scope))
 
     async def _frame(self, size: int, direction: str) -> None:
-        state = _current_serving()
+        state = current_serving()
         if self._metrics and not self._excluded.get() and state is not None:
             attributes = {
                 **_endpoint_attributes(state.scope),
@@ -369,6 +369,14 @@ class OpenTelemetry(RpcMiddleware):
             }
             self._frames.add(1, attributes)
             self._bytes.add(size, attributes)
+
+
+def _stream_attributes(scope: RpcStreamScope) -> _Attributes:
+    return {
+        **_endpoint_attributes(scope),
+        "rpckit.stream": scope.endpoint.stream.name,
+        "rpckit.stream.direction": scope.endpoint.stream.direction.value,
+    }
 
 
 def _endpoint_attributes(
@@ -380,14 +388,6 @@ def _endpoint_attributes(
     return {
         "rpckit.endpoint": endpoint.name,
         "rpckit.route": endpoint.path,
-    }
-
-
-def _stream_attributes(scope: RpcStreamScope) -> _Attributes:
-    return {
-        **_endpoint_attributes(scope),
-        "rpckit.stream": scope.endpoint.stream.name,
-        "rpckit.stream.direction": scope.endpoint.stream.direction.value,
     }
 
 

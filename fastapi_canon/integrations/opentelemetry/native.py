@@ -14,6 +14,7 @@ from opentelemetry.instrumentation.utils import (
 from opentelemetry.trace import Span, SpanContext, SpanKind, Status, StatusCode
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from fastapi_canon.error.handlers import install_problem_observer
 from fastapi_canon.exceptions import FeatureConfigurationError
 from fastapi_canon.integrations.opentelemetry.declarations import Telemetry
 from fastapi_canon.integrations.opentelemetry.ports import excluded
@@ -72,7 +73,7 @@ def install(app: FastAPI, options: Telemetry) -> None:
     )
     app.add_middleware(_RequestContext, options=options)
     if options.problem_details:
-        app.state._canon_problem_telemetry = _problem
+        install_problem_observer(app, _problem)
 
 
 def _problem(scope: Scope, code: str, status: int) -> None:

@@ -39,11 +39,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         return contracts_main(remaining)
     elif args.command == "inspect":
-        from fastapi_canon.composition_cli import _main as inspect_main
+        from fastapi_canon.composition_cli import main as inspect_main
 
         return inspect_main(remaining, inspect=True)
     elif args.command == "explain":
-        from fastapi_canon.diagnostic_explanations import _main as explain_main
+        from fastapi_canon.diagnostic_explanations import main as explain_main
 
         return explain_main(remaining)
     elif args.command == "skill":
@@ -86,10 +86,10 @@ def _check_main(argv: Sequence[str]) -> int:
     )
     args, remaining = parser.parse_known_args(argv)
     if args.kind == "composition":
-        from fastapi_canon.composition_cli import _main as composition_main
+        from fastapi_canon.composition_cli import main as composition_main
 
         return composition_main(remaining)
-    from fastapi_canon.check_error_contracts import _main as check_main
+    from fastapi_canon.check_error_contracts import main as check_main
 
     return check_main(remaining, prog="fastapi-canon check errors")
 

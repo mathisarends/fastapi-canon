@@ -142,6 +142,10 @@ before it ends its input, the upload counts as aborted, even with the normal
 close code. fastapi_canon.integrations.websockets cancels the handler, and its `finally` blocks and context
 managers run. A completed upload therefore always ends with `{"type":"end"}`.
 
+In prepared Canon 0.21.0, Python code constructing this control model uses
+`RpcInputEndMessage(type=RpcInputMessageType.END)` from the WebSockets facade.
+The JSON frame remains `{"type":"end"}`.
+
 Incoming frames wait in a queue that holds up to `RpcLimits.max_queue_size`
 frames. When the handler falls behind, fastapi_canon.integrations.websockets stops reading from the socket.
 Memory stays bounded, and the transport slows the client down.

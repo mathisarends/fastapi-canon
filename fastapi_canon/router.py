@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, TypedDict, Unpack
 
@@ -12,8 +13,9 @@ from fastapi.types import IncEx
 from starlette.routing import BaseRoute, get_name
 from starlette.types import ASGIApp, Lifespan
 
-from fastapi_canon.error import Error, ErrorConfigurationError, ErrorRegistry
-from fastapi_canon.error.contracts import SUCCESS_EXTENSION, AnyError
+from fastapi_canon.error import AnyError, Error, ErrorConfigurationError, ErrorRegistry
+from fastapi_canon.error.contracts import SUCCESS_EXTENSION
+from fastapi_canon.error.contributions import attach_error_registries, error_registries
 from fastapi_canon.error.openapi import InheritedContract
 from fastapi_canon.error.types import OpenAPIResponses
 from fastapi_canon.error.validation import unique_instances
@@ -90,6 +92,18 @@ class APIRouteOptions(RouteOptions, total=False):
     methods: list[str] | None
 
 
+@dataclass(frozen=True, slots=True)
+class RouteProvenance:
+    dependency_origins: tuple[tuple[int, str], ...]
+    error_origins: tuple[tuple[str, str], ...]
+    endpoint: Callable[..., object]
+    error_registry: ErrorRegistry | None
+
+
+def route_provenance(value: object) -> RouteProvenance | None:
+    return value.provenance if isinstance(value, _RouteMetadata) else None
+
+
 class CanonRouter(APIRouter):
     """Compose response contracts and name operations from their endpoint functions.
 
@@ -126,7 +140,7 @@ class CanonRouter(APIRouter):
         self.raises = normalize_raises(raises, parameter="raises")
         self.http_statuses = _normalize_http_statuses(http_statuses)
         if policy is not None:
-            self.raises = _distinct((*policy.raises, *self.raises))
+            self.raises = distinct_errors((*policy.raises, *self.raises))
             kwargs["dependencies"] = [
                 *policy.dependencies,
                 *(kwargs.get("dependencies") or ()),
@@ -152,7 +166,7 @@ class CanonRouter(APIRouter):
         registries = (
             (() if self.error_registry is None else (self.error_registry,))
             + tuple(self._included_error_registries)
-            + tuple(getattr(self, "_canon_error_registries", ()))
+            + ()
         )
         return tuple({id(registry): registry for registry in registries}.values())
 
@@ -164,9 +178,7 @@ class CanonRouter(APIRouter):
         if isinstance(router, CanonRouter):
             self._included_error_registries.extend(router.error_registries)
         else:
-            self._included_error_registries.extend(
-                getattr(router, "_canon_error_registries", ())
-            )
+            self._included_error_registries.extend(error_registries(router))
 
     def add_api_websocket_route(
         self,
@@ -177,10 +189,10 @@ class CanonRouter(APIRouter):
         dependencies: Sequence[Depends] | None = None,
     ) -> None:
         registries = (
-            *getattr(endpoint, "_canon_error_registries", ()),
+            *error_registries(endpoint),
             *self.error_registries,
         )
-        endpoint.__dict__["_canon_error_registries"] = tuple(dict.fromkeys(registries))
+        attach_error_registries(endpoint, registries)
         super().add_api_websocket_route(
             path, endpoint, name=name, dependencies=dependencies
         )
@@ -392,7 +404,7 @@ class CanonRouter(APIRouter):
         configured: object,
     ) -> OpenAPIResponses:
         manual = _normalize_responses(configured)
-        declared = _distinct((*self.raises, *local_raises))
+        declared = distinct_errors((*self.raises, *local_raises))
         statuses = tuple(dict.fromkeys((*self.http_statuses, *http_statuses)))
         if declared or statuses:
             registry = self.error_registry
@@ -421,6 +433,10 @@ class CanonRouter(APIRouter):
         return {**manual, **canon}
 
 
+def distinct_errors(errors: Sequence[AnyError]) -> tuple[AnyError, ...]:
+    return tuple(unique_instances(errors, Error, parameter="raises"))
+
+
 class _RouteMetadata(dict[str, Any]):
     """Retain declaration provenance across FastAPI route copies without JSON keys."""
 
@@ -433,12 +449,12 @@ class _RouteMetadata(dict[str, Any]):
         registry: ErrorRegistry | None,
     ) -> None:
         super().__init__(values)
-        self._dependency_origins = tuple(
-            (int(key), value) for key, value in dependencies.items()
+        self.provenance = RouteProvenance(
+            tuple((int(key), value) for key, value in dependencies.items()),
+            tuple(errors.items()),
+            getattr(endpoint, "__canon_declared_endpoint__", endpoint),
+            registry,
         )
-        self._error_origins = tuple(errors.items())
-        self._endpoint = getattr(endpoint, "__canon_declared_endpoint__", endpoint)
-        self._error_registry = registry
 
 
 def _normalize_responses(value: object) -> OpenAPIResponses:
@@ -448,10 +464,6 @@ def _normalize_responses(value: object) -> OpenAPIResponses:
         msg = "responses must be a mapping or None"
         raise ResponseConfigurationError(msg)
     return dict(value)
-
-
-def _distinct(errors: Sequence[AnyError]) -> tuple[AnyError, ...]:
-    return tuple(unique_instances(errors, Error, parameter="raises"))
 
 
 def _status_key(value: object) -> str:
