@@ -117,25 +117,6 @@ def describe_composition(
     )
 
 
-def http_routes(router: APIRouter) -> Iterator[_HttpRoute]:
-    for path, route in iter_contract_routes(router.routes, include_mounts=False):
-        original = getattr(route, "original_route", route)
-        if isinstance(original, APIRoute):
-            yield _HttpRoute(
-                path,
-                route.operation_id,
-                route.unique_id,
-                tuple(sorted(route.methods)),
-                route.include_in_schema,
-                route.responses,
-                tuple(route.dependencies),
-                route.dependant,
-                route.openapi_extra,
-                original,
-                tuple(route.callbacks or ()),
-            )
-
-
 def operation_headers(
     router: APIRouter, known: tuple[OperationInfo, ...] = ()
 ) -> tuple[OperationInfo, ...]:
@@ -154,6 +135,25 @@ def operation_headers(
             )
         )
     return tuple(result)
+
+
+def http_routes(router: APIRouter) -> Iterator[_HttpRoute]:
+    for path, route in iter_contract_routes(router.routes, include_mounts=False):
+        original = getattr(route, "original_route", route)
+        if isinstance(original, APIRoute):
+            yield _HttpRoute(
+                path,
+                route.operation_id,
+                route.unique_id,
+                tuple(sorted(route.methods)),
+                route.include_in_schema,
+                route.responses,
+                tuple(route.dependencies),
+                route.dependant,
+                route.openapi_extra,
+                original,
+                tuple(route.callbacks or ()),
+            )
 
 
 def qualified_name(value: object) -> str:

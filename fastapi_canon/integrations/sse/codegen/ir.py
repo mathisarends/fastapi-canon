@@ -436,6 +436,13 @@ class _Types:
         self.names: dict[str, str] = {}
         self.pending: dict[str, Document | bool] = {}
 
+    def declarations(self) -> tuple[Declaration, ...]:
+        result: dict[str, Declaration] = {}
+        while todo := sorted(set(self.pending) - set(result)):
+            for name in todo:
+                result[name] = Declaration(name, self.parse(self.pending[name]))
+        return tuple(result[name] for name in sorted(result))
+
     def parse(self, schema: Any) -> Type:
         if schema is True or schema == {}:
             return Scalar("JsonValue")
@@ -599,13 +606,6 @@ class _Types:
         }:
             return Scalar("JsonValue")
         raise ContractError(f"Unsupported or ambiguous JSON Schema: {node!r}")
-
-    def declarations(self) -> tuple[Declaration, ...]:
-        result: dict[str, Declaration] = {}
-        while todo := sorted(set(self.pending) - set(result)):
-            for name in todo:
-                result[name] = Declaration(name, self.parse(self.pending[name]))
-        return tuple(result[name] for name in sorted(result))
 
 
 def _parameter_type(

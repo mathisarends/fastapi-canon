@@ -15,6 +15,15 @@ class ProtocolReferenceError(Exception):
 type ContractSource = RpcContract
 
 
+# Public protocol loader for external contract-export tooling.
+def load_protocol(  # smelt: ignore[SMT429] -- external API
+    reference: str,
+) -> RpcProtocol:
+    """Import a channel or contract and return its internal protocol."""
+    source = load_contract_source(reference)
+    return source.protocol
+
+
 def load_contract_source(reference: str) -> ContractSource:
     """Import a contract named by ``module:attribute``."""
     module_name, separator, attribute_name = reference.partition(":")
@@ -47,15 +56,6 @@ def load_contract_source(reference: str) -> ContractSource:
             f"{reference} is a {type(source).__name__}, not an RpcContract"
         )
     return source
-
-
-# Public protocol loader for external contract-export tooling.
-def load_protocol(  # smelt: ignore[SMT429] -- external API
-    reference: str,
-) -> RpcProtocol:
-    """Import a channel or contract and return its internal protocol."""
-    source = load_contract_source(reference)
-    return source.protocol
 
 
 def render_contract(

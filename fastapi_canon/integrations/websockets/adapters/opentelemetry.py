@@ -371,6 +371,14 @@ class OpenTelemetry(RpcMiddleware):
             self._bytes.add(size, attributes)
 
 
+def _stream_attributes(scope: RpcStreamScope) -> _Attributes:
+    return {
+        **_endpoint_attributes(scope),
+        "rpckit.stream": scope.endpoint.stream.name,
+        "rpckit.stream.direction": scope.endpoint.stream.direction.value,
+    }
+
+
 def _endpoint_attributes(
     scope: RpcConnectionScope | RpcRequestScope | RpcStreamScope,
 ) -> _Attributes:
@@ -380,14 +388,6 @@ def _endpoint_attributes(
     return {
         "rpckit.endpoint": endpoint.name,
         "rpckit.route": endpoint.path,
-    }
-
-
-def _stream_attributes(scope: RpcStreamScope) -> _Attributes:
-    return {
-        **_endpoint_attributes(scope),
-        "rpckit.stream": scope.endpoint.stream.name,
-        "rpckit.stream.direction": scope.endpoint.stream.direction.value,
     }
 
 

@@ -248,43 +248,6 @@ class _SourceDiagnostics:
         self.locations = locations
         self.seen: set[tuple[str, bool]] = set()
 
-    def resolve(self, node: Document, pointer: str) -> tuple[Document, str]:
-        pointer = self.locations.get(id(node), pointer)
-        seen: set[str] = set()
-        while "$ref" in node:
-            ref = cast(str, node["$ref"])
-            if ref in seen:
-                raise ContractError(f"Cyclic reference: {ref}")
-            seen.add(ref)
-            target = resolve_pointer(self.document, ref)
-            # Boolean Schema references have no diagnosable keywords. OpenAPI
-            # reference siblings retain their original child source locations.
-            if not isinstance(target, dict):
-                return {}, unquote(ref[1:])
-            node = {
-                **cast(Document, target),
-                **{key: value for key, value in node.items() if key != "$ref"},
-            }
-            pointer = unquote(ref[1:])
-        return node, pointer
-
-    def add(
-        self, code: str, pointer: str, keyword: str, value: Any, message: str
-    ) -> None:
-        op = self.operation
-        diagnostic = GenerationDiagnostic(
-            code,
-            pointer,
-            keyword,
-            value,
-            self.target,
-            op.operation_id,
-            op.method,
-            op.path,
-            message,
-        )
-        self.result[diagnostic.id] = diagnostic
-
     def openapi(self, node: Any, pointer: str, *, event: bool = False) -> None:
         if not isinstance(node, dict):
             return
@@ -353,6 +316,43 @@ class _SourceDiagnostics:
             if keyword in node:
                 self.schema(node[keyword], pointer + "/" + keyword, event=event)
 
+    def resolve(self, node: Document, pointer: str) -> tuple[Document, str]:
+        pointer = self.locations.get(id(node), pointer)
+        seen: set[str] = set()
+        while "$ref" in node:
+            ref = cast(str, node["$ref"])
+            if ref in seen:
+                raise ContractError(f"Cyclic reference: {ref}")
+            seen.add(ref)
+            target = resolve_pointer(self.document, ref)
+            # Boolean Schema references have no diagnosable keywords. OpenAPI
+            # reference siblings retain their original child source locations.
+            if not isinstance(target, dict):
+                return {}, unquote(ref[1:])
+            node = {
+                **cast(Document, target),
+                **{key: value for key, value in node.items() if key != "$ref"},
+            }
+            pointer = unquote(ref[1:])
+        return node, pointer
+
+    def add(
+        self, code: str, pointer: str, keyword: str, value: Any, message: str
+    ) -> None:
+        op = self.operation
+        diagnostic = GenerationDiagnostic(
+            code,
+            pointer,
+            keyword,
+            value,
+            self.target,
+            op.operation_id,
+            op.method,
+            op.path,
+            message,
+        )
+        self.result[diagnostic.id] = diagnostic
+
     def _optional_discriminator(self, node: Document, pointer: str) -> None:
         field = node.get("discriminator", {}).get("propertyName")
         if not isinstance(field, str):
@@ -381,10 +381,6 @@ class _SourceDiagnostics:
                     )
 
 
-def _escape(value: str) -> str:
-    return value.replace("~", "~0").replace("/", "~1")
-
-
 def _index_locations(node: Any, pointer: str, locations: dict[int, str]) -> None:
     if isinstance(node, dict):
         locations[id(cast(Document, node))] = pointer
@@ -393,3 +389,7 @@ def _index_locations(node: Any, pointer: str, locations: dict[int, str]) -> None
     elif isinstance(node, list):
         for index, value in enumerate(cast(list[Any], node)):
             _index_locations(value, f"{pointer}/{index}", locations)
+
+
+def _escape(value: str) -> str:
+    return value.replace("~", "~0").replace("/", "~1")

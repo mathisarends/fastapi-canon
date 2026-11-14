@@ -175,13 +175,6 @@ def _adapt_endpoint(
     return adapted
 
 
-def _parse_dependency(parameter: Parameter, hint: Any) -> DependencyKey | None:
-    dependency = injected_dependency(hint)
-    if dependency is not None:
-        return DependencyKey(dependency, DEFAULT_COMPONENT)
-    return default_parse_dependency(parameter, hint)
-
-
 def _inject_async[EndpointT: Callable[..., Any]](
     endpoint: EndpointT, parameters: Any
 ) -> EndpointT:
@@ -245,6 +238,13 @@ def _inject_sync[EndpointT: Callable[..., Any]](
         endpoint
     )
     return cast(EndpointT, wrapper)
+
+
+def _parse_dependency(parameter: Parameter, hint: Any) -> DependencyKey | None:
+    dependency = injected_dependency(hint)
+    if dependency is not None:
+        return DependencyKey(dependency, DEFAULT_COMPONENT)
+    return default_parse_dependency(parameter, hint)
 
 
 def _resolver(dependency: DependencyKey) -> Callable[[Request], Any]:

@@ -67,6 +67,38 @@ class NamespaceViewNode:
     sockets: tuple[SocketDecl, ...] = ()
 
 
+def client_view(
+    ir: ClientIr,
+    *,
+    api_root: str | None,
+    api_names: Mapping[str, str],
+) -> ClientView:
+    routes = api_view(ir, api_root=api_root, api_names=api_names)
+    events = event_view(ir, api_root=api_root, api_names=api_names)
+    root_streams: list[BinaryStreamDecl | SocketDecl] = []
+    projected_streams: list[
+        tuple[tuple[str, ...], tuple[str, ...], BinaryStreamDecl | SocketDecl]
+    ] = []
+    root = tuple(api_root.split(".")) if api_root else ()
+    for stream in chain[BinaryStreamDecl | SocketDecl](ir.binary_streams, ir.sockets):
+        visible = (
+            stream.path[len(root) :]
+            if root and stream.path[: len(root)] == root
+            else stream.path
+        )
+        if not visible:
+            root_streams.append(stream)
+        else:
+            projected_streams.append((visible, stream.path, stream))
+    return ClientView(
+        root_operations=routes.root_operations,
+        root_notifications=events.root_events,
+        root_streams=tuple(_binary(root_streams)),
+        nodes=_merge_nodes(routes.nodes, events.nodes, _stream_tree(projected_streams)),
+        root_sockets=tuple(_socket_items(root_streams)),
+    )
+
+
 def api_view(
     ir: ClientIr,
     *,
@@ -159,38 +191,6 @@ def event_view(
     return EventView(tuple(root_events), _event_tree(projected))
 
 
-def client_view(
-    ir: ClientIr,
-    *,
-    api_root: str | None,
-    api_names: Mapping[str, str],
-) -> ClientView:
-    routes = api_view(ir, api_root=api_root, api_names=api_names)
-    events = event_view(ir, api_root=api_root, api_names=api_names)
-    root_streams: list[BinaryStreamDecl | SocketDecl] = []
-    projected_streams: list[
-        tuple[tuple[str, ...], tuple[str, ...], BinaryStreamDecl | SocketDecl]
-    ] = []
-    root = tuple(api_root.split(".")) if api_root else ()
-    for stream in chain[BinaryStreamDecl | SocketDecl](ir.binary_streams, ir.sockets):
-        visible = (
-            stream.path[len(root) :]
-            if root and stream.path[: len(root)] == root
-            else stream.path
-        )
-        if not visible:
-            root_streams.append(stream)
-        else:
-            projected_streams.append((visible, stream.path, stream))
-    return ClientView(
-        root_operations=routes.root_operations,
-        root_notifications=events.root_events,
-        root_streams=tuple(_binary(root_streams)),
-        nodes=_merge_nodes(routes.nodes, events.nodes, _stream_tree(projected_streams)),
-        root_sockets=tuple(_socket_items(root_streams)),
-    )
-
-
 def assert_unique_names(
     owner: str,
     values: Iterable[tuple[str, str]],
@@ -237,24 +237,6 @@ def _root_exists(nodes: tuple[ApiNode, ...], root: tuple[str, ...]) -> bool:
             return False
         candidates = node.children
     return True
-
-
-def _api_name(
-    source_path: tuple[str, ...],
-    visible_source: tuple[str, ...],
-    index: int,
-    aliases: Mapping[str, str],
-    matched: set[str],
-) -> str:
-    root_length = len(source_path) - len(visible_source)
-    original_prefix = ".".join(source_path[: root_length + index + 1])
-    visible_prefix = ".".join(visible_source[: index + 1])
-    segment = visible_source[index]
-    for key in (original_prefix, visible_prefix, segment):
-        if key in aliases:
-            matched.add(key)
-            return aliases[key]
-    return segment
 
 
 def _view_tree(
@@ -323,6 +305,24 @@ def _matching_notification_aliases(
         for index in range(len(visible)):
             _api_name(event.path, visible, index, aliases, matched)
     return matched
+
+
+def _api_name(
+    source_path: tuple[str, ...],
+    visible_source: tuple[str, ...],
+    index: int,
+    aliases: Mapping[str, str],
+    matched: set[str],
+) -> str:
+    root_length = len(source_path) - len(visible_source)
+    original_prefix = ".".join(source_path[: root_length + index + 1])
+    visible_prefix = ".".join(visible_source[: index + 1])
+    segment = visible_source[index]
+    for key in (original_prefix, visible_prefix, segment):
+        if key in aliases:
+            matched.add(key)
+            return aliases[key]
+    return segment
 
 
 def _event_tree(

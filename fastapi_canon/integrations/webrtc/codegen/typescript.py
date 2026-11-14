@@ -113,16 +113,6 @@ class ContractError(ValueError):
     """The contract cannot be turned into a client."""
 
 
-# Supported generator runtime-resource accessor; callers may be external.
-def runtime_source() -> str:  # smelt: ignore[SMT429] -- external API
-    """Return the static TypeScript runtime shipped with the package."""
-    return (
-        resources.files("fastapi_canon.integrations.webrtc.codegen")
-        .joinpath("templates/runtime.ts")
-        .read_text(encoding="utf-8")
-    )
-
-
 def generate_typescript(
     contract: Mapping[str, Any],
     *,
@@ -173,6 +163,16 @@ def generate_typescript(
         + 'export * from "./models.js";\n'
         + 'export * from "./client.js";\n',
     }
+
+
+# Supported generator runtime-resource accessor; callers may be external.
+def runtime_source() -> str:  # smelt: ignore[SMT429] -- external API
+    """Return the static TypeScript runtime shipped with the package."""
+    return (
+        resources.files("fastapi_canon.integrations.webrtc.codegen")
+        .joinpath("templates/runtime.ts")
+        .read_text(encoding="utf-8")
+    )
 
 
 def _check_contract(contract: Mapping[str, Any]) -> None:
@@ -347,23 +347,6 @@ class _Emitter:
         return "\n".join(line for line in lines if line)
 
 
-def _schema_doc(schema: Any) -> str | None:
-    if not isinstance(schema, Mapping):
-        return None
-    description = schema.get("description")
-    return description if isinstance(description, str) else None
-
-
-def _doc(text: str | None, indent: str) -> str:
-    if not text:
-        return ""
-    lines = text.replace("*/", "*\\/").strip().splitlines()
-    if len(lines) == 1:
-        return f"{indent}/** {lines[0]} */\n"
-    body = "\n".join(f"{indent} *{' ' + line if line else ''}" for line in lines)
-    return f"{indent}/**\n{body}\n{indent} */\n"
-
-
 def _literal(value: Any) -> str:
     if value is None or isinstance(value, bool | int | float | str):
         return json.dumps(value)
@@ -377,30 +360,10 @@ def _union(parts: Sequence[str]) -> str:
     return " | ".join(unique) if unique else "never"
 
 
-# ------------------------------------------------------------------ client
-
-_RECEIVE_TYPES = {
-    "raw": "string | ArrayBuffer",
-    "text": "string",
-    "binary": "ArrayBuffer",
-    "none": "never",
-}
-_SEND_TYPES = {
-    "raw": "string | ArrayBuffer | ArrayBufferView",
-    "text": "string",
-    "binary": "ArrayBuffer | ArrayBufferView",
-    "none": "never",
-}
-
-
 def _wrap(part: str) -> str:
     if " | " in part or " & " in part or part.startswith("..."):
         return f"({part})"
     return part
-
-
-def _property(name: str) -> str:
-    return name if _IDENTIFIER.fullmatch(name) else json.dumps(name)
 
 
 def _client(
@@ -425,6 +388,22 @@ def _client(
         out.append("\n" + _session_types(session, models))
     out.append(_client_class(sessions, client_name))
     return "".join(out)
+
+
+# ------------------------------------------------------------------ client
+
+_RECEIVE_TYPES = {
+    "raw": "string | ArrayBuffer",
+    "text": "string",
+    "binary": "ArrayBuffer",
+    "none": "never",
+}
+_SEND_TYPES = {
+    "raw": "string | ArrayBuffer | ArrayBufferView",
+    "text": "string",
+    "binary": "ArrayBuffer | ArrayBufferView",
+    "none": "never",
+}
 
 
 def _session_types(session: Mapping[str, Any], models: _Emitter) -> str:
@@ -521,6 +500,17 @@ def _session_types(session: Mapping[str, Any], models: _Emitter) -> str:
     return "".join(parts)
 
 
+def _schema_doc(schema: Any) -> str | None:
+    if not isinstance(schema, Mapping):
+        return None
+    description = schema.get("description")
+    return description if isinstance(description, str) else None
+
+
+def _property(name: str) -> str:
+    return name if _IDENTIFIER.fullmatch(name) else json.dumps(name)
+
+
 def _message_type(
     message_format: str,
     schema: Any,
@@ -589,6 +579,16 @@ def _client_class(sessions: Sequence[Mapping[str, Any]], client_name: str) -> st
     return "\n".join(lines) + "\n"
 
 
+def _doc(text: str | None, indent: str) -> str:
+    if not text:
+        return ""
+    lines = text.replace("*/", "*\\/").strip().splitlines()
+    if len(lines) == 1:
+        return f"{indent}/** {lines[0]} */\n"
+    body = "\n".join(f"{indent} *{' ' + line if line else ''}" for line in lines)
+    return f"{indent}/**\n{body}\n{indent} */\n"
+
+
 def _ts_value(value: Any, indent: str) -> str:
     inner = indent + "  "
     if isinstance(value, Mapping):
@@ -611,14 +611,14 @@ def _words(name: str) -> list[str]:
     return [word for word in re.split(r"[^A-Za-z0-9]+", spaced) if word]
 
 
-def _pascal(name: str) -> str:
-    result = "".join(word[:1].upper() + word[1:] for word in _words(name)) or "Session"
-    return f"_{result}" if result[0].isdigit() else result
-
-
 def _camel(name: str) -> str:
     pascal = _pascal(name).lstrip("_")
     result = pascal[:1].lower() + pascal[1:]
     if not result or result[0].isdigit() or result in _RESERVED_WORDS:
         return f"_{result}"
     return result
+
+
+def _pascal(name: str) -> str:
+    result = "".join(word[:1].upper() + word[1:] for word in _words(name)) or "Session"
+    return f"_{result}" if result[0].isdigit() else result

@@ -14,6 +14,21 @@ class ContractError(ValueError):
     """An invalid or unsupported OpenAPI contract."""
 
 
+def resolve_ref(document: Document, value: Document) -> Document:
+    """Resolve local JSON Pointer references, detecting reference-only cycles."""
+    seen: set[str] = set()
+    while "$ref" in value:
+        ref: str = value["$ref"]
+        if ref in seen:
+            raise ContractError(f"Cyclic reference: {ref}")
+        seen.add(ref)
+        target = resolve_pointer(document, ref)
+        if not isinstance(target, dict):
+            raise ContractError(f"Reference does not point to an object: {ref}")
+        value = {**target, **{k: v for k, v in value.items() if k != "$ref"}}
+    return value
+
+
 def resolve_pointer(document: Document, ref: str) -> Any:
     if not ref.startswith("#/"):
         raise ContractError(f"Only local OpenAPI references are supported: {ref!r}")
@@ -31,19 +46,20 @@ def resolve_pointer(document: Document, ref: str) -> Any:
     return target
 
 
-def resolve_ref(document: Document, value: Document) -> Document:
-    """Resolve local JSON Pointer references, detecting reference-only cycles."""
-    seen: set[str] = set()
-    while "$ref" in value:
-        ref: str = value["$ref"]
-        if ref in seen:
-            raise ContractError(f"Cyclic reference: {ref}")
-        seen.add(ref)
-        target = resolve_pointer(document, ref)
-        if not isinstance(target, dict):
-            raise ContractError(f"Reference does not point to an object: {ref}")
-        value = {**target, **{k: v for k, v in value.items() if k != "$ref"}}
-    return value
+def export_schema(app: FastAPI) -> Document:
+    """Copy native OpenAPI output, promote compatible 3.1 output, then validate.
+
+    FastAPI emits the 3.2 itemSchema/contentSchema structure under a 3.1 version.
+    Its JSON Schema dialect is already Draft 2020-12. No stream schemas are
+    synthesized and the application's cached document is never modified.
+    Incompatible custom OpenAPI extensions fail validation instead of being lost.
+    """
+    try:
+        document = export_openapi(app)
+    except ValueError as exc:
+        raise ContractError(str(exc)) from exc
+    validate_contract(document)
+    return document
 
 
 def validate_contract(document: Document) -> None:
@@ -129,19 +145,3 @@ def validate_contract(document: Document) -> None:
                 walk(value, f"{path}/{index}")
 
     walk(document, "$")
-
-
-def export_schema(app: FastAPI) -> Document:
-    """Copy native OpenAPI output, promote compatible 3.1 output, then validate.
-
-    FastAPI emits the 3.2 itemSchema/contentSchema structure under a 3.1 version.
-    Its JSON Schema dialect is already Draft 2020-12. No stream schemas are
-    synthesized and the application's cached document is never modified.
-    Incompatible custom OpenAPI extensions fail validation instead of being lost.
-    """
-    try:
-        document = export_openapi(app)
-    except ValueError as exc:
-        raise ContractError(str(exc)) from exc
-    validate_contract(document)
-    return document

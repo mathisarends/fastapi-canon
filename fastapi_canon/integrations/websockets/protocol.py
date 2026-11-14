@@ -423,27 +423,6 @@ def notification_definition(
     )
 
 
-def stream_payload(function: FunctionType) -> Any:
-    annotation = get_type_hints(function, include_extras=True).get("return")
-    annotation = _stream_annotation(annotation)
-    if get_origin(annotation) not in (AsyncIterator, AsyncGenerator) or not get_args(
-        annotation
-    ):
-        raise ProtocolDefinitionError("RPC stream must return AsyncIterator[Payload]")
-    payload = _resolve_alias(get_args(annotation)[0])
-    normalized = _stream_annotation(payload)
-    if normalized is Any or (
-        get_origin(normalized) in (Union, UnionType)
-        and any(
-            _stream_annotation(item) in (bytes, Any) for item in get_args(normalized)
-        )
-    ):
-        raise ProtocolDefinitionError(
-            "Stream payload must unambiguously declare bytes or serializable messages"
-        )
-    return bytes if normalized is bytes else payload
-
-
 def subscription_definition(
     *,
     name: str,
@@ -555,6 +534,27 @@ def stream_definition(
         path_parameters=tuple(parameter.name for parameter in path_parameters),
         path_model=_path_model(function, hints, path_parameters),
     )
+
+
+def stream_payload(function: FunctionType) -> Any:
+    annotation = get_type_hints(function, include_extras=True).get("return")
+    annotation = _stream_annotation(annotation)
+    if get_origin(annotation) not in (AsyncIterator, AsyncGenerator) or not get_args(
+        annotation
+    ):
+        raise ProtocolDefinitionError("RPC stream must return AsyncIterator[Payload]")
+    payload = _resolve_alias(get_args(annotation)[0])
+    normalized = _stream_annotation(payload)
+    if normalized is Any or (
+        get_origin(normalized) in (Union, UnionType)
+        and any(
+            _stream_annotation(item) in (bytes, Any) for item in get_args(normalized)
+        )
+    ):
+        raise ProtocolDefinitionError(
+            "Stream payload must unambiguously declare bytes or serializable messages"
+        )
+    return bytes if normalized is bytes else payload
 
 
 def socket_definition(

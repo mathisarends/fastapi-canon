@@ -25,6 +25,32 @@ class EventType(StrEnum):
     BATCH = auto()
 
 
+def _main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source-dir", type=Path, default=_ROOT)
+    parser.add_argument(
+        "--runtime", choices=("all", "python", "typescript"), default="all"
+    )
+    parser.add_argument("--events", type=int, default=100)
+    parser.add_argument("--iterations", type=int, default=10)
+    parser.add_argument("--rounds", type=int, default=5)
+    parser.add_argument(
+        "--memory", action="store_true", help="Separate Python peak-memory sample"
+    )
+    parser.add_argument("--output", type=Path)
+    args = parser.parse_args()
+    if min(args.events, args.iterations, args.rounds) < 1:
+        parser.error("events, iterations and rounds must be positive")
+    with tempfile.TemporaryDirectory(prefix="streams-benchmark-") as temporary:
+        report = asyncio.run(_benchmark(args, Path(temporary)))
+    content = json.dumps(report, indent=2) + "\n"
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(content, encoding="utf-8", newline="\n")
+    else:
+        print(content, end="")
+
+
 async def _benchmark(args, directory):
     # Select source before importing, so one harness can compare revisions with
     # the same interpreter, dependencies, payloads and measurement parameters.
@@ -236,32 +262,6 @@ async def _benchmark(args, directory):
         )
         report["runtimes"]["typescript"] = json.loads(result.stdout)
     return report
-
-
-def _main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source-dir", type=Path, default=_ROOT)
-    parser.add_argument(
-        "--runtime", choices=("all", "python", "typescript"), default="all"
-    )
-    parser.add_argument("--events", type=int, default=100)
-    parser.add_argument("--iterations", type=int, default=10)
-    parser.add_argument("--rounds", type=int, default=5)
-    parser.add_argument(
-        "--memory", action="store_true", help="Separate Python peak-memory sample"
-    )
-    parser.add_argument("--output", type=Path)
-    args = parser.parse_args()
-    if min(args.events, args.iterations, args.rounds) < 1:
-        parser.error("events, iterations and rounds must be positive")
-    with tempfile.TemporaryDirectory(prefix="streams-benchmark-") as temporary:
-        report = asyncio.run(_benchmark(args, Path(temporary)))
-    content = json.dumps(report, indent=2) + "\n"
-    if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(content, encoding="utf-8", newline="\n")
-    else:
-        print(content, end="")
 
 
 async def _measure(operation, iterations, args, units):

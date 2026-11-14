@@ -219,78 +219,6 @@ async def serve_socket_endpoint(
             )
 
 
-async def _prepare(
-    endpoint: RpcAnyEndpoint,
-    socket: RpcWebSocket,
-    resolver: RpcResolverLike | None,
-    context: object | Mapping[type[Any], object] | None,
-    path_model: type[BaseModel] | None = None,
-    before_accept: RpcBeforeAccept | None = None,
-    rejections: RpcRejections | None = None,
-) -> tuple[RpcConnection, RpcResolver, dict[type[Any], object], dict[str, Any]] | None:
-    endpoint.service.freeze()
-    resolved = as_resolver(resolver)
-    values = context_values(context)
-    path_params = (
-        socket.handshake.path_params or endpoint.match(socket.handshake.path) or {}
-    )
-    connection = RpcConnection.create(endpoint.name, socket, path_params)
-    drain_session = current_drain_session()
-    if drain_session is not None:
-        drain_session.connection = connection
-        if not isinstance(endpoint, RpcEndpoint):
-            drain_session.ready.set()
-    state = current_serving()
-    if state is not None:
-        state.scope.connection = connection
-    base_values = {**values, RpcConnection: connection}
-    if (
-        endpoint.subprotocol is not None
-        and endpoint.subprotocol not in socket.handshake.subprotocols
-    ):
-        record_rejection(RpcRejection.PROTOCOL_ERROR)
-        await socket.reject(RpcRejection.PROTOCOL_ERROR, "Unsupported subprotocol")
-        return None
-    path_values: dict[str, Any] = {}
-    if path_model is not None:
-        try:
-            parsed = path_model.model_validate(dict(path_params))
-        except ValidationError:
-            record_rejection(RpcRejection.NOT_FOUND)
-            await socket.reject(RpcRejection.NOT_FOUND, "Invalid path variable")
-            return None
-        path_values = {name: getattr(parsed, name) for name in path_model.model_fields}
-        base_values[path_model] = parsed
-    if before_accept is not None:
-        try:
-            accepted_values = await before_accept(socket.handshake)
-        except Exception as error:
-            record_error(error)
-            rejected = map_rejection(error, rejections)
-            if rejected is None:
-                logger.exception("RPC before_accept hook failed")
-                rejected = RpcReject(RpcRejection.INTERNAL_ERROR, "Internal error")
-            record_rejection(rejected.rejection)
-            await socket.reject(
-                rejected.rejection, rejected.reason, headers=rejected.headers
-            )
-            return None
-        if accepted_values is not None:
-            base_values.update(accepted_values)
-    expiry = base_values.get(RpcConnectionExpiry)
-    if isinstance(expiry, RpcConnectionExpiry):
-        connection.expire_at(expiry.expires_at)
-    if endpoint.service.drain.draining:
-        record_rejection(RpcRejection.UNAVAILABLE)
-        await socket.reject(RpcRejection.UNAVAILABLE, "Server restarting")
-        return None
-    await socket.accept(endpoint.subprotocol)
-    connection.mark_accepted()
-    if state is not None:
-        state.accepted_at = time.perf_counter()
-    return connection, resolved, base_values, path_values
-
-
 async def _serve_endpoint(
     endpoint: RpcEndpoint[Any],
     socket: RpcWebSocket,
@@ -357,6 +285,18 @@ async def _run_rpc_endpoint(
         activity,
         middleware,
     ).run()
+
+
+async def _flush(
+    outgoing: asyncio.Queue[str], writer: asyncio.Task[None], timeout: float | None
+) -> None:
+    drained = asyncio.create_task(outgoing.join())
+    try:
+        await asyncio.wait(
+            (drained, writer), timeout=timeout, return_when=asyncio.FIRST_COMPLETED
+        )
+    finally:
+        drained.cancel()
 
 
 class _RpcSession:
@@ -495,21 +435,6 @@ class _RpcSession:
             self.connection.record_close(code, reason, raw_close_code)
             self.close_event.set()
 
-    async def _report_slow_consumer(self) -> None:
-        if self._slow_consumer_reported:
-            return
-        self._slow_consumer_reported = True
-        await notify_activity(self.activity, "slow_consumer_closed", self.connection)
-
-    async def _send_outgoing(self, message: str) -> None:
-        try:
-            async with asyncio.timeout(self.limits.send_timeout):
-                await self._outgoing.put(message)
-        except TimeoutError:
-            logger.warning("RPC client too slow: outgoing queue blocked")
-            self.request_close(RpcConnectionClose.POLICY_VIOLATION, "Client too slow")
-            await self._report_slow_consumer()
-
     async def _writer(self) -> None:
         try:
             while True:
@@ -534,108 +459,11 @@ class _RpcSession:
             logger.exception("RPC writer failed")
             self.request_close(RpcConnectionClose.INTERNAL_ERROR, "Internal error")
 
-    async def _invoke_one(self, call: PendingCall) -> RpcSuccess | RpcFailure | None:
-        call.started = True
-        message = call.message
-        try:
-            if call.invalid:
-                return await self.server.handle_failure(
-                    message, RpcInvalidRequestError()
-                )
-            if call.shutting_down:
-                return await self.server.handle_failure(
-                    message, RpcServerShuttingDownError()
-                )
-            if call.reservation is None:
-                return await self._reject_pending(message)
-            if not call.batch and self.subscriptions.owns(message["method"]):
-                assert call.envelope is not None
-                return await self.subscriptions.handle(
-                    call.envelope, admitted_at=call.admitted_at
-                )
-            return await self.server.handle_one_bounded(
-                message, admitted_at=call.admitted_at, envelope=call.envelope
-            )
-        finally:
-            if call.reservation is not None:
-                self.pending.release(call.reservation)
-
-    async def _collect_one(self, call: PendingCall) -> RpcSuccess | RpcFailure | None:
-        try:
-            return await call.task
-        except asyncio.CancelledError:
-            if (
-                call.started
-                or not call.cancel_requested
-                or self.close_event.is_set()
-                or (
-                    (current := asyncio.current_task()) is not None
-                    and current.cancelling()
-                )
-            ):
-                raise
-            return await self.server.handle_failure(
-                call.message, RpcRequestCancelledError()
-            )
-
-    async def _invoke(
-        self,
-        items: Sequence[PendingCall],
-        batch: bool,
-        controls: Sequence[RpcSuccess | RpcFailure] = (),
-    ) -> None:
-        try:
-            responses = (
-                [await self._collect_one(items[0])]
-                if len(items) == 1
-                else await asyncio.gather(*(self._collect_one(call) for call in items))
-            )
-        finally:
-            unfinished = [call.task for call in items if not call.task.done()]
-            for task in unfinished:
-                task.cancel()
-            if unfinished:
-                await asyncio.gather(*unfinished, return_exceptions=True)
-        completed: list[BaseModel] = [
-            *controls,
-            *(r for r in responses if r is not None),
-        ]
-        if completed and (not self.close_event.is_set()):
-            await self._send_outgoing(
-                self._codec.encode(completed if batch else completed[0])
-            )
-
-    async def _reject_pending(self, message: object) -> RpcSuccess | RpcFailure | None:
-        self._pending_rejections += 1
-        if self._pending_rejections == 1:
-            logger.warning("RPC client exceeded max_pending_requests")
-        return await self.server.handle_failure(message, RpcPendingLimitError())
-
     def _invocation_done(self, task: asyncio.Task[None]) -> None:
         self._tasks.discard(task)
         if not task.cancelled() and (error := task.exception()) is not None:
             record_error(error)
             self.request_close(RpcConnectionClose.INTERNAL_ERROR, "Internal error")
-
-    def _schedule_failure(self, message: object, error: Exception) -> bool:
-        if (
-            len(self._tasks)
-            >= self.limits.max_pending_requests + self.limits.max_queue_size
-        ):
-            self.request_close(
-                RpcConnectionClose.POLICY_VIOLATION, "Too many response collectors"
-            )
-            return False
-
-        async def respond() -> None:
-            response = await self.server.handle_failure(message, error)
-            if response is not None and (not self.close_event.is_set()):
-                await self._send_outgoing(self._codec.encode(response))
-
-        task = asyncio.create_task(respond())
-        self._tasks.add(task)
-        task.add_done_callback(self._invocation_done)
-        return True
 
     def _call_done(
         self,
@@ -648,30 +476,6 @@ class _RpcSession:
             self.pending.release(call.reservation)
         if key is not None and self.requests.get(key) is call:
             del self.requests[key]
-
-    def _cancel_request(self, item: object) -> bool:
-        if not isinstance(item, dict) or item.get("method") != "$/cancelRequest":
-            return False
-        if "id" in item:
-            return False
-        params = item.get("params")
-        if (
-            item.get("jsonrpc") == "2.0"
-            and set(item) == {"jsonrpc", "method", "params"}
-            and isinstance(params, dict)
-            and (set(params) == {"id"})
-            and (type(params["id"]) in (str, int))
-        ):
-            call = self.requests.get((type(params["id"]), params["id"]))
-            if (
-                call is not None
-                and call.reservation is not None
-                and (not call.cancel_requested)
-                and (not call.task.done())
-            ):
-                call.cancel_requested = True
-                call.task.cancel(CLIENT_CANCEL)
-        return True
 
     async def _reader(self) -> None:
         try:
@@ -804,6 +608,142 @@ class _RpcSession:
             record_error(error)
             self.request_close(RpcConnectionClose.INTERNAL_ERROR, "Internal error")
 
+    async def _invoke_one(self, call: PendingCall) -> RpcSuccess | RpcFailure | None:
+        call.started = True
+        message = call.message
+        try:
+            if call.invalid:
+                return await self.server.handle_failure(
+                    message, RpcInvalidRequestError()
+                )
+            if call.shutting_down:
+                return await self.server.handle_failure(
+                    message, RpcServerShuttingDownError()
+                )
+            if call.reservation is None:
+                return await self._reject_pending(message)
+            if not call.batch and self.subscriptions.owns(message["method"]):
+                assert call.envelope is not None
+                return await self.subscriptions.handle(
+                    call.envelope, admitted_at=call.admitted_at
+                )
+            return await self.server.handle_one_bounded(
+                message, admitted_at=call.admitted_at, envelope=call.envelope
+            )
+        finally:
+            if call.reservation is not None:
+                self.pending.release(call.reservation)
+
+    async def _invoke(
+        self,
+        items: Sequence[PendingCall],
+        batch: bool,
+        controls: Sequence[RpcSuccess | RpcFailure] = (),
+    ) -> None:
+        try:
+            responses = (
+                [await self._collect_one(items[0])]
+                if len(items) == 1
+                else await asyncio.gather(*(self._collect_one(call) for call in items))
+            )
+        finally:
+            unfinished = [call.task for call in items if not call.task.done()]
+            for task in unfinished:
+                task.cancel()
+            if unfinished:
+                await asyncio.gather(*unfinished, return_exceptions=True)
+        completed: list[BaseModel] = [
+            *controls,
+            *(r for r in responses if r is not None),
+        ]
+        if completed and (not self.close_event.is_set()):
+            await self._send_outgoing(
+                self._codec.encode(completed if batch else completed[0])
+            )
+
+    async def _send_outgoing(self, message: str) -> None:
+        try:
+            async with asyncio.timeout(self.limits.send_timeout):
+                await self._outgoing.put(message)
+        except TimeoutError:
+            logger.warning("RPC client too slow: outgoing queue blocked")
+            self.request_close(RpcConnectionClose.POLICY_VIOLATION, "Client too slow")
+            await self._report_slow_consumer()
+
+    async def _report_slow_consumer(self) -> None:
+        if self._slow_consumer_reported:
+            return
+        self._slow_consumer_reported = True
+        await notify_activity(self.activity, "slow_consumer_closed", self.connection)
+
+    async def _collect_one(self, call: PendingCall) -> RpcSuccess | RpcFailure | None:
+        try:
+            return await call.task
+        except asyncio.CancelledError:
+            if (
+                call.started
+                or not call.cancel_requested
+                or self.close_event.is_set()
+                or (
+                    (current := asyncio.current_task()) is not None
+                    and current.cancelling()
+                )
+            ):
+                raise
+            return await self.server.handle_failure(
+                call.message, RpcRequestCancelledError()
+            )
+
+    async def _reject_pending(self, message: object) -> RpcSuccess | RpcFailure | None:
+        self._pending_rejections += 1
+        if self._pending_rejections == 1:
+            logger.warning("RPC client exceeded max_pending_requests")
+        return await self.server.handle_failure(message, RpcPendingLimitError())
+
+    def _schedule_failure(self, message: object, error: Exception) -> bool:
+        if (
+            len(self._tasks)
+            >= self.limits.max_pending_requests + self.limits.max_queue_size
+        ):
+            self.request_close(
+                RpcConnectionClose.POLICY_VIOLATION, "Too many response collectors"
+            )
+            return False
+
+        async def respond() -> None:
+            response = await self.server.handle_failure(message, error)
+            if response is not None and (not self.close_event.is_set()):
+                await self._send_outgoing(self._codec.encode(response))
+
+        task = asyncio.create_task(respond())
+        self._tasks.add(task)
+        task.add_done_callback(self._invocation_done)
+        return True
+
+    def _cancel_request(self, item: object) -> bool:
+        if not isinstance(item, dict) or item.get("method") != "$/cancelRequest":
+            return False
+        if "id" in item:
+            return False
+        params = item.get("params")
+        if (
+            item.get("jsonrpc") == "2.0"
+            and set(item) == {"jsonrpc", "method", "params"}
+            and isinstance(params, dict)
+            and (set(params) == {"id"})
+            and (type(params["id"]) in (str, int))
+        ):
+            call = self.requests.get((type(params["id"]), params["id"]))
+            if (
+                call is not None
+                and call.reservation is not None
+                and (not call.cancel_requested)
+                and (not call.task.done())
+            ):
+                call.cancel_requested = True
+                call.task.cancel(CLIENT_CANCEL)
+        return True
+
     async def _events(self) -> None:
         try:
             await asyncio.gather(
@@ -846,18 +786,6 @@ class _RpcSession:
         )
         await _flush(self._outgoing, self._writer_task, None)
         self.request_close(RpcConnectionClose.SERVICE_RESTART, "Server restarting")
-
-
-async def _flush(
-    outgoing: asyncio.Queue[str], writer: asyncio.Task[None], timeout: float | None
-) -> None:
-    drained = asyncio.create_task(outgoing.join())
-    try:
-        await asyncio.wait(
-            (drained, writer), timeout=timeout, return_when=asyncio.FIRST_COMPLETED
-        )
-    finally:
-        drained.cancel()
 
 
 async def _event_source(
@@ -974,6 +902,78 @@ async def _serve_stream_endpoint(
                 rejections,
                 activity,
             )
+
+
+async def _prepare(
+    endpoint: RpcAnyEndpoint,
+    socket: RpcWebSocket,
+    resolver: RpcResolverLike | None,
+    context: object | Mapping[type[Any], object] | None,
+    path_model: type[BaseModel] | None = None,
+    before_accept: RpcBeforeAccept | None = None,
+    rejections: RpcRejections | None = None,
+) -> tuple[RpcConnection, RpcResolver, dict[type[Any], object], dict[str, Any]] | None:
+    endpoint.service.freeze()
+    resolved = as_resolver(resolver)
+    values = context_values(context)
+    path_params = (
+        socket.handshake.path_params or endpoint.match(socket.handshake.path) or {}
+    )
+    connection = RpcConnection.create(endpoint.name, socket, path_params)
+    drain_session = current_drain_session()
+    if drain_session is not None:
+        drain_session.connection = connection
+        if not isinstance(endpoint, RpcEndpoint):
+            drain_session.ready.set()
+    state = current_serving()
+    if state is not None:
+        state.scope.connection = connection
+    base_values = {**values, RpcConnection: connection}
+    if (
+        endpoint.subprotocol is not None
+        and endpoint.subprotocol not in socket.handshake.subprotocols
+    ):
+        record_rejection(RpcRejection.PROTOCOL_ERROR)
+        await socket.reject(RpcRejection.PROTOCOL_ERROR, "Unsupported subprotocol")
+        return None
+    path_values: dict[str, Any] = {}
+    if path_model is not None:
+        try:
+            parsed = path_model.model_validate(dict(path_params))
+        except ValidationError:
+            record_rejection(RpcRejection.NOT_FOUND)
+            await socket.reject(RpcRejection.NOT_FOUND, "Invalid path variable")
+            return None
+        path_values = {name: getattr(parsed, name) for name in path_model.model_fields}
+        base_values[path_model] = parsed
+    if before_accept is not None:
+        try:
+            accepted_values = await before_accept(socket.handshake)
+        except Exception as error:
+            record_error(error)
+            rejected = map_rejection(error, rejections)
+            if rejected is None:
+                logger.exception("RPC before_accept hook failed")
+                rejected = RpcReject(RpcRejection.INTERNAL_ERROR, "Internal error")
+            record_rejection(rejected.rejection)
+            await socket.reject(
+                rejected.rejection, rejected.reason, headers=rejected.headers
+            )
+            return None
+        if accepted_values is not None:
+            base_values.update(accepted_values)
+    expiry = base_values.get(RpcConnectionExpiry)
+    if isinstance(expiry, RpcConnectionExpiry):
+        connection.expire_at(expiry.expires_at)
+    if endpoint.service.drain.draining:
+        record_rejection(RpcRejection.UNAVAILABLE)
+        await socket.reject(RpcRejection.UNAVAILABLE, "Server restarting")
+        return None
+    await socket.accept(endpoint.subprotocol)
+    connection.mark_accepted()
+    if state is not None:
+        state.accepted_at = time.perf_counter()
+    return connection, resolved, base_values, path_values
 
 
 @asynccontextmanager
@@ -1139,6 +1139,10 @@ class _StreamSession:
                     await self.socket.close(*self.close_value)
             self.connection.mark_closed()
 
+    def client_disconnected(self, error: RpcDisconnect) -> None:
+        self.client_closed = True
+        self.request_close(error.code, error.reason, error.raw_close_code)
+
     def request_close(
         self, code: RpcConnectionClose, reason: str, raw_close_code: int | None = None
     ) -> None:
@@ -1150,38 +1154,6 @@ class _StreamSession:
             self.close_value = (code, reason)
             self.connection.record_close(code, reason, raw_close_code)
             self.close_event.set()
-
-    def client_disconnected(self, error: RpcDisconnect) -> None:
-        self.client_closed = True
-        self.request_close(error.code, error.reason, error.raw_close_code)
-
-    def _close_stream_error(self, error: Exception) -> None:
-        if isinstance(error, RpcStreamClose):
-            self.request_close(error.close, error.reason)
-            return
-        record_error(error)
-        rejected = map_rejection(error, self.rejections)
-        if rejected is not None:
-            self.request_close(REJECTION_CLOSES[rejected.rejection], rejected.reason)
-            return
-        try:
-            mapped = (
-                error
-                if isinstance(error, RpcError)
-                else self.error_mapper(error)
-                if self.error_mapper is not None
-                else None
-            )
-        except Exception:
-            logger.exception("RPC binary stream error mapper failed")
-            mapped = None
-        if mapped is not None:
-            self.request_close(
-                RpcConnectionClose.POLICY_VIOLATION, f"{mapped.code}: {mapped.message}"
-            )
-            return
-        logger.error("RPC binary stream failed", exc_info=error)
-        self.request_close(RpcConnectionClose.INTERNAL_ERROR, "Internal error")
 
     async def _write(self) -> None:
         try:
@@ -1262,6 +1234,34 @@ class _StreamSession:
             self.client_disconnected(error)
         except Exception as error:
             self._close_stream_error(error)
+
+    def _close_stream_error(self, error: Exception) -> None:
+        if isinstance(error, RpcStreamClose):
+            self.request_close(error.close, error.reason)
+            return
+        record_error(error)
+        rejected = map_rejection(error, self.rejections)
+        if rejected is not None:
+            self.request_close(REJECTION_CLOSES[rejected.rejection], rejected.reason)
+            return
+        try:
+            mapped = (
+                error
+                if isinstance(error, RpcError)
+                else self.error_mapper(error)
+                if self.error_mapper is not None
+                else None
+            )
+        except Exception:
+            logger.exception("RPC binary stream error mapper failed")
+            mapped = None
+        if mapped is not None:
+            self.request_close(
+                RpcConnectionClose.POLICY_VIOLATION, f"{mapped.code}: {mapped.message}"
+            )
+            return
+        logger.error("RPC binary stream failed", exc_info=error)
+        self.request_close(RpcConnectionClose.INTERNAL_ERROR, "Internal error")
 
 
 def _is_input_end(frame: str) -> bool:
@@ -1382,6 +1382,11 @@ class _SocketSession:
                     await self.socket.close(*self.close_value)
             self.connection.mark_closed()
 
+    def client_disconnected(self, error: RpcDisconnect) -> None:
+        if not self.client_closed:
+            self.client_closed = True
+            self.request_close(error.code, error.reason, error.raw_close_code)
+
     def request_close(
         self, code: RpcConnectionClose, reason: str, raw_close_code: int | None = None
     ) -> None:
@@ -1394,10 +1399,18 @@ class _SocketSession:
             self.connection.record_close(code, reason, raw_close_code)
             self.close_event.set()
 
-    def client_disconnected(self, error: RpcDisconnect) -> None:
-        if not self.client_closed:
-            self.client_closed = True
-            self.request_close(error.code, error.reason, error.raw_close_code)
+    async def _handle(self) -> None:
+        try:
+            if self.definition.message_parameter is None:
+                await self.definition.function(**self.arguments)
+            else:
+                async for frame in self._socket_handle:
+                    await self._respond(frame)
+            self.request_close(RpcConnectionClose.NORMAL, "")
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            self._close_failure(error)
 
     def _close_failure(self, error: Exception) -> None:
         leaves = _leaf_exceptions(error)
@@ -1432,19 +1445,6 @@ class _SocketSession:
             message_arguments[self.definition.message_parameter] = message
             response = await self.definition.function(**message_arguments)
             await self._socket_handle.send(response)
-
-    async def _handle(self) -> None:
-        try:
-            if self.definition.message_parameter is None:
-                await self.definition.function(**self.arguments)
-            else:
-                async for frame in self._socket_handle:
-                    await self._respond(frame)
-            self.request_close(RpcConnectionClose.NORMAL, "")
-        except asyncio.CancelledError:
-            raise
-        except Exception as error:
-            self._close_failure(error)
 
     async def _read(self) -> None:
         try:

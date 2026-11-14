@@ -121,6 +121,17 @@ class RpcServer:
     def protocol(self) -> RpcProtocol:
         return self._protocol
 
+    async def handle_json(self, message: str | bytes | bytearray) -> str | None:
+        """Decode, serve, and encode one JSON-RPC message."""
+        try:
+            request = self._codec.decode(message)
+        except RpcParseError as error:
+            failure_response = await self.handle_failure(message, error)
+            assert failure_response is not None
+            return self._codec.encode(failure_response)
+        response = await self.handle(request)
+        return None if response is None else self._codec.encode(response)
+
     async def handle(self, raw_request: object) -> RpcResponseMessage:
         """Serve one decoded request or batch."""
         if isinstance(raw_request, list):
@@ -203,17 +214,6 @@ class RpcServer:
             if failure is None:
                 raise
         return response if observed else self._failure_response(raw_request, failure)
-
-    async def handle_json(self, message: str | bytes | bytearray) -> str | None:
-        """Decode, serve, and encode one JSON-RPC message."""
-        try:
-            request = self._codec.decode(message)
-        except RpcParseError as error:
-            failure_response = await self.handle_failure(message, error)
-            assert failure_response is not None
-            return self._codec.encode(failure_response)
-        response = await self.handle(request)
-        return None if response is None else self._codec.encode(response)
 
     async def handle_failure(
         self, raw_request: object, error: Exception

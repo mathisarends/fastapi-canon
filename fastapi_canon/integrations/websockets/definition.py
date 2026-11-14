@@ -728,16 +728,6 @@ class RpcDefinition:
             + ", ".join(e.name for e in self.endpoints)
         )
 
-    def match(self, path: str) -> tuple[RpcAnyEndpoint, dict[str, str]] | None:
-        ordered = sorted(
-            enumerate(self.endpoints), key=lambda item: ("{" in item[1].path, item[0])
-        )
-        for _, endpoint in ordered:
-            values = endpoint.match(path)
-            if values is not None:
-                return endpoint, values
-        return None
-
     def freeze(self) -> RpcProtocol:
         if self._protocol is not None:
             return self._protocol
@@ -891,6 +881,16 @@ class RpcDefinition:
                 limits=limits,
                 rejections=rejections,
             )
+
+    def match(self, path: str) -> tuple[RpcAnyEndpoint, dict[str, str]] | None:
+        ordered = sorted(
+            enumerate(self.endpoints), key=lambda item: ("{" in item[1].path, item[0])
+        )
+        for _, endpoint in ordered:
+            values = endpoint.match(path)
+            if values is not None:
+                return endpoint, values
+        return None
 
     def contract(
         self,

@@ -57,6 +57,9 @@ All notable changes to `fastapi-canon` are documented in this file.
   allows a handler to stop one incoming track before session teardown.
 - Declare composition check prerequisites explicitly. Align transport lint rules
   and document reasons for type suppressions. Regenerate committed clients.
+- Order callers before their helpers while preserving eager binding dependencies.
+  Enforce the enabled Smelt source conventions as warnings in CI and pre-commit,
+  including optional defaults, callable operations and facade ownership.
 
 ## 0.20.0 - 2026-11-13
 

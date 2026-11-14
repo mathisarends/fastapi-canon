@@ -169,8 +169,6 @@ class SessionRuntime:
             name=declaration.name, session_id=session_id, websocket=websocket
         )
 
-    # ------------------------------------------------------------------ public
-
     async def serve(self) -> None:
         """Run the session to completion. Never raises except for cancellation."""
         cancelled = False
@@ -207,20 +205,6 @@ class SessionRuntime:
     async def wait_finished(self) -> None:
         await self._finished.wait()
 
-    def channel_state(self, channel: DataChannelSpec[Any, Any] | str) -> SessionChannel:
-        name = channel.name if isinstance(channel, DataChannelSpec) else channel
-        state = self._channels.get(name)
-        if state is None:
-            raise ValueError(
-                f"Session {self.declaration.name!r} has no channel {name!r}"
-            )
-        if isinstance(channel, DataChannelSpec) and channel != state.spec:
-            raise ValueError(
-                f"Channel {name!r} of session {self.declaration.name!r} is "
-                "declared with a different DataChannelSpec"
-            )
-        return state
-
     async def send_message(
         self, target: DataChannelSpec[Any, Any] | str, message: Any
     ) -> None:
@@ -254,6 +238,20 @@ class SessionRuntime:
                 if channel.closed.is_set():
                     raise WebRtcError(ErrorCode.CHANNEL_CLOSED) from error
                 raise WebRtcError(ErrorCode.ENGINE_FAILURE) from error
+
+    def channel_state(self, channel: DataChannelSpec[Any, Any] | str) -> SessionChannel:
+        name = channel.name if isinstance(channel, DataChannelSpec) else channel
+        state = self._channels.get(name)
+        if state is None:
+            raise ValueError(
+                f"Session {self.declaration.name!r} has no channel {name!r}"
+            )
+        if isinstance(channel, DataChannelSpec) and channel != state.spec:
+            raise ValueError(
+                f"Channel {name!r} of session {self.declaration.name!r} is "
+                "declared with a different DataChannelSpec"
+            )
+        return state
 
     async def next_message(self, channel: SessionChannel) -> Any:
         """Return the next received message; raise ``StopAsyncIteration`` once the
@@ -428,12 +426,6 @@ class SessionRuntime:
             self.code = code
             self._done.set()
 
-    # --------------------------------------------------------------- startup
-
-    def _release_track(self, native: Any) -> None:
-        if self._owned_tracks.pop(id(native), None) is not None:
-            stop_native_track(native)
-
     async def _accept(self) -> bool:
         offered = self._ws.get("subprotocols") or []
         if offered and protocol.SUBPROTOCOL not in offered:
@@ -528,28 +520,6 @@ class SessionRuntime:
                     )
                 )
 
-    def _attach_initial_tracks(self) -> None:
-        if self._initial_tracks_attached:
-            return
-        self._initial_tracks_attached = True
-        peer = self._require_peer()
-        for native in self._session.tracks:
-            try:
-                kind = self._engine.track_kind(native)
-            except TypeError as error:
-                raise WebRtcError(ErrorCode.MEDIA_REJECTED) from error
-            direction = self.declaration.media.direction(kind)
-            if direction is None or not direction.sends:
-                raise WebRtcError(
-                    ErrorCode.MEDIA_REJECTED,
-                    f"The session does not send {kind} media.",
-                )
-            handle = OutgoingTrack(self, native, kind, owned=True)
-            self._senders[handle] = self._engine_call(
-                functools.partial(peer.add_track, native)
-            )
-            self._outgoing.append(handle)
-
     def _hello(self, ice: IceServers) -> protocol.SessionMessage:
         declaration = self.declaration
         media = declaration.media
@@ -591,8 +561,6 @@ class SessionRuntime:
                 renegotiation=capabilities.renegotiation,
             ),
         )
-
-    # -------------------------------------------------------------- signaling
 
     async def _read(self) -> None:
         limit = self._limits.max_signaling_message_bytes
@@ -647,14 +615,6 @@ class SessionRuntime:
                 # The reader observes the disconnect and classifies it.
                 self._signaling_open = False
 
-    def _send(self, message: protocol.ServerMessage) -> None:
-        if self._signaling_lost or not self._signaling_open or self.code is not None:
-            return
-        try:
-            self._outbound.put_nowait(message)
-        except asyncio.QueueFull:
-            self.terminate(ErrorCode.QUEUE_EXHAUSTED)
-
     async def _on_description(self, message: protocol.DescriptionMessage) -> None:
         description = message.description.to_engine()
         if description.type == DescriptionType.OFFER:
@@ -692,6 +652,28 @@ class SessionRuntime:
             await self._flush_pending_candidates()
         if renegotiation:
             self._emit(SessionEventKind.RENEGOTIATED)
+
+    def _attach_initial_tracks(self) -> None:
+        if self._initial_tracks_attached:
+            return
+        self._initial_tracks_attached = True
+        peer = self._require_peer()
+        for native in self._session.tracks:
+            try:
+                kind = self._engine.track_kind(native)
+            except TypeError as error:
+                raise WebRtcError(ErrorCode.MEDIA_REJECTED) from error
+            direction = self.declaration.media.direction(kind)
+            if direction is None or not direction.sends:
+                raise WebRtcError(
+                    ErrorCode.MEDIA_REJECTED,
+                    f"The session does not send {kind} media.",
+                )
+            handle = OutgoingTrack(self, native, kind, owned=True)
+            self._senders[handle] = self._engine_call(
+                functools.partial(peer.add_track, native)
+            )
+            self._outgoing.append(handle)
 
     async def _on_answer(self, answer: SessionDescription, negotiation: int) -> None:
         async with self._negotiation:
@@ -865,8 +847,6 @@ class SessionRuntime:
                     f"Too many incoming {kind} tracks.",
                 )
 
-    # ------------------------------------------------------- engine callbacks
-
     def _bind_channel(
         self, channel: SessionChannel, engine_channel: EngineDataChannel
     ) -> None:
@@ -917,8 +897,6 @@ class SessionRuntime:
             )
         )
 
-    # --------------------------------------------------------------- handlers
-
     def _check_established(self) -> None:
         if self._established or self.code is not None:
             return
@@ -949,6 +927,14 @@ class SessionRuntime:
             self._spawn(self._watch_media(), "media", ErrorCode.ENGINE_FAILURE)
         if session.run is not None:
             self._spawn_handler(self._run_handler(session.run), "run")
+
+    def _send(self, message: protocol.ServerMessage) -> None:
+        if self._signaling_lost or not self._signaling_open or self.code is not None:
+            return
+        try:
+            self._outbound.put_nowait(message)
+        except asyncio.QueueFull:
+            self.terminate(ErrorCode.QUEUE_EXHAUSTED)
 
     async def _run_handler(self, run: Callable[[Peer], Awaitable[None]]) -> None:
         await run(self._peer_handle)
@@ -990,8 +976,6 @@ class SessionRuntime:
             self.terminate(ErrorCode.MEDIA_TIMEOUT)
             return
         self._emit(SessionEventKind.MEDIA_READY)
-
-    # ------------------------------------------------------------ task helpers
 
     def _spawn(self, coroutine: Awaitable[None], name: str, failure: ErrorCode) -> None:
         task = asyncio.create_task(
@@ -1044,11 +1028,6 @@ class SessionRuntime:
         task = asyncio.create_task(expire(), name=f"webrtc:{self._label}:{name}")
         self._timers[name] = task
 
-    def _cancel_timer(self, name: str) -> None:
-        task = self._timers.pop(name, None)
-        if task is not None:
-            task.cancel()
-
     async def _until(self, *events: asyncio.Event) -> None:
         """Wait for any of ``events``; raise once the session terminates."""
         if not any(event.is_set() for event in events):
@@ -1085,35 +1064,6 @@ class SessionRuntime:
                 "Negotiation failed for %s: %s", self._label, type(error).__name__
             )
             raise WebRtcError(ErrorCode.NEGOTIATION_FAILED) from error
-
-    def _emit(
-        self,
-        kind: SessionEventKind,
-        *,
-        code: ErrorCode | None = None,
-        media_kind: MediaKind | None = None,
-    ) -> None:
-        hook = self._options.on_event
-        if hook is None:
-            return
-        event = SessionEvent(
-            kind=kind,
-            name=self.declaration.name,
-            session_id=self.session_id,
-            elapsed_seconds=time.monotonic() - self._admitted_at,
-            code=code,
-            media_kind=media_kind,
-        )
-        try:
-            hook(event)
-        except Exception:
-            logger.exception("Session event hook failed")
-
-    @property
-    def _label(self) -> str:
-        return f"{self.declaration.name}/{self.session_id[:8]}"
-
-    # ---------------------------------------------------------------- cleanup
 
     async def _cleanup_once(self) -> None:
         if self._finished.is_set():
@@ -1192,6 +1142,42 @@ class SessionRuntime:
             else (logger.warning)
         )
         log("Session %s closed: %s", self._label, code.value)
+
+    def _release_track(self, native: Any) -> None:
+        if self._owned_tracks.pop(id(native), None) is not None:
+            stop_native_track(native)
+
+    @property
+    def _label(self) -> str:
+        return f"{self.declaration.name}/{self.session_id[:8]}"
+
+    def _cancel_timer(self, name: str) -> None:
+        task = self._timers.pop(name, None)
+        if task is not None:
+            task.cancel()
+
+    def _emit(
+        self,
+        kind: SessionEventKind,
+        *,
+        code: ErrorCode | None = None,
+        media_kind: MediaKind | None = None,
+    ) -> None:
+        hook = self._options.on_event
+        if hook is None:
+            return
+        event = SessionEvent(
+            kind=kind,
+            name=self.declaration.name,
+            session_id=self.session_id,
+            elapsed_seconds=time.monotonic() - self._admitted_at,
+            code=code,
+            media_kind=media_kind,
+        )
+        try:
+            hook(event)
+        except Exception:
+            logger.exception("Session event hook failed")
 
     async def _close_signaling(self, code: ErrorCode) -> None:
         self._signaling_open = False

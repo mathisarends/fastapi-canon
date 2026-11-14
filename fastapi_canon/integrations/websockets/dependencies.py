@@ -47,16 +47,6 @@ class FunctionResolver(RpcResolver):
         return cast(DependencyT, await value if inspect.isawaitable(value) else value)
 
 
-def as_resolver(value: RpcResolverLike | None) -> RpcResolver:
-    if value is None:
-        return EmptyResolver()
-    if hasattr(value, "resolve"):
-        return cast(RpcResolver, value)
-    if callable(value):
-        return FunctionResolver(value)
-    raise TypeError("resolver must implement resolve() or be callable")
-
-
 class ContextResolver(RpcResolver):
     def __init__(
         self,
@@ -92,6 +82,16 @@ def resolver_with_context(
     resolved = as_resolver(resolver)
     values = context_values(context)
     return ContextResolver(resolved, values) if values else resolved
+
+
+def as_resolver(value: RpcResolverLike | None) -> RpcResolver:
+    if value is None:
+        return EmptyResolver()
+    if hasattr(value, "resolve"):
+        return cast(RpcResolver, value)
+    if callable(value):
+        return FunctionResolver(value)
+    raise TypeError("resolver must implement resolve() or be callable")
 
 
 @asynccontextmanager

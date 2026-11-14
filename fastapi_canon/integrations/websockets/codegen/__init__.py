@@ -32,17 +32,6 @@ __all__ = [
 LAYOUT_VERSION = 12
 
 
-def render_python_client(
-    document: dict[str, Any],
-    options: PythonClientOptions,
-) -> Mapping[str, str]:
-    """Render a Python client package as relative path to file content."""
-    from fastapi_canon.integrations.websockets.codegen.python import render_files
-
-    files = render_files(build_ir(document), options)
-    return _with_manifest(files, document, language="python")
-
-
 def generate_python_client(
     document: dict[str, Any],
     output_dir: Path,
@@ -54,17 +43,15 @@ def generate_python_client(
     return write_files(output_dir, render_python_client(document, options), check=check)
 
 
-def render_typescript_client(
+def render_python_client(
     document: dict[str, Any],
-    options: TypeScriptClientOptions,
+    options: PythonClientOptions,
 ) -> Mapping[str, str]:
-    """Render a TypeScript client package as relative path to file content."""
-    from fastapi_canon.integrations.websockets.codegen.typescript import (
-        render_files as render_typescript_files,
-    )
+    """Render a Python client package as relative path to file content."""
+    from fastapi_canon.integrations.websockets.codegen.python import render_files
 
-    files = render_typescript_files(build_ir(document), options)
-    return _with_manifest(files, document, language="typescript")
+    files = render_files(build_ir(document), options)
+    return _with_manifest(files, document, language="python")
 
 
 def generate_typescript_client(
@@ -80,6 +67,19 @@ def generate_typescript_client(
         render_typescript_client(document, options),
         check=check,
     )
+
+
+def render_typescript_client(
+    document: dict[str, Any],
+    options: TypeScriptClientOptions,
+) -> Mapping[str, str]:
+    """Render a TypeScript client package as relative path to file content."""
+    from fastapi_canon.integrations.websockets.codegen.typescript import (
+        render_files as render_typescript_files,
+    )
+
+    files = render_typescript_files(build_ir(document), options)
+    return _with_manifest(files, document, language="typescript")
 
 
 def _with_manifest(

@@ -509,6 +509,43 @@ def nested_injections(dependant: Dependant | None) -> tuple[DependencyKey, ...]:
     return tuple(dict.fromkeys(keys))
 
 
+def check_installed(
+    app: FastAPI, description: CompositionInfo | None, features: tuple[Feature, ...]
+) -> CheckReport:
+    if description is None:
+        raise FeatureConfigurationError("Composition description is unavailable")
+    issues: list[CheckIssue] = []
+    checks: list[CheckResult] = []
+    check_operations(
+        operation_headers(app.router, description.operations), issues, checks
+    )
+    check_http_paths(app.router, (), (), description.operations, issues, checks)
+    if any(
+        check.name in {"http.operation_ids", "http.paths"} and check.status == "failed"
+        for check in checks
+    ):
+        checks.append(CheckResult("http.contracts", "skipped"))
+    else:
+        cached = app.openapi_schema
+        try:
+            validate_openapi_contracts(app)
+        except ErrorConfigurationError as error:
+            issues.append(
+                CheckIssue(
+                    "canon.contracts.E001",
+                    str(error),
+                    "Match route response contracts to the composed error catalog.",
+                )
+            )
+            checks.append(CheckResult("http.contracts", "failed"))
+        else:
+            checks.append(CheckResult("http.contracts", "passed"))
+        finally:
+            app.openapi_schema = cached
+    run_feature_checks(features, description, issues, checks)
+    return CheckReport(tuple(issues), tuple(checks))
+
+
 def check_operations(
     operations: tuple[OperationInfo, ...],
     issues: list[CheckIssue],
@@ -656,43 +693,6 @@ def run_feature_checks(
                     else "passed",
                 )
             )
-
-
-def check_installed(
-    app: FastAPI, description: CompositionInfo | None, features: tuple[Feature, ...]
-) -> CheckReport:
-    if description is None:
-        raise FeatureConfigurationError("Composition description is unavailable")
-    issues: list[CheckIssue] = []
-    checks: list[CheckResult] = []
-    check_operations(
-        operation_headers(app.router, description.operations), issues, checks
-    )
-    check_http_paths(app.router, (), (), description.operations, issues, checks)
-    if any(
-        check.name in {"http.operation_ids", "http.paths"} and check.status == "failed"
-        for check in checks
-    ):
-        checks.append(CheckResult("http.contracts", "skipped"))
-    else:
-        cached = app.openapi_schema
-        try:
-            validate_openapi_contracts(app)
-        except ErrorConfigurationError as error:
-            issues.append(
-                CheckIssue(
-                    "canon.contracts.E001",
-                    str(error),
-                    "Match route response contracts to the composed error catalog.",
-                )
-            )
-            checks.append(CheckResult("http.contracts", "failed"))
-        else:
-            checks.append(CheckResult("http.contracts", "passed"))
-        finally:
-            app.openapi_schema = cached
-    run_feature_checks(features, description, issues, checks)
-    return CheckReport(tuple(issues), tuple(checks))
 
 
 def raise_check_errors(report: CheckReport) -> None:

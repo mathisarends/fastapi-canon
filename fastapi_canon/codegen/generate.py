@@ -304,6 +304,13 @@ def _json(value: Any) -> str:
     )
 
 
+def _changed(path: Path, expected: str) -> bool:
+    _regular(path)
+    if not expected:
+        return path.exists()
+    return not path.is_file() or path.read_bytes() != expected.encode("utf-8")
+
+
 def _regular(path: Path) -> None:
     if any(parent.is_symlink() for parent in (path, *path.parents)) or (
         path.exists() and not path.is_file()
@@ -311,13 +318,6 @@ def _regular(path: Path) -> None:
         raise ValueError(
             f"Generated output must be a regular file without symlinks: {path}"
         )
-
-
-def _changed(path: Path, expected: str) -> bool:
-    _regular(path)
-    if not expected:
-        return path.exists()
-    return not path.is_file() or path.read_bytes() != expected.encode("utf-8")
 
 
 def _diff(expected: dict[Path, str], changed: tuple[Path, ...]) -> str:

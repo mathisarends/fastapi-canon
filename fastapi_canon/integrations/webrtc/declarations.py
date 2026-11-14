@@ -259,6 +259,10 @@ class DataChannelSpec(Generic[Receive, Send]):
         return _adapter(self.send_model)
 
 
+def _adapter(model: Any) -> TypeAdapter[Any] | None:
+    return TypeAdapter(model) if _format(model) == MessageFormat.JSON else None
+
+
 def _format(model: Any) -> MessageFormat:
     if model is Never or model is NoReturn:
         return MessageFormat.NONE
@@ -269,10 +273,6 @@ def _format(model: Any) -> MessageFormat:
     if model is bytes:
         return MessageFormat.BINARY
     return MessageFormat.JSON
-
-
-def _adapter(model: Any) -> TypeAdapter[Any] | None:
-    return TypeAdapter(model) if _format(model) == MessageFormat.JSON else None
 
 
 @dataclass(frozen=True)
