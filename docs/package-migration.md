@@ -17,7 +17,7 @@ Version 0.21.0 is prepared, not published. Follow the 0.20.0 migration below
 for the FastAPI minimum, SSE naming and source-check changes when upgrading from
 an earlier release. Where APIs differ, the 0.21.0 instructions take precedence;
 older sections describe the API at that version. The changelog's
-[`CANON-021-*` markers](../CHANGELOG.md#0210---unreleased) identify the individual
+[`CANON-021-*` markers](../CHANGELOG.md#0210---2026-11-14) identify the individual
 breaking migrations for coding agents.
 
 WebSocket generators now fail on corrupt `.rpcgen/manifest.json`
