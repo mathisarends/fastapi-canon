@@ -51,8 +51,9 @@ app = Composition(
 `instrument(Port, OtherPort, ...)` requires at least one positional port and
 returns one immutable `Instrumentation` part, which goes into
 `Feature(integrations=[...])` like any other integration part. The keyword-only
-`expected` and `component` options apply to every port in the call. Use one call
-per group of ports with different settings:
+`expected` and `component` options apply to every port in the call. Declared
+Canon errors with a status below 500 count as expected without listing them. Use
+one call per group of ports with different settings:
 
 ```python
 integrations = [
@@ -178,73 +179,49 @@ container = make_async_container(Infrastructure(), Telemetry.disabled().provider
 `options.provider(component="billing")` selects a named Dishka component. These
 providers return the borrowed configuration; they never create or close SDKs.
 
-### Explicit resource adapters
+### HTTP clients and database engines
 
-Install `fastapi-canon[otel-httpx]` plus the HTTPX or HTTPX2 client library you use,
-and `fastapi-canon[otel-sqlalchemy]` plus your database driver. The SQLAlchemy extra
-includes its asyncio dependencies, including greenlet, for sync/async engine
-support across supported SQLAlchemy versions. The core `otel`
-extra does not install client libraries, SQLAlchemy or the SDK.
+With `Telemetry` enabled, Canon instruments every HTTPX/HTTPX2 client and
+SQLAlchemy engine that a Dishka provider returns. Install
+`fastapi-canon[otel-httpx]` or `fastapi-canon[otel-sqlalchemy]`; providers stay
+plain:
 
 ```python
-from collections.abc import AsyncIterator
-
-import httpx2
-from dishka import Provider, Scope, provide
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-
-from fastapi_canon.integrations.opentelemetry import Telemetry
-from fastapi_canon.integrations.opentelemetry.httpx import instrument_httpx
-from fastapi_canon.integrations.opentelemetry.sqlalchemy import instrument_sqlalchemy
-
-
 class Infrastructure(Provider):
     @provide(scope=Scope.APP)
-    async def client(self, telemetry: Telemetry) -> AsyncIterator[httpx2.AsyncClient]:
+    async def client(self) -> AsyncIterator[httpx2.AsyncClient]:
         async with httpx2.AsyncClient(timeout=10) as client:
-            with instrument_httpx(client, telemetry):
-                yield client
-
-    @provide(scope=Scope.APP)
-    async def engine(self, telemetry: Telemetry) -> AsyncIterator[AsyncEngine]:
-        engine = create_async_engine("sqlite+aiosqlite:///application.db")
-        try:
-            with instrument_sqlalchemy(engine, telemetry, pool_name="primary"):
-                yield engine
-        finally:
-            await engine.dispose()
+            yield client
 ```
 
-Both context managers also support synchronous resources and return the original
-instance. Their scope must outlive in-flight operations. They detach on normal
-exit, failure and cancellation, without closing resources or borrowed providers.
-Tracing and metrics follow their respective application switches independently.
-Both-off configurations are no-ops, including without optional packages installed.
-
-For Canon-owned database engines, pass a reusable declaration to the engine
-context hook:
+Configure or disable adapters with `resources`:
 
 ```python
-from fastapi_canon.integrations.database import Database
-from fastapi_canon.integrations.opentelemetry.sqlalchemy import (
-    SqlAlchemyInstrumentation,
-)
+from fastapi_canon.integrations.opentelemetry.httpx import HttpxClients
+from fastapi_canon.integrations.opentelemetry.sqlalchemy import SqlAlchemyEngines
 
-database = Database(
-    url=settings.database_url,
-    engine_context=SqlAlchemyInstrumentation(
-        telemetry=telemetry,
-        pool_name="backend",
-    ),
+Telemetry(
+    resources=[HttpxClients(capture_url=False), SqlAlchemyEngines(pool_name="primary")]
 )
+Telemetry(resources=[])  # no resource instrumentation
 ```
 
-`SqlAlchemyInstrumentation` is immutable and accepts the same telemetry options
-as `instrument_sqlalchemy`: `pool_name`, `pool_metrics` and `capture_statement`.
-It creates a fresh context for each engine. Canon detaches the instrumentation
-before disposing its pool, including failed startup and cancellation. Custom
-providers can also use `with instrumentation(engine):` with a configured
-declaration. Engines and SDK providers remain owned by their original owner.
+Omitting `resources` uses every installed `fastapi_canon.telemetry_resources`
+entry point. A third-party `ResourceInstrumentation` implements
+`accepts(provided_type)` and `instrument(resource, telemetry)`.
+
+For resources outside Dishka, or a per-instance setting, use the context managers.
+Automatic instrumentation skips these instances:
+
+```python
+with instrument_httpx(client, telemetry, capture_url=True):
+    ...
+with instrument_sqlalchemy(engine, telemetry, pool_name="reports"):
+    ...
+```
+
+Instrumentation detaches before the resource closes and never closes resources
+or borrowed providers.
 
 HTTPX uses contrib's public `instrument_client` / `uninstrument_client` API for
 the supplied client only. Already instrumented clients are rejected so another

@@ -45,7 +45,10 @@ app = Composition(features=[feature], integrations=[Mcp(), Telemetry()])
 Rename `McpOptions` to `Mcp` and drop `*` before `instrument(...)`. Enable
 `Telemetry.disabled()` where `telemetry=None` was used. Replace
 `@router.webrtc(...)` with `@rtc.session(...)` on a `WebRtcRouter` passed to
-`Feature(routers=[...])`, and `ContractKind` values with strings. See the
+`Feature(routers=[...])`, and `ContractKind` values with strings. Remove
+`SqlAlchemyInstrumentation` and manual `instrument_httpx` wrappers: enabled
+`Telemetry` instruments provided clients and engines, configured with
+`resources=[HttpxClients(...), SqlAlchemyEngines(...)]`. See the
 [changelog](../CHANGELOG.md#0210---unreleased) for the full list.
 
 ## Upgrade to 0.20.0

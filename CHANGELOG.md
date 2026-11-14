@@ -59,6 +59,15 @@ All notable changes to `fastapi-canon` are documented in this file.
   targets reject keys that their generator does not accept for the language.
   `TargetConfig` moved to `fastapi_canon.codegen.generators`.
 
+- Enabled `Telemetry` instruments every Dishka-provided HTTPX/HTTPX2 client and
+  SQLAlchemy engine; instances wrapped with `instrument_httpx` or
+  `instrument_sqlalchemy` are skipped. Pass `Telemetry(resources=[])` to opt out.
+  `SqlAlchemyInstrumentation` is removed: drop `engine_context=` and pass
+  `resources=[SqlAlchemyEngines(pool_name=...)]` for custom options.
+
+- Instrumented ports record declared Canon errors with a status below 500 as
+  expected outcomes. Catch them in an adapter if they must mark spans as errors.
+
 ### Fixed
 
 - Error registry contributions survive router inclusion through a typed
@@ -68,6 +77,9 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 - `fastapi_canon.integration` for custom integrations, route contracts and
   checks; generators and CLI commands register through entry points.
+- `ResourceInstrumentation`, `HttpxClients` and `SqlAlchemyEngines` for app-wide
+  resource telemetry, extensible through `fastapi_canon.telemetry_resources`
+  entry points.
 - `AcquireTransactionLock` provides callable transaction lock acquisition.
   `TransactionLocks` remains an alias, with its existing `acquire()` operation.
 - `fastapi_canon.error` exposes the read-only `ErrorCatalog` and `AnyError`
