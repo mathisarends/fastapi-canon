@@ -1,7 +1,10 @@
 """Explicit-exception propagation for the supported, statically resolved subset."""
 
+from __future__ import annotations
+
 import ast
 from dataclasses import dataclass, field
+from typing import NamedTuple
 
 from fastapi_canon.checks.source import (
     SourceDefinition,
@@ -40,7 +43,7 @@ class ExceptionFlow:
     escapes: list[_Escape] = field(default_factory=list)
     unknowns: list[UnknownValue] = field(default_factory=list)
 
-    def extend(self, other: "ExceptionFlow") -> None:
+    def extend(self, other: ExceptionFlow) -> None:
         self.escapes.extend(other.escapes)
         self.unknowns.extend(other.unknowns)
 
@@ -48,10 +51,7 @@ class ExceptionFlow:
 class ContractAnalyzer:
     def __init__(self, source: SourceIndex) -> None:
         self.source = source
-        self._summaries: dict[
-            tuple[str, bool, str | None, str | None],
-            tuple[tuple[_Escape, ...], tuple[UnknownValue, ...], frozenset[str]],
-        ] = {}
+        self._summaries: dict[_SummaryKey, _Summary] = {}
 
     def function(
         self,
@@ -69,7 +69,9 @@ class ContractAnalyzer:
                     UnknownValue("recursive call", function.name, function.node.lineno)
                 ]
             )
-        summary_key = function.name, iterated, receiver, dependency_transport
+        summary_key = _SummaryKey(
+            function.name, iterated, receiver, dependency_transport
+        )
         if summary_key in self._summaries:
             escapes, unknowns, modules = self._summaries[summary_key]
             self.source.touched.update(modules)
@@ -92,7 +94,7 @@ class ContractAnalyzer:
             flow.escapes = list(first.values())
             flow.unknowns = list(dict.fromkeys(flow.unknowns))
             if not any(item.message == "recursive call" for item in flow.unknowns):
-                self._summaries[summary_key] = (
+                self._summaries[summary_key] = _Summary(
                     tuple(flow.escapes),
                     tuple(flow.unknowns),
                     frozenset(self.source.touched),
@@ -101,6 +103,451 @@ class ContractAnalyzer:
         finally:
             previous.update(self.source.touched)
             self.source.touched = previous
+
+    def expression(
+        self,
+        node: ast.expr,
+        function: SourceDefinition,
+        env: SymbolEnvironment,
+        *,
+        stack: tuple[str, ...],
+        awaited: bool = False,
+        iterated: bool = False,
+    ) -> ExceptionFlow:
+        flow = ExceptionFlow()
+        if isinstance(node, ast.Await):
+            return self.expression(
+                node.value, function, env, stack=stack, awaited=True, iterated=iterated
+            )
+        if isinstance(node, ast.Lambda):
+            return flow
+        if isinstance(node, ast.GeneratorExp) and not iterated:
+            # Creation evaluates the outer iterable expression, but neither the
+            # filters nor the result until a consumer advances the generator.
+            flow.extend(
+                self.expression(node.generators[0].iter, function, env, stack=stack)
+            )
+            flow.unknowns.append(
+                UnknownValue(
+                    "generator expression execution is deferred until iterated",
+                    function.name,
+                    node.lineno,
+                )
+            )
+            return flow
+        if isinstance(
+            node, ast.ListComp | ast.SetComp | ast.DictComp | ast.GeneratorExp
+        ):
+            return self._comprehension(node, function, env, stack=stack)
+        if isinstance(node, ast.NamedExpr):
+            flow.unknowns.append(
+                UnknownValue(
+                    f"unsupported expression: {type(node).__name__}",
+                    function.name,
+                    node.lineno,
+                )
+            )
+        if isinstance(node, ast.Call):
+            for argument in [*node.args, *(kw.value for kw in node.keywords)]:
+                flow.extend(self.expression(argument, function, env, stack=stack))
+            target = self.source.infer(node.func, function.module, env)
+            name = target.name or self.source.resolve(node.func, function.module, env)
+            definition = self.source.definitions.get(name or "")
+            if definition and isinstance(node.func, ast.Attribute | ast.Call):
+                receiver_expression = (
+                    node.func.value
+                    if isinstance(node.func, ast.Attribute)
+                    else node.func
+                )
+                flow.extend(
+                    self.expression(receiver_expression, function, env, stack=stack)
+                )
+            if name and name.startswith("builtins.") and self.source.exception(name):
+                return flow
+            if definition and isinstance(definition.node, ast.ClassDef):
+                if target.instance:
+                    method = self.source.method(definition.name, "__call__")
+                    if method is None:
+                        flow.unknowns.append(
+                            UnknownValue(
+                                f"unresolved callable instance: {ast.unparse(node.func)}",
+                                function.name,
+                                node.lineno,
+                            )
+                        )
+                    elif self.source.abstract(method):
+                        flow.extend(
+                            self._dispatch(
+                                node,
+                                method,
+                                function,
+                                stack=stack,
+                                awaited=awaited,
+                                iterated=iterated,
+                            )
+                        )
+                    else:
+                        flow.extend(
+                            self._call(
+                                node,
+                                method,
+                                function,
+                                stack=stack,
+                                awaited=awaited,
+                                iterated=iterated,
+                                receiver=definition.name,
+                            )
+                        )
+                else:
+                    flow.extend(
+                        self._construct(definition, function, stack, line=node.lineno)
+                    )
+            elif definition and definition.owner and self.source.abstract(definition):
+                flow.extend(
+                    self._dispatch(
+                        node,
+                        definition,
+                        function,
+                        stack=stack,
+                        awaited=awaited,
+                        iterated=iterated,
+                    )
+                )
+            elif definition:
+                if definition.owner and isinstance(node.func, ast.Attribute):
+                    receiver = self.source.resolve(
+                        node.func.value, function.module, env
+                    )
+                    if (
+                        receiver
+                        and receiver != definition.owner
+                        and not self.source.classmethod(definition)
+                    ):
+                        flow.unknowns.append(
+                            UnknownValue(
+                                "inherited method dispatch may use subclass overrides",
+                                function.name,
+                                node.lineno,
+                            )
+                        )
+                flow.extend(
+                    self._call(
+                        node,
+                        definition,
+                        function,
+                        stack=stack,
+                        awaited=awaited,
+                        iterated=iterated,
+                        receiver=target.receiver,
+                    )
+                )
+            elif self.source.origin(node.func, function.module, env) is not None:
+                # Library code raises no application exceptions of its own; it
+                # reaches them only through receivers and callables it is given.
+                if isinstance(node.func, ast.Attribute | ast.Call):
+                    evaluated: ast.expr = (
+                        node.func.value
+                        if isinstance(node.func, ast.Attribute)
+                        else node.func
+                    )
+                    flow.extend(self.expression(evaluated, function, env, stack=stack))
+                for argument in [*node.args, *(kw.value for kw in node.keywords)]:
+                    flow.extend(self._callback(argument, function, env, stack=stack))
+            else:
+                flow.unknowns.append(
+                    UnknownValue(
+                        f"unresolved call: {ast.unparse(node.func)}",
+                        function.name,
+                        node.lineno,
+                    )
+                )
+            return flow
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, ast.expr):
+                flow.extend(self.expression(child, function, env, stack=stack))
+        if isinstance(node, ast.Attribute):
+            name = self.source.resolve(node, function.module, env)
+            member = self.source.definitions.get(name or "")
+            if (
+                member
+                and isinstance(member.node, ast.FunctionDef)
+                and any(
+                    self.source.resolve(decorator, member.module) == "builtins.property"
+                    for decorator in member.node.decorator_list
+                )
+            ):
+                flow.extend(self.function(member, stack))
+        return flow
+
+    def block(
+        self,
+        body: list[ast.stmt],
+        function: SourceDefinition,
+        env: SymbolEnvironment,
+        *,
+        stack: tuple[str, ...],
+        reraised: tuple[_Escape, ...] = (),
+    ) -> ExceptionFlow:
+        flow = ExceptionFlow()
+        for node in body:
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+                # Nested definitions are not executed, but their bodies cannot be resolved.
+                env[node.name] = SymbolValue()
+                for expression in node.decorator_list:
+                    flow.extend(self.expression(expression, function, env, stack=stack))
+                if isinstance(node, ast.ClassDef):
+                    flow.unknowns.append(
+                        UnknownValue(
+                            "nested class construction", function.name, node.lineno
+                        )
+                    )
+                else:
+                    for expression in [
+                        *node.args.defaults,
+                        *(value for value in node.args.kw_defaults if value),
+                    ]:
+                        flow.extend(
+                            self.expression(expression, function, env, stack=stack)
+                        )
+                continue
+            if isinstance(node, ast.Raise):
+                if node.exc is None:
+                    if reraised:
+                        flow.escapes.extend(reraised)
+                    else:
+                        flow.unknowns.append(
+                            UnknownValue(
+                                "unresolved re-raise", function.name, node.lineno
+                            )
+                        )
+                else:
+                    flow.extend(self.expression(node.exc, function, env, stack=stack))
+                    if node.cause:
+                        flow.extend(
+                            self.expression(node.cause, function, env, stack=stack)
+                        )
+                    target = (
+                        node.exc.func if isinstance(node.exc, ast.Call) else node.exc
+                    )
+                    name = self.source.resolve(target, function.module, env)
+                    if name and self.source.exception(name):
+                        flow.escapes.append(
+                            _Escape(name, (function.name,), node.lineno)
+                        )
+                    else:
+                        flow.unknowns.append(
+                            UnknownValue(
+                                f"unresolved raised exception: {ast.unparse(node.exc)}",
+                                function.name,
+                                node.lineno,
+                            )
+                        )
+                break
+            if isinstance(node, ast.Try):
+                attempted = self.block(
+                    node.body, function, env.copy(), stack=stack, reraised=reraised
+                )
+                flow.unknowns.extend(attempted.unknowns)
+                remaining = attempted.escapes
+                for handler in node.handlers:
+                    types = (
+                        handler.type.elts
+                        if isinstance(handler.type, ast.Tuple)
+                        else [handler.type]
+                    )
+                    names = [
+                        self.source.resolve(item, function.module, env)
+                        for item in types
+                        if item is not None
+                    ]
+                    unknown_catch = handler.type is not None and (
+                        not names
+                        or any(
+                            name is None or self.source.mro(name) is None
+                            for name in names
+                        )
+                    )
+                    if unknown_catch:
+                        flow.unknowns.append(
+                            UnknownValue(
+                                "unresolved exception handler",
+                                function.name,
+                                handler.lineno,
+                            )
+                        )
+                    caught = [
+                        item
+                        for item in remaining
+                        if handler.type is None
+                        or any(
+                            name in (self.source.mro(item.exception) or [])
+                            for name in names
+                            if name
+                        )
+                    ]
+                    remaining = [item for item in remaining if item not in caught]
+                    handler_env = env.copy()
+                    caught_types = {item.exception for item in caught}
+                    if handler.name:
+                        handler_env[handler.name] = SymbolValue(
+                            next(iter(caught_types)) if len(caught_types) == 1 else "",
+                            instance=True,
+                        )
+                    # Implicit failures (e.g. int(value)) can reach handlers too.
+                    flow.extend(
+                        self.block(
+                            handler.body,
+                            function,
+                            handler_env,
+                            stack=stack,
+                            reraised=tuple(caught),
+                        )
+                    )
+                flow.escapes.extend(remaining)
+                flow.extend(
+                    self.block(
+                        node.orelse,
+                        function,
+                        env.copy(),
+                        stack=stack,
+                        reraised=reraised,
+                    )
+                )
+                flow.extend(
+                    self.block(
+                        node.finalbody,
+                        function,
+                        env.copy(),
+                        stack=stack,
+                        reraised=reraised,
+                    )
+                )
+                if any(
+                    isinstance(child, ast.Return | ast.Raise)
+                    for child in _executed_nodes(node.finalbody)
+                ):
+                    flow.unknowns.append(
+                        UnknownValue(
+                            "finally may replace an escaping exception",
+                            function.name,
+                            node.lineno,
+                        )
+                    )
+                self._invalidate(node, env)
+                continue
+            if isinstance(node, ast.With | ast.AsyncWith):
+                flow.extend(
+                    self._context_manager(
+                        node, function, env, stack=stack, reraised=reraised
+                    )
+                )
+                self._invalidate(node, env)
+                continue
+            if isinstance(node, ast.If):
+                flow.extend(self.expression(node.test, function, env, stack=stack))
+                condition = self.source.condition(node.test, function.module, env)
+                if condition is not False:
+                    flow.extend(
+                        self.block(
+                            node.body,
+                            function,
+                            env.copy(),
+                            stack=stack,
+                            reraised=reraised,
+                        )
+                    )
+                if condition is not True:
+                    flow.extend(
+                        self.block(
+                            node.orelse,
+                            function,
+                            env.copy(),
+                            stack=stack,
+                            reraised=reraised,
+                        )
+                    )
+                self._invalidate(node, env)
+                selected = node.body if condition else node.orelse
+                if condition is not None and any(
+                    isinstance(statement, ast.Return | ast.Raise)
+                    for statement in selected
+                ):
+                    break
+                continue
+            if isinstance(node, ast.For | ast.AsyncFor | ast.While):
+                # Iterations may run zero or more times, like independent branches.
+                if isinstance(node, ast.While):
+                    flow.extend(self.expression(node.test, function, env, stack=stack))
+                else:
+                    flow.extend(
+                        self.expression(
+                            node.iter, function, env, stack=stack, iterated=True
+                        )
+                    )
+                    self._invalidate(node.target, env)
+                flow.extend(
+                    self.block(
+                        node.body, function, env.copy(), stack=stack, reraised=reraised
+                    )
+                )
+                flow.extend(
+                    self.block(
+                        node.orelse,
+                        function,
+                        env.copy(),
+                        stack=stack,
+                        reraised=reraised,
+                    )
+                )
+                self._invalidate(node, env)
+                continue
+            if isinstance(node, ast.Assign | ast.AnnAssign):
+                if node.value is not None:
+                    flow.extend(self.expression(node.value, function, env, stack=stack))
+                targets = (
+                    node.targets if isinstance(node, ast.Assign) else [node.target]
+                )
+                inferred = SymbolValue()
+                if isinstance(node, ast.AnnAssign):
+                    inferred = SymbolValue(
+                        self.source.annotation(node.annotation, function.module) or "",
+                        instance=True,
+                    )
+                if not inferred.name and node.value is not None:
+                    inferred = self.source.infer(node.value, function.module, env)
+                for target in targets:
+                    key = self.source.key(target)
+                    env[key] = inferred
+                continue
+            if isinstance(node, ast.Return):
+                if node.value:
+                    flow.extend(self.expression(node.value, function, env, stack=stack))
+                break
+            if isinstance(node, ast.Expr):
+                flow.extend(self.expression(node.value, function, env, stack=stack))
+                continue
+            if isinstance(node, ast.Pass | ast.Break | ast.Continue):
+                continue
+            # Match, try*, etc. need more control-flow knowledge.
+            flow.unknowns.append(
+                UnknownValue(
+                    f"unsupported statement: {type(node).__name__}",
+                    function.name,
+                    node.lineno,
+                )
+            )
+            for child in _executed_nodes([node]):
+                if isinstance(child, ast.Raise) and child.exc:
+                    target = (
+                        child.exc.func if isinstance(child.exc, ast.Call) else child.exc
+                    )
+                    name = self.source.resolve(target, function.module, env)
+                    if name and self.source.exception(name):
+                        flow.escapes.append(
+                            _Escape(name, (function.name,), child.lineno)
+                        )
+            self._invalidate(node, env)
+        return flow
 
     def _analyze_function(
         self,
@@ -145,178 +592,7 @@ class ContractAnalyzer:
             )
             return flow
         env = self.source.environment(function, receiver, dependency_transport)
-        flow.extend(self.block(node.body, function, env, (*stack, function.name)))
-        return flow
-
-    def expression(
-        self,
-        node: ast.expr,
-        function: SourceDefinition,
-        env: SymbolEnvironment,
-        stack: tuple[str, ...],
-        *,
-        awaited: bool = False,
-        iterated: bool = False,
-    ) -> ExceptionFlow:
-        flow = ExceptionFlow()
-        if isinstance(node, ast.Await):
-            return self.expression(
-                node.value, function, env, stack, awaited=True, iterated=iterated
-            )
-        if isinstance(node, ast.Lambda):
-            return flow
-        if isinstance(node, ast.GeneratorExp) and not iterated:
-            # Creation evaluates the outer iterable expression, but neither the
-            # filters nor the result until a consumer advances the generator.
-            flow.extend(self.expression(node.generators[0].iter, function, env, stack))
-            flow.unknowns.append(
-                UnknownValue(
-                    "generator expression execution is deferred until iterated",
-                    function.name,
-                    node.lineno,
-                )
-            )
-            return flow
-        if isinstance(
-            node, ast.ListComp | ast.SetComp | ast.DictComp | ast.GeneratorExp
-        ):
-            return self._comprehension(node, function, env, stack)
-        if isinstance(node, ast.NamedExpr):
-            flow.unknowns.append(
-                UnknownValue(
-                    f"unsupported expression: {type(node).__name__}",
-                    function.name,
-                    node.lineno,
-                )
-            )
-        if isinstance(node, ast.Call):
-            for argument in [*node.args, *(kw.value for kw in node.keywords)]:
-                flow.extend(self.expression(argument, function, env, stack))
-            target = self.source.infer(node.func, function.module, env)
-            name = target.name or self.source.resolve(node.func, function.module, env)
-            definition = self.source.definitions.get(name or "")
-            if definition and isinstance(node.func, ast.Attribute | ast.Call):
-                receiver_expression = (
-                    node.func.value
-                    if isinstance(node.func, ast.Attribute)
-                    else node.func
-                )
-                flow.extend(self.expression(receiver_expression, function, env, stack))
-            if name and name.startswith("builtins.") and self.source.exception(name):
-                return flow
-            if definition and isinstance(definition.node, ast.ClassDef):
-                if target.instance:
-                    method = self.source.method(definition.name, "__call__")
-                    if method is None:
-                        flow.unknowns.append(
-                            UnknownValue(
-                                f"unresolved callable instance: {ast.unparse(node.func)}",
-                                function.name,
-                                node.lineno,
-                            )
-                        )
-                    elif self.source.abstract(method):
-                        flow.extend(
-                            self._dispatch(
-                                node,
-                                method,
-                                function,
-                                stack,
-                                awaited=awaited,
-                                iterated=iterated,
-                            )
-                        )
-                    else:
-                        flow.extend(
-                            self._call(
-                                node,
-                                method,
-                                function,
-                                stack,
-                                awaited=awaited,
-                                iterated=iterated,
-                                receiver=definition.name,
-                            )
-                        )
-                else:
-                    flow.extend(
-                        self._construct(definition, function, stack, node.lineno)
-                    )
-            elif definition and definition.owner and self.source.abstract(definition):
-                flow.extend(
-                    self._dispatch(
-                        node,
-                        definition,
-                        function,
-                        stack,
-                        awaited=awaited,
-                        iterated=iterated,
-                    )
-                )
-            elif definition:
-                if definition.owner and isinstance(node.func, ast.Attribute):
-                    receiver = self.source.resolve(
-                        node.func.value, function.module, env
-                    )
-                    if (
-                        receiver
-                        and receiver != definition.owner
-                        and not self.source.classmethod(definition)
-                    ):
-                        flow.unknowns.append(
-                            UnknownValue(
-                                "inherited method dispatch may use subclass overrides",
-                                function.name,
-                                node.lineno,
-                            )
-                        )
-                flow.extend(
-                    self._call(
-                        node,
-                        definition,
-                        function,
-                        stack,
-                        awaited=awaited,
-                        iterated=iterated,
-                        receiver=target.receiver,
-                    )
-                )
-            elif self.source.origin(node.func, function.module, env) is not None:
-                # Library code raises no application exceptions of its own; it
-                # reaches them only through receivers and callables it is given.
-                if isinstance(node.func, ast.Attribute | ast.Call):
-                    evaluated: ast.expr = (
-                        node.func.value
-                        if isinstance(node.func, ast.Attribute)
-                        else node.func
-                    )
-                    flow.extend(self.expression(evaluated, function, env, stack))
-                for argument in [*node.args, *(kw.value for kw in node.keywords)]:
-                    flow.extend(self._callback(argument, function, env, stack))
-            else:
-                flow.unknowns.append(
-                    UnknownValue(
-                        f"unresolved call: {ast.unparse(node.func)}",
-                        function.name,
-                        node.lineno,
-                    )
-                )
-            return flow
-        for child in ast.iter_child_nodes(node):
-            if isinstance(child, ast.expr):
-                flow.extend(self.expression(child, function, env, stack))
-        if isinstance(node, ast.Attribute):
-            name = self.source.resolve(node, function.module, env)
-            member = self.source.definitions.get(name or "")
-            if (
-                member
-                and isinstance(member.node, ast.FunctionDef)
-                and any(
-                    self.source.resolve(decorator, member.module) == "builtins.property"
-                    for decorator in member.node.decorator_list
-                )
-            ):
-                flow.extend(self.function(member, stack))
+        flow.extend(self.block(node.body, function, env, stack=(*stack, function.name)))
         return flow
 
     def _comprehension(
@@ -324,6 +600,7 @@ class ContractAnalyzer:
         node: ast.ListComp | ast.SetComp | ast.DictComp | ast.GeneratorExp,
         function: SourceDefinition,
         env: SymbolEnvironment,
+        *,
         stack: tuple[str, ...],
     ) -> ExceptionFlow:
         flow = ExceptionFlow()
@@ -349,17 +626,17 @@ class ContractAnalyzer:
                     generator.iter,
                     function,
                     env if index == 0 else local,
-                    stack,
+                    stack=stack,
                     asynchronous=bool(generator.is_async),
                 )
             )
             for condition in generator.ifs:
-                flow.extend(self.expression(condition, function, local, stack))
+                flow.extend(self.expression(condition, function, local, stack=stack))
         values = (
             [node.key, node.value] if isinstance(node, ast.DictComp) else [node.elt]
         )
         for value in values:
-            flow.extend(self.expression(value, function, local, stack))
+            flow.extend(self.expression(value, function, local, stack=stack))
         return flow
 
     def _comprehension_iterable(
@@ -367,11 +644,11 @@ class ContractAnalyzer:
         node: ast.expr,
         function: SourceDefinition,
         env: SymbolEnvironment,
-        stack: tuple[str, ...],
         *,
+        stack: tuple[str, ...],
         asynchronous: bool,
     ) -> ExceptionFlow:
-        flow = self.expression(node, function, env, stack, iterated=True)
+        flow = self.expression(node, function, env, stack=stack, iterated=True)
         target = node.func if isinstance(node, ast.Call) else node
         definition = self.source.definitions.get(
             self.source.resolve(target, function.module, env) or ""
@@ -416,14 +693,15 @@ class ContractAnalyzer:
         node: ast.With | ast.AsyncWith,
         function: SourceDefinition,
         env: SymbolEnvironment,
+        *,
         stack: tuple[str, ...],
         reraised: tuple[_Escape, ...],
         index: int = 0,
     ) -> ExceptionFlow:
         if index == len(node.items):
-            return self.block(node.body, function, env, stack, reraised)
+            return self.block(node.body, function, env, stack=stack, reraised=reraised)
         item = node.items[index]
-        flow = self.expression(item.context_expr, function, env, stack)
+        flow = self.expression(item.context_expr, function, env, stack=stack)
         if (
             isinstance(node, ast.With)
             and isinstance(item.context_expr, ast.Call)
@@ -434,7 +712,7 @@ class ContractAnalyzer:
             if item.optional_vars is not None:
                 self._invalidate(item.optional_vars, local)
             inner = self._context_manager(
-                node, function, local, stack, reraised, index + 1
+                node, function, local, stack=stack, reraised=reraised, index=index + 1
             )
             names = [
                 self.source.resolve(argument, function.module, env)
@@ -526,7 +804,9 @@ class ContractAnalyzer:
                         item.optional_vars.lineno,
                     )
                 )
-        inner = self._context_manager(node, function, local, stack, reraised, index + 1)
+        inner = self._context_manager(
+            node, function, local, stack=stack, reraised=reraised, index=index + 1
+        )
         if supported:
             assert exit_method is not None
             mode = _suppression(exit_method.node)
@@ -582,6 +862,7 @@ class ContractAnalyzer:
         definition: SourceDefinition,
         function: SourceDefinition,
         stack: tuple[str, ...],
+        *,
         line: int,
     ) -> ExceptionFlow:
         """Follow the application code that constructing *definition* runs."""
@@ -674,6 +955,7 @@ class ContractAnalyzer:
         argument: ast.expr,
         function: SourceDefinition,
         env: SymbolEnvironment,
+        *,
         stack: tuple[str, ...],
     ) -> ExceptionFlow:
         """Assume library code calls the application callables it receives."""
@@ -689,7 +971,7 @@ class ContractAnalyzer:
                 *filter(None, [parameters.vararg, parameters.kwarg]),
             ]:
                 lambda_env[item.arg] = SymbolValue()
-            return self.expression(argument.body, function, lambda_env, stack)
+            return self.expression(argument.body, function, lambda_env, stack=stack)
         if not isinstance(argument, ast.Name | ast.Attribute | ast.Call):
             return ExceptionFlow()
         inferred = self.source.infer(argument, function.module, env)
@@ -719,7 +1001,7 @@ class ContractAnalyzer:
                     if method is not None
                     else ExceptionFlow()
                 )
-            return self._construct(definition, function, stack, argument.lineno)
+            return self._construct(definition, function, stack, line=argument.lineno)
         return self._traced(
             function,
             self.function(
@@ -746,8 +1028,8 @@ class ContractAnalyzer:
         node: ast.Call,
         definition: SourceDefinition,
         function: SourceDefinition,
-        stack: tuple[str, ...],
         *,
+        stack: tuple[str, ...],
         awaited: bool,
         iterated: bool,
         receiver: str | None = None,
@@ -782,8 +1064,8 @@ class ContractAnalyzer:
         node: ast.Call,
         port: SourceDefinition,
         function: SourceDefinition,
-        stack: tuple[str, ...],
         *,
+        stack: tuple[str, ...],
         awaited: bool,
         iterated: bool,
     ) -> ExceptionFlow:
@@ -836,232 +1118,11 @@ class ContractAnalyzer:
                     node,
                     candidate,
                     function,
-                    stack,
+                    stack=stack,
                     awaited=awaited,
                     iterated=iterated,
                 )
             )
-        return flow
-
-    def block(
-        self,
-        body: list[ast.stmt],
-        function: SourceDefinition,
-        env: SymbolEnvironment,
-        stack: tuple[str, ...],
-        reraised: tuple[_Escape, ...] = (),
-    ) -> ExceptionFlow:
-        flow = ExceptionFlow()
-        for node in body:
-            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
-                # Nested definitions are not executed, but their bodies cannot be resolved.
-                env[node.name] = SymbolValue()
-                for expression in node.decorator_list:
-                    flow.extend(self.expression(expression, function, env, stack))
-                if isinstance(node, ast.ClassDef):
-                    flow.unknowns.append(
-                        UnknownValue(
-                            "nested class construction", function.name, node.lineno
-                        )
-                    )
-                else:
-                    for expression in [
-                        *node.args.defaults,
-                        *(value for value in node.args.kw_defaults if value),
-                    ]:
-                        flow.extend(self.expression(expression, function, env, stack))
-                continue
-            if isinstance(node, ast.Raise):
-                if node.exc is None:
-                    if reraised:
-                        flow.escapes.extend(reraised)
-                    else:
-                        flow.unknowns.append(
-                            UnknownValue(
-                                "unresolved re-raise", function.name, node.lineno
-                            )
-                        )
-                else:
-                    flow.extend(self.expression(node.exc, function, env, stack))
-                    if node.cause:
-                        flow.extend(self.expression(node.cause, function, env, stack))
-                    target = (
-                        node.exc.func if isinstance(node.exc, ast.Call) else node.exc
-                    )
-                    name = self.source.resolve(target, function.module, env)
-                    if name and self.source.exception(name):
-                        flow.escapes.append(
-                            _Escape(name, (function.name,), node.lineno)
-                        )
-                    else:
-                        flow.unknowns.append(
-                            UnknownValue(
-                                f"unresolved raised exception: {ast.unparse(node.exc)}",
-                                function.name,
-                                node.lineno,
-                            )
-                        )
-                break
-            if isinstance(node, ast.Try):
-                attempted = self.block(node.body, function, env.copy(), stack, reraised)
-                flow.unknowns.extend(attempted.unknowns)
-                remaining = attempted.escapes
-                for handler in node.handlers:
-                    types = (
-                        handler.type.elts
-                        if isinstance(handler.type, ast.Tuple)
-                        else [handler.type]
-                    )
-                    names = [
-                        self.source.resolve(item, function.module, env)
-                        for item in types
-                        if item is not None
-                    ]
-                    unknown_catch = handler.type is not None and (
-                        not names
-                        or any(
-                            name is None or self.source.mro(name) is None
-                            for name in names
-                        )
-                    )
-                    if unknown_catch:
-                        flow.unknowns.append(
-                            UnknownValue(
-                                "unresolved exception handler",
-                                function.name,
-                                handler.lineno,
-                            )
-                        )
-                    caught = [
-                        item
-                        for item in remaining
-                        if handler.type is None
-                        or any(
-                            name in (self.source.mro(item.exception) or [])
-                            for name in names
-                            if name
-                        )
-                    ]
-                    remaining = [item for item in remaining if item not in caught]
-                    handler_env = env.copy()
-                    caught_types = {item.exception for item in caught}
-                    if handler.name:
-                        handler_env[handler.name] = SymbolValue(
-                            next(iter(caught_types)) if len(caught_types) == 1 else "",
-                            instance=True,
-                        )
-                    # Implicit failures (e.g. int(value)) can reach handlers too.
-                    flow.extend(
-                        self.block(
-                            handler.body, function, handler_env, stack, tuple(caught)
-                        )
-                    )
-                flow.escapes.extend(remaining)
-                flow.extend(
-                    self.block(node.orelse, function, env.copy(), stack, reraised)
-                )
-                flow.extend(
-                    self.block(node.finalbody, function, env.copy(), stack, reraised)
-                )
-                if any(
-                    isinstance(child, ast.Return | ast.Raise)
-                    for child in _executed_nodes(node.finalbody)
-                ):
-                    flow.unknowns.append(
-                        UnknownValue(
-                            "finally may replace an escaping exception",
-                            function.name,
-                            node.lineno,
-                        )
-                    )
-                self._invalidate(node, env)
-                continue
-            if isinstance(node, ast.With | ast.AsyncWith):
-                flow.extend(self._context_manager(node, function, env, stack, reraised))
-                self._invalidate(node, env)
-                continue
-            if isinstance(node, ast.If):
-                flow.extend(self.expression(node.test, function, env, stack))
-                condition = self.source.condition(node.test, function.module, env)
-                if condition is not False:
-                    flow.extend(
-                        self.block(node.body, function, env.copy(), stack, reraised)
-                    )
-                if condition is not True:
-                    flow.extend(
-                        self.block(node.orelse, function, env.copy(), stack, reraised)
-                    )
-                self._invalidate(node, env)
-                selected = node.body if condition else node.orelse
-                if condition is not None and any(
-                    isinstance(statement, ast.Return | ast.Raise)
-                    for statement in selected
-                ):
-                    break
-                continue
-            if isinstance(node, ast.For | ast.AsyncFor | ast.While):
-                # Iterations may run zero or more times, like independent branches.
-                if isinstance(node, ast.While):
-                    flow.extend(self.expression(node.test, function, env, stack))
-                else:
-                    flow.extend(
-                        self.expression(node.iter, function, env, stack, iterated=True)
-                    )
-                    self._invalidate(node.target, env)
-                flow.extend(
-                    self.block(node.body, function, env.copy(), stack, reraised)
-                )
-                flow.extend(
-                    self.block(node.orelse, function, env.copy(), stack, reraised)
-                )
-                self._invalidate(node, env)
-                continue
-            if isinstance(node, ast.Assign | ast.AnnAssign):
-                if node.value is not None:
-                    flow.extend(self.expression(node.value, function, env, stack))
-                targets = (
-                    node.targets if isinstance(node, ast.Assign) else [node.target]
-                )
-                inferred = SymbolValue()
-                if isinstance(node, ast.AnnAssign):
-                    inferred = SymbolValue(
-                        self.source.annotation(node.annotation, function.module) or "",
-                        instance=True,
-                    )
-                if not inferred.name and node.value is not None:
-                    inferred = self.source.infer(node.value, function.module, env)
-                for target in targets:
-                    key = self.source.key(target)
-                    env[key] = inferred
-                continue
-            if isinstance(node, ast.Return):
-                if node.value:
-                    flow.extend(self.expression(node.value, function, env, stack))
-                break
-            if isinstance(node, ast.Expr):
-                flow.extend(self.expression(node.value, function, env, stack))
-                continue
-            if isinstance(node, ast.Pass | ast.Break | ast.Continue):
-                continue
-            # Match, try*, etc. need more control-flow knowledge.
-            flow.unknowns.append(
-                UnknownValue(
-                    f"unsupported statement: {type(node).__name__}",
-                    function.name,
-                    node.lineno,
-                )
-            )
-            for child in _executed_nodes([node]):
-                if isinstance(child, ast.Raise) and child.exc:
-                    target = (
-                        child.exc.func if isinstance(child.exc, ast.Call) else child.exc
-                    )
-                    name = self.source.resolve(target, function.module, env)
-                    if name and self.source.exception(name):
-                        flow.escapes.append(
-                            _Escape(name, (function.name,), child.lineno)
-                        )
-            self._invalidate(node, env)
         return flow
 
     def _invalidate(self, node: ast.AST, env: SymbolEnvironment) -> None:
@@ -1148,3 +1209,16 @@ def _executed_nodes(body: list[ast.stmt]) -> list[ast.AST]:
     for node in body:
         visit(node)
     return result
+
+
+class _SummaryKey(NamedTuple):
+    function: str
+    iterated: bool
+    receiver: str | None
+    dependency_transport: str | None
+
+
+class _Summary(NamedTuple):
+    escapes: tuple[_Escape, ...]
+    unknowns: tuple[UnknownValue, ...]
+    modules: frozenset[str]

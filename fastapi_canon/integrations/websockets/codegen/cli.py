@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import ast
 import json
@@ -5,6 +7,7 @@ import sys
 import tomllib
 from collections.abc import Sequence
 from pathlib import Path
+from typing import NamedTuple
 
 from fastapi_canon.integrations.websockets.codegen import (
     render_python_client,
@@ -177,7 +180,7 @@ def _render_client(
 ) -> dict[str, str]:
     bindings = tuple(load_binding(name) for name in getattr(arguments, "bindings", ()))
     if arguments.language == "python":
-        extra_files, extra_exports = _extra_python_files(
+        extras = _extra_python_files(
             getattr(arguments, "extra_files", ()),
             getattr(arguments, "extra_exports", ()),
         )
@@ -188,8 +191,8 @@ def _render_client(
             api_names=dict(arguments.api_name),
             source=arguments.schema.name,
             with_transport=arguments.with_transport,
-            extra_files=extra_files,
-            extra_exports=extra_exports,
+            extra_files=extras.files,
+            extra_exports=extras.exports,
             bindings=bindings,
             contract=arguments.schema,
         )
@@ -210,7 +213,7 @@ def _render_client(
 
 def _extra_python_files(
     paths: Sequence[Path], exports: Sequence[str]
-) -> tuple[dict[str, str], dict[str, str]]:
+) -> _ExtraPythonFiles:
     files: dict[str, str] = {}
     owners: dict[str, str] = {}
     for path in paths:
@@ -245,7 +248,7 @@ def _extra_python_files(
         if name in resolved:
             raise ValueError(f"Duplicate extra export: {name}")
         resolved[name] = owners[name]
-    return files, resolved
+    return _ExtraPythonFiles(files, resolved)
 
 
 def _report_generation(changed: Sequence[Path], *, check: bool) -> int:
@@ -380,7 +383,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _add_schema_command(
-    commands: "argparse._SubParsersAction[argparse.ArgumentParser]",
+    commands: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
     schema = commands.add_parser(
         "schema",
@@ -420,7 +423,7 @@ def _add_schema_command(
 
 
 def _add_generate_command(
-    commands: "argparse._SubParsersAction[argparse.ArgumentParser]",
+    commands: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
     generate = commands.add_parser("generate", help="Generate a client package.")
     generate.add_argument(
@@ -489,11 +492,21 @@ def _add_generate_command(
     )
 
 
-def _name_mapping(value: str) -> tuple[str, str]:
+def _name_mapping(value: str) -> _NameMapping:
     path, separator, name = value.partition("=")
     if not separator or not path or not name:
         raise argparse.ArgumentTypeError(f"Expected path=name, got {value!r}")
-    return path, name
+    return _NameMapping(path, name)
+
+
+class _ExtraPythonFiles(NamedTuple):
+    files: dict[str, str]
+    exports: dict[str, str]
+
+
+class _NameMapping(NamedTuple):
+    path: str
+    name: str
 
 
 if __name__ == "__main__":

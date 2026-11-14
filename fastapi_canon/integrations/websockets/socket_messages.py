@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
@@ -13,7 +15,7 @@ class SocketMessages:
     output_validator: SchemaValidator
 
     @classmethod
-    def create(cls, incoming: Any, outgoing: Any) -> "SocketMessages":
+    def create(cls, incoming: Any, outgoing: Any) -> SocketMessages:
         client, server = TypeAdapter(incoming), TypeAdapter(outgoing)
         schema = deepcopy(server.core_schema)
         _revalidate_models(schema)

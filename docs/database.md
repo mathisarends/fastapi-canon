@@ -373,9 +373,8 @@ async def reserve(self, allocation_key: int) -> None:
     # Read and update the protected records using the injected session.
 ```
 
-Canon 0.21.0 adds this callable operation. `TransactionLocks`
-remains an alias for the same dependency, and `acquire(key)` remains supported.
-Both names resolve to the same scoped instance.
+Canon 0.21.0 adds this callable operation; `acquire(key)` remains supported
+on the same dependency. Unreleased 0.22.0 removes the `TransactionLocks` alias.
 
 PostgreSQL uses transaction advisory locks on the session's current connection.
 They coordinate separate processes and are released by commit or rollback,
@@ -402,7 +401,7 @@ inside repositories so the explicit backend policy is applied consistently.
 | One short callable use case | APP-scoped `Scoped[UseCase]` wrapper |
 | Multiple service calls in one short scope | APP-scoped `ServiceScope[Service]` factory |
 | Typed factory for deliberate standalone work | `async_sessionmaker[SessionClass]` |
-| PostgreSQL advisory transaction locks | Injected `TransactionLocks` |
+| PostgreSQL advisory transaction locks | Injected `AcquireTransactionLock` |
 | Alembic directory and existing revision graph | `AlembicMigrations`, preserving application revisions |
 | Missing schema behind a current revision | Presence checks at startup and upgrade to head; add a forward repair revision |
 | Readiness | Inject the owned `AsyncEngine` into the application's check |

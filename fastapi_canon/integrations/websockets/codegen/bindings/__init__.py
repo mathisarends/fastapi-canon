@@ -3,34 +3,32 @@ from dataclasses import dataclass
 from importlib import import_module
 from importlib.metadata import entry_points
 from pathlib import Path
-from typing import Literal, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
+from fastapi_canon.codegen.generators import ClientLanguage
 from fastapi_canon.integrations.websockets.codegen.ir import (
     SocketDecl,
     SocketProtocolDecl,
     UnsupportedSchemaError,
 )
 
-ENTRY_POINT_GROUP = "fastapi_canon.integrations.websockets.socket_bindings"
-
-type BindingLanguage = Literal["python", "typescript"]
-
 __all__ = [
     "ENTRY_POINT_GROUP",
     "BindingContext",
-    "BindingLanguage",
     "ProtocolBinding",
     "SocketBinding",
     "bind_sockets",
     "load_binding",
 ]
 
+ENTRY_POINT_GROUP = "fastapi_canon.integrations.websockets.socket_bindings"
+
 
 @dataclass(frozen=True, slots=True)
 class BindingContext:
     """What a binding learns about the client it extends."""
 
-    language: BindingLanguage
+    language: ClientLanguage
     protocols: tuple[SocketProtocolDecl, ...]
     """The distinct declarations of the binding's protocol in this contract."""
     contract: str | Path | None = None
@@ -99,10 +97,10 @@ def load_binding(reference: str) -> ProtocolBinding:
     return binding
 
 
-def bind_sockets(
+def bind_sockets(  # smelt: ignore[SMT345] -- public binding API signature
     sockets: Iterable[SocketDecl],
     bindings: Sequence[ProtocolBinding],
-    language: BindingLanguage,
+    language: ClientLanguage,
     contract: str | Path | None = None,
 ) -> dict[str, SocketBinding]:
     """Bind each configured protocol once; the result is keyed by protocol name."""

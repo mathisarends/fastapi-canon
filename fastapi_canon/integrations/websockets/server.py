@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 import time
@@ -62,7 +64,7 @@ class RpcServer:
     _dispatcher: RpcDispatcher
     _error_mapper: RpcErrorMapper | None
     _middleware: tuple[RpcMiddlewareLike, ...]
-    _endpoint: "RpcEndpoint[Any] | None"
+    _endpoint: RpcEndpoint[Any] | None
     _connection: RpcConnection | None
     _codec: RpcCodec
     _limits: RpcLimits
@@ -85,8 +87,8 @@ class RpcServer:
         limits: RpcLimits | None = None,
         strict_errors: bool = False,
         middleware: Sequence[RpcMiddlewareLike] = (),
-        endpoint: "RpcEndpoint[Any] | None" = None,
-    ) -> "RpcServer":
+        endpoint: RpcEndpoint[Any] | None = None,
+    ) -> RpcServer:
         server = cls.__new__(cls)
         server._protocol = protocol
         server._dispatcher = RpcDispatcher(protocol, resolver=resolver)
@@ -150,7 +152,7 @@ class RpcServer:
         admitted_at: float | None = None,
         envelope: RpcRequestEnvelope | None = None,
     ) -> RpcResponse | None:
-        async def dispatch(scope: "RpcRequestScope | None") -> RpcResponse | None:
+        async def dispatch(scope: RpcRequestScope | None) -> RpcResponse | None:
             return await self._dispatch_request(
                 raw_request, scope=scope, envelope=envelope
             )

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 import time
@@ -278,7 +280,7 @@ def record_rejection(rejection: RpcRejection) -> None:
 
 @asynccontextmanager
 async def serving_scope(
-    endpoint: "RpcAnyEndpoint",
+    endpoint: RpcAnyEndpoint,
     socket: RpcWebSocket,
     middleware: Sequence[RpcMiddlewareLike] = (),
 ) -> AsyncGenerator[ServingState | None, None]:

@@ -5,6 +5,8 @@ from typing import Literal
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+type SqliteLockPolicy = Literal["error", "ignore"]
+
 
 class AcquireTransactionLock:
     """Coordinate transactions across processes until commit or rollback.
@@ -15,7 +17,7 @@ class AcquireTransactionLock:
     """
 
     def __init__(
-        self, session: AsyncSession, *, sqlite: Literal["error", "ignore"] = "error"
+        self, session: AsyncSession, *, sqlite: SqliteLockPolicy = "error"
     ) -> None:
         if sqlite not in {"error", "ignore"}:
             raise ValueError("sqlite lock policy must be 'error' or 'ignore'")
@@ -43,6 +45,3 @@ class AcquireTransactionLock:
     async def acquire(self, key: int) -> None:
         """Acquire a lock through the supported named operation."""
         await self(key)
-
-
-TransactionLocks = AcquireTransactionLock

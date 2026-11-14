@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NamedTuple
 
 from fastapi import APIRouter
 from fastapi.dependencies.models import Dependant
@@ -30,10 +30,17 @@ from fastapi_canon.injection import injected_resolver_dependency
 from fastapi_canon.router import CanonRouter, route_provenance
 
 
+class FeatureSource(NamedTuple):
+    name: str
+    routers: tuple[APIRouter, ...]
+    providers: tuple[str, ...]
+
+
 def describe_composition(
-    features: Sequence[tuple[str, tuple[APIRouter, ...], tuple[str, ...]]],
+    features: Sequence[FeatureSource],
     routers: tuple[APIRouter, ...],
     catalog: ErrorCatalog | None,
+    *,
     application_router: APIRouter,
 ) -> CompositionInfo:
     sources = [
@@ -58,7 +65,10 @@ def describe_composition(
     operations: list[OperationInfo] = []
     for (name, router, source), route in zip(sources, effective, strict=True):
         dependencies = _dependencies(
-            route, source, router, application_router.dependencies
+            route,
+            source,
+            router,
+            application_dependencies=application_router.dependencies,
         )
         errors: list[ErrorInfo] = []
         declared, _, _ = contracts_from_responses(route.path, route.responses, catalog)
@@ -176,6 +186,7 @@ def _dependencies(
     route: _HttpRoute,
     source: _HttpRoute,
     router: APIRouter,
+    *,
     application_dependencies: Sequence[Depends],
 ) -> tuple[DependencyInfo, ...]:
     original = getattr(source, "original_route", source)

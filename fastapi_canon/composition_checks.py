@@ -5,7 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from functools import partial
 from inspect import iscoroutine
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from dishka import (
     DEFAULT_COMPONENT,
@@ -49,6 +49,7 @@ from fastapi_canon.integration import (
     attached_route,
 )
 from fastapi_canon.introspection import (
+    FeatureSource,
     describe_composition,
     http_routes,
     operation_headers,
@@ -134,7 +135,7 @@ def validate_websocket_paths(
         for feature in features
         for router in feature.routers
     )
-    seen: dict[str, tuple[str, str, str]] = {}
+    seen: dict[str, _WebSocketClaim] = {}
     for owner, shared_prefix, router in sources:
         for path, route in iter_contract_routes(router.routes, include_mounts=False):
             if not isinstance(getattr(route, "original_route", route), WebSocketRoute):
@@ -150,14 +151,14 @@ def validate_websocket_paths(
                 raise WebSocketPathError(
                     CheckIssue(
                         "canon.routing.E004",
-                        f"Duplicate WebSocket path {path!r}: {previous[0]!r} "
-                        f"({previous[2]}) and {owner!r} ({name})",
+                        f"Duplicate WebSocket path {path!r}: {previous.owner!r} "
+                        f"({previous.name}) and {owner!r} ({name})",
                         "Use distinct effective WebSocket paths or remove the duplicate contribution.",
-                        feature_names=tuple(dict.fromkeys((previous[0], owner))),
-                        locations=(previous[1], location),
+                        feature_names=tuple(dict.fromkeys((previous.owner, owner))),
+                        locations=(previous.location, location),
                     )
                 )
-            seen[key] = (owner, location, name)
+            seen[key] = _WebSocketClaim(owner, location, name)
 
 
 def prepare_registry(
@@ -244,6 +245,7 @@ def check_integration_routes(
     app: FastAPI,
     features: tuple[Feature, ...],
     routers: tuple[APIRouter, ...],
+    *,
     container: AsyncContainer | None,
     issues: list[CheckIssue],
     checks: list[CheckResult],
@@ -319,6 +321,7 @@ def check_http_dependencies(
     app: FastAPI,
     features: tuple[Feature, ...],
     description: CompositionInfo,
+    *,
     container: AsyncContainer | None,
     issues: list[CheckIssue],
     checks: list[CheckResult],
@@ -423,7 +426,9 @@ def check_installed(
     check_operations(
         operation_headers(app.router, description.operations), issues, checks
     )
-    check_http_paths(app.router, (), (), description.operations, issues, checks)
+    check_http_paths(
+        app.router, (), (), known=description.operations, issues=issues, checks=checks
+    )
     if any(
         check.name in {"http.operation_ids", "http.paths"} and check.status == "failed"
         for check in checks
@@ -446,7 +451,7 @@ def check_installed(
             checks.append(CheckResult("http.contracts", "passed"))
         finally:
             app.openapi_schema = cached
-    run_feature_checks(features, description, issues, checks)
+    run_feature_checks(features, description, issues, checks=checks)
     return CheckReport(tuple(issues), tuple(checks))
 
 
@@ -489,6 +494,7 @@ def check_http_paths(
     application: APIRouter,
     routers: tuple[APIRouter, ...],
     features: tuple[Feature, ...],
+    *,
     known: tuple[OperationInfo, ...],
     issues: list[CheckIssue],
     checks: list[CheckResult],
@@ -525,7 +531,7 @@ def check_http_paths(
     installed = {
         (op.operation_id, op.path, op.methods): op.feature_name for op in known
     }
-    seen: dict[tuple[str, str], tuple[str, str]] = {}
+    seen: dict[_HttpDispatch, _HttpClaim] = {}
     failed = False
     for owner, path, route in entries:
         methods = tuple(sorted(route.methods or ()))
@@ -537,7 +543,7 @@ def check_http_paths(
         path_regex = route.path_regex or compile_path(route.path)[0]
         pattern = re.sub(r"\(\?P<[^>]+>", "(?:", path_regex.pattern)
         for method in methods:
-            key = (method, pattern)
+            key = _HttpDispatch(method, pattern)
             previous = seen.get(key)
             if previous is not None:
                 failed = True
@@ -546,12 +552,12 @@ def check_http_paths(
                         "canon.routing.E003",
                         f"Ambiguous HTTP route {method} {path}",
                         "Use distinct effective paths or HTTP methods; operation IDs do not change dispatch.",
-                        feature_names=tuple(dict.fromkeys((previous[0], owner))),
-                        locations=(f"{method} {previous[1]}", f"{method} {path}"),
+                        feature_names=tuple(dict.fromkeys((previous.owner, owner))),
+                        locations=(f"{method} {previous.path}", f"{method} {path}"),
                     )
                 )
             else:
-                seen[key] = (owner, path)
+                seen[key] = _HttpClaim(owner, path)
     checks.append(CheckResult("http.paths", "failed" if failed else "passed"))
 
 
@@ -559,6 +565,7 @@ def run_feature_checks(
     features: tuple[Feature, ...],
     description: CompositionInfo,
     issues: list[CheckIssue],
+    *,
     checks: list[CheckResult],
 ) -> None:
     for feature, info in zip(features, description.features, strict=True):
@@ -836,8 +843,8 @@ def validate_error_installation(
     app: FastAPI,
     routers: tuple[APIRouter, ...],
     handlers: tuple[tuple[type[Exception], ExceptionHandler], ...],
-    registry: ErrorRegistry | None,
     *,
+    registry: ErrorRegistry | None,
     include_validation_error: bool,
     include_http_exceptions: bool,
     include_unhandled_error: bool,
@@ -1002,7 +1009,10 @@ class _CheckComposition:
                     passed.add(step.name)
         if self.description is not None:
             run_feature_checks(
-                self.composition.features, self.description, self.issues, self.checks
+                self.composition.features,
+                self.description,
+                self.issues,
+                checks=self.checks,
             )
         elif any(feature.checks for feature in self.composition.features):
             self.checks.append(CheckResult("feature.checks", "skipped"))
@@ -1078,9 +1088,9 @@ class _CheckComposition:
             self.app,
             self.composition.features,
             self.routers,
-            self.container,
-            self.issues,
-            self.checks,
+            container=self.container,
+            issues=self.issues,
+            checks=self.checks,
         )
 
     def _prepare_integration(self, integration: Integration) -> None:
@@ -1100,12 +1110,14 @@ class _CheckComposition:
         assert self.routers is not None
         self.description = describe_composition(
             tuple(
-                (f.name, f.routers, tuple(qualified_name(p) for p in f.providers))
+                FeatureSource(
+                    f.name, f.routers, tuple(qualified_name(p) for p in f.providers)
+                )
                 for f in self.composition.features
             ),
             self.routers,
             self.registry,
-            self.app.router,
+            application_router=self.app.router,
         )
 
     def _operation_ids(self) -> None:
@@ -1122,9 +1134,9 @@ class _CheckComposition:
             self.app.router,
             self.routers,
             self.composition.features,
-            (),
-            self.issues,
-            self.checks,
+            known=(),
+            issues=self.issues,
+            checks=self.checks,
         )
 
     def _http_dependencies(self) -> None:
@@ -1133,9 +1145,9 @@ class _CheckComposition:
             self.app,
             self.composition.features,
             self.description,
-            self.container,
-            self.issues,
-            self.checks,
+            container=self.container,
+            issues=self.issues,
+            checks=self.checks,
         )
 
     def _contracts(self) -> None:
@@ -1145,8 +1157,24 @@ class _CheckComposition:
             self.app,
             self.routers,
             flatten_handlers(self.composition.features),
-            self.registry,
+            registry=self.registry,
             include_validation_error=options.include_validation_error,
             include_http_exceptions=options.include_http_exceptions,
             include_unhandled_error=options.include_unhandled_error,
         )
+
+
+class _WebSocketClaim(NamedTuple):
+    owner: str
+    location: str
+    name: str
+
+
+class _HttpDispatch(NamedTuple):
+    method: str
+    pattern: str
+
+
+class _HttpClaim(NamedTuple):
+    owner: str
+    path: str

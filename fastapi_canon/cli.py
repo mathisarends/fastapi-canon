@@ -14,6 +14,7 @@ from importlib.metadata import entry_points
 from importlib.resources import as_file, files
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import NamedTuple
 
 from fastapi_canon._version import __version__
 
@@ -162,7 +163,7 @@ def _install_skill(source: Path, destinations: Sequence[Path], *, force: bool) -
     # Stage every copy before replacing any destination. Keep the previous trees
     # until all replacements succeed so an installation error can restore them.
     with ExitStack() as stack:
-        prepared: list[tuple[Path, Path, Path]] = []
+        prepared: list[_StagedSkill] = []
         for destination in destinations:
             destination.parent.mkdir(parents=True, exist_ok=True)
             temporary = Path(
@@ -172,7 +173,7 @@ def _install_skill(source: Path, destinations: Sequence[Path], *, force: bool) -
             )
             staged, backup = temporary / "skill", temporary / "previous"
             shutil.copytree(source, staged)
-            prepared.append((destination, staged, backup))
+            prepared.append(_StagedSkill(destination, staged, backup))
         try:
             for destination, staged, backup in prepared:
                 if destination.exists():
@@ -185,3 +186,9 @@ def _install_skill(source: Path, destinations: Sequence[Path], *, force: bool) -
                 if backup.exists():
                     backup.rename(destination)
             raise
+
+
+class _StagedSkill(NamedTuple):
+    destination: Path
+    staged: Path
+    backup: Path

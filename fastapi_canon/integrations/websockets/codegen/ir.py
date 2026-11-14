@@ -529,7 +529,12 @@ def _model(
     required = set(schema.get("required", ()))
     discriminator = discriminator_fields.get(name)
     fields = tuple(
-        _field(field_name, field_schema, field_name in required, discriminator)
+        _field(
+            field_name,
+            field_schema,
+            field_name in required,
+            discriminator=discriminator,
+        )
         for field_name, field_schema in _type_field_first(schema.get("properties", {}))
     )
     return ModelDecl(
@@ -544,6 +549,7 @@ def _field(
     name: str,
     schema: dict[str, Any],
     required: bool,
+    *,
     discriminator: EnumLiteralType | None,
 ) -> FieldDecl:
     if discriminator is not None and name == "type":

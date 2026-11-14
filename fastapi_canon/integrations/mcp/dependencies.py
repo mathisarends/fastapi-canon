@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from functools import wraps
@@ -25,7 +25,7 @@ class McpScope:
         self._container = container
 
     @asynccontextmanager
-    async def __call__(self) -> AsyncIterator[AsyncContainer]:
+    async def __call__(self) -> AsyncGenerator[AsyncContainer, None]:
         async with self._container(scope=Scope.REQUEST) as scoped:
             token = _ACTIVE.set(scoped)
             try:
@@ -79,6 +79,8 @@ def inject_handler(function: Callable[..., Any]) -> Callable[..., Any]:
 
 
 @asynccontextmanager
-async def request_scope(container: AsyncContainer) -> AsyncIterator[AsyncContainer]:
+async def request_scope(
+    container: AsyncContainer,
+) -> AsyncGenerator[AsyncContainer, None]:
     async with McpScope(container)() as scoped:
         yield scoped

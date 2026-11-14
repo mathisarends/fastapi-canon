@@ -45,20 +45,24 @@ class ComponentValidation(Middleware):
     async def on_call_tool(
         self, context: MiddlewareContext[Any], call_next: Any
     ) -> Any:
-        _validate_components(await self._server.list_tools())
+        tools = await self._server.list_tools()
+        _validate_components(tools)
         return await call_next(context)
 
     async def on_get_prompt(
         self, context: MiddlewareContext[Any], call_next: Any
     ) -> Any:
-        _validate_components(await self._server.list_prompts())
+        prompts = await self._server.list_prompts()
+        _validate_components(prompts)
         return await call_next(context)
 
     async def on_read_resource(
         self, context: MiddlewareContext[Any], call_next: Any
     ) -> Any:
-        _validate_components(await self._server.list_resources())
-        _validate_components(await self._server.list_resource_templates())
+        resources = await self._server.list_resources()
+        _validate_components(resources)
+        templates = await self._server.list_resource_templates()
+        _validate_components(templates)
         return await call_next(context)
 
 

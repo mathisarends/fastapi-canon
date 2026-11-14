@@ -5,8 +5,10 @@ import json
 import warnings
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, cast
 from urllib.parse import unquote
+
+from fastapi_canon.codegen.generators import ClientLanguage
 
 # The IR builder lazily invokes diagnostics and enum passes over its own model graph.
 from fastapi_canon.integrations.sse.codegen.ir import (  # smelt: ignore[SMT104] -- factory cycle  # noqa: E501
@@ -16,10 +18,9 @@ from fastapi_canon.integrations.sse.codegen.ir import (  # smelt: ignore[SMT104]
 from fastapi_canon.integrations.sse.codegen.openapi import (
     ContractError,
     Document,
+    ParameterKey,
     resolve_pointer,
 )
-
-type GenerationTarget = Literal["python", "typescript"]
 
 _UNSUPPORTED = {
     "format",
@@ -70,7 +71,7 @@ class GenerationDiagnostic:
     pointer: str
     keyword: str
     value: Any
-    target: GenerationTarget
+    target: ClientLanguage
     operation_id: str
     method: str
     path: str
@@ -96,7 +97,7 @@ class GenerationDiagnostic:
 
 
 def collect_diagnostics(
-    document: Document, contract: Contract, target: GenerationTarget
+    document: Document, contract: Contract, target: ClientLanguage
 ) -> list[GenerationDiagnostic]:
     """Inspect schemas reachable from generated operations, following local refs."""
     result: dict[str, GenerationDiagnostic] = {}
@@ -109,13 +110,13 @@ def collect_diagnostics(
         method = operation.method.lower()
         raw = path_item[method]
         operation_pointer = locations.get(id(raw), base + "/" + method)
-        merged: dict[tuple[str, str], tuple[Document, str]] = {}
+        merged: dict[ParameterKey, tuple[Document, str]] = {}
         for container, pointer in ((path_item, base), (raw, operation_pointer)):
             for index, value in enumerate(container.get("parameters", [])):
                 param, location = visitor.resolve(
                     value, f"{pointer}/parameters/{index}"
                 )
-                merged[(param["in"], param["name"])] = (param, location)
+                merged[ParameterKey(param["in"], param["name"])] = (param, location)
         for param, pointer in merged.values():
             visitor.schema(param.get("schema", {}), pointer + "/schema")
         if "requestBody" in raw:
@@ -138,6 +139,7 @@ def write_diagnostics(
     path: Path,
     diagnostics: list[GenerationDiagnostic],
     accepted: set[str],
+    *,
     generation: Document,
 ) -> None:
     python = generation["target"] == "python"
@@ -236,13 +238,13 @@ class _SourceDiagnostics:
     def __init__(
         self,
         document: Document,
-        target: GenerationTarget,
+        target: ClientLanguage,
         operation: Operation,
         result: dict[str, GenerationDiagnostic],
         locations: dict[int, str],
     ) -> None:
         self.document = document
-        self.target: GenerationTarget = target
+        self.target: ClientLanguage = target
         self.operation = operation
         self.result = result
         self.locations = locations
@@ -285,8 +287,8 @@ class _SourceDiagnostics:
                 "unsupported-constraint",
                 pointer + "/" + keyword,
                 keyword,
-                node[keyword],
-                "This constraint is not enforced at runtime by the generated "
+                value=node[keyword],
+                message="This constraint is not enforced at runtime by the generated "
                 + self.target
                 + " SDK.",
             )
@@ -337,7 +339,7 @@ class _SourceDiagnostics:
         return node, pointer
 
     def add(
-        self, code: str, pointer: str, keyword: str, value: Any, message: str
+        self, code: str, pointer: str, keyword: str, *, value: Any, message: str
     ) -> None:
         op = self.operation
         diagnostic = GenerationDiagnostic(
@@ -372,9 +374,10 @@ class _SourceDiagnostics:
                         "optional-discriminator",
                         location + "/properties/" + _escape(field),
                         "required",
-                        field,
-                        f"Event schema {name!r} has optional discriminator {field!r}. "
-                        "Missing tags can prevent variant selection. The generated "
+                        value=field,
+                        message=f"Event schema {name!r} has optional discriminator "
+                        f"{field!r}. Missing tags can prevent variant selection. "
+                        "The generated "
                         "field remains optional; mark it required in the output schema "
                         "if the serializer always emits it. "
                         "See docs/codegen.md#event-discriminators.",

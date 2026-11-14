@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import inspect
 import re
 from collections import Counter
@@ -158,7 +160,7 @@ class RpcChannel:
         return tuple(self._sockets)
 
     @property
-    def children(self) -> tuple["RpcChannel", ...]:
+    def children(self) -> tuple[RpcChannel, ...]:
         return tuple(self._children)
 
     @property
@@ -497,7 +499,7 @@ class RpcChannel:
         *,
         raises: Iterable[RpcErrorDeclaration] = (),
         resolver_scope: RpcResolverScope | None = None,
-    ) -> "RpcChannel":
+    ) -> RpcChannel:
         self.ensure_mutable()
         local = _name(name, "child channel name")
         child = RpcChannel(
@@ -513,7 +515,7 @@ class RpcChannel:
         self._children.append(child)
         return child
 
-    def include_channel(self, channel: "RpcChannel", *, namespace: str = "") -> None:
+    def include_channel(self, channel: RpcChannel, *, namespace: str = "") -> None:
         """Include an independent snapshot under a relative namespace.
 
         The namespace replaces the included channel's root namespace. Nested
@@ -653,7 +655,7 @@ class RpcChannel:
             raise ProtocolDefinitionError(f"Duplicate RPC route: {name}")
         self._names.add(name)
 
-    def snapshot(self, namespace: str) -> "RpcChannel":
+    def snapshot(self, namespace: str) -> RpcChannel:
         snapshot = RpcChannel(
             self.name, namespace=namespace, resolver_scope=self.resolver_scope
         )

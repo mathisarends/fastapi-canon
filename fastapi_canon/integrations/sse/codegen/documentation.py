@@ -1,12 +1,9 @@
-from typing import Literal
-
+from fastapi_canon.codegen.generators import ClientLanguage
 from fastapi_canon.integrations.sse.codegen.ir import Operation
 from fastapi_canon.integrations.sse.codegen.names import identifier
 
 
-def operation_doc(
-    operation: Operation, language: Literal["typescript", "python"]
-) -> str:
+def operation_doc(operation: Operation, language: ClientLanguage) -> str:
     """Combine endpoint descriptions with guarantees of the selected SDK."""
     paragraphs = [part for part in (operation.summary, operation.description) if part]
     paragraphs.extend(

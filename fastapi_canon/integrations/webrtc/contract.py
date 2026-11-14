@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable, Iterator, Sequence
 from copy import copy, deepcopy
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal, NamedTuple
 
 from fastapi import FastAPI
 from pydantic import BaseModel, TypeAdapter
@@ -66,7 +66,7 @@ def build_contract(
 ) -> dict[str, Any]:
     """Build the contract of every session declared in ``app``."""
     routes = app.routes if isinstance(app, FastAPI) else app
-    sessions: list[tuple[str, SessionDeclaration, Dependant | None]] = []
+    sessions: list[_Session] = []
     seen: set[str] = set()
     entries = (
         iter_contract_routes(routes) if registered_routes is None else registered_routes
@@ -79,36 +79,36 @@ def build_contract(
                 "generated clients need unique names"
             )
         seen.add(declaration.name)
-        sessions.append((path, declaration, dependant))
+        sessions.append(_Session(path, declaration, dependant))
 
-    inputs: list[tuple[tuple[str, str], JsonSchemaMode, TypeAdapter[Any]]] = []
+    inputs: list[_SchemaInput] = []
     for _, declaration, dependant in sessions:
         for spec in declaration.channels:
             if spec.receive_adapter is not None:
                 inputs.append(
-                    (
-                        (declaration.name, f"{spec.name}:receive"),
+                    _SchemaInput(
+                        _SchemaKey(declaration.name, f"{spec.name}:receive"),
                         "validation",
                         spec.receive_adapter,
                     )
                 )
             if spec.send_adapter is not None:
                 inputs.append(
-                    (
-                        (declaration.name, f"{spec.name}:send"),
+                    _SchemaInput(
+                        _SchemaKey(declaration.name, f"{spec.name}:send"),
                         "serialization",
                         spec.send_adapter,
                     )
                 )
         for location, name, annotation, _required in _parameters(dependant):
             inputs.append(
-                (
-                    (declaration.name, f"{location}:{name}"),
+                _SchemaInput(
+                    _SchemaKey(declaration.name, f"{location}:{name}"),
                     "validation",
                     TypeAdapter(annotation),
                 )
             )
-    schemas: dict[tuple[str, str], Any] = {}
+    schemas: dict[_SchemaKey, Any] = {}
     definitions: dict[str, Any] = {}
     if inputs:
         mapping, defs = TypeAdapter.json_schemas(
@@ -126,11 +126,11 @@ def build_contract(
                 path,
                 declaration,
                 dependant,
-                schemas,
-                app if isinstance(app, FastAPI) else None,
+                schemas=schemas,
+                app=app if isinstance(app, FastAPI) else None,
             )
             for path, declaration, dependant in sorted(
-                sessions, key=lambda s: s[1].name
+                sessions, key=lambda session: session.declaration.name
             )
         ],
         "definitions": dict(sorted(definitions.items())),
@@ -146,7 +146,8 @@ def _session(
     path: str,
     declaration: SessionDeclaration,
     dependant: Dependant | None,
-    schemas: dict[tuple[str, str], Any],
+    *,
+    schemas: dict[_SchemaKey, Any],
     app: FastAPI | None,
 ) -> dict[str, Any]:
     media = declaration.media
@@ -160,7 +161,7 @@ def _session(
                 "name": name,
                 "in": location,
                 "required": required,
-                "schema": schemas[(declaration.name, f"{location}:{name}")],
+                "schema": schemas[_SchemaKey(declaration.name, f"{location}:{name}")],
             }
             for location, name, _annotation, required in _parameters(dependant)
         ],
@@ -183,7 +184,7 @@ def _session(
 def _channel(
     declaration: SessionDeclaration,
     spec: DataChannelSpec,
-    schemas: dict[tuple[str, str], Any],
+    schemas: dict[_SchemaKey, Any],
 ) -> dict[str, Any]:
     return {
         "name": spec.name,
@@ -195,59 +196,61 @@ def _channel(
         "max_message_bytes": declaration.max_message_bytes(spec),
         "receive_format": spec.receive_format,
         "send_format": spec.send_format,
-        "receive_schema": schemas.get((declaration.name, f"{spec.name}:receive")),
-        "send_schema": schemas.get((declaration.name, f"{spec.name}:send")),
+        "receive_schema": schemas.get(
+            _SchemaKey(declaration.name, f"{spec.name}:receive")
+        ),
+        "send_schema": schemas.get(_SchemaKey(declaration.name, f"{spec.name}:send")),
     }
 
 
 def _session_routes(
     routes: Iterable[tuple[str, Any]],
-) -> Iterator[tuple[str, Any, Dependant | None]]:
+) -> Iterator[_SessionRoute]:
     for path, route in routes:
         endpoint = getattr(route, "endpoint", None)
         if endpoint is None or not hasattr(endpoint, DECLARATION_ATTRIBUTE):
             continue
-        yield path, endpoint, getattr(route, "dependant", None)
+        yield _SessionRoute(path, endpoint, getattr(route, "dependant", None))
 
 
 def _parameters(
     dependant: Dependant | None,
-) -> list[tuple[_ParameterLocation, str, Any, bool]]:
+) -> list[_Parameter]:
     if dependant is None:
         return []
-    found: dict[tuple[str, str], tuple[_ParameterLocation, str, Any, bool]] = {}
+    found: dict[_ParameterKey, _Parameter] = {}
     for location, alias, field_info in _fields(dependant):
-        key = (location, alias)
+        key = _ParameterKey(location, alias)
         required = bool(field_info.is_required())
         previous = found.get(key)
         if previous is not None:
-            required = required or previous[3]
+            required = required or previous.required
         # Keep constraints and descriptions of Query()/Path() declarations.
         info = copy(field_info)
         info.alias = info.validation_alias = info.serialization_alias = None
         annotation = _ANNOTATED[info.annotation, info]
-        found[key] = (location, alias, annotation, required)
-    path_order = [v for (loc, _), v in found.items() if loc == "path"]
-    query_order = [v for (loc, _), v in found.items() if loc == "query"]
+        found[key] = _Parameter(location, alias, annotation, required)
+    path_order = [v for key, v in found.items() if key.location == "path"]
+    query_order = [v for key, v in found.items() if key.location == "query"]
     return path_order + query_order
 
 
 def _fields(
     dependant: Dependant,
-) -> Iterable[tuple[_ParameterLocation, str, FieldInfo]]:
-    """Yield ``(location, wire name, field info)`` of every path/query field."""
+) -> Iterable[_Field]:
+    """Yield the location, wire name and field info of every path/query field."""
     for field in dependant.path_params:
-        yield "path", _wire_name(field), field.field_info
+        yield _Field("path", _wire_name(field), field.field_info)
     query = dependant.query_params
     annotation = query[0].field_info.annotation if len(query) == 1 else None
     if isinstance(annotation, type) and issubclass(annotation, BaseModel):
         # FastAPI extracts a lone query model separately in each dependency.
         # Read its fields through Pydantic's public API, as FastAPI does.
         for name, info in annotation.model_fields.items():
-            yield "query", _model_field_name(name, info), info
+            yield _Field("query", _model_field_name(name, info), info)
     else:
         for field in query:
-            yield "query", _wire_name(field), field.field_info
+            yield _Field("query", _wire_name(field), field.field_info)
     for child in dependant.dependencies:
         yield from _fields(child)
 
@@ -264,3 +267,44 @@ def _model_field_name(name: str, info: FieldInfo) -> str:
     if isinstance(info.validation_alias, str) and info.validation_alias:
         return info.validation_alias
     return info.alias or name
+
+
+class _Session(NamedTuple):
+    path: str
+    declaration: SessionDeclaration
+    dependant: Dependant | None
+
+
+class _SessionRoute(NamedTuple):
+    path: str
+    endpoint: Any
+    dependant: Dependant | None
+
+
+class _SchemaKey(NamedTuple):
+    session: str
+    slot: str
+
+
+class _SchemaInput(NamedTuple):
+    key: _SchemaKey
+    mode: JsonSchemaMode
+    adapter: TypeAdapter[Any]
+
+
+class _ParameterKey(NamedTuple):
+    location: _ParameterLocation
+    name: str
+
+
+class _Parameter(NamedTuple):
+    location: _ParameterLocation
+    name: str
+    annotation: Any
+    required: bool
+
+
+class _Field(NamedTuple):
+    location: _ParameterLocation
+    name: str
+    info: FieldInfo

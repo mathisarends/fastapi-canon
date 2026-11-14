@@ -6,7 +6,7 @@ import time
 from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager, nullcontext, suppress
 from functools import partial
-from typing import Any
+from typing import Any, NamedTuple
 
 from pydantic import BaseModel, ValidationError
 
@@ -194,11 +194,11 @@ async def serve_socket_endpoint(
         prepared = await _prepare(
             endpoint,
             socket,
-            resolver,
-            context,
-            endpoint.socket.path_model,
-            before_accept,
-            rejections,
+            resolver=resolver,
+            context=context,
+            path_model=endpoint.socket.path_model,
+            before_accept=before_accept,
+            rejections=rejections,
         )
         if prepared is None:
             return
@@ -210,12 +210,12 @@ async def serve_socket_endpoint(
                 endpoint,
                 socket,
                 connection,
-                resolved,
-                values,
-                path_values,
-                limits if limits is not None else RpcLimits(),
-                rejections,
-                activity,
+                resolved=resolved,
+                values=values,
+                path_values=path_values,
+                limits=limits if limits is not None else RpcLimits(),
+                rejections=rejections,
+                activity=activity,
             )
 
 
@@ -236,11 +236,11 @@ async def _serve_endpoint(
     prepared = await _prepare(
         endpoint,
         socket,
-        resolver,
-        context,
-        endpoint.path_model,
-        before_accept,
-        rejections,
+        resolver=resolver,
+        context=context,
+        path_model=endpoint.path_model,
+        before_accept=before_accept,
+        rejections=rejections,
     )
     if prepared is None:
         return
@@ -251,13 +251,13 @@ async def _serve_endpoint(
             endpoint,
             socket,
             connection,
-            resolved,
-            values,
-            error_mapper,
-            limits,
-            rejections,
-            activity,
-            middleware,
+            resolved=resolved,
+            values=values,
+            error_mapper=error_mapper,
+            limits=limits,
+            rejections=rejections,
+            activity=activity,
+            middleware=middleware,
         )
 
 
@@ -265,6 +265,7 @@ async def _run_rpc_endpoint(
     endpoint: RpcEndpoint[Any],
     socket: RpcWebSocket,
     connection: RpcConnection,
+    *,
     resolved: RpcResolver,
     values: dict[type[Any], object],
     error_mapper: RpcErrorMapper | None,
@@ -752,9 +753,9 @@ class _RpcSession:
                         event,
                         self.scoped,
                         self._send_outgoing,
-                        self.activity,
-                        self.rejections,
-                        self.server,
+                        activity=self.activity,
+                        rejections=self.rejections,
+                        server=self.server,
                     )
                     for event in self.endpoint.protocol.notifications
                 )
@@ -792,6 +793,7 @@ async def _event_source(
     event: RpcNotificationDefinition,
     resolver: RpcResolver,
     send: Callable[[str], Awaitable[None]],
+    *,
     activity: NotifyActivity | None,
     rejections: RpcRejections | None,
     server: RpcServer,
@@ -874,11 +876,11 @@ async def _serve_stream_endpoint(
     prepared = await _prepare(
         endpoint,
         socket,
-        resolver,
-        context,
-        stream.path_model,
-        before_accept,
-        rejections,
+        resolver=resolver,
+        context=context,
+        path_model=stream.path_model,
+        before_accept=before_accept,
+        rejections=rejections,
     )
     if prepared is None:
         return
@@ -894,25 +896,26 @@ async def _serve_stream_endpoint(
                 endpoint,
                 socket,
                 connection,
-                resolved,
-                values,
-                path_values,
-                limits,
-                error_mapper,
-                rejections,
-                activity,
+                resolved=resolved,
+                values=values,
+                path_values=path_values,
+                limits=limits,
+                error_mapper=error_mapper,
+                rejections=rejections,
+                activity=activity,
             )
 
 
 async def _prepare(
     endpoint: RpcAnyEndpoint,
     socket: RpcWebSocket,
+    *,
     resolver: RpcResolverLike | None,
     context: object | Mapping[type[Any], object] | None,
     path_model: type[BaseModel] | None = None,
     before_accept: RpcBeforeAccept | None = None,
     rejections: RpcRejections | None = None,
-) -> tuple[RpcConnection, RpcResolver, dict[type[Any], object], dict[str, Any]] | None:
+) -> _Prepared | None:
     endpoint.service.freeze()
     resolved = as_resolver(resolver)
     values = context_values(context)
@@ -973,7 +976,7 @@ async def _prepare(
     connection.mark_accepted()
     if state is not None:
         state.accepted_at = time.perf_counter()
-    return connection, resolved, base_values, path_values
+    return _Prepared(connection, resolved, base_values, path_values)
 
 
 @asynccontextmanager
@@ -1021,6 +1024,7 @@ async def _run_stream_endpoint(
     endpoint: RpcStreamEndpoint[Any],
     socket: RpcWebSocket,
     connection: RpcConnection,
+    *,
     resolved: RpcResolver,
     values: dict[type[Any], object],
     path_values: dict[str, Any],
@@ -1276,6 +1280,7 @@ async def _run_socket(
     endpoint: RpcSocketEndpoint[Any],
     socket: RpcWebSocket,
     connection: RpcConnection,
+    *,
     resolved: RpcResolver,
     values: dict[type[Any], object],
     path_values: dict[str, Any],
@@ -1485,3 +1490,10 @@ def _leaf_exceptions(error: Exception) -> list[Exception]:
     if isinstance(error, ExceptionGroup):
         return [leaf for item in error.exceptions for leaf in _leaf_exceptions(item)]
     return [error]
+
+
+class _Prepared(NamedTuple):
+    connection: RpcConnection
+    resolver: RpcResolver
+    values: dict[type[Any], object]
+    path_values: dict[str, Any]

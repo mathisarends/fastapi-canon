@@ -2,8 +2,8 @@ import re
 from collections.abc import Callable
 from dataclasses import replace
 from importlib.resources import files
-from typing import Literal
 
+from fastapi_canon.codegen.generators import HttpClient
 from fastapi_canon.codegen.problems import problem_runtime
 from fastapi_canon.integrations.sse.codegen.documentation import operation_doc
 from fastapi_canon.integrations.sse.codegen.ir import (
@@ -50,7 +50,7 @@ _MODEL_SYMBOLS = {
 
 
 def generate_python(
-    contract: Contract, *, http_client: Literal["httpx", "httpx2"] = "httpx"
+    contract: Contract, *, http_client: HttpClient = "httpx"
 ) -> dict[str, str]:
     if http_client not in {"httpx", "httpx2"}:
         raise ContractError(f"Unsupported Python HTTP client: {http_client!r}")
@@ -201,7 +201,7 @@ def generate_python(
     return output
 
 
-def runtime_source(*, http_client: Literal["httpx", "httpx2"] = "httpx") -> str:
+def runtime_source(*, http_client: HttpClient = "httpx") -> str:
     http_import = (
         "import httpx2 as httpx" if http_client == "httpx2" else "import httpx"
     )

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncGenerator, Callable, Mapping
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from dishka import (
     AsyncContainer,
@@ -37,10 +37,10 @@ type FeatureLifespan = Lifespan[FastAPI]
 
 def installed_contract_routes(
     app: FastAPI,
-) -> tuple[tuple[Feature, ...], tuple[tuple[Feature, str, object], ...]]:
+) -> tuple[tuple[Feature, ...], tuple[ContractRoute, ...]]:
     """Return installed features and the routes each registered, across mounts.
 
-    Routes are ``(feature, effective path, original route)`` triples. Mounted
+    Each route records its feature, effective path and original route. Mounted
     FastAPI applications contribute their own compositions under the mount path.
     """
     installed = getattr(app.state, INSTALLATION_STATE_KEY, None)
@@ -53,11 +53,17 @@ def installed_contract_routes(
             routes = (
                 *routes,
                 *(
-                    (feature, prefix + path, route)
+                    ContractRoute(feature, prefix + path, route)
                     for feature, path, route in child_routes
                 ),
             )
     return features, routes
+
+
+class ContractRoute(NamedTuple):
+    feature: Feature
+    path: str
+    route: object
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,9 +78,7 @@ class Installation:
     override_ids: tuple[int, ...]
     container: AsyncContainer | None = field(compare=False)
     description: CompositionInfo | None = field(default=None, compare=False)
-    contract_routes: tuple[tuple[Feature, str, object], ...] = field(
-        default=(), compare=False
-    )
+    contract_routes: tuple[ContractRoute, ...] = field(default=(), compare=False)
 
 
 def apply_composition(app: FastAPI, composition: Composition) -> bool:
@@ -142,7 +146,7 @@ def apply_composition(app: FastAPI, composition: Composition) -> bool:
     )
     registered = tuple(iter_contract_routes(app.routes))[previous_routes:]
     contract_routes = tuple(
-        (feature, path, getattr(route, "original_route", route))
+        ContractRoute(feature, path, getattr(route, "original_route", route))
         for feature, (path, route) in zip(owners, registered, strict=True)
     )
     for exception, handler in handlers:
@@ -238,7 +242,7 @@ def compose_lifespan(
     container: AsyncContainer | None,
 ) -> FeatureLifespan:
     @asynccontextmanager
-    async def composed(app: FastAPI) -> AsyncIterator[Mapping[str, Any]]:
+    async def composed(app: FastAPI) -> AsyncGenerator[Mapping[str, Any], None]:
         async with AsyncExitStack() as stack:
             if container is not None:
                 stack.push_async_callback(container.close)

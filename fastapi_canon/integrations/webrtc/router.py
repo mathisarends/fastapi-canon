@@ -8,7 +8,7 @@ import asyncio
 import inspect
 import logging
 import uuid
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncGenerator, Callable, Sequence
 from contextlib import asynccontextmanager
 from functools import update_wrapper
 from typing import Annotated, Any, TypeVar, cast, get_type_hints
@@ -168,7 +168,7 @@ class SessionRouter(APIRouter):
                     )
                     await _refuse(websocket, ErrorCode.HANDLER_FAILURE)
                     return
-                await self._serve(declaration, capacities, websocket, session)
+                await self._serve(declaration, capacities, websocket, session=session)
 
             endpoint.__doc__ = factory.__doc__
             endpoint.__name__ = f"webrtc_session_{declaration.name}"
@@ -214,6 +214,7 @@ class SessionRouter(APIRouter):
         declaration: SessionDeclaration,
         capacities: tuple[SessionCapacity, ...],
         websocket: WebSocket,
+        *,
         session: Session,
     ) -> None:
         runtime: SessionRuntime | None = None
@@ -231,7 +232,7 @@ class SessionRouter(APIRouter):
                 )
                 await _refuse(websocket, ErrorCode.HANDLER_FAILURE)
                 return
-            runtime = self._admit(declaration, capacities, websocket, session)
+            runtime = self._admit(declaration, capacities, websocket, session=session)
             if runtime is None:
                 code = ErrorCode.SHUTDOWN if self._closing else ErrorCode.SESSION_LIMIT
                 await _refuse(websocket, code)
@@ -261,6 +262,7 @@ class SessionRouter(APIRouter):
         declaration: SessionDeclaration,
         capacities: tuple[SessionCapacity, ...],
         websocket: WebSocket,
+        *,
         session: Session,
     ) -> SessionRuntime | None:
         session_id = uuid.uuid4().hex
@@ -302,7 +304,7 @@ class SessionRouter(APIRouter):
             logger.exception("Session event hook failed")
 
     @asynccontextmanager
-    async def _lifespan(self, _app: Any) -> AsyncIterator[None]:
+    async def _lifespan(self, _app: Any) -> AsyncGenerator[None, None]:
         self._closing = False
         try:
             yield

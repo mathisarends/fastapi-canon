@@ -356,7 +356,7 @@ def _compile_document(
                 stream["problems"].append({"$ref": f"#/components/schemas/{name}"})
         responses = operation.setdefault("responses", {})
         if stream is not None:
-            _compile_stream_contract(stream, responses, components, registry)
+            _compile_stream_contract(stream, responses, components, registry=registry)
 
         _errors, http_statuses, _success = contracts_from_responses(
             path, responses, registry
@@ -374,8 +374,8 @@ def _compile_document(
                 path,
                 responses,
                 registry,
-                (shared, shared_statuses),
-                (_errors, http_statuses),
+                shared=(shared, shared_statuses),
+                local=(_errors, http_statuses),
             )
             _errors, http_statuses, _success = contracts_from_responses(
                 path, responses, registry
@@ -406,18 +406,18 @@ def _compile_document(
                     components,
                     responses,
                     422,
-                    "request_validation_error",
-                    "RequestValidationProblem",
-                    "Request validation failed",
+                    code="request_validation_error",
+                    component="RequestValidationProblem",
+                    title="Request validation failed",
                 )
         if include_internal_error:
             _add_builtin_response(
                 components,
                 responses,
                 500,
-                "internal_server_error",
-                "InternalServerProblem",
-                "Internal Server Error",
+                code="internal_server_error",
+                component="InternalServerProblem",
+                title="Internal Server Error",
             )
 
     return result
@@ -441,6 +441,7 @@ def _compose_inherited_responses(
     path: str,
     responses: dict[str, Any],
     registry: ErrorCatalog,
+    *,
     shared: tuple[tuple[AnyError, ...], tuple[int, ...]],
     local: tuple[tuple[AnyError, ...], tuple[int, ...]],
 ) -> None:
@@ -754,6 +755,7 @@ def _compile_stream_contract(
     profile: dict[str, Any],
     responses: dict[str, Any],
     components: dict[str, Any],
+    *,
     registry: ErrorCatalog | None,
 ) -> None:
     base = registry.type_base if registry is not None else None
@@ -821,6 +823,7 @@ def _add_builtin_response(
     components: dict[str, Any],
     responses: dict[str, Any],
     status: int,
+    *,
     code: str,
     component: str,
     title: str,

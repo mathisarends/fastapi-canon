@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import re
 import warnings
 from collections import Counter
@@ -59,7 +61,7 @@ ENDPOINT_ATTRIBUTE = "__canon_rpc_endpoint__"
 
 @dataclass(frozen=True, slots=True, eq=False)
 class RpcEndpoint[ContextT]:
-    service: "RpcDefinition"
+    service: RpcDefinition
     name: str
     path: str
     channels: tuple[RpcChannel, ...]
@@ -162,7 +164,7 @@ class RpcEndpoint[ContextT]:
 
 @dataclass(frozen=True, slots=True, eq=False)
 class RpcStreamEndpoint[ContextT]:
-    service: "RpcDefinition"
+    service: RpcDefinition
     name: str
     path: str
     stream: RpcStreamDefinition
@@ -212,7 +214,7 @@ class RpcStreamEndpoint[ContextT]:
 
 @dataclass(frozen=True, slots=True, eq=False)
 class RpcSocketEndpoint[ContextT]:
-    service: "RpcDefinition"
+    service: RpcDefinition
     name: str
     path: str
     socket: RpcSocketDefinition
@@ -485,7 +487,9 @@ class RpcDefinition:
         rejects: Sequence[RpcErrorBinding[Any]] = (),
     ) -> RpcEndpoint[Any]:
         self.ensure_mutable()
-        variables = _validate_endpoint(self._endpoints, path, name, subprotocol)
+        variables = _validate_endpoint(
+            self._endpoints, path, name, subprotocol=subprotocol
+        )
         _validate_context(context)
         if path_model is not None:
             if not isinstance(path_model, type) or not issubclass(
@@ -587,7 +591,9 @@ class RpcDefinition:
         rejects: Sequence[RpcErrorBinding[Any]] = (),
     ) -> RpcStreamEndpoint[Any]:
         self.ensure_mutable()
-        variables = _validate_endpoint(self._endpoints, path, name, subprotocol)
+        variables = _validate_endpoint(
+            self._endpoints, path, name, subprotocol=subprotocol
+        )
         _validate_context(context)
         marker = getattr(stream, "__rpckit_stream__", None)
         if not isinstance(stream, FunctionType) or marker is None:
@@ -680,7 +686,9 @@ class RpcDefinition:
             raise ProtocolDefinitionError(
                 "rpc.socket() expects a function decorated by @channel.socket()"
             )
-        variables = _validate_endpoint(self._endpoints, path, name, subprotocol)
+        variables = _validate_endpoint(
+            self._endpoints, path, name, subprotocol=subprotocol
+        )
         _validate_context(context)
         if handler in self._mounted_sockets:
             raise ProtocolDefinitionError(
@@ -898,7 +906,7 @@ class RpcDefinition:
         base_url: str,
         description: str = "Typed JSON-RPC API.",
         variables: Mapping[str, ServerVariable] | None = None,
-        app: "FastAPI | None" = None,
+        app: FastAPI | None = None,
     ) -> RpcContract:
         from fastapi_canon.integrations.websockets.contract import contract_from_service
 
@@ -941,6 +949,7 @@ def _validate_endpoint(
     endpoints: Sequence[RpcAnyEndpoint],
     path: str,
     name: str | None,
+    *,
     subprotocol: str | None,
 ) -> tuple[str, ...]:
     if (

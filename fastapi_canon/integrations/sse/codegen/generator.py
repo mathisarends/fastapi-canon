@@ -72,7 +72,9 @@ class SseGenerator:
             "python_http_client": target.http_client if language == "python" else None,
         }
         if target.diagnostics is not None:
-            write_diagnostics(target.diagnostics, diagnostics, set(), generation)
+            write_diagnostics(
+                target.diagnostics, diagnostics, set(), generation=generation
+            )
         accepted: set[str] = (
             accepted_diagnostics(
                 diagnostics,
@@ -82,7 +84,9 @@ class SseGenerator:
             else set()
         )
         if target.diagnostics is not None:
-            write_diagnostics(target.diagnostics, diagnostics, accepted, generation)
+            write_diagnostics(
+                target.diagnostics, diagnostics, accepted, generation=generation
+            )
         pending = [item for item in diagnostics if item.id not in accepted]
         emit_diagnostics(pending)
         if target.strict and pending:

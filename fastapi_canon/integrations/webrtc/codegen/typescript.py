@@ -9,6 +9,8 @@ The output consists of four modules:
 - ``index.ts``: re-exports of the three modules above.
 """
 
+from __future__ import annotations
+
 import json
 import re
 from collections.abc import Mapping, Sequence
@@ -175,6 +177,22 @@ def runtime_source() -> str:  # smelt: ignore[SMT429] -- external API
     )
 
 
+# ------------------------------------------------------------------ client
+
+_RECEIVE_TYPES = {
+    "raw": "string | ArrayBuffer",
+    "text": "string",
+    "binary": "ArrayBuffer",
+    "none": "never",
+}
+_SEND_TYPES = {
+    "raw": "string | ArrayBuffer | ArrayBufferView",
+    "text": "string",
+    "binary": "ArrayBuffer | ArrayBufferView",
+    "none": "never",
+}
+
+
 def _check_contract(contract: Mapping[str, Any]) -> None:
     if not isinstance(contract, Mapping):
         raise ContractError("The contract must be a JSON object")
@@ -226,7 +244,7 @@ def _definition_names(
     return names
 
 
-def _models(definitions: Mapping[str, Any], emitter: "_Emitter") -> str:
+def _models(definitions: Mapping[str, Any], emitter: _Emitter) -> str:
     if not definitions:
         return "export {};\n"
     blocks: list[str] = []
@@ -258,7 +276,7 @@ class _Emitter:
         self.names = names
         self.prefix = prefix
 
-    def scoped(self, prefix: str) -> "_Emitter":
+    def scoped(self, prefix: str) -> _Emitter:
         return _Emitter(self.names, prefix)
 
     def type(self, schema: Any, indent: str = "") -> str:
@@ -309,21 +327,6 @@ class _Emitter:
             return self.object_body(schema, indent)
         return "unknown"
 
-    def _array(self, schema: Mapping[str, Any], indent: str) -> str:
-        prefix_items = schema.get("prefixItems")
-        items = schema.get("items", True)
-        if isinstance(prefix_items, list):
-            elements = [self.type(item, indent) for item in prefix_items]
-            minimum = schema.get("minItems", len(elements))
-            rendered = [
-                element if index < minimum else f"{_wrap(element)}?"
-                for index, element in enumerate(elements)
-            ]
-            if items is not False and schema.get("maxItems") != len(elements):
-                rendered.append(f"...{_wrap(self.type(items, indent))}[]")
-            return f"[{', '.join(rendered)}]"
-        return f"{_wrap(self.type(items, indent))}[]"
-
     def object_body(self, schema: Mapping[str, Any], indent: str) -> str:
         properties: Mapping[str, Any] = schema.get("properties", {})
         required = set(schema.get("required", ()))
@@ -345,6 +348,21 @@ class _Emitter:
             lines.append(f"{inner}[key: string]: unknown;")
         lines.append(f"{indent}}}")
         return "\n".join(line for line in lines if line)
+
+    def _array(self, schema: Mapping[str, Any], indent: str) -> str:
+        prefix_items = schema.get("prefixItems")
+        items = schema.get("items", True)
+        if isinstance(prefix_items, list):
+            elements = [self.type(item, indent) for item in prefix_items]
+            minimum = schema.get("minItems", len(elements))
+            rendered = [
+                element if index < minimum else f"{_wrap(element)}?"
+                for index, element in enumerate(elements)
+            ]
+            if items is not False and schema.get("maxItems") != len(elements):
+                rendered.append(f"...{_wrap(self.type(items, indent))}[]")
+            return f"[{', '.join(rendered)}]"
+        return f"{_wrap(self.type(items, indent))}[]"
 
 
 def _literal(value: Any) -> str:
@@ -390,22 +408,6 @@ def _client(
     return "".join(out)
 
 
-# ------------------------------------------------------------------ client
-
-_RECEIVE_TYPES = {
-    "raw": "string | ArrayBuffer",
-    "text": "string",
-    "binary": "ArrayBuffer",
-    "none": "never",
-}
-_SEND_TYPES = {
-    "raw": "string | ArrayBuffer | ArrayBufferView",
-    "text": "string",
-    "binary": "ArrayBuffer | ArrayBufferView",
-    "none": "never",
-}
-
-
 def _session_types(session: Mapping[str, Any], models: _Emitter) -> str:
     name: str = session["name"]
     pascal = _pascal(name)
@@ -424,13 +426,13 @@ def _session_types(session: Mapping[str, Any], models: _Emitter) -> str:
                 channel["receive_format"],
                 channel.get("receive_schema"),
                 _SEND_TYPES,
-                models,
+                models=models,
             )
             receive = _message_type(
                 channel["send_format"],
                 channel.get("send_schema"),
                 _RECEIVE_TYPES,
-                models,
+                models=models,
             )
             lines.append(
                 f"  readonly {_property(channel['name'])}: {{\n"
@@ -515,6 +517,7 @@ def _message_type(
     message_format: str,
     schema: Any,
     fallback: Mapping[str, str],
+    *,
     models: _Emitter,
 ) -> str:
     if message_format == "json":

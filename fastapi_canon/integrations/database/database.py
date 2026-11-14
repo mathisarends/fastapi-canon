@@ -2,7 +2,7 @@
 
 from collections.abc import AsyncGenerator, Callable, Mapping
 from contextlib import AbstractContextManager, asynccontextmanager, nullcontext
-from typing import Any, Literal
+from typing import Any
 
 from anyio import CancelScope
 from dishka import Provider, Scope, provide
@@ -16,7 +16,10 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from fastapi_canon.feature import Feature
-from fastapi_canon.integrations.database.locks import TransactionLocks
+from fastapi_canon.integrations.database.locks import (
+    AcquireTransactionLock,
+    SqliteLockPolicy,
+)
 from fastapi_canon.integrations.database.migrations import AlembicMigrations
 
 
@@ -38,7 +41,7 @@ class Database:
         check_migrations_on_startup: bool = True,
         engine_context: Callable[[AsyncEngine], AbstractContextManager[object]]
         | None = None,
-        sqlite_advisory_locks: Literal["error", "ignore"] = "error",
+        sqlite_advisory_locks: SqliteLockPolicy = "error",
     ) -> None:
         normalized = make_url(url)
         drivers = {
@@ -129,7 +132,7 @@ class _DatabaseProvider(Provider):
         self,
         database: Database,
         session_class: type[AsyncSession],
-        sqlite_locks: Literal["error", "ignore"],
+        sqlite_locks: SqliteLockPolicy,
     ) -> None:
         super().__init__()
         self._database = database
@@ -159,8 +162,8 @@ class _DatabaseProvider(Provider):
         )
 
     @provide(scope=Scope.REQUEST)
-    def transaction_locks(self, session: AsyncSession) -> TransactionLocks:
-        return TransactionLocks(session, sqlite=self._sqlite_locks)
+    def transaction_locks(self, session: AsyncSession) -> AcquireTransactionLock:
+        return AcquireTransactionLock(session, sqlite=self._sqlite_locks)
 
     async def _session(
         self, factory: async_sessionmaker[AsyncSession]

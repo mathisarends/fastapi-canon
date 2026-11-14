@@ -177,6 +177,7 @@ class OpenTelemetry(RpcMiddleware):
         span: Span | None,
         error: BaseException | None,
         cancelled: bool,
+        *,
         error_type: str | None,
     ) -> None:
         if span is None:
@@ -228,7 +229,12 @@ class OpenTelemetry(RpcMiddleware):
                             if outcome.rejection is not None
                             else _close_error(outcome.close_code)
                         )
-                        self._finish(span, outcome.error, outcome.cancelled, error_type)
+                        self._finish(
+                            span,
+                            outcome.error,
+                            outcome.cancelled,
+                            error_type=error_type,
+                        )
                         result = {
                             **attributes,
                             "rpckit.outcome": (
@@ -291,7 +297,10 @@ class OpenTelemetry(RpcMiddleware):
                 outcome = scope.outcome
                 if outcome is not None:
                     self._finish(
-                        span, outcome.error, outcome.cancelled, outcome.error_code
+                        span,
+                        outcome.error,
+                        outcome.cancelled,
+                        error_type=outcome.error_code,
                     )
                     if span is not None and outcome.error_code is not None:
                         span.set_attribute(
@@ -331,7 +340,7 @@ class OpenTelemetry(RpcMiddleware):
                         span,
                         outcome.error,
                         outcome.cancelled,
-                        _close_error(outcome.close_code),
+                        error_type=_close_error(outcome.close_code),
                     )
                     if self._metrics:
                         result = _close_attributes(attributes, outcome.close_code)

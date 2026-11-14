@@ -18,6 +18,7 @@ def install_mcp(
     app: FastAPI,
     mounts: Sequence[McpMount],
     options: Mcp,
+    *,
     container: AsyncContainer | None,
     configuration: McpRuntime,
 ) -> Lifespan[FastAPI]:

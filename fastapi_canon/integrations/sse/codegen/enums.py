@@ -1,4 +1,5 @@
 from dataclasses import replace
+from typing import NamedTuple
 
 from fastapi_canon.integrations.sse.codegen.ir import (
     Contract,
@@ -32,7 +33,7 @@ def with_enums(contract: Contract) -> Contract:
             declarations[name] = operation.event
             operation = replace(operation, event=Reference(name))
         operations.append(operation)
-    candidates: list[tuple[str, set[tuple[str, str]], set[str]]] = []
+    candidates: list[_EnumCandidate] = []
     for name, type_ in sorted(declarations.items()):
         if not isinstance(type_, Union):
             continue
@@ -47,7 +48,7 @@ def with_enums(contract: Contract) -> Contract:
             }
             declarations[name] = StringEnum(_members(values))
         elif type_.discriminator:
-            fields: set[tuple[str, str]] = set()
+            fields: set[_DiscriminatorField] = set()
             values: set[str] = set()
             members = _discriminator_models(type_.members, declarations)
             for member in members or ():
@@ -75,7 +76,7 @@ def with_enums(contract: Contract) -> Contract:
                 ):
                     break
                 assert field is not None
-                fields.add((member.name, field.name))
+                fields.add(_DiscriminatorField(member.name, field.name))
                 values.update(
                     part.value
                     for part in literals
@@ -84,7 +85,7 @@ def with_enums(contract: Contract) -> Contract:
             else:
                 if members:
                     candidates.append(
-                        (
+                        _EnumCandidate(
                             name + identifier(type_.discriminator, upper=True),
                             fields,
                             values,
@@ -206,3 +207,14 @@ def _enum_literals(type_: Type, enum: str, members: dict[str, str]) -> Type:
         return EnumValue(enum, members[type_.value])
     assert isinstance(type_, Union)
     return Union(tuple(_enum_literals(part, enum, members) for part in type_.members))
+
+
+class _DiscriminatorField(NamedTuple):
+    model: str
+    field: str
+
+
+class _EnumCandidate(NamedTuple):
+    name: str
+    fields: set[_DiscriminatorField]
+    values: set[str]

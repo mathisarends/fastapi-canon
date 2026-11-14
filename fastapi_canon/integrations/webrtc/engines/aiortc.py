@@ -17,7 +17,7 @@ import asyncio
 import contextlib
 import logging
 from collections.abc import Callable, Sequence
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 
 try:
     from aiortc import (
@@ -270,12 +270,12 @@ class AiortcPeer:
     def _datachannel(self, channel: RTCDataChannel) -> None:
         self._observer.data_channel(AiortcDataChannel(channel))
 
-    def _negotiated_parameters(self) -> dict[str, tuple[list[Any], list[Any]]]:
+    def _negotiated_parameters(self) -> dict[str, _NegotiatedMedia]:
         # aiortc's createOffer resets every transceiver to its default payload
         # types and header-extension IDs. Browsers reject re-offers that remap
         # them on an established m-line, so re-offers keep the negotiated ones.
         return {
-            transceiver.mid: (
+            transceiver.mid: _NegotiatedMedia(
                 list(transceiver._codecs),
                 list(transceiver._headerExtensions),
             )
@@ -350,17 +350,16 @@ def _ice_server(server: IceServer) -> RTCIceServer:
 
 def _keep_negotiated(
     offer: RTCSessionDescription,
-    negotiated: dict[str, tuple[list[Any], list[Any]]],
+    negotiated: dict[str, _NegotiatedMedia],
 ) -> RTCSessionDescription:
     document = SdpDocument.parse(offer.sdp)
     for media in document.media:
         saved = negotiated.get(media.rtp.muxId)
         if saved is None:
             continue
-        codecs, extensions = saved
-        media.rtp.codecs = codecs
-        media.rtp.headerExtensions = extensions
-        media.fmt = [codec.payloadType for codec in codecs]
+        media.rtp.codecs = saved.codecs
+        media.rtp.headerExtensions = saved.header_extensions
+        media.fmt = [codec.payloadType for codec in saved.codecs]
     return RTCSessionDescription(sdp=str(document), type=offer.type)
 
 
@@ -468,3 +467,8 @@ class AiortcDataChannel:
 
     def close(self) -> None:
         self.native.close()
+
+
+class _NegotiatedMedia(NamedTuple):
+    codecs: list[Any]
+    header_extensions: list[Any]

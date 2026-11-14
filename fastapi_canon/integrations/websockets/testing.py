@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import json
 from collections import deque
@@ -127,23 +129,8 @@ class SocketFaults:
         self._closed.set()
         self._send_gate.set()
 
-    async def _wait(
-        self, operation: Awaitable[object], socket: "InMemorySocket"
-    ) -> None:
-        waiting = asyncio.ensure_future(operation)
-        closing = asyncio.create_task(self._closed.wait())
-        try:
-            await asyncio.wait((waiting, closing), return_when=asyncio.FIRST_COMPLETED)
-            socket.ensure_open()
-            await waiting
-        finally:
-            for task in (waiting, closing):
-                if not task.done():
-                    task.cancel()
-            await asyncio.gather(waiting, closing, return_exceptions=True)
-
     async def deliver(
-        self, socket: "InMemorySocket", queue: asyncio.Queue[Any], frame: str | bytes
+        self, socket: InMemorySocket, queue: asyncio.Queue[Any], frame: str | bytes
     ) -> None:
         socket.ensure_open()
         if not self._send_gate.is_set():
@@ -168,6 +155,19 @@ class SocketFaults:
                 queue.put_nowait(frame)
         if self.drop_after is not None and self.frames_sent >= self.drop_after:
             socket.disconnect(RpcDisconnect(self.close_code, self.reason))
+
+    async def _wait(self, operation: Awaitable[object], socket: InMemorySocket) -> None:
+        waiting = asyncio.ensure_future(operation)
+        closing = asyncio.create_task(self._closed.wait())
+        try:
+            await asyncio.wait((waiting, closing), return_when=asyncio.FIRST_COMPLETED)
+            socket.ensure_open()
+            await waiting
+        finally:
+            for task in (waiting, closing):
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(waiting, closing, return_exceptions=True)
 
 
 class InMemorySocket:
@@ -348,21 +348,6 @@ class InMemorySocketFactory:
         self._rejections: deque[RpcTestHandshakeRejected] = deque()
         self._closed = False
 
-    def reject_next(
-        self,
-        *,
-        status: int | None = None,
-        close_code: int | None = None,
-        reason: str = "",
-    ) -> None:
-        if status is None and close_code is None:
-            raise ValueError("Provide a handshake status or close_code")
-        self._rejections.append(
-            RpcTestHandshakeRejected(
-                status=status, close_code=close_code, reason=reason
-            )
-        )
-
     async def __call__(
         self,
         url: str,
@@ -411,11 +396,26 @@ class InMemorySocketFactory:
             handshake.cancel()
             await asyncio.gather(handshake, return_exceptions=True)
 
-    async def __aenter__(self) -> "InMemorySocketFactory":
+    async def __aenter__(self) -> InMemorySocketFactory:
         return self
 
     async def __aexit__(self, *exc: object) -> None:
         await self.close()
+
+    def reject_next(
+        self,
+        *,
+        status: int | None = None,
+        close_code: int | None = None,
+        reason: str = "",
+    ) -> None:
+        if status is None and close_code is None:
+            raise ValueError("Provide a handshake status or close_code")
+        self._rejections.append(
+            RpcTestHandshakeRejected(
+                status=status, close_code=close_code, reason=reason
+            )
+        )
 
     async def close(self) -> None:
         if self._closed:
@@ -628,7 +628,8 @@ class RpcTestClient:
     async def _read(self) -> None:
         try:
             while True:
-                value = json.loads(await self.socket.client_receive())
+                message = await self.socket.client_receive()
+                value = json.loads(message)
                 if not isinstance(value, dict):
                     continue
                 if "method" in value:
@@ -644,7 +645,7 @@ class RpcTestClient:
                     response.set_exception(error)
             await self._notifications.put(_CLOSED)
 
-    def _connection_closed(self) -> "RpcTestConnectionClosed":
+    def _connection_closed(self) -> RpcTestConnectionClosed:
         return RpcTestConnectionClosed(self.socket.rejection or self.socket.closed)
 
 

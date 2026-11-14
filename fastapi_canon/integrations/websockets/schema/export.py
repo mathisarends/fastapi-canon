@@ -12,9 +12,6 @@ class ProtocolReferenceError(Exception):
     """Raised when a ``module:attribute`` reference names no RPC source."""
 
 
-type ContractSource = RpcContract
-
-
 # Public protocol loader for external contract-export tooling.
 def load_protocol(  # smelt: ignore[SMT429] -- external API
     reference: str,
@@ -24,7 +21,7 @@ def load_protocol(  # smelt: ignore[SMT429] -- external API
     return source.protocol
 
 
-def load_contract_source(reference: str) -> ContractSource:
+def load_contract_source(reference: str) -> RpcContract:
     """Import a contract named by ``module:attribute``."""
     module_name, separator, attribute_name = reference.partition(":")
     if not separator or not module_name or not attribute_name:
@@ -59,7 +56,7 @@ def load_contract_source(reference: str) -> ContractSource:
 
 
 def render_contract(
-    source: ContractSource,
+    source: RpcContract,
     *,
     title: str | None = None,
     description: str | None = None,

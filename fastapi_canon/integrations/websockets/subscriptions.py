@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
@@ -36,11 +38,6 @@ class RpcStreamLimitError(RpcError):
 
 
 class SubscriptionSession:
-    async def wait_finished(self) -> None:
-        await asyncio.gather(
-            *(task for _, task in tuple(self._tasks.values())), return_exceptions=True
-        )
-
     def __init__(
         self,
         definitions: tuple[RpcSubscriptionDefinition, ...],
@@ -74,10 +71,15 @@ class SubscriptionSession:
             default=False,
         )
 
+    async def wait_finished(self) -> None:
+        await asyncio.gather(
+            *(task for _, task in tuple(self._tasks.values())), return_exceptions=True
+        )
+
     async def handle(
         self, request: RpcRequestEnvelope, *, admitted_at: float | None = None
     ) -> RpcResponse | None:
-        async def handshake(scope: "RpcRequestScope | None") -> None:
+        async def handshake(scope: RpcRequestScope | None) -> None:
             token = self._request.set(scope)
             try:
                 await self._handle(request)

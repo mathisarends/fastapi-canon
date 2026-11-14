@@ -264,7 +264,7 @@ def _validate_collisions(
                 continue
             previous = seen.get(key)
             if previous is not None and previous.error is not entry.error:
-                raise _collision_error(dimension, key, previous, entry)
+                raise _collision_error(dimension, key, previous, second=entry)
             seen[key] = entry
         by_exception[entry.error.exception] = entry
 
@@ -275,6 +275,7 @@ def _collision_error(
     dimension: str,
     value: object,
     first: _RegistryEntry,
+    *,
     second: _RegistryEntry,
 ) -> ErrorConfigurationError:
     return ErrorConfigurationError(

@@ -8,6 +8,7 @@ from fastapi_canon.integrations.sse.codegen.names import client_path, identifier
 from fastapi_canon.integrations.sse.codegen.openapi import (
     ContractError,
     Document,
+    ParameterKey,
     resolve_pointer,
     resolve_ref,
     validate_contract,
@@ -28,9 +29,9 @@ _REF_METADATA = {
 }
 
 if TYPE_CHECKING:
+    from fastapi_canon.codegen.generators import ClientLanguage
     from fastapi_canon.integrations.sse.codegen.diagnostics import (
         GenerationDiagnostic,
-        GenerationTarget,
     )
 
 
@@ -188,7 +189,7 @@ class Contract:
 def build_ir(
     document: Document,
     *,
-    target: GenerationTarget = "python",
+    target: ClientLanguage = "python",
     diagnostics: list[GenerationDiagnostic] | None = None,
     include_operations: tuple[str, ...] | None = None,
 ) -> Contract:
@@ -294,10 +295,10 @@ def build_ir(
                     f"Operation name collision: {'.'.join(keys)}.{name}"
                 )
             names.add((keys, name))
-            merged: dict[tuple[str, str], Document] = {}
+            merged: dict[ParameterKey, Document] = {}
             for value in [*path_item.get("parameters", []), *raw.get("parameters", [])]:
                 param = resolve_ref(document, value)
-                merged[(param["in"], param["name"])] = param
+                merged[ParameterKey(param["in"], param["name"])] = param
             params: list[Parameter] = []
             arguments: set[str] = set()
             for (location, param_name), param in sorted(merged.items()):

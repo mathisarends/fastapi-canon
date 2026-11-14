@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import inspect
 import re
 from collections.abc import Callable, Iterable, Mapping
@@ -66,6 +68,39 @@ class RpcError(Exception):
     _builtin: ClassVar[bool] = False
     problem: Problem | None = None
 
+    def __init__(
+        self,
+        details: BaseModel | None = None,
+        /,
+        *,
+        message: str | None = None,
+        **fields: Any,
+    ) -> None:
+        if type(self) is RpcError:
+            raise TypeError("RpcError cannot be instantiated directly")
+        details_type = type(self).details_type
+        if details_type is None:
+            if details is not None or fields:
+                suggestion = (
+                    "; did you mean to pass message=...?"
+                    if isinstance(details, str)
+                    else ""
+                )
+                raise TypeError(
+                    f"{type(self).__name__} does not accept details{suggestion}"
+                )
+            self.details = None
+        else:
+            if details is not None and fields:
+                raise TypeError("Pass either a details instance or fields, not both")
+            if details is None and not fields:
+                raise TypeError(f"{type(self).__name__} requires details")
+            if details is not None and not isinstance(details, details_type):
+                raise TypeError(f"details must be {details_type.__name__}")
+            self.details = details if details is not None else details_type(**fields)
+        self.message = message if message is not None else type(self).message
+        super().__init__(self.message)
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         code = cls.__dict__.get("code", _error_code(cls.__name__))
@@ -99,39 +134,6 @@ class RpcError(Exception):
         cls.message = cls.__dict__.get("message", code.replace("_", " ").capitalize())
         cls.rpc_code = int(rpc_code)
         cls.details_type = details_type
-
-    def __init__(
-        self,
-        details: BaseModel | None = None,
-        /,
-        *,
-        message: str | None = None,
-        **fields: Any,
-    ) -> None:
-        if type(self) is RpcError:
-            raise TypeError("RpcError cannot be instantiated directly")
-        details_type = type(self).details_type
-        if details_type is None:
-            if details is not None or fields:
-                suggestion = (
-                    "; did you mean to pass message=...?"
-                    if isinstance(details, str)
-                    else ""
-                )
-                raise TypeError(
-                    f"{type(self).__name__} does not accept details{suggestion}"
-                )
-            self.details = None
-        else:
-            if details is not None and fields:
-                raise TypeError("Pass either a details instance or fields, not both")
-            if details is None and not fields:
-                raise TypeError(f"{type(self).__name__} requires details")
-            if details is not None and not isinstance(details, details_type):
-                raise TypeError(f"details must be {details_type.__name__}")
-            self.details = details if details is not None else details_type(**fields)
-        self.message = message if message is not None else type(self).message
-        super().__init__(self.message)
 
     @property
     def is_builtin(self) -> bool:
@@ -167,8 +169,18 @@ class RpcInvalidParamsError(RpcError):
     rpc_code = RpcErrorCode.INVALID_PARAMS
     details: RpcInvalidParams
 
+    def __init__(self, error: ValidationError | None = None, **fields: Any) -> None:
+        if error is not None:
+            converted = type(self).from_validation_error(error)
+            self.details = converted.details
+            self.message = converted.message
+            Exception.__init__(self, self.message)
+            return
+        fields.setdefault("issues", [])
+        super().__init__(**fields)
+
     @classmethod
-    def from_validation_error(cls, error: ValidationError) -> "RpcInvalidParamsError":
+    def from_validation_error(cls, error: ValidationError) -> RpcInvalidParamsError:
         issues = [
             RpcValidationIssue(
                 loc=list(issue["loc"]), message=issue["msg"], type=issue["type"]
@@ -180,16 +192,6 @@ class RpcInvalidParamsError(RpcError):
         return cls(
             issues=issues, message=f"Invalid params at {location}: {first.message}"
         )
-
-    def __init__(self, error: ValidationError | None = None, **fields: Any) -> None:
-        if error is not None:
-            converted = type(self).from_validation_error(error)
-            self.details = converted.details
-            self.message = converted.message
-            Exception.__init__(self, self.message)
-            return
-        fields.setdefault("issues", [])
-        super().__init__(**fields)
 
 
 class RpcInternalError(RpcError):

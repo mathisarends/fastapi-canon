@@ -124,7 +124,7 @@ class RpcSocket(Generic[_IncomingT, _OutgoingT]):
         )
 
     @classmethod
-    def create(
+    def create(  # smelt: ignore[SMT345] -- public RpcSocket factory signature
         cls,
         socket: RpcWebSocket,
         connection: RpcConnection,

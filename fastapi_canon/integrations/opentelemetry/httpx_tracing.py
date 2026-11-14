@@ -2,7 +2,7 @@
 
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, override
 
 from opentelemetry import trace
 from opentelemetry.trace import Span, SpanContext, Status, StatusCode
@@ -33,6 +33,7 @@ class HttpInstrumentationProvider(trace.TracerProvider):
             {"http.url", "url.full"} if capture_url else set()
         )
 
+    @override
     def get_tracer(
         self,
         instrumenting_module_name: str,
@@ -134,6 +135,7 @@ class _HttpSpan(Span):
             status.status_code if isinstance(status, Status) else status
         )
 
+    @override
     def record_exception(
         self,
         exception: BaseException,

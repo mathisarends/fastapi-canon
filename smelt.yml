@@ -273,6 +273,7 @@ structure:
         style: absolute
       private_modules: forbid
       future_annotations: when-needed
+      max_positional_parameters: 3
       type_dispatch:
         style: match
         min_branches: 3
@@ -334,6 +335,15 @@ rules:
   async-mock-without-await-check: error
   test-only-public-function: error
   nondeterministic-test-data: warning
+  deprecated-async-contextmanager-return: warning
+  duplicate-literal-type: warning
+  private-symbol-import: warning
+  await-in-call-argument: warning
+  str-enum-explicit-values: warning
+  redundant-private-delegate: warning
+  redundant-name-alias: warning
+  prefer-deferred-annotations: warning
+  anonymous-tuple-type: warning
   unused-suppression: error
   resolved-debt: error
 suppressions:
