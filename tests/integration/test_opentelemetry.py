@@ -377,6 +377,43 @@ def test_combined_groups_keep_expected_failures_independent() -> None:
         assert capture.one("Service.run").status.status_code is StatusCode.ERROR
 
 
+@pytest.mark.parametrize(
+    ("status", "port_status"),
+    [(404, StatusCode.UNSET), (503, StatusCode.ERROR)],
+    ids=["declared-client-error", "declared-server-error"],
+)
+def test_declared_client_errors_are_expected_without_explicit_types(
+    status: int, port_status: StatusCode
+) -> None:
+    class Dependencies(Provider):
+        repository = provide(MemoryRepository, provides=Repository, scope=Scope.REQUEST)
+
+    feature = Feature(
+        name="items",
+        providers=[Dependencies],
+        errors=[Error(Missing, status=status, code="missing", title="Missing")],
+        integrations=[instrument(Repository)],
+    )
+    with SpanCapture() as capture:
+        app = Composition(
+            features=(feature,),
+            integrations=[Telemetry(tracer_provider=capture.provider)],
+        ).build(FastAPI())
+
+        async def run() -> None:
+            async with (
+                asyncio.timeout(5),
+                app.router.lifespan_context(app),
+                app.state.dishka_container() as request,
+            ):
+                repository = await request.get(Repository)
+                with pytest.raises(Missing):
+                    await repository.get(UUID(int=1), fail="expected")
+
+        asyncio.run(run())
+        assert capture.one("Repository.get").status.status_code is port_status
+
+
 def test_instrumentation_is_immutable_and_copied_by_feature() -> None:
     expected: list[type[Exception]] = [Missing]
     declaration = instrument(Repository, Service, expected=expected, component="named")

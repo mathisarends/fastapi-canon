@@ -19,6 +19,7 @@ except ModuleNotFoundError as exc:
         name=exc.name,
     ) from exc
 
+from fastapi_canon.integration import ErrorLookup
 from fastapi_canon.integrations.opentelemetry.declarations import (
     Instrumentation,
     Telemetry,
@@ -52,7 +53,13 @@ class _InstrumentedProxy:
 
 
 class _InstrumentPort:
-    def __init__(self, registrations: Registrations, options: Telemetry) -> None:
+    def __init__(
+        self,
+        registrations: Registrations,
+        options: Telemetry,
+        errors: ErrorLookup | None,
+    ) -> None:
+        self._errors = errors
         self.tracer = trace.get_tracer(
             "fastapi_canon", tracer_provider=options.tracer_provider
         )
@@ -122,7 +129,7 @@ class _InstrumentPort:
                     return await target(*args, **kwargs)
                 except Exception as error:
                     error_type = type(error).__name__
-                    expected = isinstance(error, spec.expected)
+                    expected = isinstance(error, spec.expected) or self._declared(error)
                     if not expected:
                         outcome["error.type"] = error_type
                     if span is not None:
@@ -143,12 +150,23 @@ class _InstrumentPort:
 
         return call
 
+    def _declared(self, error: Exception) -> bool:
+        # A declared client error is an expected outcome, not a failed operation.
+        declared = self._errors.resolve(error) if self._errors is not None else None
+        return declared is not None and declared.status < 500
+
 
 def create_instrumentation_providers(
-    registrations: Registrations, options: Telemetry
+    registrations: Registrations,
+    options: Telemetry,
+    errors: ErrorLookup | None = None,
 ) -> tuple[Provider, ...]:
-    """Decorate each ``(feature, port, declaration)`` binding with a proxy."""
-    observer = _InstrumentPort(registrations, options)
+    """Decorate each ``(feature, port, declaration)`` binding with a proxy.
+
+    Exceptions declared as client errors (status below 500) in *errors* count as
+    expected, in addition to each declaration's ``expected`` types.
+    """
+    observer = _InstrumentPort(registrations, options, errors)
     return tuple(_provider(spec, port, observer) for _, port, spec in registrations)
 
 

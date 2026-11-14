@@ -10,7 +10,13 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from starlette.types import Scope as ASGIScope
 
 from fastapi_canon.exceptions import FeatureConfigurationError
-from fastapi_canon.integration import Installer, Integration, IntegrationContext
+from fastapi_canon.integration import (
+    ErrorLookup,
+    Installer,
+    Integration,
+    IntegrationContext,
+    ProviderContext,
+)
 
 if TYPE_CHECKING:
     from dishka import Provider
@@ -158,14 +164,11 @@ class Telemetry(Integration):
             meter_provider=self.meter_provider,
         )
 
-    def providers(
-        self,
-        parts: tuple[tuple[str, Instrumentation], ...],
-        providers: tuple[Provider, ...],
-    ) -> tuple[Provider, ...]:
+    def providers(self, context: ProviderContext) -> tuple[Provider, ...]:
         """Bind this configuration per component and decorate instrumented ports."""
+        providers = context.providers
         _reject_reserved_binding(providers)
-        instrumentation = instrumentation_providers(parts, self)
+        instrumentation = instrumentation_providers(context.parts, self, context.errors)
         if not providers and not instrumentation:
             return ()
         components = dict.fromkeys(
@@ -208,6 +211,7 @@ Instrumentation.integration = Telemetry
 def instrumentation_providers(
     registrations: tuple[tuple[str, Instrumentation], ...],
     options: Telemetry,
+    errors: ErrorLookup | None = None,
 ) -> tuple[Provider, ...]:
     ports = tuple(
         (feature, port, spec) for feature, spec in registrations for port in spec.ports
@@ -229,7 +233,7 @@ def instrumentation_providers(
         create_instrumentation_providers,
     )
 
-    return create_instrumentation_providers(ports, options)
+    return create_instrumentation_providers(ports, options, errors)
 
 
 def instrumented_methods(

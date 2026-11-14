@@ -34,7 +34,7 @@ from fastapi_canon.diagnostics import (
     OperationInfo,
     qualified_name,
 )
-from fastapi_canon.error import ErrorRegistry, installed_catalog
+from fastapi_canon.error import ErrorCatalog, ErrorRegistry, installed_catalog
 from fastapi_canon.error.contributions import error_registries
 from fastapi_canon.exceptions import ErrorConfigurationError, FeatureConfigurationError
 from fastapi_canon.injected_route import InjectedRoute, endpoint_dependencies
@@ -44,6 +44,7 @@ from fastapi_canon.integration import (
     Integration,
     IntegrationContext,
     IntegrationError,
+    ProviderContext,
     RouteContext,
     attached_route,
 )
@@ -191,7 +192,9 @@ def prepare_registry(
     )
 
 
-def prepare_container(app: FastAPI, composition: Composition) -> AsyncContainer | None:
+def prepare_container(
+    app: FastAPI, composition: Composition, errors: ErrorCatalog | None
+) -> AsyncContainer | None:
     reject_duplicate_contributions(composition.features, "providers", "provider source")
     materialized = materialize_providers(flatten_provider_sources(composition.features))
     reject_duplicate_materialized_providers(materialized)
@@ -201,7 +204,11 @@ def prepare_container(app: FastAPI, composition: Composition) -> AsyncContainer 
         providers = (
             *providers,
             *integration.providers(
-                integration_parts(composition, integration), feature_providers
+                ProviderContext(
+                    integration_parts(composition, integration),
+                    feature_providers,
+                    errors,
+                )
             ),
         )
     if composition.overrides:
@@ -1063,7 +1070,7 @@ class _CheckComposition:
         self.registry = prepare_registry(self.app, self.composition, self.routers)
 
     def _providers(self) -> None:
-        self.container = prepare_container(self.app, self.composition)
+        self.container = prepare_container(self.app, self.composition, self.registry)
 
     def _integration_routes(self) -> None:
         assert self.routers is not None

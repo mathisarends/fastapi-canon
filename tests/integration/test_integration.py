@@ -16,6 +16,7 @@ from fastapi_canon.integration import (
     IntegrationContext,
     IntegrationError,
     IntegrationRoute,
+    ProviderContext,
     RouteContext,
     attach_route,
 )
@@ -29,10 +30,8 @@ class Names(tuple[str, ...]):
 class Greetings(Integration):
     path: str = "/greetings"
 
-    def providers(
-        self, parts: tuple[tuple[str, Any], ...], providers: tuple[Provider, ...]
-    ) -> Sequence[Provider]:
-        names = Names(f"{feature}:{part.name}" for feature, part in parts)
+    def providers(self, context: ProviderContext) -> Sequence[Provider]:
+        names = Names(f"{feature}:{part.name}" for feature, part in context.parts)
         provider = Provider(scope=Scope.APP)
         provider.provide(lambda: names, provides=Names)
         return (provider,)

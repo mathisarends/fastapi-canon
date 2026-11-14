@@ -23,12 +23,15 @@ if TYPE_CHECKING:
 
 __all__ = [
     "ContractExporter",
+    "DeclaredError",
+    "ErrorLookup",
     "Installer",
     "Integration",
     "IntegrationContext",
     "IntegrationError",
     "IntegrationPart",
     "IntegrationRoute",
+    "ProviderContext",
     "RouteContext",
     "attach_route",
     "attached_route",
@@ -48,10 +51,8 @@ class Integration:
 
     __slots__ = ()
 
-    def providers(
-        self, parts: Parts[Any], providers: tuple[Provider, ...]
-    ) -> Sequence[Provider]:
-        """Return Dishka providers added after the feature *providers*."""
+    def providers(self, context: ProviderContext) -> Sequence[Provider]:
+        """Return Dishka providers added after the feature providers."""
         return ()
 
     def prepare(self, context: IntegrationContext) -> Installer | None:
@@ -63,6 +64,33 @@ class IntegrationPart(Protocol):
     """A feature-owned contribution to one integration."""
 
     integration: ClassVar[type[Integration]]
+
+
+class DeclaredError(Protocol):
+    """The parts of a declared error contract that integrations may read."""
+
+    @property
+    def status(self) -> int: ...
+
+    @property
+    def code(self) -> str: ...
+
+
+class ErrorLookup(Protocol):
+    """Resolve an exception to the error contract the composition declares."""
+
+    def resolve(self, exception: Exception) -> DeclaredError | None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderContext:
+    """The composition's providers, available to ``Integration.providers``."""
+
+    parts: Parts[Any]
+    providers: tuple[Provider, ...]
+    """The Dishka providers contributed by features."""
+    errors: ErrorLookup | None
+    """The composition's declared error contracts, if any."""
 
 
 @dataclass(frozen=True, slots=True)
