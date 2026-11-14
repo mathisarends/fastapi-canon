@@ -78,6 +78,8 @@ application behavior. Independent failures can appear together.
 | Code | Configuration problem |
 | --- | --- |
 | `canon.composition.E001` | Installation timing, conflicting installation or integration options. |
+| `canon.integrations.E001` | A feature part requires an integration that the composition has not enabled. |
+| `canon.integrations.E002` | An integration's preparation fails without a more specific diagnostic code. |
 | `canon.routing.E001` | Repeated router contributions or an invalid router factory. |
 | `canon.routing.E002` | Duplicate HTTP operation IDs, including collisions with existing app routes. |
 | `canon.routing.E003` | Ambiguous HTTP method/path contributions, including hidden and existing app routes. |
@@ -98,6 +100,11 @@ Use `fastapi-canon explain canon.routing.E002` for a built-in code's meaning,
 minimal example, repair and guide. [Diagnostic explanations](diagnostics.md)
 also support JSON and source/generation code families without importing
 an application or executing its checks.
+
+In 0.21.0, MCP preparation reports `integration.Mcp` instead of `mcp.routes` and
+`mcp.runtime`. Transport checks run under `integration.routes` and retain the
+detailed RPC/WebRTC result names described below. Enabled telemetry contributes
+`integration.Telemetry`; omitted integrations contribute no preparation step.
 
 Built-in checks validate composition configuration, the provider graph, selected
 HTTP/SSE, RPC and WebRTC factory roots, HTTP contracts and registered WebSocket path

@@ -16,6 +16,9 @@ and assemble them explicitly with `Feature` and `Composition`.
    The bundled examples accompany the installed library. Linked GitHub guides
    track development; use the matching release tag when consulting them for an
    older installation. The Canon source checkout is not required.
+   For a 0.21.0 migration, use the changelog's `CANON-021-*` markers and
+   [upgrade guide](https://github.com/mathisarends/fastapi-canon/blob/main/docs/package-migration.md#upgrade-to-0210).
+   Older migration sections describe their own version's API.
 3. Read only the reference needed for the current decision:
 
 | Task | Load |
@@ -36,8 +39,9 @@ them. Supporting references are installed beside this file for both agent tools.
   Infrastructure implements I/O. Presentation maps wire models and public errors.
   Both outer layers depend inward; `feature.py` and the app root assemble them.
 - Give each feature one `fastapi_canon.APIRouter` for HTTP, typed SSE
-  (`@router.sse`), JSON-RPC channels (`router.include_channel`) and WebRTC
-  (`@router.webrtc`). Contribute it once through `Feature(routers=[router])`.
+  (`@router.sse`) and JSON-RPC channels (`router.include_channel`). WebRTC uses
+  `WebRtcRouter` from `fastapi_canon.integrations.webrtc`, with `@rtc.session`.
+  Contribute both through `Feature(routers=[router, rtc])` when needed.
 - Use Dishka for application dependencies. HTTP handlers, SSE endpoints and
   RPC methods request services with `Inject[T]`; `APIRouter` needs no
   `DishkaRoute` or `@inject` for endpoints. Decorate FastAPI dependency

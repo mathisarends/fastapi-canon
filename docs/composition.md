@@ -14,8 +14,9 @@ and Alembic migrations.
 Each feature declares its endpoints on one `fastapi_canon.APIRouter`. It keeps
 FastAPI's familiar route decorators, adds composable `raises=` and `response=`
 contracts, and declares typed SSE (`@router.sse`), JSON-RPC channels
-(`router.include_channel`) and WebRTC sessions (`@router.webrtc`) on the same
-router. See [routers](routers.md) for every transport option.
+(`router.include_channel`) on the same router. WebRTC sessions use
+`WebRtcRouter.session()` on a separate router in the same feature.
+See [routers](routers.md) for every transport option.
 
 Use the [quickstart](quickstart.md#core-api-routes-errors-and-composition)
 for HTTP, typed SSE and WebSocket RPC declarations. This guide covers core
@@ -354,7 +355,7 @@ fastapi-canon check errors src --strict --require-complete
 incomplete analysis or no supported operations. Calls on abstract ports follow
 the implementations bound by Dishka `Provider` classes in the scanned roots;
 unresolved calls and unbound ports remain visible as incomplete. It checks
-`APIRouter` HTTP, SSE and WebRTC operations and `RpcChannel` methods.
+`APIRouter` HTTP/SSE operations, `WebRtcRouter` sessions and `RpcChannel` methods.
 
 Error contracts are implemented directly by `fastapi-canon`; no separate error
 library is required. Declare `Error` definitions with `raises=`; Composition

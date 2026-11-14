@@ -123,6 +123,7 @@ See the [0.21.0 upgrade guide](package-migration.md#upgrade-to-0210).
 | `port_metrics` | `False` | Record `canon.port.duration` in seconds, independently of port spans |
 | `problem_details` | `True` | Enrich the native HTTP server span with handled Problem Details outcomes |
 | `exclude` | `None` | ASGI scope predicate; suppress native telemetry and ports, and participating downstream instrumentation for HTTP requests |
+| `resources` | `None` | Use installed resource adapters; an explicit list replaces the defaults, and `[]` disables resource instrumentation |
 
 Apply composition before startup. Canon forces FastAPI's `auto_configure=False`,
 including when the environment requests automatic exporters. It never creates
@@ -182,7 +183,9 @@ providers return the borrowed configuration; they never create or close SDKs.
 ### HTTP clients and database engines
 
 With `Telemetry` enabled, Canon instruments every HTTPX/HTTPX2 client and
-SQLAlchemy engine that a Dishka provider returns. Install
+SQLAlchemy engine whose Dishka-provided type is accepted by a resource adapter.
+Bindings typed only as `object` or an unrelated port are not selected by runtime
+instance type. Install
 `fastapi-canon[otel-httpx]` or `fastapi-canon[otel-sqlalchemy]`; providers stay
 plain:
 
@@ -313,8 +316,8 @@ and application-boundary spans are wanted. See also the
 
 Library instrumentation belongs to the application provider that owns the engine
 or client. The [reference demo](../examples/reference-service/README.md#local-telemetry-demo)
-uses the explicit resource adapters above and injected configuration to propagate
-W3C context through an HTTPX2 client and add SQL query spans below repository spans.
+uses automatic resource instrumentation to propagate W3C context through an
+HTTPX2 client and add SQL query spans below repository spans.
 
 HTTPX2 supports `HTTPX2ClientInstrumentor.instrument_client(client, ...)` and
 `uninstrument_client(client)`. SQLAlchemy's documented

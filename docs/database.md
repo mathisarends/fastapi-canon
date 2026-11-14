@@ -272,9 +272,9 @@ return sessions, repositories, lazy ORM graphs or iterators needing those resour
 synchronous callables and async generators are rejected. The entire awaited call
 is inside the scope, so keep long external operations in the orchestrator.
 
-Use ordinary dependency injection for the wrapper: for example HTTP currently
-uses `FromDishka[Scoped[PrepareTurn]]` with its usual Dishka route/decorator setup.
-This addition does not change transport injection markers or registration.
+Use ordinary dependency injection for the wrapper: Canon HTTP handlers request
+`Inject[Scoped[PrepareTurn]]` on `APIRouter`, without an additional route class or
+`@inject` decorator.
 
 For multiple service calls in one atomic step, keep the explicit
 `async with service_scope() as service:` API. Separate `Scoped` calls commit

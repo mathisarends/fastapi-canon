@@ -8,65 +8,97 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Breaking changes
 
-- Optional arguments now use their default only when passed `None`. Empty error
-  messages, empty path-parameter overrides and callable objects with false
-  truthiness are preserved rather than replaced by inherited defaults. Pass
-  `None` to request a default; replace empty endpoint names with a valid name or
+Each `CANON-021-*` marker identifies one migration for coding agents. Apply these
+changes for 0.21.0; older version sections describe their own APIs and may be
+superseded here. See the [upgrade guide](docs/package-migration.md#upgrade-to-0210).
+
+- **`CANON-021-DEFAULTS`** — Optional arguments now use their default only when
+  passed `None`. Empty error messages, empty path-parameter overrides and callable
+  objects with false truthiness are preserved rather than replaced by inherited
+  defaults. Pass `None` to request a default; replace empty endpoint names with a valid name or
   `None` to derive the name from its path.
 
-- `RpcInputEndMessage.type` now uses the narrow enum literal
+- **`CANON-021-RPC-END`** — `RpcInputEndMessage.type` now uses the narrow enum literal
   `RpcInputMessageType.END`. Construct typed control messages with
   `RpcInputEndMessage(type=RpcInputMessageType.END)` instead of a raw Python
   string. The JSON control frame remains `{"type":"end"}`.
 
-- WebSocket generation now rejects corrupt ownership manifests and unsafe output
-  paths instead of ignoring them. Generated paths must be relative POSIX paths
+- **`CANON-021-OUTPUT-PATHS`** — WebSocket generation now rejects corrupt ownership
+  manifests and unsafe output paths instead of ignoring them. Generated paths
+  must be relative POSIX paths
   without backslashes, colons or parent traversal. Restore a corrupt
   `.rpcgen/manifest.json` from version control, or review and remove the old
   generated output before regenerating into a clean directory. Handwritten files
   are preserved; writes atomically replace each changed file. SSE and WebRTC use
   the same validated writer and retain their existing manifest formats.
 
-- A new `Composition.build()` executes feature checks once during preparation;
-  repeated builds still validate the installed application and rerun feature
+- **`CANON-021-BUILD-CHECKS`** — The first `Composition.build(app)` executes feature
+  checks once during preparation; repeated builds still validate the installed
+  application and rerun feature
   checks. Keep checks free of side effects and remove assumptions about duplicate
   execution during the first build.
 
-- Optional integrations use one `integrations=` parameter. Replace
+- **`CANON-021-INTEGRATIONS`** — Optional integrations use one `integrations=`
+  parameter. Replace
   `Composition(mcp=McpOptions(...), telemetry=Telemetry(...))` with
   `Composition(integrations=[Mcp(...), Telemetry(...)])`, and
   `Feature(mcp=[...], instrumentation=...)` with `Feature(integrations=[...])`.
   `McpOptions` is renamed to `Mcp`.
 
-- `instrument(...)` returns one `Instrumentation` part; remove `*` unpacking.
+- **`CANON-021-INSTRUMENT`** — `instrument(...)` returns one `Instrumentation`
+  part; remove `*` unpacking.
   Instrumentation and `McpMount` parts fail with `canon.integrations.E001` unless
-  their integration is enabled. `Telemetry` is no longer bound implicitly; enable
-  `Telemetry.disabled()` where `telemetry=None` was used.
+  their integration is enabled. `Telemetry` is no longer bound implicitly. Enable
+  `Composition(integrations=[Telemetry.disabled()])` when keeping instrumentation
+  declarations or providers that inject `Telemetry` without recording signals.
+  Otherwise omit the integration.
 
-- WebRTC sessions use their own router. Replace `@router.webrtc(...)` with
+- **`CANON-021-WEBRTC`** — WebRTC sessions use their own router. Replace
+  `@router.webrtc(...)` with
   `rtc = WebRtcRouter(engine=...)`, `@rtc.session(...)` and
   `Feature(routers=[rtc])`. `CanonWebRtcRouter` is now `WebRtcRouter`, and
-  `SessionOptions` is removed.
+  `SessionOptions` is removed. Move engine, ICE-server, event-hook and origin
+  options from the decorator to `WebRtcRouter`; keep per-session limits, media,
+  dependencies and `raises` on `session()`. See
+  [router options](docs/routers.md#typed-sse-and-webrtc-in-the-same-feature).
 
-- `ContractKind` is removed; contract kinds are strings such as `"openapi"`.
-  Read WebRTC documents from `contracts.documents["webrtc"]`.
+- **`CANON-021-CONTRACTS`** — `ContractKind` is removed; pass strings such as
+  `kinds=("openapi", "openrpc")`. Omitted `kinds` now exports every available
+  kind, including custom transports. Replace `Contracts(openapi=doc)` with
+  `Contracts(documents={"openapi": doc})`; `documents` is a read-only mapping.
+  Replace `contracts.webrtc` with `contracts.documents.get("webrtc")` to retain
+  `None` for an absent transport. `openapi` and `openrpc` accessors remain.
 
-- The `mcp.routes`, `mcp.runtime`, `rpc.method_dependencies` and
-  `webrtc.factory_dependencies` check steps become `integration.Mcp` and
-  `integration.routes`. Update tooling that matches step names.
+- **`CANON-021-CHECK-STEPS`** — MCP's `mcp.routes` and `mcp.runtime` check steps
+  become `integration.Mcp`. Transport checks run under `integration.routes`;
+  the detailed `rpc.method_dependencies:<feature>:<path>:<method>` and
+  `webrtc.factory_dependencies:<feature>:<path>` results remain. Update tooling
+  that matches aggregate step names; retain handling for those detailed results.
 
-- Codegen generators are loaded from `fastapi_canon.generators` entry points, and
+- **`CANON-021-GENERATORS`** — Codegen generators are loaded from
+  `fastapi_canon.generators` entry points, and
   targets reject keys that their generator does not accept for the language.
-  `TargetConfig` moved to `fastapi_canon.codegen.generators`.
+  Generator extensions import `TargetConfig` from `fastapi_canon.codegen.generators`
+  instead of `fastapi_canon.codegen.config`. Remove irrelevant target settings:
+  for example, `package` is accepted for Python RPC, not TypeScript RPC.
+  Built-in target names and version-2 configuration remain supported.
 
-- Enabled `Telemetry` instruments every Dishka-provided HTTPX/HTTPX2 client and
-  SQLAlchemy engine; instances wrapped with `instrument_httpx` or
-  `instrument_sqlalchemy` are skipped. Pass `Telemetry(resources=[])` to opt out.
-  `SqlAlchemyInstrumentation` is removed: drop `engine_context=` and pass
-  `resources=[SqlAlchemyEngines(pool_name=...)]` for custom options.
+- **`CANON-021-RESOURCE-TELEMETRY`** — Enabled `Telemetry` automatically instruments
+  Dishka-provided HTTPX/HTTPX2 clients and SQLAlchemy engines; instances wrapped
+  with `instrument_httpx` or `instrument_sqlalchemy` are skipped. Pass
+  `Telemetry(resources=[])` to opt out.
+  `SqlAlchemyInstrumentation` is removed: replace
+  `engine_context=SqlAlchemyInstrumentation(...)` with
+  `Telemetry(resources=[SqlAlchemyEngines(pool_name=...)])` for custom options.
+  Keep `engine_context=` for application-owned listeners. Explicit resource lists
+  replace the defaults; include `HttpxClients()` too if both adapters are wanted.
+  Manual wrappers remain supported for per-instance settings and non-Dishka resources.
 
-- Instrumented ports record declared Canon errors with a status below 500 as
-  expected outcomes. Catch them in an adapter if they must mark spans as errors.
+- **`CANON-021-EXPECTED-ERRORS`** — Instrumented ports record declared Canon errors
+  with a status below 500 as expected outcomes, even without `expected=`. They
+  produce `canon.port.expected_exception`, leave span status unset and omit
+  `error.type` from port spans and duration metrics. Update alerts accordingly;
+  use application-owned instrumentation for a different classification.
 
 ### Fixed
 
@@ -740,7 +772,7 @@ Python/TypeScript SDKs together. See the [upgrade guide](docs/package-migration.
   arbitrary stderr text to use the documented JSON `schema_version`, code and
   location fields. Known validation messages remain readable; source warnings
   report constraint locations without copying schema values. See
-  [generation diagnostics](docs/unified-canon-concept.md#json-generation-diagnostics).
+  [0.16.0 generation diagnostics](https://github.com/mathisarends/fastapi-canon/blob/fastapi-canon-v0.16.0/docs/unified-canon-concept.md#json-generation-diagnostics).
 
 - CLI target loading rejects async/generator factories, awaitable/generator
   results and uninspectable or required-argument factory signatures consistently.

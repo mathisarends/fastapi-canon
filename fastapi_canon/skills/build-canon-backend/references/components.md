@@ -12,7 +12,8 @@ uv run python -c "import inspect; from fastapi_canon import Composition, Feature
 
 | Component | Responsibility | Connect it through |
 | --- | --- | --- |
-| `APIRouter` | One feature router: HTTP contracts, typed SSE, JSON-RPC channel mounts, WebRTC sessions | `Feature(routers=[router])` |
+| `APIRouter` | Feature router: HTTP contracts, typed SSE, JSON-RPC channel mounts | `Feature(routers=[router])` |
+| `WebRtcRouter` | Managed WebRTC sessions via `@rtc.session(...)` | Add it to the same `Feature.routers` |
 | `RpcChannel`, `Inject` | Typed JSON-RPC methods/events and their injected dependencies | `router.include_channel(channel, path=...)` |
 | `Error` | Public problem identity and exception mapping | `raises=` registers definitions; `Feature(errors=[...])` adds undeclared errors; `ErrorRegistry` only for manual assembly |
 | `RouterPolicy` | Reusable HTTP prerequisites and documented failures | Router `policy=`; an including or `router_factory` router extends its children |
@@ -55,8 +56,9 @@ def create_app() -> FastAPI:
     return composition.build(FastAPI(title="Projects API"))
 ```
 
-`build()` validates before and after installing. Composition creates the container during
-lifespan, starts features in declaration order and shuts them down in reverse.
+`build()` runs feature checks once during preparation and validates installed
+OpenAPI. Composition builds the container without resolving resources, starts
+feature lifespans in declaration order and shuts them down in reverse.
 Feature lifespans may borrow dependencies while the container is alive. Keep
 connections and I/O out of imports, declarations and app construction; open owned
 resources in yielding providers or lifespans. Do not add a second `setup_dishka`

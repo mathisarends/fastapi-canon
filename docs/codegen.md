@@ -95,6 +95,11 @@ your own `fastapi_canon.codegen.generators.Generator` with:
 graphql = "my_package.codegen:GENERATOR"
 ```
 
+Import `Generator`, `TargetConfig` and `Rendering` from that public module.
+Declare accepted target keys per language in `settings`; unsupported keys now
+fail configuration validation, including keys intended for another language.
+For example, `package` is a Python RPC setting, not a TypeScript RPC setting.
+
 ## Developer commands
 
 ```console

@@ -6,8 +6,9 @@ dependencies. Keep core imports usable without optional runtimes.
 
 ## Shared feature router
 
-Add every transport to the feature's existing `APIRouter`, then contribute it
-once through `Feature`:
+Add HTTP, SSE and WebSocket declarations to the feature's existing `APIRouter`,
+then contribute it once through `Feature`. WebRTC uses a separate `WebRtcRouter`
+in that feature:
 
 ```python
 from collections.abc import AsyncIterator
@@ -130,5 +131,8 @@ Telemetry is opt-in at composition. Import `Telemetry` and `instrument` from
 `Feature(..., integrations=[instrument(ProjectRepository, ProjectService)])` and
 enable `Composition(integrations=[Telemetry(...)])`. Pass application-owned providers to `Telemetry` as documented in
 [telemetry.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/telemetry.md). Instrument declarations leave ordinary Dishka providers
-usable on their own. Engine/client instrumentation uses the explicit resource
-adapters, and the application owns exporter/provider shutdown.
+usable on their own. Enabled telemetry automatically instruments Dishka-provided
+clients and engines through installed resource adapters; `resources=[]` opts out.
+Explicit resource contexts remain available for per-instance settings. Use
+`Telemetry.disabled()` when retaining instrumentation parts or injected telemetry
+configuration without recording signals. The application owns exporter/provider shutdown.
