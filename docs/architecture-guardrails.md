@@ -1,7 +1,7 @@
 # Architecture and test guardrails
 
 [smelt.yml](../smelt.yml) defines dependency boundaries, source conventions and
-test policies. The development lockfile pins `smelt-cli==0.6.0`;
+test policies. The development lockfile pins `smelt-cli==0.8.0`;
 [.smelt.schema.json](../.smelt.schema.json) provides editor completion.
 
 ## Run the policy

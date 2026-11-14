@@ -3,9 +3,9 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Literal, cast
+from typing import cast
 
-from fastapi_canon.codegen.generators import TargetConfig, load_generator
+from fastapi_canon.codegen.generators import HttpClient, TargetConfig, load_generator
 
 
 @dataclass(frozen=True)
@@ -147,7 +147,7 @@ def _target(root: Path, name: str, value: object) -> TargetConfig:
         _path(root, value.get("output")),
         package,
         client,
-        cast(Literal["httpx", "httpx2"], http),
+        cast(HttpClient, http),
         strict=strict,
         diagnostics=_path(root, value["diagnostics"])
         if "diagnostics" in value

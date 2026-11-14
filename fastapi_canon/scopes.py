@@ -1,5 +1,7 @@
 """Short service scopes and HTTP resource lifetimes owned by composition."""
 
+from __future__ import annotations
+
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from inspect import getattr_static, iscoroutinefunction
@@ -58,7 +60,7 @@ class Scoped[UseCaseT]:
         self._scope = ServiceScope(container, use_case, component=component)
 
     async def __call__[**Parameters, ResultT](
-        self: "Scoped[Callable[Parameters, Awaitable[ResultT]]]",
+        self: Scoped[Callable[Parameters, Awaitable[ResultT]]],
         *args: Parameters.args,
         **kwargs: Parameters.kwargs,
     ) -> ResultT:

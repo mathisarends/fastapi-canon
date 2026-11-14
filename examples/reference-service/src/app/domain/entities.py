@@ -22,5 +22,5 @@ class Entity:
         return self._created_at
 
 
-# Semantic sugar: aggregates are entities that form a consistency boundary.
-Aggregate = Entity
+class Aggregate(Entity):
+    """An entity that forms a consistency boundary."""

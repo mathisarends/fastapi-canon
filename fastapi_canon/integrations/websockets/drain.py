@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -47,7 +47,7 @@ class RpcDrain:
     @asynccontextmanager
     async def session(
         self, socket: RpcWebSocket
-    ) -> AsyncIterator[_DrainSession | None]:
+    ) -> AsyncGenerator[_DrainSession | None, None]:
         if self.draining:
             await socket.reject(RpcRejection.UNAVAILABLE, "Server restarting")
             yield None

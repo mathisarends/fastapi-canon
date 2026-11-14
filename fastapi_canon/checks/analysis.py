@@ -1,5 +1,7 @@
 """Explicit-exception propagation for the supported, statically resolved subset."""
 
+from __future__ import annotations
+
 import ast
 from dataclasses import dataclass, field
 
@@ -40,7 +42,7 @@ class ExceptionFlow:
     escapes: list[_Escape] = field(default_factory=list)
     unknowns: list[UnknownValue] = field(default_factory=list)
 
-    def extend(self, other: "ExceptionFlow") -> None:
+    def extend(self, other: ExceptionFlow) -> None:
         self.escapes.extend(other.escapes)
         self.unknowns.extend(other.unknowns)
 
@@ -101,52 +103,6 @@ class ContractAnalyzer:
         finally:
             previous.update(self.source.touched)
             self.source.touched = previous
-
-    def _analyze_function(
-        self,
-        function: SourceDefinition,
-        stack: tuple[str, ...],
-        *,
-        iterated: bool,
-        receiver: str | None = None,
-        dependency_transport: str | None = None,
-    ) -> ExceptionFlow:
-        node = function.node
-        assert isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
-        flow = ExceptionFlow()
-        for decorator in node.decorator_list:
-            name = self.source.resolve(decorator, function.module)
-            if name == "abc.abstractmethod":
-                return ExceptionFlow(
-                    unknowns=[
-                        UnknownValue(
-                            "abstract implementation", function.name, node.lineno
-                        )
-                    ]
-                )
-            if name not in {
-                "dishka.integrations.fastapi.inject",
-                "builtins.staticmethod",
-                "builtins.classmethod",
-                "builtins.property",
-            } and not _operation_decorator(decorator):
-                flow.unknowns.append(
-                    UnknownValue(
-                        "unresolved decorator", function.name, decorator.lineno
-                    )
-                )
-        if not iterated and _generator(node):
-            flow.unknowns.append(
-                UnknownValue(
-                    "generator execution is outside the HTTP response boundary",
-                    function.name,
-                    node.lineno,
-                )
-            )
-            return flow
-        env = self.source.environment(function, receiver, dependency_transport)
-        flow.extend(self.block(node.body, function, env, (*stack, function.name)))
-        return flow
 
     def expression(
         self,
@@ -317,6 +273,273 @@ class ContractAnalyzer:
                 )
             ):
                 flow.extend(self.function(member, stack))
+        return flow
+
+    def block(
+        self,
+        body: list[ast.stmt],
+        function: SourceDefinition,
+        env: SymbolEnvironment,
+        stack: tuple[str, ...],
+        reraised: tuple[_Escape, ...] = (),
+    ) -> ExceptionFlow:
+        flow = ExceptionFlow()
+        for node in body:
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+                # Nested definitions are not executed, but their bodies cannot be resolved.
+                env[node.name] = SymbolValue()
+                for expression in node.decorator_list:
+                    flow.extend(self.expression(expression, function, env, stack))
+                if isinstance(node, ast.ClassDef):
+                    flow.unknowns.append(
+                        UnknownValue(
+                            "nested class construction", function.name, node.lineno
+                        )
+                    )
+                else:
+                    for expression in [
+                        *node.args.defaults,
+                        *(value for value in node.args.kw_defaults if value),
+                    ]:
+                        flow.extend(self.expression(expression, function, env, stack))
+                continue
+            if isinstance(node, ast.Raise):
+                if node.exc is None:
+                    if reraised:
+                        flow.escapes.extend(reraised)
+                    else:
+                        flow.unknowns.append(
+                            UnknownValue(
+                                "unresolved re-raise", function.name, node.lineno
+                            )
+                        )
+                else:
+                    flow.extend(self.expression(node.exc, function, env, stack))
+                    if node.cause:
+                        flow.extend(self.expression(node.cause, function, env, stack))
+                    target = (
+                        node.exc.func if isinstance(node.exc, ast.Call) else node.exc
+                    )
+                    name = self.source.resolve(target, function.module, env)
+                    if name and self.source.exception(name):
+                        flow.escapes.append(
+                            _Escape(name, (function.name,), node.lineno)
+                        )
+                    else:
+                        flow.unknowns.append(
+                            UnknownValue(
+                                f"unresolved raised exception: {ast.unparse(node.exc)}",
+                                function.name,
+                                node.lineno,
+                            )
+                        )
+                break
+            if isinstance(node, ast.Try):
+                attempted = self.block(node.body, function, env.copy(), stack, reraised)
+                flow.unknowns.extend(attempted.unknowns)
+                remaining = attempted.escapes
+                for handler in node.handlers:
+                    types = (
+                        handler.type.elts
+                        if isinstance(handler.type, ast.Tuple)
+                        else [handler.type]
+                    )
+                    names = [
+                        self.source.resolve(item, function.module, env)
+                        for item in types
+                        if item is not None
+                    ]
+                    unknown_catch = handler.type is not None and (
+                        not names
+                        or any(
+                            name is None or self.source.mro(name) is None
+                            for name in names
+                        )
+                    )
+                    if unknown_catch:
+                        flow.unknowns.append(
+                            UnknownValue(
+                                "unresolved exception handler",
+                                function.name,
+                                handler.lineno,
+                            )
+                        )
+                    caught = [
+                        item
+                        for item in remaining
+                        if handler.type is None
+                        or any(
+                            name in (self.source.mro(item.exception) or [])
+                            for name in names
+                            if name
+                        )
+                    ]
+                    remaining = [item for item in remaining if item not in caught]
+                    handler_env = env.copy()
+                    caught_types = {item.exception for item in caught}
+                    if handler.name:
+                        handler_env[handler.name] = SymbolValue(
+                            next(iter(caught_types)) if len(caught_types) == 1 else "",
+                            instance=True,
+                        )
+                    # Implicit failures (e.g. int(value)) can reach handlers too.
+                    flow.extend(
+                        self.block(
+                            handler.body, function, handler_env, stack, tuple(caught)
+                        )
+                    )
+                flow.escapes.extend(remaining)
+                flow.extend(
+                    self.block(node.orelse, function, env.copy(), stack, reraised)
+                )
+                flow.extend(
+                    self.block(node.finalbody, function, env.copy(), stack, reraised)
+                )
+                if any(
+                    isinstance(child, ast.Return | ast.Raise)
+                    for child in _executed_nodes(node.finalbody)
+                ):
+                    flow.unknowns.append(
+                        UnknownValue(
+                            "finally may replace an escaping exception",
+                            function.name,
+                            node.lineno,
+                        )
+                    )
+                self._invalidate(node, env)
+                continue
+            if isinstance(node, ast.With | ast.AsyncWith):
+                flow.extend(self._context_manager(node, function, env, stack, reraised))
+                self._invalidate(node, env)
+                continue
+            if isinstance(node, ast.If):
+                flow.extend(self.expression(node.test, function, env, stack))
+                condition = self.source.condition(node.test, function.module, env)
+                if condition is not False:
+                    flow.extend(
+                        self.block(node.body, function, env.copy(), stack, reraised)
+                    )
+                if condition is not True:
+                    flow.extend(
+                        self.block(node.orelse, function, env.copy(), stack, reraised)
+                    )
+                self._invalidate(node, env)
+                selected = node.body if condition else node.orelse
+                if condition is not None and any(
+                    isinstance(statement, ast.Return | ast.Raise)
+                    for statement in selected
+                ):
+                    break
+                continue
+            if isinstance(node, ast.For | ast.AsyncFor | ast.While):
+                # Iterations may run zero or more times, like independent branches.
+                if isinstance(node, ast.While):
+                    flow.extend(self.expression(node.test, function, env, stack))
+                else:
+                    flow.extend(
+                        self.expression(node.iter, function, env, stack, iterated=True)
+                    )
+                    self._invalidate(node.target, env)
+                flow.extend(
+                    self.block(node.body, function, env.copy(), stack, reraised)
+                )
+                flow.extend(
+                    self.block(node.orelse, function, env.copy(), stack, reraised)
+                )
+                self._invalidate(node, env)
+                continue
+            if isinstance(node, ast.Assign | ast.AnnAssign):
+                if node.value is not None:
+                    flow.extend(self.expression(node.value, function, env, stack))
+                targets = (
+                    node.targets if isinstance(node, ast.Assign) else [node.target]
+                )
+                inferred = SymbolValue()
+                if isinstance(node, ast.AnnAssign):
+                    inferred = SymbolValue(
+                        self.source.annotation(node.annotation, function.module) or "",
+                        instance=True,
+                    )
+                if not inferred.name and node.value is not None:
+                    inferred = self.source.infer(node.value, function.module, env)
+                for target in targets:
+                    key = self.source.key(target)
+                    env[key] = inferred
+                continue
+            if isinstance(node, ast.Return):
+                if node.value:
+                    flow.extend(self.expression(node.value, function, env, stack))
+                break
+            if isinstance(node, ast.Expr):
+                flow.extend(self.expression(node.value, function, env, stack))
+                continue
+            if isinstance(node, ast.Pass | ast.Break | ast.Continue):
+                continue
+            # Match, try*, etc. need more control-flow knowledge.
+            flow.unknowns.append(
+                UnknownValue(
+                    f"unsupported statement: {type(node).__name__}",
+                    function.name,
+                    node.lineno,
+                )
+            )
+            for child in _executed_nodes([node]):
+                if isinstance(child, ast.Raise) and child.exc:
+                    target = (
+                        child.exc.func if isinstance(child.exc, ast.Call) else child.exc
+                    )
+                    name = self.source.resolve(target, function.module, env)
+                    if name and self.source.exception(name):
+                        flow.escapes.append(
+                            _Escape(name, (function.name,), child.lineno)
+                        )
+            self._invalidate(node, env)
+        return flow
+
+    def _analyze_function(
+        self,
+        function: SourceDefinition,
+        stack: tuple[str, ...],
+        *,
+        iterated: bool,
+        receiver: str | None = None,
+        dependency_transport: str | None = None,
+    ) -> ExceptionFlow:
+        node = function.node
+        assert isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+        flow = ExceptionFlow()
+        for decorator in node.decorator_list:
+            name = self.source.resolve(decorator, function.module)
+            if name == "abc.abstractmethod":
+                return ExceptionFlow(
+                    unknowns=[
+                        UnknownValue(
+                            "abstract implementation", function.name, node.lineno
+                        )
+                    ]
+                )
+            if name not in {
+                "dishka.integrations.fastapi.inject",
+                "builtins.staticmethod",
+                "builtins.classmethod",
+                "builtins.property",
+            } and not _operation_decorator(decorator):
+                flow.unknowns.append(
+                    UnknownValue(
+                        "unresolved decorator", function.name, decorator.lineno
+                    )
+                )
+        if not iterated and _generator(node):
+            flow.unknowns.append(
+                UnknownValue(
+                    "generator execution is outside the HTTP response boundary",
+                    function.name,
+                    node.lineno,
+                )
+            )
+            return flow
+        env = self.source.environment(function, receiver, dependency_transport)
+        flow.extend(self.block(node.body, function, env, (*stack, function.name)))
         return flow
 
     def _comprehension(
@@ -841,227 +1064,6 @@ class ContractAnalyzer:
                     iterated=iterated,
                 )
             )
-        return flow
-
-    def block(
-        self,
-        body: list[ast.stmt],
-        function: SourceDefinition,
-        env: SymbolEnvironment,
-        stack: tuple[str, ...],
-        reraised: tuple[_Escape, ...] = (),
-    ) -> ExceptionFlow:
-        flow = ExceptionFlow()
-        for node in body:
-            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
-                # Nested definitions are not executed, but their bodies cannot be resolved.
-                env[node.name] = SymbolValue()
-                for expression in node.decorator_list:
-                    flow.extend(self.expression(expression, function, env, stack))
-                if isinstance(node, ast.ClassDef):
-                    flow.unknowns.append(
-                        UnknownValue(
-                            "nested class construction", function.name, node.lineno
-                        )
-                    )
-                else:
-                    for expression in [
-                        *node.args.defaults,
-                        *(value for value in node.args.kw_defaults if value),
-                    ]:
-                        flow.extend(self.expression(expression, function, env, stack))
-                continue
-            if isinstance(node, ast.Raise):
-                if node.exc is None:
-                    if reraised:
-                        flow.escapes.extend(reraised)
-                    else:
-                        flow.unknowns.append(
-                            UnknownValue(
-                                "unresolved re-raise", function.name, node.lineno
-                            )
-                        )
-                else:
-                    flow.extend(self.expression(node.exc, function, env, stack))
-                    if node.cause:
-                        flow.extend(self.expression(node.cause, function, env, stack))
-                    target = (
-                        node.exc.func if isinstance(node.exc, ast.Call) else node.exc
-                    )
-                    name = self.source.resolve(target, function.module, env)
-                    if name and self.source.exception(name):
-                        flow.escapes.append(
-                            _Escape(name, (function.name,), node.lineno)
-                        )
-                    else:
-                        flow.unknowns.append(
-                            UnknownValue(
-                                f"unresolved raised exception: {ast.unparse(node.exc)}",
-                                function.name,
-                                node.lineno,
-                            )
-                        )
-                break
-            if isinstance(node, ast.Try):
-                attempted = self.block(node.body, function, env.copy(), stack, reraised)
-                flow.unknowns.extend(attempted.unknowns)
-                remaining = attempted.escapes
-                for handler in node.handlers:
-                    types = (
-                        handler.type.elts
-                        if isinstance(handler.type, ast.Tuple)
-                        else [handler.type]
-                    )
-                    names = [
-                        self.source.resolve(item, function.module, env)
-                        for item in types
-                        if item is not None
-                    ]
-                    unknown_catch = handler.type is not None and (
-                        not names
-                        or any(
-                            name is None or self.source.mro(name) is None
-                            for name in names
-                        )
-                    )
-                    if unknown_catch:
-                        flow.unknowns.append(
-                            UnknownValue(
-                                "unresolved exception handler",
-                                function.name,
-                                handler.lineno,
-                            )
-                        )
-                    caught = [
-                        item
-                        for item in remaining
-                        if handler.type is None
-                        or any(
-                            name in (self.source.mro(item.exception) or [])
-                            for name in names
-                            if name
-                        )
-                    ]
-                    remaining = [item for item in remaining if item not in caught]
-                    handler_env = env.copy()
-                    caught_types = {item.exception for item in caught}
-                    if handler.name:
-                        handler_env[handler.name] = SymbolValue(
-                            next(iter(caught_types)) if len(caught_types) == 1 else "",
-                            instance=True,
-                        )
-                    # Implicit failures (e.g. int(value)) can reach handlers too.
-                    flow.extend(
-                        self.block(
-                            handler.body, function, handler_env, stack, tuple(caught)
-                        )
-                    )
-                flow.escapes.extend(remaining)
-                flow.extend(
-                    self.block(node.orelse, function, env.copy(), stack, reraised)
-                )
-                flow.extend(
-                    self.block(node.finalbody, function, env.copy(), stack, reraised)
-                )
-                if any(
-                    isinstance(child, ast.Return | ast.Raise)
-                    for child in _executed_nodes(node.finalbody)
-                ):
-                    flow.unknowns.append(
-                        UnknownValue(
-                            "finally may replace an escaping exception",
-                            function.name,
-                            node.lineno,
-                        )
-                    )
-                self._invalidate(node, env)
-                continue
-            if isinstance(node, ast.With | ast.AsyncWith):
-                flow.extend(self._context_manager(node, function, env, stack, reraised))
-                self._invalidate(node, env)
-                continue
-            if isinstance(node, ast.If):
-                flow.extend(self.expression(node.test, function, env, stack))
-                condition = self.source.condition(node.test, function.module, env)
-                if condition is not False:
-                    flow.extend(
-                        self.block(node.body, function, env.copy(), stack, reraised)
-                    )
-                if condition is not True:
-                    flow.extend(
-                        self.block(node.orelse, function, env.copy(), stack, reraised)
-                    )
-                self._invalidate(node, env)
-                selected = node.body if condition else node.orelse
-                if condition is not None and any(
-                    isinstance(statement, ast.Return | ast.Raise)
-                    for statement in selected
-                ):
-                    break
-                continue
-            if isinstance(node, ast.For | ast.AsyncFor | ast.While):
-                # Iterations may run zero or more times, like independent branches.
-                if isinstance(node, ast.While):
-                    flow.extend(self.expression(node.test, function, env, stack))
-                else:
-                    flow.extend(
-                        self.expression(node.iter, function, env, stack, iterated=True)
-                    )
-                    self._invalidate(node.target, env)
-                flow.extend(
-                    self.block(node.body, function, env.copy(), stack, reraised)
-                )
-                flow.extend(
-                    self.block(node.orelse, function, env.copy(), stack, reraised)
-                )
-                self._invalidate(node, env)
-                continue
-            if isinstance(node, ast.Assign | ast.AnnAssign):
-                if node.value is not None:
-                    flow.extend(self.expression(node.value, function, env, stack))
-                targets = (
-                    node.targets if isinstance(node, ast.Assign) else [node.target]
-                )
-                inferred = SymbolValue()
-                if isinstance(node, ast.AnnAssign):
-                    inferred = SymbolValue(
-                        self.source.annotation(node.annotation, function.module) or "",
-                        instance=True,
-                    )
-                if not inferred.name and node.value is not None:
-                    inferred = self.source.infer(node.value, function.module, env)
-                for target in targets:
-                    key = self.source.key(target)
-                    env[key] = inferred
-                continue
-            if isinstance(node, ast.Return):
-                if node.value:
-                    flow.extend(self.expression(node.value, function, env, stack))
-                break
-            if isinstance(node, ast.Expr):
-                flow.extend(self.expression(node.value, function, env, stack))
-                continue
-            if isinstance(node, ast.Pass | ast.Break | ast.Continue):
-                continue
-            # Match, try*, etc. need more control-flow knowledge.
-            flow.unknowns.append(
-                UnknownValue(
-                    f"unsupported statement: {type(node).__name__}",
-                    function.name,
-                    node.lineno,
-                )
-            )
-            for child in _executed_nodes([node]):
-                if isinstance(child, ast.Raise) and child.exc:
-                    target = (
-                        child.exc.func if isinstance(child.exc, ast.Call) else child.exc
-                    )
-                    name = self.source.resolve(target, function.module, env)
-                    if name and self.source.exception(name):
-                        flow.escapes.append(
-                            _Escape(name, (function.name,), child.lineno)
-                        )
-            self._invalidate(node, env)
         return flow
 
     def _invalidate(self, node: ast.AST, env: SymbolEnvironment) -> None:

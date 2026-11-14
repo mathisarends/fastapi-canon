@@ -115,13 +115,14 @@ async def _save_file(
     title: str,
     description: str | None,
 ) -> FileInfo:
+    content = await upload.read()
     file = StoredFile(
         id=uuid4(),
         filename=upload.filename or "upload",
         content_type=upload.content_type or "application/octet-stream",
         title=title,
         description=description,
-        content=await upload.read(),
+        content=content,
     )
     store.put(project_id, file)
     return FileInfo(

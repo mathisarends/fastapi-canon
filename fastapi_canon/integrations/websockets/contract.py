@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import re
 from collections.abc import Mapping, Sequence
@@ -105,7 +107,7 @@ class RpcContract:
 
 
 def contract_from_service(
-    service: "RpcDefinition",
+    service: RpcDefinition,
     *,
     title: str,
     base_url: str,
@@ -123,7 +125,7 @@ def contract_from_service(
 
 
 def contract_from_endpoints(
-    endpoints: Sequence["RpcAnyEndpoint"],
+    endpoints: Sequence[RpcAnyEndpoint],
     protocol: RpcProtocol,
     *,
     title: str,

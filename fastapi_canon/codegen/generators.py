@@ -9,6 +9,8 @@ The referenced object implements ``Generator``. Keep its module light: import
 rendering dependencies inside ``render`` so configuration loading stays cheap.
 """
 
+from __future__ import annotations
+
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from functools import cache
@@ -18,7 +20,9 @@ from typing import Any, Literal, Protocol
 
 __all__ = [
     "GROUP",
+    "ClientLanguage",
     "Generator",
+    "HttpClient",
     "Rendering",
     "TargetConfig",
     "contract_kinds",
@@ -26,6 +30,9 @@ __all__ = [
 ]
 
 GROUP = "fastapi_canon.generators"
+
+type ClientLanguage = Literal["python", "typescript"]
+type HttpClient = Literal["httpx", "httpx2"]
 
 
 @dataclass(frozen=True)
@@ -39,7 +46,7 @@ class TargetConfig:
     output: Path | None = None
     package: str = "api_client"
     client_name: str = "ApiClient"
-    http_client: Literal["httpx", "httpx2"] = "httpx"
+    http_client: HttpClient = "httpx"
     generate_command: tuple[str, ...] = ()
     check_command: tuple[str, ...] = ()
     timeout: int = 120
@@ -81,7 +88,7 @@ class Generator(Protocol):
         ...
 
     def render(
-        self, target: "TargetConfig", document: dict[str, Any], contracts: Path
+        self, target: TargetConfig, document: dict[str, Any], contracts: Path
     ) -> Rendering:
         """Render *target* from *document*; *contracts* is the contract directory."""
         ...

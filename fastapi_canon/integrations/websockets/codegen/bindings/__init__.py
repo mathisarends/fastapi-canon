@@ -3,17 +3,14 @@ from dataclasses import dataclass
 from importlib import import_module
 from importlib.metadata import entry_points
 from pathlib import Path
-from typing import Literal, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
+from fastapi_canon.codegen.generators import ClientLanguage as BindingLanguage
 from fastapi_canon.integrations.websockets.codegen.ir import (
     SocketDecl,
     SocketProtocolDecl,
     UnsupportedSchemaError,
 )
-
-ENTRY_POINT_GROUP = "fastapi_canon.integrations.websockets.socket_bindings"
-
-type BindingLanguage = Literal["python", "typescript"]
 
 __all__ = [
     "ENTRY_POINT_GROUP",
@@ -24,6 +21,8 @@ __all__ = [
     "bind_sockets",
     "load_binding",
 ]
+
+ENTRY_POINT_GROUP = "fastapi_canon.integrations.websockets.socket_bindings"
 
 
 @dataclass(frozen=True, slots=True)

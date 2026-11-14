@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import json
 import os
@@ -190,7 +192,7 @@ def _main() -> None:
             runner(_ROOT, _pnpm(), "run", "test:browser", python=False, env=environment)
 
 
-def _check_webrtc_types(runner: "_RunCheck") -> None:
+def _check_webrtc_types(runner: _RunCheck) -> None:
     # SSE uses pyright and WebSockets uses root mypy; WebRTC has this scoped profile.
     config = """[tool.mypy]
 python_version = "3.12"

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any, ClassVar, Literal, Self
 
 from pydantic import (
@@ -51,7 +53,7 @@ class RpcRequestEnvelope(RpcSchema):
 class RpcErrorData(RpcSchema):
     code: int
     message: str
-    data: "RpcErrorPayload | RpcProblemPayload"
+    data: RpcErrorPayload | RpcProblemPayload
 
 
 class RpcProblemPayload(RpcSchema):

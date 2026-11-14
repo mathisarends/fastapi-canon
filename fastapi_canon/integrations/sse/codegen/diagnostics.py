@@ -5,8 +5,10 @@ import json
 import warnings
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, cast
 from urllib.parse import unquote
+
+from fastapi_canon.codegen.generators import ClientLanguage
 
 # The IR builder lazily invokes diagnostics and enum passes over its own model graph.
 from fastapi_canon.integrations.sse.codegen.ir import (  # smelt: ignore[SMT104] -- factory cycle  # noqa: E501
@@ -18,8 +20,6 @@ from fastapi_canon.integrations.sse.codegen.openapi import (
     Document,
     resolve_pointer,
 )
-
-type GenerationTarget = Literal["python", "typescript"]
 
 _UNSUPPORTED = {
     "format",
@@ -70,7 +70,7 @@ class GenerationDiagnostic:
     pointer: str
     keyword: str
     value: Any
-    target: GenerationTarget
+    target: ClientLanguage
     operation_id: str
     method: str
     path: str
@@ -96,7 +96,7 @@ class GenerationDiagnostic:
 
 
 def collect_diagnostics(
-    document: Document, contract: Contract, target: GenerationTarget
+    document: Document, contract: Contract, target: ClientLanguage
 ) -> list[GenerationDiagnostic]:
     """Inspect schemas reachable from generated operations, following local refs."""
     result: dict[str, GenerationDiagnostic] = {}
@@ -236,13 +236,13 @@ class _SourceDiagnostics:
     def __init__(
         self,
         document: Document,
-        target: GenerationTarget,
+        target: ClientLanguage,
         operation: Operation,
         result: dict[str, GenerationDiagnostic],
         locations: dict[int, str],
     ) -> None:
         self.document = document
-        self.target: GenerationTarget = target
+        self.target: ClientLanguage = target
         self.operation = operation
         self.result = result
         self.locations = locations

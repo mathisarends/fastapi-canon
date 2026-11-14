@@ -8,7 +8,7 @@ import asyncio
 import inspect
 import logging
 import uuid
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncGenerator, Callable, Sequence
 from contextlib import asynccontextmanager
 from functools import update_wrapper
 from typing import Annotated, Any, TypeVar, cast, get_type_hints
@@ -302,7 +302,7 @@ class SessionRouter(APIRouter):
             logger.exception("Session event hook failed")
 
     @asynccontextmanager
-    async def _lifespan(self, _app: Any) -> AsyncIterator[None]:
+    async def _lifespan(self, _app: Any) -> AsyncGenerator[None, None]:
         self._closing = False
         try:
             yield

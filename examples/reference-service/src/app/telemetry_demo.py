@@ -3,7 +3,7 @@
 import logging
 import os
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
 
 import httpx2
@@ -57,7 +57,7 @@ def _telemetry(name: str) -> tuple[Telemetry, Lifespan[FastAPI]]:
     )
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         with export_python_logs(logs):
             try:
                 yield

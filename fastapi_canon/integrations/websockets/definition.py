@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import re
 import warnings
 from collections import Counter
@@ -59,7 +61,7 @@ ENDPOINT_ATTRIBUTE = "__canon_rpc_endpoint__"
 
 @dataclass(frozen=True, slots=True, eq=False)
 class RpcEndpoint[ContextT]:
-    service: "RpcDefinition"
+    service: RpcDefinition
     name: str
     path: str
     channels: tuple[RpcChannel, ...]
@@ -162,7 +164,7 @@ class RpcEndpoint[ContextT]:
 
 @dataclass(frozen=True, slots=True, eq=False)
 class RpcStreamEndpoint[ContextT]:
-    service: "RpcDefinition"
+    service: RpcDefinition
     name: str
     path: str
     stream: RpcStreamDefinition
@@ -212,7 +214,7 @@ class RpcStreamEndpoint[ContextT]:
 
 @dataclass(frozen=True, slots=True, eq=False)
 class RpcSocketEndpoint[ContextT]:
-    service: "RpcDefinition"
+    service: RpcDefinition
     name: str
     path: str
     socket: RpcSocketDefinition
@@ -898,7 +900,7 @@ class RpcDefinition:
         base_url: str,
         description: str = "Typed JSON-RPC API.",
         variables: Mapping[str, ServerVariable] | None = None,
-        app: "FastAPI | None" = None,
+        app: FastAPI | None = None,
     ) -> RpcContract:
         from fastapi_canon.integrations.websockets.contract import contract_from_service
 

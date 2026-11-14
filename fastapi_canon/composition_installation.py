@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncGenerator, Callable, Mapping
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
@@ -238,7 +238,7 @@ def compose_lifespan(
     container: AsyncContainer | None,
 ) -> FeatureLifespan:
     @asynccontextmanager
-    async def composed(app: FastAPI) -> AsyncIterator[Mapping[str, Any]]:
+    async def composed(app: FastAPI) -> AsyncGenerator[Mapping[str, Any], None]:
         async with AsyncExitStack() as stack:
             if container is not None:
                 stack.push_async_callback(container.close)

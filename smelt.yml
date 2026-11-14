@@ -334,6 +334,14 @@ rules:
   async-mock-without-await-check: error
   test-only-public-function: error
   nondeterministic-test-data: warning
+  deprecated-async-contextmanager-return: warning
+  duplicate-literal-type: warning
+  private-symbol-import: warning
+  await-in-call-argument: warning
+  str-enum-explicit-values: warning
+  redundant-private-delegate: warning
+  redundant-name-alias: warning
+  prefer-deferred-annotations: warning
   unused-suppression: error
   resolved-debt: error
 suppressions:

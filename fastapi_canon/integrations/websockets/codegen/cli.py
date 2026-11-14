@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import ast
 import json
@@ -380,7 +382,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _add_schema_command(
-    commands: "argparse._SubParsersAction[argparse.ArgumentParser]",
+    commands: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
     schema = commands.add_parser(
         "schema",
@@ -420,7 +422,7 @@ def _add_schema_command(
 
 
 def _add_generate_command(
-    commands: "argparse._SubParsersAction[argparse.ArgumentParser]",
+    commands: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
     generate = commands.add_parser("generate", help="Generate a client package.")
     generate.add_argument(

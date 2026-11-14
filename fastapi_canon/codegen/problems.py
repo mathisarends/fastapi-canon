@@ -1,8 +1,9 @@
 from importlib.resources import files
-from typing import Literal
+
+from fastapi_canon.codegen.generators import ClientLanguage
 
 
-def problem_runtime(language: Literal["python", "typescript"]) -> str:
+def problem_runtime(language: ClientLanguage) -> str:
     name = "problem.py" if language == "python" else "problem.ts"
     return (
         files("fastapi_canon.codegen")

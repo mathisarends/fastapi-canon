@@ -28,9 +28,9 @@ _REF_METADATA = {
 }
 
 if TYPE_CHECKING:
+    from fastapi_canon.codegen.generators import ClientLanguage
     from fastapi_canon.integrations.sse.codegen.diagnostics import (
         GenerationDiagnostic,
-        GenerationTarget,
     )
 
 
@@ -188,7 +188,7 @@ class Contract:
 def build_ir(
     document: Document,
     *,
-    target: GenerationTarget = "python",
+    target: ClientLanguage = "python",
     diagnostics: list[GenerationDiagnostic] | None = None,
     include_operations: tuple[str, ...] | None = None,
 ) -> Contract:
