@@ -4,6 +4,27 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## Unreleased
 
+### Breaking changes
+
+These changes require the next minor release, 0.22.0. See the
+[upgrade guide](docs/package-migration.md#upgrade-to-0220).
+
+- **`CANON-022-TRANSACTION-LOCKS`** — The `TransactionLocks` alias is removed.
+  Import and inject `AcquireTransactionLock` from
+  `fastapi_canon.integrations.database`; `acquire(key)` is unchanged.
+
+- **`CANON-022-BINDING-LANGUAGE`** — `BindingLanguage` is removed from
+  `fastapi_canon.integrations.websockets.codegen.bindings`. Import the same
+  `Literal["python", "typescript"]` type as `ClientLanguage` from
+  `fastapi_canon.codegen.generators`.
+
+### Development
+
+- Upgrade Smelt to 0.8.0 and enforce its new source conventions: named tuple
+  fields, at most three positional parameters, deferred annotations, shared
+  `Literal` aliases and `AsyncGenerator` context managers. Public APIs are
+  unchanged.
+
 ## 0.21.0 - 2026-11-14
 
 ### Breaking changes

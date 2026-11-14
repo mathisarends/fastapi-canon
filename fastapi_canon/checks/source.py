@@ -826,8 +826,8 @@ class SourceIndex:
         node: ast.expr,
         module: str,
         env: SymbolEnvironment,
-        seen: frozenset[str] = frozenset(),
         *,
+        seen: frozenset[str] = frozenset(),
         awaited: bool = False,
     ) -> SymbolValue:
         key = self.key(node)
@@ -835,9 +835,9 @@ class SourceIndex:
             return env[key]
         match node:
             case ast.Await():
-                return self.infer(node.value, module, env, seen, awaited=True)
+                return self.infer(node.value, module, env, seen=seen, awaited=True)
             case ast.Call():
-                target = self.infer(node.func, module, env, seen)
+                target = self.infer(node.func, module, env, seen=seen)
                 receiver_type = target.receiver
                 definition = self.definitions.get(target.name)
                 if definition and isinstance(definition.node, ast.ClassDef):
@@ -861,7 +861,7 @@ class SourceIndex:
                 if returned and returned[1] == awaited and self.external(target.name):
                     return SymbolValue(returned[0], instance=True)
                 if isinstance(node.func, ast.Attribute):
-                    receiver = self.infer(node.func.value, module, env, seen)
+                    receiver = self.infer(node.func.value, module, env, seen=seen)
                     if receiver.name in _RESULT_TYPES and self.external(receiver.name):
                         if node.func.attr in {"unique", "yield_per"}:
                             return receiver
@@ -883,15 +883,17 @@ class SourceIndex:
                     if isinstance(binding, tuple):
                         if local in seen:
                             return SymbolValue()
-                        return self.infer(binding[1], binding[0], {}, seen | {local})
+                        return self.infer(
+                            binding[1], binding[0], {}, seen=seen | {local}
+                        )
                 name = self.resolve(node, module, env)
                 if not name or name in seen:
                     return SymbolValue()
                 binding = self.bindings.get(name)
                 if isinstance(binding, tuple):
-                    return self.infer(binding[1], binding[0], {}, seen | {name})
+                    return self.infer(binding[1], binding[0], {}, seen=seen | {name})
                 if isinstance(node, ast.Attribute):
-                    receiver = self.infer(node.value, module, env, seen)
+                    receiver = self.infer(node.value, module, env, seen=seen)
                     field_type = self._field(receiver.name, node.attr)
                     if field_type:
                         return SymbolValue(field_type, instance=True)
@@ -916,6 +918,7 @@ class SourceIndex:
         node: ast.expr,
         module: str,
         env: SymbolEnvironment | None = None,
+        *,
         seen: frozenset[str] = frozenset(),
     ) -> str | None:
         """The external callable or value that *node* evaluates or derives from."""
@@ -940,13 +943,13 @@ class SourceIndex:
             case ast.List() | ast.Tuple() | ast.Set() | ast.Dict():
                 return f"builtins.{type(node).__name__.lower()}"
             case ast.Await():
-                return self.origin(node.value, module, env, seen)
+                return self.origin(node.value, module, env, seen=seen)
             case ast.Call():
-                return self.origin(node.func, module, env, seen)
+                return self.origin(node.func, module, env, seen=seen)
             case ast.Subscript():
-                return self.origin(node.value, module, env, seen)
+                return self.origin(node.value, module, env, seen=seen)
             case ast.Attribute():
-                receiver = self.origin(node.value, module, env, seen)
+                receiver = self.origin(node.value, module, env, seen=seen)
                 # An untyped call result may be an application object returned
                 # by the library; application method names stay unresolved.
                 if receiver is None or (

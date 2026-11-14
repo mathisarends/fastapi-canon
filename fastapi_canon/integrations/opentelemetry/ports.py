@@ -22,12 +22,12 @@ except ModuleNotFoundError as exc:
 from fastapi_canon.integration import ErrorLookup
 from fastapi_canon.integrations.opentelemetry.declarations import (
     Instrumentation,
+    PortRegistration,
     Telemetry,
     instrumented_methods,
 )
 
-type Registrations = tuple[tuple[str, type[Any], Instrumentation], ...]
-"""``(feature name, port, declaration)`` triples in composition order."""
+type Registrations = tuple[PortRegistration, ...]
 
 excluded: ContextVar[bool] = ContextVar("canon.telemetry.excluded", default=False)
 
@@ -76,7 +76,7 @@ class _InstrumentPort:
                 f"Instrumented{port.__name__}",
                 (_InstrumentedProxy,),
                 {
-                    name: self._wrapper(spec, port, feature, name, method)
+                    name: self._wrapper(spec, port, feature, name=name, method=method)
                     for name, method in instrumented_methods(port)
                 },
             )
@@ -93,6 +93,7 @@ class _InstrumentPort:
         spec: Instrumentation,
         port: type[Any],
         feature: str,
+        *,
         name: str,
         method: Callable[..., Any],
     ) -> Callable[..., Any]:

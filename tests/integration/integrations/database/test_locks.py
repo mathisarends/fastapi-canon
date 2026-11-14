@@ -11,7 +11,6 @@ from fastapi_canon import Composition
 from fastapi_canon.integrations.database import (
     AcquireTransactionLock,
     Database,
-    TransactionLocks,
 )
 
 
@@ -69,8 +68,7 @@ async def test_sqlite_advisory_lock_omission_requires_explicit_configuration(
         app.router.lifespan_context(app),
         app.state.dishka_container(scope=Scope.REQUEST) as scope,
     ):
-        locks = await scope.get(TransactionLocks)
-        assert await scope.get(AcquireTransactionLock) is locks
+        locks = await scope.get(AcquireTransactionLock)
         with pytest.raises(NotImplementedError, match="require PostgreSQL"):
             await locks.acquire(123)
     explicit = Database(
@@ -82,6 +80,5 @@ async def test_sqlite_advisory_lock_omission_requires_explicit_configuration(
         permitted.router.lifespan_context(permitted),
         permitted.state.dishka_container(scope=Scope.REQUEST) as scope,
     ):
-        locks = await scope.get(TransactionLocks)
-        assert await scope.get(AcquireTransactionLock) is locks
+        locks = await scope.get(AcquireTransactionLock)
         assert await locks.acquire(123) is None

@@ -45,7 +45,3 @@ class AcquireTransactionLock:
     async def acquire(self, key: int) -> None:
         """Acquire a lock through the supported named operation."""
         await self(key)
-
-
-# Supported public name from 0.20; retained for existing consumers.
-TransactionLocks = AcquireTransactionLock  # smelt: ignore[SMT344] -- documented public compatibility alias

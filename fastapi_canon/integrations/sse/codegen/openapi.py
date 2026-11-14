@@ -1,6 +1,6 @@
 import json
 from importlib.resources import files
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 from urllib.parse import unquote
 
 from fastapi import FastAPI
@@ -12,6 +12,13 @@ type Document = dict[str, Any]
 
 class ContractError(ValueError):
     """An invalid or unsupported OpenAPI contract."""
+
+
+class ParameterKey(NamedTuple):
+    """The OpenAPI identity of an operation parameter."""
+
+    location: str
+    name: str
 
 
 def resolve_ref(document: Document, value: Document) -> Document:

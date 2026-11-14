@@ -5,7 +5,7 @@ from importlib.metadata import entry_points
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from fastapi_canon.codegen.generators import ClientLanguage as BindingLanguage
+from fastapi_canon.codegen.generators import ClientLanguage
 from fastapi_canon.integrations.websockets.codegen.ir import (
     SocketDecl,
     SocketProtocolDecl,
@@ -15,7 +15,6 @@ from fastapi_canon.integrations.websockets.codegen.ir import (
 __all__ = [
     "ENTRY_POINT_GROUP",
     "BindingContext",
-    "BindingLanguage",
     "ProtocolBinding",
     "SocketBinding",
     "bind_sockets",
@@ -29,7 +28,7 @@ ENTRY_POINT_GROUP = "fastapi_canon.integrations.websockets.socket_bindings"
 class BindingContext:
     """What a binding learns about the client it extends."""
 
-    language: BindingLanguage
+    language: ClientLanguage
     protocols: tuple[SocketProtocolDecl, ...]
     """The distinct declarations of the binding's protocol in this contract."""
     contract: str | Path | None = None
@@ -98,10 +97,10 @@ def load_binding(reference: str) -> ProtocolBinding:
     return binding
 
 
-def bind_sockets(
+def bind_sockets(  # smelt: ignore[SMT345] -- public binding API signature
     sockets: Iterable[SocketDecl],
     bindings: Sequence[ProtocolBinding],
-    language: BindingLanguage,
+    language: ClientLanguage,
     contract: str | Path | None = None,
 ) -> dict[str, SocketBinding]:
     """Bind each configured protocol once; the result is keyed by protocol name."""

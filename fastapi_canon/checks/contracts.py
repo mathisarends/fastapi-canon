@@ -1,9 +1,11 @@
 """Read Canon declarations and compare them with explicit escaping exceptions."""
 
+from __future__ import annotations
+
 import ast
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from fastapi_canon.checks.analysis import (
     HTTP_ROUTE_METHODS,
@@ -113,7 +115,7 @@ class _CheckContracts:
                 else:
                     continue
                 if method == RPC_METHOD:
-                    rpc = self._rpc_method(function, decorator, owner, nested)
+                    rpc = self._rpc_method(function, decorator, owner, nested=nested)
                     if rpc is not None:
                         operations.append(rpc)
                     continue
@@ -165,7 +167,9 @@ class _CheckContracts:
                     continue
                 assert isinstance(router, ast.Call)
                 operations.append(operation)
-                self._operation(operation, function, decorator, module, router)
+                self._operation(
+                    operation, function, decorator, module=module, router=router
+                )
         return ContractReport(operations)
 
     def _rpc_method(
@@ -173,6 +177,7 @@ class _CheckContracts:
         function: SourceDefinition,
         decorator: ast.expr,
         owner: ast.expr,
+        *,
         nested: set[int],
     ) -> _Operation | None:
         # `method` is a common attribute name: only resolved RpcChannels count.
@@ -206,8 +211,8 @@ class _CheckContracts:
             operation,
             function,
             call,
-            module,
-            channel,
+            module=module,
+            router=channel,
             declaration_modules=declaration_modules,
         )
         return operation
@@ -217,9 +222,9 @@ class _CheckContracts:
         operation: _Operation,
         function: SourceDefinition,
         decorator: ast.Call | None,
+        *,
         module: str,
         router: ast.Call,
-        *,
         declaration_modules: frozenset[str] = frozenset(),
     ) -> None:
         self.source.touched = {function.module, module, *declaration_modules}
@@ -284,7 +289,9 @@ class _CheckContracts:
         contracts_known = contracts_known and not any(
             self.source.uncertain.get(scope) for scope in self.source.touched
         )
-        self._compare(operation, flow, catalog, declared, contracts_known)
+        self._compare(
+            operation, flow, catalog, declared=declared, contracts_known=contracts_known
+        )
         for scope in sorted(self.source.touched):
             for message in dict.fromkeys(self.source.uncertain.get(scope, [])):
                 operation.diagnostics.append(
@@ -302,12 +309,12 @@ class _CheckContracts:
                 for element in sequence.elts:
                     mapped = self._mapped_error(element, scope)
                     if mapped is not None:
-                        catalog[mapped[0]] = mapped[1]
+                        catalog[mapped.exception] = mapped.error
             self.source.touched = touched
             self._catalog_cache = catalog
         return self._catalog_cache
 
-    def _mapped_error(self, element: ast.expr, module: str) -> tuple[str, str] | None:
+    def _mapped_error(self, element: ast.expr, module: str) -> _ErrorMapping | None:
         identity = self.source.resolve(element, module)
         scope, definition = self.source.value(element, module)
         if (
@@ -324,7 +331,7 @@ class _CheckContracts:
         )
         if exception is None or not self.source.exception(exception):
             return None
-        return exception, identity
+        return _ErrorMapping(exception, identity)
 
     def _errors(
         self, node: ast.expr | None, module: str, operation: _Operation
@@ -397,6 +404,7 @@ class _CheckContracts:
         node: ast.expr | None,
         module: str,
         operation: _Operation,
+        *,
         seen: frozenset[int] = frozenset(),
     ) -> list[tuple[str, ast.expr]]:
         if node is None:
@@ -411,15 +419,15 @@ class _CheckContracts:
             for element in node.elts:
                 if isinstance(element, ast.Starred):
                     result.extend(
-                        self._sequence(element.value, module, operation, seen)
+                        self._sequence(element.value, module, operation, seen=seen)
                     )
                 else:
                     result.append((module, element))
             return result
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-            return self._sequence(node.left, module, operation, seen) + self._sequence(
-                node.right, module, operation, seen
-            )
+            return self._sequence(
+                node.left, module, operation, seen=seen
+            ) + self._sequence(node.right, module, operation, seen=seen)
         self._unknown(operation, f"unresolved contract sequence: {ast.unparse(node)}")
         return []
 
@@ -512,10 +520,11 @@ class _CheckContracts:
         operation: _Operation,
         flow: ExceptionFlow,
         catalog: dict[str, str],
+        *,
         declared: dict[str, str],
         contracts_known: bool,
     ) -> None:
-        seen: set[tuple[str, str]] = set()
+        seen: set[_Finding] = set()
         for escape in flow.escapes:
             if self.source.framework_exception(escape.exception):
                 if self.source.websocket_exception(
@@ -548,7 +557,7 @@ class _CheckContracts:
             code = "CAN001" if mapped else "CAN002"
             if mapped and mapped in declared.values():
                 continue
-            key = code, escape.exception
+            key = _Finding(code, escape.exception)
             if key in seen:
                 continue
             seen.add(key)
@@ -583,3 +592,13 @@ class _CheckContracts:
 
 def analyze_error_contracts(roots: list[Path]) -> ContractReport:
     return _CheckContracts(SourceIndex.read(roots))()
+
+
+class _ErrorMapping(NamedTuple):
+    exception: str
+    error: str
+
+
+class _Finding(NamedTuple):
+    code: str
+    exception: str

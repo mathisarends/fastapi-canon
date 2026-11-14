@@ -7,7 +7,7 @@ import inspect
 from collections.abc import Callable
 from contextlib import aclosing
 from inspect import Parameter
-from typing import Annotated, Any, cast, get_type_hints
+from typing import Annotated, Any, NamedTuple, cast, get_type_hints
 
 from dishka import DEFAULT_COMPONENT, AsyncContainer, DependencyKey
 from dishka.integrations.base import default_parse_dependency, wrap_injection
@@ -38,7 +38,7 @@ def inject_endpoint[EndpointT: Callable[..., Any]](endpoint: EndpointT) -> Endpo
     parameters = signature.parameters
     if not inspect.isfunction(endpoint) and not inspect.isclass(endpoint):
         endpoint = cast(
-            "EndpointT", _adapt_endpoint(endpoint, signature, hints, source)
+            "EndpointT", _adapt_endpoint(endpoint, signature, hints, source=source)
         )
     if not any(
         _parse_dependency(parameter, hints.get(name, parameter.annotation)) is not None
@@ -81,7 +81,7 @@ def endpoint_dependencies(endpoint: Callable[..., Any]) -> tuple[DependencyKey, 
 
 def _endpoint_signature(
     endpoint: Callable[..., Any],
-) -> tuple[inspect.Signature, dict[str, Any], Callable[..., Any]]:
+) -> _EndpointSignature:
     try:
         signature = inspect.signature(endpoint)
         source = endpoint
@@ -108,13 +108,14 @@ def _endpoint_signature(
         raise TypeError(
             f"Cannot inspect endpoint {get_name(endpoint)!r}; use a typed function, bound method, callable instance or functools.partial"
         ) from None
-    return signature, hints, source
+    return _EndpointSignature(signature, hints, source)
 
 
 def _adapt_endpoint(
     endpoint: Callable[..., Any],
     signature: inspect.Signature,
     hints: dict[str, Any],
+    *,
     source: Callable[..., Any],
 ) -> Callable[..., Any]:
     if any(
@@ -265,3 +266,9 @@ def _request_container(request: Request) -> AsyncContainer:
             "dishka.integrations.fastapi.setup_dishka(container, app)."
         )
     return container
+
+
+class _EndpointSignature(NamedTuple):
+    signature: inspect.Signature
+    hints: dict[str, Any]
+    source: Callable[..., Any]

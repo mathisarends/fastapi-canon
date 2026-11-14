@@ -11,6 +11,20 @@ The [repository migration](repository-migration.md) records the
 source history and publishing setup. The repository move does not rename the
 PyPI project or add further Python import changes.
 
+## Upgrade to 0.22.0
+
+Version 0.22.0 is unreleased. Replace removed aliases with their targets:
+
+```python
+# Before
+from fastapi_canon.integrations.database import TransactionLocks
+from fastapi_canon.integrations.websockets.codegen.bindings import BindingLanguage
+
+# After
+from fastapi_canon.integrations.database import AcquireTransactionLock
+from fastapi_canon.codegen.generators import ClientLanguage
+```
+
 ## Upgrade to 0.21.0
 
 Version 0.21.0 was published on 2026-11-14. Follow the 0.20.0 migration below

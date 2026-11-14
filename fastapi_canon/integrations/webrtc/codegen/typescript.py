@@ -426,13 +426,13 @@ def _session_types(session: Mapping[str, Any], models: _Emitter) -> str:
                 channel["receive_format"],
                 channel.get("receive_schema"),
                 _SEND_TYPES,
-                models,
+                models=models,
             )
             receive = _message_type(
                 channel["send_format"],
                 channel.get("send_schema"),
                 _RECEIVE_TYPES,
-                models,
+                models=models,
             )
             lines.append(
                 f"  readonly {_property(channel['name'])}: {{\n"
@@ -517,6 +517,7 @@ def _message_type(
     message_format: str,
     schema: Any,
     fallback: Mapping[str, str],
+    *,
     models: _Emitter,
 ) -> str:
     if message_format == "json":

@@ -29,11 +29,14 @@ Declare `StrEnum` members with explicit string literals. Their wire and public
 values must remain visible and independent of Python member names; do not use
 `auto()` for these enums.
 
+Name tuple fields with a `NamedTuple` or frozen dataclass, and make parameters
+after the third keyword-only. Framework callbacks and public signatures keep
+their shape with a reasoned suppression.
+
 Inspect public contracts and falsy inputs before changing
 names, dependency lifetimes or defaults; syntax alone cannot establish that a
 change preserves compatibility. `AcquireTransactionLock`, for example, provides
-a callable operation while retaining the supported `TransactionLocks` alias and
-named `acquire` operation.
+a callable operation while retaining its named `acquire` operation.
 
 ## Change the policy
 
@@ -55,8 +58,8 @@ the few existing exceptions and their reasons.
 ## Upgrade Smelt
 
 Regenerate the editor schema as UTF-8 and review the
-[upstream rule catalog](https://github.com/mathisarends/smelt/blob/v0.6.0/docs/rules/README.md)
-and [upgrade guide](https://github.com/mathisarends/smelt/blob/v0.6.0/docs/upgrading.md#050-to-060).
+[upstream rule catalog](https://github.com/mathisarends/smelt/blob/v0.8.0/docs/rules/README.md)
+and [upgrade guide](https://github.com/mathisarends/smelt/blob/v0.8.0/docs/upgrading.md#070-to-080).
 Run the full policy and inspect new findings before adopting rules.
 Keep suppressions and exclusions tied to actual contracts.
 

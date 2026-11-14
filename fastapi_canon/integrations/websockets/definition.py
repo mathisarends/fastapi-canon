@@ -487,7 +487,9 @@ class RpcDefinition:
         rejects: Sequence[RpcErrorBinding[Any]] = (),
     ) -> RpcEndpoint[Any]:
         self.ensure_mutable()
-        variables = _validate_endpoint(self._endpoints, path, name, subprotocol)
+        variables = _validate_endpoint(
+            self._endpoints, path, name, subprotocol=subprotocol
+        )
         _validate_context(context)
         if path_model is not None:
             if not isinstance(path_model, type) or not issubclass(
@@ -589,7 +591,9 @@ class RpcDefinition:
         rejects: Sequence[RpcErrorBinding[Any]] = (),
     ) -> RpcStreamEndpoint[Any]:
         self.ensure_mutable()
-        variables = _validate_endpoint(self._endpoints, path, name, subprotocol)
+        variables = _validate_endpoint(
+            self._endpoints, path, name, subprotocol=subprotocol
+        )
         _validate_context(context)
         marker = getattr(stream, "__rpckit_stream__", None)
         if not isinstance(stream, FunctionType) or marker is None:
@@ -682,7 +686,9 @@ class RpcDefinition:
             raise ProtocolDefinitionError(
                 "rpc.socket() expects a function decorated by @channel.socket()"
             )
-        variables = _validate_endpoint(self._endpoints, path, name, subprotocol)
+        variables = _validate_endpoint(
+            self._endpoints, path, name, subprotocol=subprotocol
+        )
         _validate_context(context)
         if handler in self._mounted_sockets:
             raise ProtocolDefinitionError(
@@ -943,6 +949,7 @@ def _validate_endpoint(
     endpoints: Sequence[RpcAnyEndpoint],
     path: str,
     name: str | None,
+    *,
     subprotocol: str | None,
 ) -> tuple[str, ...]:
     if (

@@ -4,6 +4,7 @@ import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from itertools import chain
+from typing import NamedTuple
 
 from fastapi_canon.integrations.websockets.codegen.ir import (
     ApiNode,
@@ -76,9 +77,7 @@ def client_view(
     routes = api_view(ir, api_root=api_root, api_names=api_names)
     events = event_view(ir, api_root=api_root, api_names=api_names)
     root_streams: list[BinaryStreamDecl | SocketDecl] = []
-    projected_streams: list[
-        tuple[tuple[str, ...], tuple[str, ...], BinaryStreamDecl | SocketDecl]
-    ] = []
+    projected_streams: list[_Projection[BinaryStreamDecl | SocketDecl]] = []
     root = tuple(api_root.split(".")) if api_root else ()
     for stream in chain[BinaryStreamDecl | SocketDecl](ir.binary_streams, ir.sockets):
         visible = (
@@ -89,7 +88,7 @@ def client_view(
         if not visible:
             root_streams.append(stream)
         else:
-            projected_streams.append((visible, stream.path, stream))
+            projected_streams.append(_Projection(visible, stream.path, stream))
     return ClientView(
         root_operations=routes.root_operations,
         root_notifications=events.root_events,
@@ -116,7 +115,7 @@ def api_view(
 
     matched_names: set[str] = set()
     root_operations = list(ir.root_operations)
-    projected: list[tuple[tuple[str, ...], tuple[str, ...], RouteDecl]] = []
+    projected: list[_Projection[RouteDecl]] = []
     for route in ir.operations:
         if not route.path:
             continue
@@ -130,15 +129,15 @@ def api_view(
                 route.path,
                 visible_source,
                 index,
-                api_names,
-                matched_names,
+                aliases=api_names,
+                matched=matched_names,
             )
             for index in range(len(visible_source))
         )
         if not visible:
             root_operations.append(route)
         else:
-            projected.append((visible, route.path, route))
+            projected.append(_Projection(visible, route.path, route))
 
     matched_names.update(_matching_notification_aliases(ir, root, api_names))
     unknown = sorted(set(api_names) - matched_names)
@@ -172,7 +171,7 @@ def event_view(
 ) -> EventView:
     root = tuple(api_root.split(".")) if api_root else ()
     root_events: list[NotificationDecl] = []
-    projected: list[tuple[tuple[str, ...], tuple[str, ...], NotificationDecl]] = []
+    projected: list[_Projection[NotificationDecl]] = []
     for event in ir.notifications:
         source_path = event.path
         visible_source = (
@@ -181,19 +180,28 @@ def event_view(
             else source_path
         )
         visible = tuple(
-            _api_name(source_path, visible_source, index, api_names, set())
+            _api_name(
+                source_path, visible_source, index, aliases=api_names, matched=set()
+            )
             for index in range(len(visible_source))
         )
         if not visible:
             root_events.append(event)
         else:
-            projected.append((visible, source_path, event))
+            projected.append(_Projection(visible, source_path, event))
     return EventView(tuple(root_events), _event_tree(projected))
+
+
+class NameBinding(NamedTuple):
+    """A contract name and the identifier generated for it."""
+
+    source: str
+    identifier: str
 
 
 def assert_unique_names(
     owner: str,
-    values: Iterable[tuple[str, str]],
+    values: Iterable[NameBinding],
 ) -> None:
     identifiers: dict[str, str] = {}
     for source, identifier in values:
@@ -240,7 +248,7 @@ def _root_exists(nodes: tuple[ApiNode, ...], root: tuple[str, ...]) -> bool:
 
 
 def _view_tree(
-    routes: list[tuple[tuple[str, ...], tuple[str, ...], RouteDecl]],
+    routes: list[_Projection[RouteDecl]],
 ) -> tuple[ApiViewNode, ...]:
     tree: dict[str, dict[str, object]] = {}
     for visible_path, source_path, route in routes:
@@ -303,7 +311,7 @@ def _matching_notification_aliases(
             else event.path
         )
         for index in range(len(visible)):
-            _api_name(event.path, visible, index, aliases, matched)
+            _api_name(event.path, visible, index, aliases=aliases, matched=matched)
     return matched
 
 
@@ -311,6 +319,7 @@ def _api_name(
     source_path: tuple[str, ...],
     visible_source: tuple[str, ...],
     index: int,
+    *,
     aliases: Mapping[str, str],
     matched: set[str],
 ) -> str:
@@ -326,7 +335,7 @@ def _api_name(
 
 
 def _event_tree(
-    events: list[tuple[tuple[str, ...], tuple[str, ...], NotificationDecl]],
+    events: list[_Projection[NotificationDecl]],
 ) -> tuple[EventViewNode, ...]:
     tree: dict[str, dict[str, object]] = {}
     for visible_path, source_path, event in events:
@@ -439,9 +448,7 @@ def _socket_items(
 
 
 def _stream_tree(
-    streams: list[
-        tuple[tuple[str, ...], tuple[str, ...], BinaryStreamDecl | SocketDecl]
-    ],
+    streams: list[_Projection[BinaryStreamDecl | SocketDecl]],
 ) -> tuple[StreamViewNode, ...]:
     tree: dict[str, dict[str, object]] = {}
     for visible_path, source_path, stream in streams:
@@ -489,3 +496,9 @@ def _stream_node(
             for child_segment, child in children.items()
         ),
     )
+
+
+class _Projection[T](NamedTuple):
+    visible_path: tuple[str, ...]
+    source_path: tuple[str, ...]
+    declaration: T

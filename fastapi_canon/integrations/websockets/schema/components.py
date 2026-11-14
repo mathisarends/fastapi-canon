@@ -3,7 +3,7 @@ from collections.abc import Iterable
 from enum import Enum
 from itertools import chain
 from types import UnionType
-from typing import Any, TypeAliasType, get_args, get_origin
+from typing import Any, NamedTuple, TypeAliasType, get_args, get_origin
 
 from pydantic import BaseModel, TypeAdapter
 from pydantic.json_schema import JsonSchemaMode
@@ -27,20 +27,20 @@ def components(protocol: RpcProtocol) -> dict[str, Any]:
     """Build the JSON Schema components referenced by the OpenRPC document."""
     annotations = _annotations(protocol)
     _assert_unique_wire_names(annotations.values())
-    adapters: list[tuple[str, JsonSchemaMode, TypeAdapter[Any]]] = [
-        (name, "serialization", TypeAdapter(annotation))
+    adapters: list[_SchemaInput] = [
+        _SchemaInput(name, "serialization", TypeAdapter(annotation))
         for name, annotation in annotations.items()
     ]
     for socket in protocol.sockets:
         if socket.message_contract is not None:
             adapters.extend(
                 [
-                    (
+                    _SchemaInput(
                         socket_message_schema_name(socket.name, "client"),
                         "validation",
                         socket.message_contract.client,
                     ),
-                    (
+                    _SchemaInput(
                         socket_message_schema_name(socket.name, "server"),
                         "serialization",
                         socket.message_contract.server,
@@ -51,7 +51,7 @@ def components(protocol: RpcProtocol) -> dict[str, Any]:
     definitions: dict[str, Any] = root.get("$defs", {})
     for method in protocol.methods:
         definitions[method.request_name] = _request_schema(
-            method.name, method.request_name, method.params, method.summary
+            method.name, method.request_name, method.params, summary=method.summary
         )
     for notification in protocol.notifications:
         name = notification_schema_name(notification.name)
@@ -143,6 +143,7 @@ def _request_schema(
     name: str,
     title: str,
     params_model: type[BaseModel] | None,
+    *,
     summary: str | None,
 ) -> dict[str, Any]:
     required = ["jsonrpc", "method"]
@@ -239,3 +240,9 @@ def _assert_unique_wire_names(annotations: Iterable[Any]) -> None:
 
     for annotation in annotations:
         visit(annotation)
+
+
+class _SchemaInput(NamedTuple):
+    name: str
+    mode: JsonSchemaMode
+    adapter: TypeAdapter[Any]

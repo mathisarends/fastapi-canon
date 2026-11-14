@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
-from typing import Any, Protocol
+from typing import Any, NamedTuple, Protocol
 
 from fastapi_canon.error.error import Error
 from fastapi_canon.exceptions import ErrorConfigurationError
@@ -52,13 +52,15 @@ def iter_operations(
                     yield f"{method.upper()} {path}", operation
 
 
+class ResponseContracts(NamedTuple):
+    errors: tuple[AnyError, ...]
+    http_statuses: tuple[int, ...]
+    success: tuple[int, str | None] | None
+
+
 def contracts_from_responses(
     path: str, responses: Mapping[str, Any], registry: ErrorCatalog | None
-) -> tuple[
-    tuple[AnyError, ...],
-    tuple[int, ...],
-    tuple[int, str | None] | None,
-]:
+) -> ResponseContracts:
     by_identity = (
         {str(id(error)): error for error in registry.errors}
         if registry is not None
@@ -126,4 +128,4 @@ def contracts_from_responses(
                 raise ErrorConfigurationError(msg)
             success = (status, media_type or None)
 
-    return tuple(result), tuple(http_statuses), success
+    return ResponseContracts(tuple(result), tuple(http_statuses), success)

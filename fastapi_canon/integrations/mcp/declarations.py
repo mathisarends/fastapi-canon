@@ -123,7 +123,9 @@ class Mcp(Integration):
                 "starting resources.",
             ) from error
         return Installer(
-            lambda app, container: install_mcp(app, mounts, self, container, runtime)
+            lambda app, container: install_mcp(
+                app, mounts, self, container=container, configuration=runtime
+            )
         )
 
 

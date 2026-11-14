@@ -35,6 +35,7 @@ from fastapi_canon.integrations.websockets.codegen.ir import (
     named_types,
 )
 from fastapi_canon.integrations.websockets.codegen.names import (
+    NameBinding,
     NamespaceViewNode,
     assert_unique_names,
     client_view,
@@ -95,24 +96,24 @@ def render_files(ir: ClientIr, options: PythonClientOptions) -> dict[str, str]:
         ir,
         view.root_operations,
         (*view.root_streams, *view.root_sockets),
-        view.nodes,
-        options,
-        client_name,
+        nodes=view.nodes,
+        options=options,
+        client_name=client_name,
     )
     bound = bind_sockets(ir.sockets, options.bindings, "python", options.contract)
     files = {
-        "__init__.py": _render_package_init(ir, options, client_name, view.nodes),
+        "__init__.py": _render_package_init(ir, options, client_name, nodes=view.nodes),
         **_render_runtime(ir, options),
         "client.py": _render_client(
             ir,
             view.root_operations,
             view.nodes,
-            view.root_notifications,
-            view.root_streams,
-            view.root_sockets,
-            options,
-            client_name,
-            bound,
+            root_events=view.root_notifications,
+            root_streams=view.root_streams,
+            root_sockets=view.root_sockets,
+            options=options,
+            client_name=client_name,
+            bound=bound,
         ),
     }
     if ir.declarations:
@@ -137,7 +138,7 @@ def render_files(ir: ClientIr, options: PythonClientOptions) -> dict[str, str]:
     if view.nodes:
         files["namespaces/__init__.py"] = _render_namespaces_init(view.nodes, options)
         for node in view.nodes:
-            files[_api_file(node)] = _render_api(node, ir, options, bound)
+            files[_api_file(node)] = _render_api(node, ir, options, bound=bound)
     for name, content in options.extra_files.items():
         if name != _identifier(name.removesuffix(".py")) + ".py":
             raise UnsupportedSchemaError(f"Invalid extra Python file name: {name!r}")
@@ -360,7 +361,13 @@ def _render_endpoints(ir: ClientIr, options: PythonClientOptions) -> str:
 def _render_streams(ir: ClientIr, options: PythonClientOptions) -> str:
     imports = _Imports()
     imports.add_module("asyncio")
-    imports.add("collections.abc", "AsyncGenerator", "Awaitable", "Callable", "Mapping")
+    imports.add(
+        "collections.abc",
+        "AsyncGenerator",
+        "Awaitable",
+        "Callable",
+        "Mapping",
+    )
     imports.add("contextlib", "asynccontextmanager")
     imports.add("dataclasses", "dataclass", "field")
     imports.add("enum", "StrEnum")
@@ -389,7 +396,13 @@ def _render_streams(ir: ClientIr, options: PythonClientOptions) -> str:
 
 def _render_sockets(ir: ClientIr, options: PythonClientOptions) -> str:
     imports = _Imports()
-    imports.add("collections.abc", "AsyncGenerator", "Awaitable", "Callable", "Mapping")
+    imports.add(
+        "collections.abc",
+        "AsyncGenerator",
+        "Awaitable",
+        "Callable",
+        "Mapping",
+    )
     imports.add("contextlib", "asynccontextmanager")
     imports.add("dataclasses", "dataclass", "field")
     imports.add("enum", "StrEnum")
@@ -467,6 +480,7 @@ def _render_api(
     root: NamespaceViewNode,
     ir: ClientIr,
     options: PythonClientOptions,
+    *,
     bound: Mapping[str, SocketBinding],
 ) -> str:
     imports = _Imports()
@@ -483,7 +497,7 @@ def _render_api(
         )
     sockets = [socket for node in nodes for socket in node.sockets]
     if sockets:
-        _add_socket_imports(imports, options, sockets, bound)
+        _add_socket_imports(imports, options, sockets, bound=bound)
     for node in nodes:
         for route in node.operations:
             _add_operation_imports(route, imports, options)
@@ -520,6 +534,7 @@ def _render_client(
     ir: ClientIr,
     root_operations: tuple[RouteDecl, ...],
     nodes: tuple[NamespaceViewNode, ...],
+    *,
     root_events: tuple[NotificationDecl, ...],
     root_streams: tuple[BinaryStreamDecl, ...],
     root_sockets: tuple[SocketDecl, ...],
@@ -562,7 +577,7 @@ def _render_client(
     if ir.sockets:
         imports.add(f"{options.package}.sockets", "SocketOpener")
         if root_sockets:
-            _add_socket_imports(imports, options, root_sockets, bound)
+            _add_socket_imports(imports, options, root_sockets, bound=bound)
         if options.with_transport == "websocket":
             imports.add(
                 f"{options.package}.sockets",
@@ -615,6 +630,7 @@ def _add_socket_imports(
     imports: _Imports,
     options: PythonClientOptions,
     sockets: Iterable[SocketDecl],
+    *,
     bound: Mapping[str, SocketBinding],
 ) -> None:
     imports.add("contextlib", "AbstractAsyncContextManager")
@@ -686,6 +702,7 @@ def _render_package_init(
     ir: ClientIr,
     options: PythonClientOptions,
     client_name: str,
+    *,
     nodes: tuple[NamespaceViewNode, ...],
 ) -> str:
     imports = _Imports(relative_to=options.package)
@@ -1064,6 +1081,7 @@ def _validate(
     ir: ClientIr,
     root_operations: tuple[RouteDecl, ...],
     root_streams: tuple[BinaryStreamDecl | SocketDecl, ...],
+    *,
     nodes: tuple[NamespaceViewNode, ...],
     options: PythonClientOptions,
     client_name: str,
@@ -1103,7 +1121,7 @@ def _validate(
     assert_unique_names(
         "schemas",
         (
-            (declaration.name, pascal_case(declaration.name))
+            NameBinding(declaration.name, pascal_case(declaration.name))
             for declaration in ir.declarations
         ),
     )
@@ -1117,30 +1135,36 @@ def _validate(
     for model in ir.models:
         assert_unique_names(
             f"model {model.name}",
-            ((field.name, _identifier(field.name)) for field in model.fields),
+            (
+                NameBinding(field.name, _identifier(field.name))
+                for field in model.fields
+            ),
         )
     for route in ir.operations:
         assert_unique_names(
             f"method {route.rpc_name}",
             (
-                (parameter.name, _identifier(parameter.name))
+                NameBinding(parameter.name, _identifier(parameter.name))
                 for parameter in route.params
             ),
         )
     client_members = [
-        ("<client.close>", "close"),
-        ("<client.closed>", "closed"),
-        ("<client.state>", "state"),
-        ("<client.states>", "states"),
-        ("<client.dropped_notifications>", "dropped_notifications"),
-        ("<client.from_transport>", "from_transport"),
-        *((node.source_path[-1], _identifier(node.segment)) for node in nodes),
+        NameBinding("<client.close>", "close"),
+        NameBinding("<client.closed>", "closed"),
+        NameBinding("<client.state>", "state"),
+        NameBinding("<client.states>", "states"),
+        NameBinding("<client.dropped_notifications>", "dropped_notifications"),
+        NameBinding("<client.from_transport>", "from_transport"),
         *(
-            (route.rpc_name, _identifier(route.operation_name))
+            NameBinding(node.source_path[-1], _identifier(node.segment))
+            for node in nodes
+        ),
+        *(
+            NameBinding(route.rpc_name, _identifier(route.operation_name))
             for route in root_operations
         ),
         *(
-            (event.rpc_name, _identifier(event.operation_name))
+            NameBinding(event.rpc_name, _identifier(event.operation_name))
             for event in client_view(
                 ir,
                 api_root=options.api_root,
@@ -1148,65 +1172,70 @@ def _validate(
             ).root_notifications
         ),
         *(
-            (stream.rpc_name, _identifier(stream.operation_name))
+            NameBinding(stream.rpc_name, _identifier(stream.operation_name))
             for stream in root_streams
         ),
     ]
     if ir.servers:
         client_members.extend(
             [
-                ("<client.from_transports>", "from_transports"),
-                ("<client.from_transport_map>", "from_transport_map"),
+                NameBinding("<client.from_transports>", "from_transports"),
+                NameBinding("<client.from_transport_map>", "from_transport_map"),
             ]
         )
     if options.with_transport == "websocket":
-        client_members.append(("<client.connect>", "connect"))
+        client_members.append(NameBinding("<client.connect>", "connect"))
         connect_options = [
-            *((option, option) for option in _CONNECT_OPTIONS),
+            *(NameBinding(option, option) for option in _CONNECT_OPTIONS),
             *(
-                (variable.name, _identifier(variable.name))
+                NameBinding(variable.name, _identifier(variable.name))
                 for variable in _connect_variables(ir)
             ),
         ]
         if len(ir.servers) == 1:
-            connect_options.append(("<connect.url>", "url"))
+            connect_options.append(NameBinding("<connect.url>", "url"))
         if ir.binary_streams:
             connect_options.append(
-                ("<connect.stream_socket_factory>", "stream_socket_factory")
+                NameBinding("<connect.stream_socket_factory>", "stream_socket_factory")
             )
         if ir.sockets:
             connect_options.append(
-                ("<connect.socket_connection_factory>", "socket_connection_factory")
+                NameBinding(
+                    "<connect.socket_connection_factory>", "socket_connection_factory"
+                )
             )
         assert_unique_names("connect options", connect_options)
     assert_unique_names("root client", client_members)
-    _assert_unique_package_exports(ir, options, nodes, client_name)
+    _assert_unique_package_exports(ir, options, nodes, client_name=client_name)
     _validate_nodes(nodes)
     for node in nodes:
         assert_unique_names(
             f"Python namespace module {_identifier(node.segment)!r}",
             (
-                (".".join(item.source_path), _api_class(item.path))
+                NameBinding(".".join(item.source_path), _api_class(item.path))
                 for item in _walk((node,))
             ),
         )
     assert_unique_names(
         "servers",
-        ((server.name, _identifier(server.name)) for server in ir.servers),
+        (NameBinding(server.name, _identifier(server.name)) for server in ir.servers),
     )
     assert_unique_names(
         "binary streams",
-        ((stream.name, _identifier(stream.name)) for stream in ir.binary_streams),
+        (
+            NameBinding(stream.name, _identifier(stream.name))
+            for stream in ir.binary_streams
+        ),
     )
     assert_unique_names(
         "sockets",
-        ((socket.name, _identifier(socket.name)) for socket in ir.sockets),
+        (NameBinding(socket.name, _identifier(socket.name)) for socket in ir.sockets),
     )
     for server in ir.servers:
         assert_unique_names(
             f"server {server.name}",
             (
-                (variable.name, _identifier(variable.name))
+                NameBinding(variable.name, _identifier(variable.name))
                 for variable in server.variables
             ),
         )
@@ -1216,35 +1245,41 @@ def _assert_unique_package_exports(
     ir: ClientIr,
     options: PythonClientOptions,
     nodes: tuple[NamespaceViewNode, ...],
+    *,
     client_name: str,
 ) -> None:
-    exports: list[tuple[str, str]] = [("<client>", client_name)]
-    exports.extend(("<runtime>", name) for name in _PACKAGE_EXPORTS)
+    exports: list[NameBinding] = [NameBinding("<client>", client_name)]
+    exports.extend(NameBinding("<runtime>", name) for name in _PACKAGE_EXPORTS)
     if ir.servers:
-        exports.extend(("<endpoints>", name) for name in ("Endpoint", "ServerName"))
-        exports.append(("<endpoints>", "endpoints"))
-    if options.with_transport == "websocket":
-        exports.append(("<transport>", "WebSocketTransport"))
-    if ir.binary_streams:
-        exports.extend(("<streams>", name) for name in _STREAM_EXPORTS)
-        exports.append(("<streams>", "streams"))
-    if ir.sockets:
-        exports.extend(("<sockets>", name) for name in _SOCKET_EXPORTS)
-        exports.append(("<sockets>", "sockets"))
         exports.extend(
-            ("<streams>", name) for name in _STREAM_EXPORTS if name.startswith("Rpc")
+            NameBinding("<endpoints>", name) for name in ("Endpoint", "ServerName")
+        )
+        exports.append(NameBinding("<endpoints>", "endpoints"))
+    if options.with_transport == "websocket":
+        exports.append(NameBinding("<transport>", "WebSocketTransport"))
+    if ir.binary_streams:
+        exports.extend(NameBinding("<streams>", name) for name in _STREAM_EXPORTS)
+        exports.append(NameBinding("<streams>", "streams"))
+    if ir.sockets:
+        exports.extend(NameBinding("<sockets>", name) for name in _SOCKET_EXPORTS)
+        exports.append(NameBinding("<sockets>", "sockets"))
+        exports.extend(
+            NameBinding("<streams>", name)
+            for name in _STREAM_EXPORTS
+            if name.startswith("Rpc")
         )
     if ir.declarations:
-        exports.append(("<models>", "models"))
+        exports.append(NameBinding("<models>", "models"))
     exports.extend(
-        (declaration.name, _schema_name(declaration.name))
+        NameBinding(declaration.name, _schema_name(declaration.name))
         for declaration in ir.declarations
     )
     exports.extend(
-        (".".join(node.source_path), _api_class(node.path)) for node in nodes
+        NameBinding(".".join(node.source_path), _api_class(node.path)) for node in nodes
     )
     exports.extend(
-        (code, f"{_schema_name(code)}Error") for code in _named_error_codes(ir)
+        NameBinding(code, f"{_schema_name(code)}Error")
+        for code in _named_error_codes(ir)
     )
     assert_unique_names("package exports", exports)
 
@@ -1252,18 +1287,19 @@ def _assert_unique_package_exports(
 def _validate_nodes(nodes: tuple[NamespaceViewNode, ...]) -> None:
     for node in nodes:
         values = [
-            (child.segment, _identifier(child.segment)) for child in node.children
+            NameBinding(child.segment, _identifier(child.segment))
+            for child in node.children
         ]
         values.extend(
-            (route.rpc_name, _identifier(route.operation_name))
+            NameBinding(route.rpc_name, _identifier(route.operation_name))
             for route in node.operations
         )
         values.extend(
-            (event.rpc_name, _identifier(event.operation_name))
+            NameBinding(event.rpc_name, _identifier(event.operation_name))
             for event in node.notifications
         )
         values.extend(
-            (stream.rpc_name, _identifier(stream.operation_name))
+            NameBinding(stream.rpc_name, _identifier(stream.operation_name))
             for stream in chain[BinaryStreamDecl | SocketDecl](
                 node.streams, node.sockets
             )

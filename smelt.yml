@@ -273,6 +273,7 @@ structure:
         style: absolute
       private_modules: forbid
       future_annotations: when-needed
+      max_positional_parameters: 3
       type_dispatch:
         style: match
         min_branches: 3
@@ -342,6 +343,7 @@ rules:
   redundant-private-delegate: warning
   redundant-name-alias: warning
   prefer-deferred-annotations: warning
+  anonymous-tuple-type: warning
   unused-suppression: error
   resolved-debt: error
 suppressions:

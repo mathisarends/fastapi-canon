@@ -6,7 +6,14 @@ import inspect
 from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, ClassVar, Protocol, runtime_checkable
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ClassVar,
+    NamedTuple,
+    Protocol,
+    runtime_checkable,
+)
 
 from starlette.types import Scope as ASGIScope
 
@@ -259,13 +266,23 @@ class Telemetry(Integration):
 Instrumentation.integration = Telemetry
 
 
+class PortRegistration(NamedTuple):
+    """One instrumented port in composition order."""
+
+    feature: str
+    port: type[Any]
+    spec: Instrumentation
+
+
 def instrumentation_providers(
     registrations: tuple[tuple[str, Instrumentation], ...],
     options: Telemetry,
     errors: ErrorLookup | None = None,
 ) -> tuple[Provider, ...]:
     ports = tuple(
-        (feature, port, spec) for feature, spec in registrations for port in spec.ports
+        PortRegistration(feature, port, spec)
+        for feature, spec in registrations
+        for port in spec.ports
     )
     seen: dict[tuple[str, type[Any]], str] = {}
     for feature, port, spec in ports:

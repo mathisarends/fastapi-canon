@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
+from types import MappingProxyType
 from typing import Any, TypedDict, Unpack
 
 from fastapi import APIRouter
@@ -94,8 +95,8 @@ class APIRouteOptions(RouteOptions, total=False):
 
 @dataclass(frozen=True, slots=True)
 class RouteProvenance:
-    dependency_origins: tuple[tuple[int, str], ...]
-    error_origins: tuple[tuple[str, str], ...]
+    dependency_origins: Mapping[int, str]
+    error_origins: Mapping[str, str]
     endpoint: Callable[..., object]
     error_registry: ErrorRegistry | None
 
@@ -274,7 +275,14 @@ class CanonRouter(APIRouter):
         response: CanonResponse | None = None,
         **kwargs: Unpack[RouteOptions],
     ) -> Callable[[CallableT], CallableT]:
-        return self._method_route("GET", path, raises, http_statuses, response, kwargs)
+        return self._method_route(
+            "GET",
+            path,
+            raises,
+            http_statuses=http_statuses,
+            response=response,
+            kwargs=kwargs,
+        )
 
     def put[CallableT: Callable[..., Any]](
         self,
@@ -285,7 +293,14 @@ class CanonRouter(APIRouter):
         response: CanonResponse | None = None,
         **kwargs: Unpack[RouteOptions],
     ) -> Callable[[CallableT], CallableT]:
-        return self._method_route("PUT", path, raises, http_statuses, response, kwargs)
+        return self._method_route(
+            "PUT",
+            path,
+            raises,
+            http_statuses=http_statuses,
+            response=response,
+            kwargs=kwargs,
+        )
 
     def post[CallableT: Callable[..., Any]](
         self,
@@ -296,7 +311,14 @@ class CanonRouter(APIRouter):
         response: CanonResponse | None = None,
         **kwargs: Unpack[RouteOptions],
     ) -> Callable[[CallableT], CallableT]:
-        return self._method_route("POST", path, raises, http_statuses, response, kwargs)
+        return self._method_route(
+            "POST",
+            path,
+            raises,
+            http_statuses=http_statuses,
+            response=response,
+            kwargs=kwargs,
+        )
 
     def delete[CallableT: Callable[..., Any]](
         self,
@@ -308,7 +330,12 @@ class CanonRouter(APIRouter):
         **kwargs: Unpack[RouteOptions],
     ) -> Callable[[CallableT], CallableT]:
         return self._method_route(
-            "DELETE", path, raises, http_statuses, response, kwargs
+            "DELETE",
+            path,
+            raises,
+            http_statuses=http_statuses,
+            response=response,
+            kwargs=kwargs,
         )
 
     def options[CallableT: Callable[..., Any]](
@@ -321,7 +348,12 @@ class CanonRouter(APIRouter):
         **kwargs: Unpack[RouteOptions],
     ) -> Callable[[CallableT], CallableT]:
         return self._method_route(
-            "OPTIONS", path, raises, http_statuses, response, kwargs
+            "OPTIONS",
+            path,
+            raises,
+            http_statuses=http_statuses,
+            response=response,
+            kwargs=kwargs,
         )
 
     def head[CallableT: Callable[..., Any]](
@@ -333,7 +365,14 @@ class CanonRouter(APIRouter):
         response: CanonResponse | None = None,
         **kwargs: Unpack[RouteOptions],
     ) -> Callable[[CallableT], CallableT]:
-        return self._method_route("HEAD", path, raises, http_statuses, response, kwargs)
+        return self._method_route(
+            "HEAD",
+            path,
+            raises,
+            http_statuses=http_statuses,
+            response=response,
+            kwargs=kwargs,
+        )
 
     def patch[CallableT: Callable[..., Any]](
         self,
@@ -345,7 +384,12 @@ class CanonRouter(APIRouter):
         **kwargs: Unpack[RouteOptions],
     ) -> Callable[[CallableT], CallableT]:
         return self._method_route(
-            "PATCH", path, raises, http_statuses, response, kwargs
+            "PATCH",
+            path,
+            raises,
+            http_statuses=http_statuses,
+            response=response,
+            kwargs=kwargs,
         )
 
     def trace[CallableT: Callable[..., Any]](
@@ -358,7 +402,12 @@ class CanonRouter(APIRouter):
         **kwargs: Unpack[RouteOptions],
     ) -> Callable[[CallableT], CallableT]:
         return self._method_route(
-            "TRACE", path, raises, http_statuses, response, kwargs
+            "TRACE",
+            path,
+            raises,
+            http_statuses=http_statuses,
+            response=response,
+            kwargs=kwargs,
         )
 
     def _generate_operation_id(self, route: APIRoute) -> str:
@@ -382,6 +431,7 @@ class CanonRouter(APIRouter):
         method: str,
         path: str,
         raises: Sequence[AnyError],
+        *,
         http_statuses: Sequence[int],
         response: CanonResponse | None,
         kwargs: RouteOptions,
@@ -450,8 +500,8 @@ class _RouteMetadata(dict[str, Any]):
     ) -> None:
         super().__init__(values)
         self.provenance = RouteProvenance(
-            tuple((int(key), value) for key, value in dependencies.items()),
-            tuple(errors.items()),
+            MappingProxyType({int(key): value for key, value in dependencies.items()}),
+            MappingProxyType(dict(errors)),
             getattr(endpoint, "__canon_declared_endpoint__", endpoint),
             registry,
         )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass, field
+from typing import NamedTuple
 
 from fastapi_canon.checks.source import (
     SourceDefinition,
@@ -50,10 +51,7 @@ class ExceptionFlow:
 class ContractAnalyzer:
     def __init__(self, source: SourceIndex) -> None:
         self.source = source
-        self._summaries: dict[
-            tuple[str, bool, str | None, str | None],
-            tuple[tuple[_Escape, ...], tuple[UnknownValue, ...], frozenset[str]],
-        ] = {}
+        self._summaries: dict[_SummaryKey, _Summary] = {}
 
     def function(
         self,
@@ -71,7 +69,9 @@ class ContractAnalyzer:
                     UnknownValue("recursive call", function.name, function.node.lineno)
                 ]
             )
-        summary_key = function.name, iterated, receiver, dependency_transport
+        summary_key = _SummaryKey(
+            function.name, iterated, receiver, dependency_transport
+        )
         if summary_key in self._summaries:
             escapes, unknowns, modules = self._summaries[summary_key]
             self.source.touched.update(modules)
@@ -94,7 +94,7 @@ class ContractAnalyzer:
             flow.escapes = list(first.values())
             flow.unknowns = list(dict.fromkeys(flow.unknowns))
             if not any(item.message == "recursive call" for item in flow.unknowns):
-                self._summaries[summary_key] = (
+                self._summaries[summary_key] = _Summary(
                     tuple(flow.escapes),
                     tuple(flow.unknowns),
                     frozenset(self.source.touched),
@@ -109,22 +109,24 @@ class ContractAnalyzer:
         node: ast.expr,
         function: SourceDefinition,
         env: SymbolEnvironment,
-        stack: tuple[str, ...],
         *,
+        stack: tuple[str, ...],
         awaited: bool = False,
         iterated: bool = False,
     ) -> ExceptionFlow:
         flow = ExceptionFlow()
         if isinstance(node, ast.Await):
             return self.expression(
-                node.value, function, env, stack, awaited=True, iterated=iterated
+                node.value, function, env, stack=stack, awaited=True, iterated=iterated
             )
         if isinstance(node, ast.Lambda):
             return flow
         if isinstance(node, ast.GeneratorExp) and not iterated:
             # Creation evaluates the outer iterable expression, but neither the
             # filters nor the result until a consumer advances the generator.
-            flow.extend(self.expression(node.generators[0].iter, function, env, stack))
+            flow.extend(
+                self.expression(node.generators[0].iter, function, env, stack=stack)
+            )
             flow.unknowns.append(
                 UnknownValue(
                     "generator expression execution is deferred until iterated",
@@ -136,7 +138,7 @@ class ContractAnalyzer:
         if isinstance(
             node, ast.ListComp | ast.SetComp | ast.DictComp | ast.GeneratorExp
         ):
-            return self._comprehension(node, function, env, stack)
+            return self._comprehension(node, function, env, stack=stack)
         if isinstance(node, ast.NamedExpr):
             flow.unknowns.append(
                 UnknownValue(
@@ -147,7 +149,7 @@ class ContractAnalyzer:
             )
         if isinstance(node, ast.Call):
             for argument in [*node.args, *(kw.value for kw in node.keywords)]:
-                flow.extend(self.expression(argument, function, env, stack))
+                flow.extend(self.expression(argument, function, env, stack=stack))
             target = self.source.infer(node.func, function.module, env)
             name = target.name or self.source.resolve(node.func, function.module, env)
             definition = self.source.definitions.get(name or "")
@@ -157,7 +159,9 @@ class ContractAnalyzer:
                     if isinstance(node.func, ast.Attribute)
                     else node.func
                 )
-                flow.extend(self.expression(receiver_expression, function, env, stack))
+                flow.extend(
+                    self.expression(receiver_expression, function, env, stack=stack)
+                )
             if name and name.startswith("builtins.") and self.source.exception(name):
                 return flow
             if definition and isinstance(definition.node, ast.ClassDef):
@@ -177,7 +181,7 @@ class ContractAnalyzer:
                                 node,
                                 method,
                                 function,
-                                stack,
+                                stack=stack,
                                 awaited=awaited,
                                 iterated=iterated,
                             )
@@ -188,7 +192,7 @@ class ContractAnalyzer:
                                 node,
                                 method,
                                 function,
-                                stack,
+                                stack=stack,
                                 awaited=awaited,
                                 iterated=iterated,
                                 receiver=definition.name,
@@ -196,7 +200,7 @@ class ContractAnalyzer:
                         )
                 else:
                     flow.extend(
-                        self._construct(definition, function, stack, node.lineno)
+                        self._construct(definition, function, stack, line=node.lineno)
                     )
             elif definition and definition.owner and self.source.abstract(definition):
                 flow.extend(
@@ -204,7 +208,7 @@ class ContractAnalyzer:
                         node,
                         definition,
                         function,
-                        stack,
+                        stack=stack,
                         awaited=awaited,
                         iterated=iterated,
                     )
@@ -231,7 +235,7 @@ class ContractAnalyzer:
                         node,
                         definition,
                         function,
-                        stack,
+                        stack=stack,
                         awaited=awaited,
                         iterated=iterated,
                         receiver=target.receiver,
@@ -246,9 +250,9 @@ class ContractAnalyzer:
                         if isinstance(node.func, ast.Attribute)
                         else node.func
                     )
-                    flow.extend(self.expression(evaluated, function, env, stack))
+                    flow.extend(self.expression(evaluated, function, env, stack=stack))
                 for argument in [*node.args, *(kw.value for kw in node.keywords)]:
-                    flow.extend(self._callback(argument, function, env, stack))
+                    flow.extend(self._callback(argument, function, env, stack=stack))
             else:
                 flow.unknowns.append(
                     UnknownValue(
@@ -260,7 +264,7 @@ class ContractAnalyzer:
             return flow
         for child in ast.iter_child_nodes(node):
             if isinstance(child, ast.expr):
-                flow.extend(self.expression(child, function, env, stack))
+                flow.extend(self.expression(child, function, env, stack=stack))
         if isinstance(node, ast.Attribute):
             name = self.source.resolve(node, function.module, env)
             member = self.source.definitions.get(name or "")
@@ -280,6 +284,7 @@ class ContractAnalyzer:
         body: list[ast.stmt],
         function: SourceDefinition,
         env: SymbolEnvironment,
+        *,
         stack: tuple[str, ...],
         reraised: tuple[_Escape, ...] = (),
     ) -> ExceptionFlow:
@@ -289,7 +294,7 @@ class ContractAnalyzer:
                 # Nested definitions are not executed, but their bodies cannot be resolved.
                 env[node.name] = SymbolValue()
                 for expression in node.decorator_list:
-                    flow.extend(self.expression(expression, function, env, stack))
+                    flow.extend(self.expression(expression, function, env, stack=stack))
                 if isinstance(node, ast.ClassDef):
                     flow.unknowns.append(
                         UnknownValue(
@@ -301,7 +306,9 @@ class ContractAnalyzer:
                         *node.args.defaults,
                         *(value for value in node.args.kw_defaults if value),
                     ]:
-                        flow.extend(self.expression(expression, function, env, stack))
+                        flow.extend(
+                            self.expression(expression, function, env, stack=stack)
+                        )
                 continue
             if isinstance(node, ast.Raise):
                 if node.exc is None:
@@ -314,9 +321,11 @@ class ContractAnalyzer:
                             )
                         )
                 else:
-                    flow.extend(self.expression(node.exc, function, env, stack))
+                    flow.extend(self.expression(node.exc, function, env, stack=stack))
                     if node.cause:
-                        flow.extend(self.expression(node.cause, function, env, stack))
+                        flow.extend(
+                            self.expression(node.cause, function, env, stack=stack)
+                        )
                     target = (
                         node.exc.func if isinstance(node.exc, ast.Call) else node.exc
                     )
@@ -335,7 +344,9 @@ class ContractAnalyzer:
                         )
                 break
             if isinstance(node, ast.Try):
-                attempted = self.block(node.body, function, env.copy(), stack, reraised)
+                attempted = self.block(
+                    node.body, function, env.copy(), stack=stack, reraised=reraised
+                )
                 flow.unknowns.extend(attempted.unknowns)
                 remaining = attempted.escapes
                 for handler in node.handlers:
@@ -385,15 +396,31 @@ class ContractAnalyzer:
                     # Implicit failures (e.g. int(value)) can reach handlers too.
                     flow.extend(
                         self.block(
-                            handler.body, function, handler_env, stack, tuple(caught)
+                            handler.body,
+                            function,
+                            handler_env,
+                            stack=stack,
+                            reraised=tuple(caught),
                         )
                     )
                 flow.escapes.extend(remaining)
                 flow.extend(
-                    self.block(node.orelse, function, env.copy(), stack, reraised)
+                    self.block(
+                        node.orelse,
+                        function,
+                        env.copy(),
+                        stack=stack,
+                        reraised=reraised,
+                    )
                 )
                 flow.extend(
-                    self.block(node.finalbody, function, env.copy(), stack, reraised)
+                    self.block(
+                        node.finalbody,
+                        function,
+                        env.copy(),
+                        stack=stack,
+                        reraised=reraised,
+                    )
                 )
                 if any(
                     isinstance(child, ast.Return | ast.Raise)
@@ -409,19 +436,35 @@ class ContractAnalyzer:
                 self._invalidate(node, env)
                 continue
             if isinstance(node, ast.With | ast.AsyncWith):
-                flow.extend(self._context_manager(node, function, env, stack, reraised))
+                flow.extend(
+                    self._context_manager(
+                        node, function, env, stack=stack, reraised=reraised
+                    )
+                )
                 self._invalidate(node, env)
                 continue
             if isinstance(node, ast.If):
-                flow.extend(self.expression(node.test, function, env, stack))
+                flow.extend(self.expression(node.test, function, env, stack=stack))
                 condition = self.source.condition(node.test, function.module, env)
                 if condition is not False:
                     flow.extend(
-                        self.block(node.body, function, env.copy(), stack, reraised)
+                        self.block(
+                            node.body,
+                            function,
+                            env.copy(),
+                            stack=stack,
+                            reraised=reraised,
+                        )
                     )
                 if condition is not True:
                     flow.extend(
-                        self.block(node.orelse, function, env.copy(), stack, reraised)
+                        self.block(
+                            node.orelse,
+                            function,
+                            env.copy(),
+                            stack=stack,
+                            reraised=reraised,
+                        )
                     )
                 self._invalidate(node, env)
                 selected = node.body if condition else node.orelse
@@ -434,23 +477,33 @@ class ContractAnalyzer:
             if isinstance(node, ast.For | ast.AsyncFor | ast.While):
                 # Iterations may run zero or more times, like independent branches.
                 if isinstance(node, ast.While):
-                    flow.extend(self.expression(node.test, function, env, stack))
+                    flow.extend(self.expression(node.test, function, env, stack=stack))
                 else:
                     flow.extend(
-                        self.expression(node.iter, function, env, stack, iterated=True)
+                        self.expression(
+                            node.iter, function, env, stack=stack, iterated=True
+                        )
                     )
                     self._invalidate(node.target, env)
                 flow.extend(
-                    self.block(node.body, function, env.copy(), stack, reraised)
+                    self.block(
+                        node.body, function, env.copy(), stack=stack, reraised=reraised
+                    )
                 )
                 flow.extend(
-                    self.block(node.orelse, function, env.copy(), stack, reraised)
+                    self.block(
+                        node.orelse,
+                        function,
+                        env.copy(),
+                        stack=stack,
+                        reraised=reraised,
+                    )
                 )
                 self._invalidate(node, env)
                 continue
             if isinstance(node, ast.Assign | ast.AnnAssign):
                 if node.value is not None:
-                    flow.extend(self.expression(node.value, function, env, stack))
+                    flow.extend(self.expression(node.value, function, env, stack=stack))
                 targets = (
                     node.targets if isinstance(node, ast.Assign) else [node.target]
                 )
@@ -468,10 +521,10 @@ class ContractAnalyzer:
                 continue
             if isinstance(node, ast.Return):
                 if node.value:
-                    flow.extend(self.expression(node.value, function, env, stack))
+                    flow.extend(self.expression(node.value, function, env, stack=stack))
                 break
             if isinstance(node, ast.Expr):
-                flow.extend(self.expression(node.value, function, env, stack))
+                flow.extend(self.expression(node.value, function, env, stack=stack))
                 continue
             if isinstance(node, ast.Pass | ast.Break | ast.Continue):
                 continue
@@ -539,7 +592,7 @@ class ContractAnalyzer:
             )
             return flow
         env = self.source.environment(function, receiver, dependency_transport)
-        flow.extend(self.block(node.body, function, env, (*stack, function.name)))
+        flow.extend(self.block(node.body, function, env, stack=(*stack, function.name)))
         return flow
 
     def _comprehension(
@@ -547,6 +600,7 @@ class ContractAnalyzer:
         node: ast.ListComp | ast.SetComp | ast.DictComp | ast.GeneratorExp,
         function: SourceDefinition,
         env: SymbolEnvironment,
+        *,
         stack: tuple[str, ...],
     ) -> ExceptionFlow:
         flow = ExceptionFlow()
@@ -572,17 +626,17 @@ class ContractAnalyzer:
                     generator.iter,
                     function,
                     env if index == 0 else local,
-                    stack,
+                    stack=stack,
                     asynchronous=bool(generator.is_async),
                 )
             )
             for condition in generator.ifs:
-                flow.extend(self.expression(condition, function, local, stack))
+                flow.extend(self.expression(condition, function, local, stack=stack))
         values = (
             [node.key, node.value] if isinstance(node, ast.DictComp) else [node.elt]
         )
         for value in values:
-            flow.extend(self.expression(value, function, local, stack))
+            flow.extend(self.expression(value, function, local, stack=stack))
         return flow
 
     def _comprehension_iterable(
@@ -590,11 +644,11 @@ class ContractAnalyzer:
         node: ast.expr,
         function: SourceDefinition,
         env: SymbolEnvironment,
-        stack: tuple[str, ...],
         *,
+        stack: tuple[str, ...],
         asynchronous: bool,
     ) -> ExceptionFlow:
-        flow = self.expression(node, function, env, stack, iterated=True)
+        flow = self.expression(node, function, env, stack=stack, iterated=True)
         target = node.func if isinstance(node, ast.Call) else node
         definition = self.source.definitions.get(
             self.source.resolve(target, function.module, env) or ""
@@ -639,14 +693,15 @@ class ContractAnalyzer:
         node: ast.With | ast.AsyncWith,
         function: SourceDefinition,
         env: SymbolEnvironment,
+        *,
         stack: tuple[str, ...],
         reraised: tuple[_Escape, ...],
         index: int = 0,
     ) -> ExceptionFlow:
         if index == len(node.items):
-            return self.block(node.body, function, env, stack, reraised)
+            return self.block(node.body, function, env, stack=stack, reraised=reraised)
         item = node.items[index]
-        flow = self.expression(item.context_expr, function, env, stack)
+        flow = self.expression(item.context_expr, function, env, stack=stack)
         if (
             isinstance(node, ast.With)
             and isinstance(item.context_expr, ast.Call)
@@ -657,7 +712,7 @@ class ContractAnalyzer:
             if item.optional_vars is not None:
                 self._invalidate(item.optional_vars, local)
             inner = self._context_manager(
-                node, function, local, stack, reraised, index + 1
+                node, function, local, stack=stack, reraised=reraised, index=index + 1
             )
             names = [
                 self.source.resolve(argument, function.module, env)
@@ -749,7 +804,9 @@ class ContractAnalyzer:
                         item.optional_vars.lineno,
                     )
                 )
-        inner = self._context_manager(node, function, local, stack, reraised, index + 1)
+        inner = self._context_manager(
+            node, function, local, stack=stack, reraised=reraised, index=index + 1
+        )
         if supported:
             assert exit_method is not None
             mode = _suppression(exit_method.node)
@@ -805,6 +862,7 @@ class ContractAnalyzer:
         definition: SourceDefinition,
         function: SourceDefinition,
         stack: tuple[str, ...],
+        *,
         line: int,
     ) -> ExceptionFlow:
         """Follow the application code that constructing *definition* runs."""
@@ -897,6 +955,7 @@ class ContractAnalyzer:
         argument: ast.expr,
         function: SourceDefinition,
         env: SymbolEnvironment,
+        *,
         stack: tuple[str, ...],
     ) -> ExceptionFlow:
         """Assume library code calls the application callables it receives."""
@@ -912,7 +971,7 @@ class ContractAnalyzer:
                 *filter(None, [parameters.vararg, parameters.kwarg]),
             ]:
                 lambda_env[item.arg] = SymbolValue()
-            return self.expression(argument.body, function, lambda_env, stack)
+            return self.expression(argument.body, function, lambda_env, stack=stack)
         if not isinstance(argument, ast.Name | ast.Attribute | ast.Call):
             return ExceptionFlow()
         inferred = self.source.infer(argument, function.module, env)
@@ -942,7 +1001,7 @@ class ContractAnalyzer:
                     if method is not None
                     else ExceptionFlow()
                 )
-            return self._construct(definition, function, stack, argument.lineno)
+            return self._construct(definition, function, stack, line=argument.lineno)
         return self._traced(
             function,
             self.function(
@@ -969,8 +1028,8 @@ class ContractAnalyzer:
         node: ast.Call,
         definition: SourceDefinition,
         function: SourceDefinition,
-        stack: tuple[str, ...],
         *,
+        stack: tuple[str, ...],
         awaited: bool,
         iterated: bool,
         receiver: str | None = None,
@@ -1005,8 +1064,8 @@ class ContractAnalyzer:
         node: ast.Call,
         port: SourceDefinition,
         function: SourceDefinition,
-        stack: tuple[str, ...],
         *,
+        stack: tuple[str, ...],
         awaited: bool,
         iterated: bool,
     ) -> ExceptionFlow:
@@ -1059,7 +1118,7 @@ class ContractAnalyzer:
                     node,
                     candidate,
                     function,
-                    stack,
+                    stack=stack,
                     awaited=awaited,
                     iterated=iterated,
                 )
@@ -1150,3 +1209,16 @@ def _executed_nodes(body: list[ast.stmt]) -> list[ast.AST]:
     for node in body:
         visit(node)
     return result
+
+
+class _SummaryKey(NamedTuple):
+    function: str
+    iterated: bool
+    receiver: str | None
+    dependency_transport: str | None
+
+
+class _Summary(NamedTuple):
+    escapes: tuple[_Escape, ...]
+    unknowns: tuple[UnknownValue, ...]
+    modules: frozenset[str]

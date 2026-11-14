@@ -182,7 +182,7 @@ def main(argv: list[str] | None = None) -> int:
                     args.diagnostics,
                     diagnostics,
                     set(),
-                    generation,
+                    generation=generation,
                 )
             accepted: set[str] = (
                 accepted_diagnostics(
@@ -196,7 +196,7 @@ def main(argv: list[str] | None = None) -> int:
                     args.diagnostics,
                     diagnostics,
                     accepted,
-                    generation,
+                    generation=generation,
                 )
             pending = [item for item in diagnostics if item.id not in accepted]
             emit_diagnostics(pending)

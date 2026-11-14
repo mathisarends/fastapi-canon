@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 from contextlib import nullcontext
-from typing import Any
+from typing import Any, override
 
 from fastapi import FastAPI
 from opentelemetry import trace
@@ -125,6 +125,7 @@ class _ProblemProvider(trace.TracerProvider):
     def __init__(self, provider: trace.TracerProvider | None) -> None:
         self.provider = provider
 
+    @override
     def get_tracer(
         self,
         instrumenting_module_name: str,

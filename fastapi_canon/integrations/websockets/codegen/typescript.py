@@ -33,6 +33,7 @@ from fastapi_canon.integrations.websockets.codegen.ir import (
     named_types,
 )
 from fastapi_canon.integrations.websockets.codegen.names import (
+    NameBinding,
     NamespaceViewNode,
     assert_unique_names,
     camel_case,
@@ -53,9 +54,9 @@ def render_files(ir: ClientIr, options: TypeScriptClientOptions) -> dict[str, st
         ir,
         view.root_operations,
         (*view.root_streams, *view.root_sockets),
-        view.nodes,
-        options,
-        client_name,
+        nodes=view.nodes,
+        options=options,
+        client_name=client_name,
     )
     bound = bind_sockets(ir.sockets, options.bindings, "typescript", options.contract)
     renderer = _Renderer(
@@ -670,6 +671,7 @@ def _validate(
     ir: ClientIr,
     root_operations: tuple[RouteDecl, ...],
     root_streams: tuple[BinaryStreamDecl | SocketDecl, ...],
+    *,
     nodes: tuple[NamespaceViewNode, ...],
     options: TypeScriptClientOptions,
     client_name: str,
@@ -711,7 +713,7 @@ def _validate(
     assert_unique_names(
         "schemas",
         (
-            (declaration.name, _schema_name(declaration.name))
+            NameBinding(declaration.name, _schema_name(declaration.name))
             for declaration in ir.declarations
         ),
     )
@@ -725,21 +727,27 @@ def _validate(
     for model in ir.models:
         assert_unique_names(
             f"model {model.name}",
-            ((field.name, _identifier(field.name)) for field in model.fields),
+            (
+                NameBinding(field.name, _identifier(field.name))
+                for field in model.fields
+            ),
         )
     client_members = [
-        ("<client.close>", "close"),
-        ("<client.closed>", "closed"),
-        ("<client.state>", "state"),
-        ("<client.states>", "states"),
-        ("<client.droppedNotifications>", "droppedNotifications"),
-        *((node.source_path[-1], _identifier(node.segment)) for node in nodes),
+        NameBinding("<client.close>", "close"),
+        NameBinding("<client.closed>", "closed"),
+        NameBinding("<client.state>", "state"),
+        NameBinding("<client.states>", "states"),
+        NameBinding("<client.droppedNotifications>", "droppedNotifications"),
         *(
-            (route.rpc_name, _identifier(route.operation_name))
+            NameBinding(node.source_path[-1], _identifier(node.segment))
+            for node in nodes
+        ),
+        *(
+            NameBinding(route.rpc_name, _identifier(route.operation_name))
             for route in root_operations
         ),
         *(
-            (event.rpc_name, _identifier(event.operation_name))
+            NameBinding(event.rpc_name, _identifier(event.operation_name))
             for event in client_view(
                 ir,
                 api_root=options.api_root,
@@ -747,35 +755,37 @@ def _validate(
             ).root_notifications
         ),
         *(
-            (stream.rpc_name, _identifier(stream.operation_name))
+            NameBinding(stream.rpc_name, _identifier(stream.operation_name))
             for stream in root_streams
         ),
     ]
-    client_members.append(("<client.withTransports>", "withTransports"))
+    client_members.append(NameBinding("<client.withTransports>", "withTransports"))
     if options.with_transport == "websocket":
-        client_members.append(("<client.connect>", "connect"))
+        client_members.append(NameBinding("<client.connect>", "connect"))
         connect_options = [
-            ("<connect.signal>", "signal"),
-            *((option, option) for option in _CONNECT_OPTIONS),
+            NameBinding("<connect.signal>", "signal"),
+            *(NameBinding(option, option) for option in _CONNECT_OPTIONS),
             *(
-                (variable.name, _identifier(variable.name))
+                NameBinding(variable.name, _identifier(variable.name))
                 for variable in _connect_variables(ir)
             ),
         ]
         if len(ir.servers) == 1:
-            connect_options.append(("<connect.url>", "url"))
+            connect_options.append(NameBinding("<connect.url>", "url"))
         if ir.binary_streams:
             connect_options.extend(
                 [
-                    ("<connect.streamSocketFactory>", "streamSocketFactory"),
-                    ("<connect.streamQueueSize>", "streamQueueSize"),
+                    NameBinding("<connect.streamSocketFactory>", "streamSocketFactory"),
+                    NameBinding("<connect.streamQueueSize>", "streamQueueSize"),
                 ]
             )
         if ir.sockets:
             connect_options.extend(
                 [
-                    ("<connect.socketConnectionFactory>", "socketConnectionFactory"),
-                    ("<connect.socketQueueSize>", "socketQueueSize"),
+                    NameBinding(
+                        "<connect.socketConnectionFactory>", "socketConnectionFactory"
+                    ),
+                    NameBinding("<connect.socketQueueSize>", "socketQueueSize"),
                 ]
             )
         assert_unique_names("connect options", connect_options)
@@ -785,27 +795,30 @@ def _validate(
         assert_unique_names(
             f"TypeScript namespace module {_identifier(node.segment)!r}",
             (
-                (".".join(item.source_path), _api_class(item.path))
+                NameBinding(".".join(item.source_path), _api_class(item.path))
                 for item in _walk((node,))
             ),
         )
     assert_unique_names(
         "servers",
-        ((server.name, _identifier(server.name)) for server in ir.servers),
+        (NameBinding(server.name, _identifier(server.name)) for server in ir.servers),
     )
     assert_unique_names(
         "binary streams",
-        ((stream.name, _identifier(stream.name)) for stream in ir.binary_streams),
+        (
+            NameBinding(stream.name, _identifier(stream.name))
+            for stream in ir.binary_streams
+        ),
     )
     assert_unique_names(
         "sockets",
-        ((socket.name, _identifier(socket.name)) for socket in ir.sockets),
+        (NameBinding(socket.name, _identifier(socket.name)) for socket in ir.sockets),
     )
     for server in ir.servers:
         assert_unique_names(
             f"server {server.name}",
             (
-                (variable.name, _identifier(variable.name))
+                NameBinding(variable.name, _identifier(variable.name))
                 for variable in server.variables
             ),
         )
@@ -814,18 +827,19 @@ def _validate(
 def _validate_nodes(nodes: tuple[NamespaceViewNode, ...]) -> None:
     for node in nodes:
         values = [
-            (child.segment, _identifier(child.segment)) for child in node.children
+            NameBinding(child.segment, _identifier(child.segment))
+            for child in node.children
         ]
         values.extend(
-            (route.rpc_name, _identifier(route.operation_name))
+            NameBinding(route.rpc_name, _identifier(route.operation_name))
             for route in node.operations
         )
         values.extend(
-            (event.rpc_name, _identifier(event.operation_name))
+            NameBinding(event.rpc_name, _identifier(event.operation_name))
             for event in node.notifications
         )
         values.extend(
-            (stream.rpc_name, _identifier(stream.operation_name))
+            NameBinding(stream.rpc_name, _identifier(stream.operation_name))
             for stream in chain[BinaryStreamDecl | SocketDecl](
                 node.streams, node.sockets
             )
@@ -981,7 +995,7 @@ def _stream_endpoint(stream: BinaryStreamDecl, rpc: str) -> str:
         stream,
         f"binaryStreams.{_identifier(stream.name)}",
         rpc,
-        "resolveStreamEndpoint",
+        function="resolveStreamEndpoint",
     )
 
 
@@ -990,7 +1004,7 @@ def _socket_handle_endpoint(socket: SocketDecl, rpc: str) -> str:
         socket,
         f"sockets.{_identifier(socket.name)}",
         rpc,
-        "resolveSocketEndpoint",
+        function="resolveSocketEndpoint",
     )
 
 
@@ -1008,7 +1022,7 @@ def _identifier(value: str) -> str:
 
 
 def _socket_endpoint(
-    stream: BinaryStreamDecl | SocketDecl, info: str, rpc: str, function: str
+    stream: BinaryStreamDecl | SocketDecl, info: str, rpc: str, *, function: str
 ) -> str:
     indent = " " * 6
     head = [info, f"{rpc}.variables"]

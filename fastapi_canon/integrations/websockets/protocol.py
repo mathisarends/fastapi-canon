@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import inspect
 from collections import Counter
 from collections.abc import AsyncGenerator, AsyncIterator, Iterable
@@ -7,6 +9,7 @@ from types import FunctionType, UnionType
 from typing import (
     Annotated,
     Any,
+    NamedTuple,
     TypeAliasType,
     Union,
     get_args,
@@ -276,82 +279,6 @@ def method_definition(
             else None
         ),
     )
-
-
-def _router_params_model(
-    function: Any,
-) -> tuple[
-    type[BaseModel] | None,
-    str | None,
-    tuple[RpcInjectedParameter, ...],
-]:
-    hints, injected, wire_parameters = _split_parameters(function)
-    if not wire_parameters:
-        return None, None, injected
-
-    if len(wire_parameters) == 1:
-        parameter = wire_parameters[0]
-        annotation = hints[parameter.name]
-        if parameter.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD,) and _is_model(
-            annotation
-        ):
-            return annotation, parameter.name, injected
-
-    names = ", ".join(parameter.name for parameter in wire_parameters)
-    raise ProtocolDefinitionError(
-        f"RPC handler {function.__qualname__} must use at most one positional "
-        f"Pydantic params model; unsupported wire parameters: {names}"
-    )
-
-
-def _split_parameters(
-    function: Any,
-) -> tuple[
-    dict[str, Any],
-    tuple[RpcInjectedParameter, ...],
-    list[inspect.Parameter],
-]:
-    parameters = tuple(inspect.signature(function).parameters.values())
-    hints = get_type_hints(function, include_extras=True)
-    injected: list[RpcInjectedParameter] = []
-    wire_parameters: list[inspect.Parameter] = []
-    for parameter in parameters:
-        annotation = hints.get(parameter.name)
-        if annotation is None:
-            raise ProtocolDefinitionError(
-                f"RPC handler {function.__qualname__} parameter "
-                f"{parameter.name!r} needs an annotation"
-            )
-        try:
-            dependency = injected_parameter(parameter.name, annotation)
-        except TypeError as error:
-            raise ProtocolDefinitionError(str(error)) from error
-        if dependency is None:
-            wire_parameters.append(parameter)
-            continue
-        if parameter.kind in (
-            inspect.Parameter.POSITIONAL_ONLY,
-            inspect.Parameter.VAR_POSITIONAL,
-            inspect.Parameter.VAR_KEYWORD,
-        ):
-            raise ProtocolDefinitionError(
-                f"Injected RPC parameter {parameter.name!r} must be passable by name"
-            )
-        if parameter.default is not inspect.Parameter.empty:
-            raise ProtocolDefinitionError(
-                f"Injected RPC parameter {parameter.name!r} cannot have a default"
-            )
-        injected.append(dependency)
-    return hints, tuple(injected), wire_parameters
-
-
-def _result_annotation(function: Any) -> Any:
-    result = get_type_hints(function, include_extras=True).get("return")
-    if result is None:
-        raise ProtocolDefinitionError(
-            f"RPC handler {function.__qualname__} needs a return annotation"
-        )
-    return result
 
 
 def notification_type_definitions(
@@ -661,6 +588,74 @@ def socket_definition(
     )
 
 
+def _router_params_model(
+    function: Any,
+) -> _ParamsModel:
+    hints, injected, wire_parameters = _split_parameters(function)
+    if not wire_parameters:
+        return _ParamsModel(None, None, injected)
+
+    if len(wire_parameters) == 1:
+        parameter = wire_parameters[0]
+        annotation = hints[parameter.name]
+        if parameter.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD,) and _is_model(
+            annotation
+        ):
+            return _ParamsModel(annotation, parameter.name, injected)
+
+    names = ", ".join(parameter.name for parameter in wire_parameters)
+    raise ProtocolDefinitionError(
+        f"RPC handler {function.__qualname__} must use at most one positional "
+        f"Pydantic params model; unsupported wire parameters: {names}"
+    )
+
+
+def _split_parameters(
+    function: Any,
+) -> _SplitParameters:
+    parameters = tuple(inspect.signature(function).parameters.values())
+    hints = get_type_hints(function, include_extras=True)
+    injected: list[RpcInjectedParameter] = []
+    wire_parameters: list[inspect.Parameter] = []
+    for parameter in parameters:
+        annotation = hints.get(parameter.name)
+        if annotation is None:
+            raise ProtocolDefinitionError(
+                f"RPC handler {function.__qualname__} parameter "
+                f"{parameter.name!r} needs an annotation"
+            )
+        try:
+            dependency = injected_parameter(parameter.name, annotation)
+        except TypeError as error:
+            raise ProtocolDefinitionError(str(error)) from error
+        if dependency is None:
+            wire_parameters.append(parameter)
+            continue
+        if parameter.kind in (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        ):
+            raise ProtocolDefinitionError(
+                f"Injected RPC parameter {parameter.name!r} must be passable by name"
+            )
+        if parameter.default is not inspect.Parameter.empty:
+            raise ProtocolDefinitionError(
+                f"Injected RPC parameter {parameter.name!r} cannot have a default"
+            )
+        injected.append(dependency)
+    return _SplitParameters(hints, tuple(injected), wire_parameters)
+
+
+def _result_annotation(function: Any) -> Any:
+    result = get_type_hints(function, include_extras=True).get("return")
+    if result is None:
+        raise ProtocolDefinitionError(
+            f"RPC handler {function.__qualname__} needs a return annotation"
+        )
+    return result
+
+
 def _stream_annotation(annotation: Any) -> Any:
     while True:
         if isinstance(annotation, TypeAliasType):
@@ -752,3 +747,15 @@ def _is_model(annotation: Any) -> bool:
 
 def _pascal_case(value: str) -> str:
     return "".join(part.capitalize() for part in value.split("_"))
+
+
+class _ParamsModel(NamedTuple):
+    model: type[BaseModel] | None
+    parameter: str | None
+    injected: tuple[RpcInjectedParameter, ...]
+
+
+class _SplitParameters(NamedTuple):
+    hints: dict[str, Any]
+    injected: tuple[RpcInjectedParameter, ...]
+    wire: list[inspect.Parameter]

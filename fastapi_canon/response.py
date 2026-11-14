@@ -4,7 +4,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Self, cast
+from typing import NamedTuple, Self, cast
 
 from fastapi_canon.error.contracts import SUCCESS_EXTENSION
 from fastapi_canon.error.error import freeze_json_mapping, validate_header_name
@@ -215,11 +215,13 @@ def _normalize_headers(value: ResponseHeaders) -> Mapping[str, OpenAPIHeader]:
         raise ErrorConfigurationError(msg)
 
     definitions: dict[str, OpenAPIHeader] = {}
-    items: Sequence[tuple[object, object]]
+    items: Sequence[_HeaderEntry]
     if isinstance(raw_value, Mapping):
-        items = tuple(raw_value.items())
+        items = tuple(_HeaderEntry(*item) for item in raw_value.items())
     else:
-        items = tuple((name, {"schema": {"type": "string"}}) for name in raw_value)
+        items = tuple(
+            _HeaderEntry(name, {"schema": {"type": "string"}}) for name in raw_value
+        )
 
     seen: set[str] = set()
     for name, definition in items:
@@ -245,3 +247,8 @@ def _thaw(value: object) -> JsonValue:
     if isinstance(value, tuple):
         return [_thaw(item) for item in value]
     return cast(JsonValue, value)
+
+
+class _HeaderEntry(NamedTuple):
+    name: object
+    definition: object
