@@ -26,7 +26,11 @@ class SseGenerator:
     }
 
     def render(
-        self, target: TargetConfig, document: dict[str, Any], contracts: Path
+        self,
+        target: TargetConfig,
+        document: dict[str, Any],
+        # Required by the Generator protocol; SSE renders from *document* alone.
+        contracts: Path,  # pylint: disable=unused-argument
     ) -> Rendering:
         """Render *target*, writing its diagnostics report when configured."""
         from fastapi_canon._version import __version__
@@ -69,7 +73,7 @@ class SseGenerator:
         }
         if target.diagnostics is not None:
             write_diagnostics(target.diagnostics, diagnostics, set(), generation)
-        accepted = (
+        accepted: set[str] = (
             accepted_diagnostics(
                 diagnostics,
                 json.loads(target.allow_diagnostics.read_text(encoding="utf-8")),

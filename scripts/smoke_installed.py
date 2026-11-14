@@ -498,7 +498,7 @@ def _observation_check(*, enabled: bool) -> None:
                 integrations=[instrument(Ping)],
             ),
         ),
-        integrations=[Telemetry() if enabled else None],
+        integrations=[Telemetry() if enabled else Telemetry.disabled()],
     ).build(FastAPI())
     with TestClient(app) as client:
         assert client.get("/observed").json() == "pong"
