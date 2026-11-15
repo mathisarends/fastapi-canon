@@ -18,6 +18,12 @@ These changes require the next minor release, 0.22.0. See the
   `Literal["python", "typescript"]` type as `ClientLanguage` from
   `fastapi_canon.codegen.generators`.
 
+### Added
+
+- `WebSocketPolicy` and `APIRouter(websocket_policy=...)` share connection
+  options across a router's WebSocket declarations; see
+  [connection policy](docs/routers.md#share-websocket-connection-policy).
+
 ### Development
 
 - Upgrade Smelt to 0.8.0 and enforce its new source conventions: named tuple

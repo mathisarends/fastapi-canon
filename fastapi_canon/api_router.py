@@ -37,6 +37,7 @@ if TYPE_CHECKING:
         RpcRejections,
         RpcResolverLike,
         RpcSocketProtocol,
+        WebSocketPolicy,
     )
     from fastapi_canon.integrations.websockets.adapters.fastapi import (
         FastApiResolver,
@@ -91,11 +92,32 @@ class APIRouter(CanonRouter):
     HTTP and SSE endpoints resolve ``Inject[T]`` and ``FromDishka[T]`` parameters
     without ``route_class=DishkaRoute`` or ``@inject``. An explicit
     ``route_class`` replaces this behavior.
+
+    ``websocket_policy`` configures the connections of this router's channel,
+    socket and binary stream declarations. Such a router rejects WebSocket
+    routes, also included ones, that were not declared under its policy or an
+    extension of it.
     """
 
-    def __init__(self, **kwargs: Unpack[RouterOptions]) -> None:
+    def __init__(
+        self,
+        *,
+        websocket_policy: WebSocketPolicy | None = None,
+        **kwargs: Unpack[RouterOptions],
+    ) -> None:
+        raw_policy: object = websocket_policy
+        if raw_policy is not None:
+            from fastapi_canon.integrations.websockets import WebSocketPolicy
+
+            if not isinstance(raw_policy, WebSocketPolicy):
+                msg = "websocket_policy must be a WebSocketPolicy instance or None"
+                raise ConfigurationError(msg)
         kwargs.setdefault("route_class", InjectedRoute)
+        self.websocket_policy = websocket_policy
         self._pending_channels: list[tuple[RpcChannel, dict[str, Any]]] = []
+        self._websocket_declarations: dict[Callable[..., Any], WebSocketPolicy] = {}
+        self._required_websocket_policies: list[WebSocketPolicy] = []
+        self._websocket_children: list[APIRouter] = []
         super().__init__(**kwargs)
 
     @property
@@ -105,7 +127,7 @@ class APIRouter(CanonRouter):
         if pending:
             self._pending_channels = []
             for channel, settings in pending:
-                self.include_channel(channel, **settings)
+                self._mount_channel(channel, None, settings)
                 # Later registrations would never reach the mounted snapshot.
                 channel.freeze()
         return self._routes
@@ -122,6 +144,11 @@ class APIRouter(CanonRouter):
         *,
         dependencies: Sequence[Depends] | None = None,
     ) -> None:
+        self._check_websocket_route(
+            self.prefix + path,
+            self._websocket_declarations.get(endpoint),
+            self._websocket_requirements(),
+        )
         key = _websocket_path(self.prefix + path)
         if any(
             key == _websocket_path(existing)
@@ -144,14 +171,29 @@ class APIRouter(CanonRouter):
         }
         incoming: set[str] = set()
         prefix = self.prefix + options.get("prefix", "")
-        for path, route in iter_contract_routes(router.routes):
+        requirements = self._websocket_requirements()
+        # Reading routes first mounts the child's pending channels.
+        routes = router.routes
+        declarations = (
+            router._declared_websocket_policies()
+            if isinstance(router, APIRouter)
+            else {}
+        )
+        for path, route in iter_contract_routes(routes):
             if not isinstance(getattr(route, "original_route", route), WebSocketRoute):
                 continue
             key = _websocket_path(prefix + path)
             if key in existing or key in incoming:
                 raise ConfigurationError(f"Duplicate WebSocket path: {prefix + path}")
+            self._check_websocket_route(
+                prefix + path, declarations.get(route.endpoint), requirements
+            )
             incoming.add(key)
         super().include_router(router, **options)
+        if isinstance(router, APIRouter):
+            self._websocket_children.append(router)
+            for policy in requirements:
+                router._require_websocket_policy(policy)
 
     def include_channel(
         self,
@@ -173,34 +215,19 @@ class APIRouter(CanonRouter):
         Resolver, context, limits and middleware options configure this connection.
         The source channel stays reusable and mutable after registration.
         """
-        from fastapi_canon.integrations.websockets import (
-            CanonWebSocketRouter,
-            RpcChannel,
-        )
-
-        if not isinstance(channel, RpcChannel):
-            raise ConfigurationError("include_channel expects an RpcChannel")
-        snapshot = RpcChannel()
-        snapshot.include_channel(
+        self._mount_channel(
             channel,
-            namespace=channel.namespace if namespace is None else namespace,
+            namespace,
+            {
+                **self._connection_options(options),
+                "path": path,
+                "name": name,
+                "dependencies": dependencies,
+                "path_model": path_model,
+                "subprotocol": subprotocol,
+                "summary": summary,
+            },
         )
-        protocol = snapshot.freeze()
-        if protocol.streams or protocol.sockets:
-            raise ConfigurationError(
-                "include_channel accepts JSON-RPC methods, events and message streams; "
-                "declare binary streams with @router.binary_stream and sockets with @router.socket"
-            )
-        adapter = CanonWebSocketRouter(prefix=self.prefix, **options)
-        adapter.socket(
-            path,
-            channels=[snapshot],
-            name=self._endpoint_name(path, name),
-            path_model=path_model,
-            subprotocol=subprotocol,
-            summary=summary,
-        )
-        self._include_websocket_adapter(adapter, path, dependencies)
 
     def channel(
         self,
@@ -229,7 +256,7 @@ class APIRouter(CanonRouter):
             namespace=self.namespace if namespace is None else namespace
         )
         settings: dict[str, Any] = {
-            **options,
+            **self._connection_options(options),
             "path": path,
             "name": name,
             "dependencies": dependencies,
@@ -264,6 +291,8 @@ class APIRouter(CanonRouter):
             RpcChannel,
         )
 
+        connection = self._connection_options(options)
+
         def decorate(stream: Stream) -> Stream:
             channel = RpcChannel(namespace=self.namespace)
             declare: Any = channel.stream(
@@ -272,7 +301,7 @@ class APIRouter(CanonRouter):
                 summary=summary,
             )
             declare(stream)
-            adapter = CanonWebSocketRouter(prefix=self.prefix, **options)
+            adapter = CanonWebSocketRouter(prefix=self.prefix, **connection)
             adapter.stream(
                 path,
                 stream,
@@ -310,6 +339,8 @@ class APIRouter(CanonRouter):
             RpcChannel,
         )
 
+        connection = self._connection_options(options)
+
         def decorate(handler: Handler) -> Handler:
             channel = RpcChannel(namespace=self.namespace)
             declaration: dict[str, Any] = {
@@ -321,7 +352,7 @@ class APIRouter(CanonRouter):
                 declaration["messages"] = messages
             declare: Any = channel.socket(**declaration)
             declare(handler)
-            adapter = CanonWebSocketRouter(prefix=self.prefix, **options)
+            adapter = CanonWebSocketRouter(prefix=self.prefix, **connection)
             adapter.socket(
                 path,
                 handler,
@@ -359,6 +390,90 @@ class APIRouter(CanonRouter):
 
         return decorate
 
+    def _mount_channel(
+        self, channel: RpcChannel, namespace: str | None, settings: dict[str, Any]
+    ) -> None:
+        """Mount a channel snapshot with already merged connection options."""
+        from fastapi_canon.integrations.websockets import (
+            CanonWebSocketRouter,
+            RpcChannel,
+        )
+
+        if not isinstance(channel, RpcChannel):
+            raise ConfigurationError("include_channel expects an RpcChannel")
+        snapshot = RpcChannel()
+        snapshot.include_channel(
+            channel,
+            namespace=channel.namespace if namespace is None else namespace,
+        )
+        protocol = snapshot.freeze()
+        if protocol.streams or protocol.sockets:
+            raise ConfigurationError(
+                "include_channel accepts JSON-RPC methods, events and message streams; "
+                "declare binary streams with @router.binary_stream and sockets with @router.socket"
+            )
+        options = dict(settings)
+        path = options.pop("path")
+        name = options.pop("name")
+        dependencies = options.pop("dependencies")
+        endpoint = {
+            "path_model": options.pop("path_model"),
+            "subprotocol": options.pop("subprotocol"),
+            "summary": options.pop("summary"),
+        }
+        adapter = CanonWebSocketRouter(prefix=self.prefix, **options)
+        adapter.socket(
+            path,
+            channels=[snapshot],
+            name=self._endpoint_name(path, name),
+            **endpoint,
+        )
+        self._include_websocket_adapter(adapter, path, dependencies)
+
+    def _connection_options(self, options: ChannelOptions) -> dict[str, Any]:
+        from fastapi_canon.integrations.websockets.policy import (
+            apply_websocket_policy,
+        )
+
+        return apply_websocket_policy(self.websocket_policy, options)
+
+    def _websocket_requirements(self) -> list[WebSocketPolicy]:
+        own = [] if self.websocket_policy is None else [self.websocket_policy]
+        return [*own, *self._required_websocket_policies]
+
+    def _require_websocket_policy(self, policy: WebSocketPolicy) -> None:
+        # Included routers stay live, so later declarations must also comply.
+        self._required_websocket_policies.append(policy)
+        for child in self._websocket_children:
+            child._require_websocket_policy(policy)
+
+    def _declared_websocket_policies(
+        self,
+    ) -> dict[Callable[..., Any], WebSocketPolicy]:
+        declared = dict(self._websocket_declarations)
+        for child in self._websocket_children:
+            declared.update(child._declared_websocket_policies())
+        return declared
+
+    def _check_websocket_route(
+        self,
+        path: str,
+        declared: WebSocketPolicy | None,
+        requirements: Sequence[WebSocketPolicy],
+    ) -> None:
+        from fastapi_canon.integrations.websockets.policy import (
+            covers_websocket_policy,
+        )
+
+        for required in requirements:
+            if not covers_websocket_policy(declared, required):
+                msg = (
+                    f"WebSocket route {path} is not declared under the "
+                    "websocket_policy of the router that includes it; declare it "
+                    "on a router with that policy or policy.extend(...)"
+                )
+                raise ConfigurationError(msg)
+
     def _endpoint_name(self, path: str, name: str | None) -> str:
         return name if name is not None else _channel_name(self.prefix + path)
 
@@ -371,6 +486,8 @@ class APIRouter(CanonRouter):
         route = adapter.routes[0]
         if not isinstance(route, APIWebSocketRoute):
             raise ConfigurationError("The channel adapter did not produce a WebSocket")
+        if self.websocket_policy is not None:
+            self._websocket_declarations[route.endpoint] = self.websocket_policy
         self.add_api_websocket_route(
             path,
             route.endpoint,

@@ -64,6 +64,7 @@ from .middleware import (
     RpcStreamScope,
 )
 from .models import RpcModel
+from .policy import WebSocketPolicy
 from .protocol import RpcProtocol
 from .server import RpcErrorMapper, RpcResponseMessage, RpcServer
 from .sockets import (
@@ -155,6 +156,7 @@ __all__ = [
     "RpcValidationIssue",
     "RpcWebSocket",
     "ServerVariable",
+    "WebSocketPolicy",
     "__version__",
     "call_scope",
     "error_message",

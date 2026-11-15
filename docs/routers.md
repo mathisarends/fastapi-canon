@@ -328,6 +328,45 @@ async def terminal(message: Command) -> Output: ...
 `include_channel()` rejects a channel that contains binary streams or sockets and
 points to these decorators.
 
+## Share WebSocket connection policy
+
+**Unreleased (0.22.0).** Pass a `WebSocketPolicy` to the router instead of
+repeating connection options on every `channel()`, `include_channel()`,
+`socket()` and `binary_stream()` declaration:
+
+```python
+from fastapi_canon.integrations.websockets import WebSocketPolicy
+
+authenticated = WebSocketPolicy(
+    context=open_session,
+    rejects=session_rejects,
+    middleware=[telemetry],
+    strict_errors=True,
+)
+router = APIRouter(
+    prefix="/browsers/{browser_id}",
+    namespace="browser",
+    websocket_policy=authenticated.extend(rejects=stream_rejects),
+)
+
+
+@router.socket("/video", messages=(RpcMessageType.BINARY,), limits=video_limits)
+async def video(socket: Inject[RpcSocket]) -> None: ...
+```
+
+A policy holds `context`, `hooks`, `resolver`, `rejects`, `rejections`,
+`middleware`, `error_mapper`, `strict_errors` and `before_accept`. `protocol`,
+`messages`, `closes`, `limits`, `drain` and `version` stay on each declaration.
+
+- `hooks`, `rejects` and `middleware` add up, policy first.
+- A declaration may set another option only when the policy leaves it unset;
+  otherwise, also for an explicit `None` or `False`, it raises `ConfigurationError`.
+  Declare public endpoints on a router without the policy.
+- `extend(...)` returns a new policy with the same rules.
+- The policy applies to declarations on its own router. A router with a policy
+  rejects WebSocket routes, including later ones on routers it includes, unless
+  they were declared under that policy or an extension of it.
+
 See [WebSocket streams](integrations/websockets/README.md) for controls, limits,
 error mappings, dependency lifetimes and generated resource APIs. Operation names
 and endpoint names must be unique within their exported transport contract.

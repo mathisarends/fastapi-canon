@@ -11,7 +11,7 @@ from fastapi_canon import APIRouter
 from fastapi_canon.api_router import ChannelOptions, StreamOptions
 from fastapi_canon.exceptions import ConfigurationError
 from fastapi_canon.integrations.sse.canon import CanonStreamRouter
-from fastapi_canon.integrations.websockets import CanonWebSocketRouter
+from fastapi_canon.integrations.websockets import CanonWebSocketRouter, WebSocketPolicy
 from fastapi_canon.router import (
     APIRouteOptions,
     FastAPIRouterOptions,
@@ -51,6 +51,21 @@ def test_channel_options_match_the_websocket_adapter() -> None:
     accepted = _keywords(CanonWebSocketRouter.__init__) - {"path", "channels", "prefix"}
 
     assert set(ChannelOptions.__annotations__) == accepted
+
+
+def test_websocket_policy_must_be_a_policy() -> None:
+    with pytest.raises(ConfigurationError, match="WebSocketPolicy"):
+        APIRouter(websocket_policy=object())  # type: ignore[arg-type]
+
+
+def test_declarations_conflicting_with_the_policy_fail_before_registration() -> None:
+    router = APIRouter(websocket_policy=WebSocketPolicy(strict_errors=True))
+
+    with pytest.raises(ConfigurationError, match="strict_errors"):
+        router.socket("/socket", strict_errors=False)
+    with pytest.raises(ConfigurationError, match="strict_errors"):
+        router.channel("/session", strict_errors=False)
+    assert router.routes == []
 
 
 def test_stream_options_are_route_options() -> None:
