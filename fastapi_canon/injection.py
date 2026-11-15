@@ -63,8 +63,12 @@ def _resolved_annotation(dependency: Any) -> Any:
 
 def _build_annotation(dependency: Any) -> Any:
     if isinstance(dependency, str):
-        # A string names no type yet; transports resolve it with the type hints.
-        return Annotated[dependency, _MARKER]
+        # Defer the whole annotation so FastAPI also sees Depends after resolving
+        # the service in the declaring function's namespace, including import aliases.
+        return (
+            "__import__('fastapi_canon.injection', fromlist=['Inject']).Inject"
+            f"[{dependency}]"
+        )
     return Annotated[dependency, _MARKER, Depends(_resolver(dependency))]
 
 

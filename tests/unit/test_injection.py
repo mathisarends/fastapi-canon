@@ -1,7 +1,7 @@
-from typing import Annotated, ForwardRef, get_args
+from typing import Annotated, get_args, get_type_hints
 
 from fastapi_canon import Inject
-from fastapi_canon.injection import injected_dependency
+from fastapi_canon.injection import injected_dependency, injected_resolver_dependency
 from fastapi_canon.integrations.mcp import Inject as McpInject
 from fastapi_canon.integrations.websockets import Inject as RpcInject
 
@@ -26,12 +26,18 @@ def test_injection_annotations_are_stable_per_dependency() -> None:
     assert injected_dependency(Inject[int]) is int
 
 
-def test_forward_references_keep_only_the_marker() -> None:
-    dependency, *metadata = get_args(Inject["Later"])
+def forward_reference(service: Inject["Later"]) -> None:
+    pass
 
-    assert isinstance(dependency, ForwardRef)
-    assert dependency.__forward_arg__ == "Later"
-    assert len(metadata) == 1
+
+def test_forward_references_resolve_the_marker_and_fastapi_dependency() -> None:
+    hint = get_type_hints(
+        forward_reference, globalns={"Later": Later}, include_extras=True
+    )["service"]
+    _, _, dependency = get_args(hint)
+
+    assert injected_dependency(hint) is Later
+    assert injected_resolver_dependency(dependency.dependency) is Later
 
 
 class Later:

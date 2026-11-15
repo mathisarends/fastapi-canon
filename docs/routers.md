@@ -59,6 +59,9 @@ needs a token verifier; no `@inject` decorator is involved, and
 `app.dependency_overrides` keeps addressing the original function. Async and sync
 forms keep their execution behavior; DI values stay out of the public request
 schema. Module/class future annotations and inherited call methods are supported.
+Quoted service types such as `Inject["Store"]` also work in FastAPI dependency
+functions; the service must be defined in that function's namespace before route
+registration.
 
 ```python
 from functools import partial

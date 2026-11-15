@@ -24,6 +24,12 @@ These changes require the next minor release, 0.22.0. See the
   options across a router's WebSocket declarations; see
   [connection policy](docs/routers.md#share-websocket-connection-policy).
 
+### Fixed
+
+- Resolve quoted service types such as `Inject["Service"]` in FastAPI dependencies
+  without exposing them as request parameters. Dependency overrides and missing
+  binding checks retain the same behavior as `Inject[Service]`.
+
 ### Development
 
 - Upgrade Smelt to 0.8.0 and enforce its new source conventions: named tuple
