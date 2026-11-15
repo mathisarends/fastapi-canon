@@ -4,9 +4,11 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## Unreleased
 
+## 0.22.0 - Unreleased
+
 ### Breaking changes
 
-These changes require the next minor release, 0.22.0. See the
+Version 0.22.0 is prepared but not published. See the
 [upgrade guide](docs/package-migration.md#upgrade-to-0220).
 
 - **`CANON-022-TRANSACTION-LOCKS`** — The `TransactionLocks` alias is removed.
