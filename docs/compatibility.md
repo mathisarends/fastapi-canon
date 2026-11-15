@@ -1,5 +1,23 @@
 # Compatibility
 
+## Canon 0.22.0
+
+Published on 2026-11-15. This release adds shared WebSocket connection policies,
+removes two aliases and fixes quoted dependency injection and WebRTC router
+options. See the [migration](package-migration.md#upgrade-to-0220).
+
+The release source passed exact-commit CI on Linux/Python 3.12–3.14 and
+Windows/Python 3.14, including PostgreSQL and Chromium/WebRTC contracts. Both
+20-combination wheel matrices passed on the publication artifacts: minimum direct
+dependencies on Python 3.12 and current dependencies on Python 3.14. Installed
+SSE CLI/backend and WebRTC client checks and all 15 public-index installation
+combinations passed. A fresh Windows/Python 3.12 core installation also passed
+CLI and runtime smoke checks.
+
+PyPI hashes, downloaded GitHub wheel/sdist files, the manifest and release tag
+match the verified source. See the [publication record](releases.md#current-versions).
+These checks do not establish support for every dependency combination.
+
 ## Canon 0.21.0
 
 Published on 2026-11-14. This release changes integration configuration, WebRTC

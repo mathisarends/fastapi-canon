@@ -13,7 +13,7 @@ PyPI project or add further Python import changes.
 
 ## Upgrade to 0.22.0
 
-Version 0.22.0 is unreleased. Replace removed aliases with their targets:
+Version 0.22.0 was published on 2026-11-15. Replace removed aliases with their targets:
 
 ```python
 # Before
