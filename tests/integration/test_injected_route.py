@@ -510,6 +510,14 @@ def test_external_containers_are_not_replaced_or_resolved_by_preflight() -> None
     assert lifecycle.closed == [1]
 
 
+async def forward_authenticated_user(token: str, verifier: Inject["Verifier"]) -> str:
+    return verifier.verify(token)
+
+
+def sync_forward_authenticated_user(token: str, verifier: Inject["Verifier"]) -> str:
+    return verifier.verify(token)
+
+
 class Verifier:
     def verify(self, token: str) -> str:
         return token.upper()
@@ -529,7 +537,15 @@ def sync_authenticated_user(token: str, verifier: Inject[Verifier]) -> str:
     return verifier.verify(token)
 
 
-@pytest.mark.parametrize("dependency", [authenticated_user, sync_authenticated_user])
+@pytest.mark.parametrize(
+    "dependency",
+    [
+        authenticated_user,
+        sync_authenticated_user,
+        forward_authenticated_user,
+        sync_forward_authenticated_user,
+    ],
+)
 def test_fastapi_dependencies_resolve_injected_parameters(
     dependency: object,
 ) -> None:
@@ -565,11 +581,14 @@ def test_fastapi_dependencies_resolve_injected_parameters(
     assert [parameter["name"] for parameter in parameters] == ["token"]
 
 
-def test_injected_fastapi_dependencies_keep_their_override_identity() -> None:
+@pytest.mark.parametrize("dependency", [authenticated_user, forward_authenticated_user])
+def test_injected_fastapi_dependencies_keep_their_override_identity(
+    dependency: object,
+) -> None:
     router = APIRouter()
 
     @router.get("/me")
-    async def me(name: Annotated[str, Depends(authenticated_user)]) -> str:
+    async def me(name: Annotated[str, Depends(dependency)]) -> str:
         return name
 
     app = Composition(
@@ -577,17 +596,20 @@ def test_injected_fastapi_dependencies_keep_their_override_identity() -> None:
             Feature(name="users", routers=[router], providers=[VerifierProvider()])
         ]
     ).build(FastAPI())
-    app.dependency_overrides[authenticated_user] = lambda: "override"
+    app.dependency_overrides[dependency] = lambda: "override"
 
     with TestClient(app) as client:
         assert client.get("/me").json() == "override"
 
 
-def test_missing_bindings_in_fastapi_dependencies_reject_before_installation() -> None:
+@pytest.mark.parametrize("dependency", [authenticated_user, forward_authenticated_user])
+def test_missing_bindings_in_fastapi_dependencies_reject_before_installation(
+    dependency: object,
+) -> None:
     router = APIRouter()
 
     @router.get("/me")
-    async def me(name: Annotated[str, Depends(authenticated_user)]) -> str:
+    async def me(name: Annotated[str, Depends(dependency)]) -> str:
         return name
 
     composition = Composition(features=[Feature(name="users", routers=[router])])

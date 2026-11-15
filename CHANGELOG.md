@@ -18,11 +18,29 @@ These changes require the next minor release, 0.22.0. See the
   `Literal["python", "typescript"]` type as `ClientLanguage` from
   `fastapi_canon.codegen.generators`.
 
+- **`CANON-022-WEBSOCKET-POLICY`** — Routers using `websocket_policy=` reject
+  unprotected Starlette WebSockets and later additions to native included routers.
+  Declare these connections with `channel()`, `socket()` or `binary_stream()` on
+  a router with the same policy or an extension. Put public WebSockets on a
+  separate router without that policy.
+
 ### Added
 
 - `WebSocketPolicy` and `APIRouter(websocket_policy=...)` share connection
   options across a router's WebSocket declarations; see
   [connection policy](docs/routers.md#share-websocket-connection-policy).
+
+### Fixed
+
+- Resolve quoted service types such as `Inject["Service"]` in FastAPI dependencies
+  without exposing them as request parameters. Dependency overrides and missing
+  binding checks retain the same behavior as `Inject[Service]`.
+- Preserve WebSocket policy declarations through native FastAPI router wrappers
+  and revalidate live included routes before inspection or dispatch.
+- Forward the declared HTTP options of `WebRtcRouter`, including responses,
+  redirect settings and lifecycle options. Custom lifespan state is preserved;
+  sessions close before lifespan resources and router event handlers run once
+  under composition.
 
 ### Development
 

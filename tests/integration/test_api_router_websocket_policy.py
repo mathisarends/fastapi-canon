@@ -7,6 +7,7 @@ import pytest
 from fastapi import APIRouter as FastAPIRouter
 from fastapi import FastAPI, Header, WebSocket
 from fastapi.testclient import TestClient
+from starlette.routing import WebSocketRoute
 from starlette.testclient import WebSocketDenialResponse
 
 from fastapi_canon import APIRouter, Composition, Feature, Inject
@@ -112,7 +113,8 @@ def test_policy_admits_each_connection_before_accepting_it(kind: str) -> None:
             assert [_receive(kind, ada), _receive(kind, bob)] == ["ada", "bob"]
 
 
-def test_routers_with_an_extended_policy_can_be_included() -> None:
+@pytest.mark.parametrize("native_wrapper", [False, True])
+def test_routers_with_an_extended_policy_can_be_included(native_wrapper: bool) -> None:
     parent = APIRouter(websocket_policy=AUTHENTICATED)
     child = APIRouter(
         prefix="/users", websocket_policy=AUTHENTICATED.extend(rejects=[UNKNOWN])
@@ -122,7 +124,12 @@ def test_routers_with_an_extended_policy_can_be_included() -> None:
     async def me(user: Inject[User]) -> AsyncIterator[bytes]:
         yield user.name.encode()
 
-    parent.include_router(child)
+    if native_wrapper:
+        wrapper = FastAPIRouter()
+        wrapper.include_router(child)
+        parent.include_router(wrapper)
+    else:
+        parent.include_router(child)
     app = Composition(features=[Feature(name="users", routers=[parent])]).build(
         FastAPI()
     )
@@ -167,6 +174,54 @@ def test_policy_routers_reject_their_own_native_websockets() -> None:
 
     with pytest.raises(ConfigurationError, match="websocket_policy"):
         router.websocket("/native")(native)
+
+
+def test_policy_routers_reject_starlette_websocket_registration() -> None:
+    router = APIRouter(websocket_policy=AUTHENTICATED)
+
+    with pytest.raises(ConfigurationError, match="websocket_policy"):
+        router.add_websocket_route("/native", native)
+    assert router.routes == []
+
+
+def test_unprotected_constructor_routes_cannot_be_installed() -> None:
+    router = APIRouter(
+        websocket_policy=AUTHENTICATED,
+        routes=[WebSocketRoute("/native", native)],
+    )
+    app = FastAPI()
+    routes = tuple(app.routes)
+    with pytest.raises(ConfigurationError, match="websocket_policy"):
+        Composition(features=[Feature(name="users", routers=[router])]).build(app)
+    assert tuple(app.routes) == routes
+
+
+def test_native_child_routes_added_after_startup_cannot_bypass_the_policy() -> None:
+    parent = APIRouter(websocket_policy=AUTHENTICATED)
+    parent.socket("/protected")(anonymous)
+    child = FastAPIRouter()
+    parent.include_router(child)
+    app = Composition(features=[Feature(name="users", routers=[parent])]).build(
+        FastAPI()
+    )
+    calls: list[str] = []
+
+    async def late(websocket: WebSocket) -> None:
+        calls.append("unauthenticated")
+        await websocket.accept()
+        await websocket.close()
+
+    with TestClient(app) as client:
+        # Warm FastAPI's included-router cache before the child changes.
+        with client.websocket_connect("/protected", headers={"X-User": "ada"}):
+            pass
+        child.add_api_websocket_route("/late", late)
+        with (
+            pytest.raises(ConfigurationError, match="websocket_policy"),
+            client.websocket_connect("/late"),
+        ):
+            pass
+    assert calls == []
 
 
 def test_included_routers_cannot_add_routes_without_the_policy_later() -> None:

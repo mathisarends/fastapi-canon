@@ -6,7 +6,10 @@ from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 from typing import Any
 
+import pytest
 from fastapi import FastAPI
+from fastapi.responses import PlainTextResponse
+from fastapi.testclient import TestClient
 from fastapi_canon import Composition, Feature
 from fastapi_canon.integrations.webrtc import SUBPROTOCOL, Session, WebRtcRouter
 from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine
@@ -55,9 +58,32 @@ def test_webrtc_uses_real_engine_and_closes_factory_dependencies() -> None:
     assert lifecycle == ["open 42", "close 42"]
 
 
-def test_application_shutdown_closes_active_webrtc_sessions() -> None:
+@pytest.mark.parametrize("custom_lifespan", [False, True])
+def test_application_shutdown_closes_active_webrtc_sessions(
+    custom_lifespan: bool,
+) -> None:
     closed: list[str] = []
-    router = WebRtcRouter(engine=AiortcEngine())
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[dict[str, str]]:
+        closed.append("lifespan open")
+        try:
+            yield {"media": "ready"}
+        finally:
+            assert router.active_sessions == 0
+            closed.append("lifespan close")
+
+    router = WebRtcRouter(
+        engine=AiortcEngine(), lifespan=lifespan if custom_lifespan else None
+    )
+
+    @asynccontextmanager
+    async def resources(app: FastAPI) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            assert router.active_sessions == 0
+            closed.append("resources closed")
 
     @router.session("/media")
     async def media() -> AsyncIterator[Session]:
@@ -66,13 +92,14 @@ def test_application_shutdown_closes_active_webrtc_sessions() -> None:
         finally:
             closed.append("factory closed")
 
-    app = Composition(features=[Feature(name="media", routers=[router])]).build(
-        FastAPI()
-    )
+    app = Composition(
+        features=[Feature(name="media", routers=[router], lifespan=resources)]
+    ).build(FastAPI())
 
     async def scenario() -> Message:
         async with AsyncExitStack() as connections:
-            async with app.router.lifespan_context(app):
+            async with app.router.lifespan_context(app) as state:
+                assert state == ({"media": "ready"} if custom_lifespan else {})
                 _incoming, outgoing = await connections.enter_async_context(
                     _connection(app, "/media", [SUBPROTOCOL])
                 )
@@ -85,7 +112,60 @@ def test_application_shutdown_closes_active_webrtc_sessions() -> None:
         "code": 1001,
         "reason": "shutdown",
     }
-    assert closed == ["factory closed"]
+    assert closed == (
+        ["lifespan open", "factory closed", "lifespan close", "resources closed"]
+        if custom_lifespan
+        else ["factory closed", "resources closed"]
+    )
+
+
+def test_http_router_options_are_forwarded() -> None:
+    router = WebRtcRouter(
+        prefix="/rtc",
+        redirect_slashes=False,
+        default_response_class=PlainTextResponse,
+        responses={404: {"description": "Missing media"}},
+        tags=["media"],
+        deprecated=True,
+    )
+
+    @router.get("/health")
+    async def health() -> str:
+        return "ready"
+
+    app = Composition(features=[Feature(name="media", routers=[router])]).build(
+        FastAPI()
+    )
+    with TestClient(app) as client:
+        response = client.get("/rtc/health")
+    assert response.status_code == 200
+    assert response.text == "ready"
+    assert response.headers["content-type"].startswith("text/plain")
+    operation = app.openapi()["paths"]["/rtc/health"]["get"]
+    assert operation["responses"]["404"]["description"] == "Missing media"
+    assert operation["tags"] == ["media"]
+    assert operation["deprecated"] is True
+    assert router.redirect_slashes is False
+
+
+@pytest.mark.parametrize("custom_app_lifespan", [False, True])
+def test_router_event_handlers_run_once(custom_app_lifespan: bool) -> None:
+    events: list[str] = []
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        yield
+
+    router = WebRtcRouter(
+        on_startup=[lambda: events.append("startup")],
+        on_shutdown=[lambda: events.append("shutdown")],
+    )
+    app = Composition(features=[Feature(name="media", routers=[router])]).build(
+        FastAPI(lifespan=lifespan) if custom_app_lifespan else FastAPI()
+    )
+    with TestClient(app):
+        assert events == ["startup"]
+    assert events == ["startup", "shutdown"]
 
 
 @asynccontextmanager
