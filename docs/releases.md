@@ -6,6 +6,12 @@ version; the reference service is an example. `release.toml` and
 
 ## Current versions
 
+**Prepared, not published: 0.22.0.** Adds shared WebSocket connection policies,
+removes two aliases and fixes quoted dependency injection and WebRTC router
+options. Follow the [migration](package-migration.md#upgrade-to-0220) and
+[changelog](../CHANGELOG.md#0220---unreleased). Publication requires exact-source
+CI and a successful release dry run.
+
 **Published: 0.21.0 (2026-11-14).** It unifies optional integrations under
 `integrations=`, moves WebRTC sessions to `WebRtcRouter`, replaces contract-kind
 enums with strings and enables automatic resource telemetry. It also strengthens
