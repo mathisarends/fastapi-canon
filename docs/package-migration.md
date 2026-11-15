@@ -25,6 +25,11 @@ from fastapi_canon.integrations.database import AcquireTransactionLock
 from fastapi_canon.codegen.generators import ClientLanguage
 ```
 
+When using `websocket_policy=`, declare connections with `channel()`, `socket()`
+or `binary_stream()` on a router with that policy or an extension. Native
+WebSocket registrations, including later additions on included routers, cannot
+bypass it. Put public WebSockets on a separate router without the policy.
+
 ## Upgrade to 0.21.0
 
 Version 0.21.0 was published on 2026-11-14. Follow the 0.20.0 migration below

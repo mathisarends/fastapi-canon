@@ -369,6 +369,8 @@ A policy holds `context`, `hooks`, `resolver`, `rejects`, `rejections`,
 - The policy applies to declarations on its own router. A router with a policy
   rejects WebSocket routes, including later ones on routers it includes, unless
   they were declared under that policy or an extension of it.
+  Changes to native included routers are checked again before route inspection
+  or dispatch; unprotected Starlette registrations are also rejected.
 
 See [WebSocket streams](integrations/websockets/README.md) for controls, limits,
 error mappings, dependency lifetimes and generated resource APIs. Operation names
@@ -411,6 +413,9 @@ Perform admission checks in dependencies, before generator execution starts.
 `max_sessions`, `capacity`, `dependencies` and `raises`. Engine, ICE-server,
 event-hook, origin, `raises` and HTTP router options belong to the `WebRtcRouter`;
 the factory may supply an engine through its returned `Session`.
+HTTP options such as `responses` and `redirect_slashes` retain FastAPI's behavior.
+A custom router `lifespan` keeps its yielded state and closes active sessions
+before its resources are released.
 `max_sessions` bounds one declaration. Pass one `SessionCapacity` to several
 declarations, also on different routers, to share a process-wide budget:
 

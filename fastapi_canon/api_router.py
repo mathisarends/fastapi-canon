@@ -8,6 +8,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, TypedDict, Unpack
 
 from fastapi import APIRouter as FastAPIRouter
+from fastapi import WebSocket
 from fastapi.params import Depends
 from fastapi.routing import APIWebSocketRoute
 from pydantic import BaseModel
@@ -115,7 +116,6 @@ class APIRouter(CanonRouter):
         kwargs.setdefault("route_class", InjectedRoute)
         self.websocket_policy = websocket_policy
         self._pending_channels: list[tuple[RpcChannel, dict[str, Any]]] = []
-        self._websocket_declarations: dict[Callable[..., Any], WebSocketPolicy] = {}
         self._required_websocket_policies: list[WebSocketPolicy] = []
         self._websocket_children: list[APIRouter] = []
         super().__init__(**kwargs)
@@ -130,6 +130,13 @@ class APIRouter(CanonRouter):
                 self._mount_channel(channel, None, settings)
                 # Later registrations would never reach the mounted snapshot.
                 channel.freeze()
+        requirements = self._websocket_requirements()
+        if requirements:
+            # Native included routers stay live and cannot intercept registration.
+            # Revalidate before inspection or dispatch, including cached inclusions.
+            for path, route in iter_contract_routes(self._routes):
+                if isinstance(getattr(route, "original_route", route), WebSocketRoute):
+                    self._check_websocket_route(path, route.endpoint, requirements)
         return self._routes
 
     @routes.setter
@@ -146,7 +153,7 @@ class APIRouter(CanonRouter):
     ) -> None:
         self._check_websocket_route(
             self.prefix + path,
-            self._websocket_declarations.get(endpoint),
+            endpoint,
             self._websocket_requirements(),
         )
         key = _websocket_path(self.prefix + path)
@@ -159,6 +166,15 @@ class APIRouter(CanonRouter):
         super().add_api_websocket_route(
             path, endpoint, name=name, dependencies=dependencies
         )
+
+    def add_websocket_route(
+        self,
+        path: str,
+        endpoint: Callable[[WebSocket], Awaitable[None]],
+        name: str | None = None,
+    ) -> None:
+        self._check_websocket_route(path, endpoint, self._websocket_requirements())
+        super().add_websocket_route(path, endpoint, name=name)
 
     def include_router(
         self, router: FastAPIRouter, **options: Unpack[IncludeRouterOptions]
@@ -174,20 +190,13 @@ class APIRouter(CanonRouter):
         requirements = self._websocket_requirements()
         # Reading routes first mounts the child's pending channels.
         routes = router.routes
-        declarations = (
-            router._declared_websocket_policies()
-            if isinstance(router, APIRouter)
-            else {}
-        )
         for path, route in iter_contract_routes(routes):
             if not isinstance(getattr(route, "original_route", route), WebSocketRoute):
                 continue
             key = _websocket_path(prefix + path)
             if key in existing or key in incoming:
                 raise ConfigurationError(f"Duplicate WebSocket path: {prefix + path}")
-            self._check_websocket_route(
-                prefix + path, declarations.get(route.endpoint), requirements
-            )
+            self._check_websocket_route(prefix + path, route.endpoint, requirements)
             incoming.add(key)
         super().include_router(router, **options)
         if isinstance(router, APIRouter):
@@ -447,24 +456,22 @@ class APIRouter(CanonRouter):
         for child in self._websocket_children:
             child._require_websocket_policy(policy)
 
-    def _declared_websocket_policies(
-        self,
-    ) -> dict[Callable[..., Any], WebSocketPolicy]:
-        declared = dict(self._websocket_declarations)
-        for child in self._websocket_children:
-            declared.update(child._declared_websocket_policies())
-        return declared
-
     def _check_websocket_route(
         self,
         path: str,
-        declared: WebSocketPolicy | None,
+        endpoint: Callable[..., Any],
         requirements: Sequence[WebSocketPolicy],
     ) -> None:
+        if not requirements:
+            return
         from fastapi_canon.integrations.websockets.policy import (
+            WebSocketPolicy,
             covers_websocket_policy,
         )
 
+        declared = getattr(endpoint, "__canon_websocket_policy__", None)
+        if not isinstance(declared, WebSocketPolicy):
+            declared = None
         for required in requirements:
             if not covers_websocket_policy(declared, required):
                 msg = (
@@ -487,7 +494,9 @@ class APIRouter(CanonRouter):
         if not isinstance(route, APIWebSocketRoute):
             raise ConfigurationError("The channel adapter did not produce a WebSocket")
         if self.websocket_policy is not None:
-            self._websocket_declarations[route.endpoint] = self.websocket_policy
+            route.endpoint.__dict__["__canon_websocket_policy__"] = (
+                self.websocket_policy
+            )
         self.add_api_websocket_route(
             path,
             route.endpoint,

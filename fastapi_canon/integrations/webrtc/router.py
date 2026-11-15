@@ -9,9 +9,10 @@ import inspect
 import logging
 import uuid
 from collections.abc import AsyncGenerator, Callable, Sequence
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
+from contextvars import ContextVar
 from functools import update_wrapper
-from typing import Annotated, Any, TypeVar, cast, get_type_hints
+from typing import Annotated, Any, TypeVar, Unpack, cast, get_type_hints
 
 from dishka import AsyncContainer, DependencyKey
 from dishka.integrations.base import default_parse_dependency, is_dishka_injected
@@ -48,6 +49,7 @@ from fastapi_canon.integrations.webrtc.runtime import (
     RuntimeOptions,
     SessionRuntime,
 )
+from fastapi_canon.router import FastAPIRouterOptions
 
 logger = logging.getLogger("fastapi_canon.integrations.webrtc")
 
@@ -86,16 +88,19 @@ class SessionRouter(APIRouter):
         max_sessions: int | None = None,
         on_event: EventHook | None = None,
         allowed_origins: Sequence[str] | None = None,
-        prefix: str = "",
-        tags: list[str] | None = None,
-        dependencies: Sequence[DependsParam] | None = None,
+        **options: Unpack[FastAPIRouterOptions],
     ) -> None:
-        super().__init__(
-            prefix=prefix,
-            tags=list(tags if tags is not None else []),
-            dependencies=list(dependencies if dependencies is not None else []),
-            lifespan=self._lifespan,
+        self._startup_complete: ContextVar[bool] = ContextVar(
+            "canon_webrtc_startup_complete", default=False
         )
+        if options.get("lifespan") is None:
+            options["on_startup"] = [
+                *(options.get("on_startup") or ()),
+                self._mark_startup,
+            ]
+        super().__init__(**options)
+        self._application_lifespan = self.lifespan_context
+        self.lifespan_context = self._lifespan
         self.engine = engine
         self.ice_servers = ice_servers
         self.limits = limits if limits is not None else SessionLimits()
@@ -304,12 +309,26 @@ class SessionRouter(APIRouter):
             logger.exception("Session event hook failed")
 
     @asynccontextmanager
-    async def _lifespan(self, _app: Any) -> AsyncGenerator[None, None]:
-        self._closing = False
+    async def _lifespan(self, app: Any) -> AsyncGenerator[Any, None]:
         try:
-            yield
+            async with AsyncExitStack() as stack:
+                state = None
+                # FastAPI copies router events to the parent. Enter the default
+                # lifespan only when the parent did not already run those events.
+                if not self._startup_complete.get():
+                    state = await stack.enter_async_context(
+                        self._application_lifespan(app)
+                    )
+                self._closing = False
+                try:
+                    yield state
+                finally:
+                    await self.aclose()
         finally:
-            await self.aclose()
+            self._startup_complete.set(False)
+
+    def _mark_startup(self) -> None:
+        self._startup_complete.set(True)
 
 
 def _inject_factory(
