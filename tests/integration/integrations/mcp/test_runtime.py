@@ -16,7 +16,7 @@ from fastmcp.utilities.asgi_transport import StreamingASGITransport
 from mcp import MCPError
 
 from fastapi_canon import Composition, Feature
-from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.errors import FeatureConfigurationError
 from fastapi_canon.integrations.mcp import (
     Inject,
     Mcp,

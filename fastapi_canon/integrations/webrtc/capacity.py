@@ -1,6 +1,3 @@
-"""Session slots shared across WebRTC declarations."""
-
-
 class SessionCapacity:
     """Limit concurrent sessions across every declaration that shares this instance.
 

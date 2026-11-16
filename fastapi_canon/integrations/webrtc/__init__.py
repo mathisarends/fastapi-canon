@@ -1,11 +1,3 @@
-"""Typed WebRTC sessions for FastAPI.
-
-Declare sessions with ``WebRtcRouter.session()``; Canon provides WebSocket signaling,
-admission through FastAPI dependencies, limits and cleanup, while an engine
-adapter (see :mod:`fastapi_canon.integrations.webrtc.engines`) owns the peer
-connection.
-"""
-
 from fastapi_canon.integrations.webrtc.canon import WebRtcRouter
 from fastapi_canon.integrations.webrtc.capacity import SessionCapacity
 from fastapi_canon.integrations.webrtc.declarations import (

@@ -20,7 +20,7 @@ from fastapi_canon import (
     Feature,
     export_contracts,
 )
-from fastapi_canon.exceptions import ConfigurationError
+from fastapi_canon.errors import ConfigurationError
 from fastapi_canon.integrations.websockets import (
     Inject,
     ProtocolDefinitionError,

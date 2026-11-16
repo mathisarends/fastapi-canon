@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from fastapi_canon.error import ErrorRegistry
 from fastapi_canon.error.contributions import error_registries
-from fastapi_canon.exceptions import ErrorConfigurationError, FeatureConfigurationError
+from fastapi_canon.errors import ErrorConfigurationError, FeatureConfigurationError
 from fastapi_canon.routing.http import route_provenance
 from fastapi_canon.routing.traversal import iter_contract_routes
 

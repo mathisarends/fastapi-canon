@@ -1,5 +1,3 @@
-"""Public handles passed to session handlers."""
-
 from __future__ import annotations
 
 import asyncio

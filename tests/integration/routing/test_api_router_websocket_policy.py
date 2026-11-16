@@ -11,7 +11,7 @@ from starlette.routing import WebSocketRoute
 from starlette.testclient import WebSocketDenialResponse
 
 from fastapi_canon import APIRouter, Composition, Feature, Inject
-from fastapi_canon.exceptions import ConfigurationError
+from fastapi_canon.errors import ConfigurationError
 from fastapi_canon.integrations.websockets import (
     RpcConnectionScope,
     RpcErrorBinding,

@@ -1,5 +1,3 @@
-"""Session declarations: media policy, data channels, limits and handlers."""
-
 from __future__ import annotations
 
 import re

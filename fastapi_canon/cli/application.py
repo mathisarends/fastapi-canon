@@ -1,5 +1,3 @@
-"""Shared import and synchronous factory rules for command-line targets."""
-
 import inspect
 import sys
 from collections.abc import Iterator

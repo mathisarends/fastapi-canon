@@ -1,12 +1,3 @@
-"""Export declared sessions as a JSON contract for client generators.
-
-The contract lists every ``WebRtcRouter`` session reachable from an application:
-its effective path, role, media policy, data channels with JSON Schemas of their
-messages, and the path and query parameters that its dependencies read. Header
-and cookie parameters are omitted because browsers cannot set them on a
-WebSocket; cookies are sent automatically.
-"""
-
 from __future__ import annotations
 
 import json

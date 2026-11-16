@@ -1,5 +1,3 @@
-"""A deliberately bounded Python symbol index; never imports inspected code."""
-
 import ast
 import builtins
 import importlib.util

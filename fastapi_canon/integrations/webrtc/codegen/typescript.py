@@ -1,14 +1,3 @@
-"""Generate a typed TypeScript browser client from a session contract.
-
-The output consists of four modules:
-
-- ``runtime.ts``: the static, framework-free signaling and session runtime.
-- ``models.ts``: TypeScript types for the shared JSON Schema definitions.
-- ``client.ts``: per-session channel, parameter and option types, embedded
-  session descriptors and the client class.
-- ``index.ts``: re-exports of the three modules above.
-"""
-
 from __future__ import annotations
 
 import json

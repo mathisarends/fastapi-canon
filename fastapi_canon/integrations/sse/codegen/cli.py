@@ -24,7 +24,6 @@ from fastapi_canon.integrations.sse.codegen.writer import planned_files, write_f
 if TYPE_CHECKING:
     from fastapi_canon.integrations.sse.codegen.diagnostics import GenerationDiagnostic
 
-__all__ = ["main"]
 
 _CONFIG_KEYS = {"app", "schema", "clients"}
 _CONFIG_TABLE = "tool.fastapi-canon.sse"

@@ -1,16 +1,3 @@
-"""Reference engine backed by `aiortc <https://github.com/aiortc/aiortc>`_.
-
-Install with ``pip install "fastapi-canon[webrtc,aiortc]"``. Local tracks are aiortc
-``MediaStreamTrack`` instances (for example from ``aiortc.contrib.media``) and
-incoming frames are PyAV ``AudioFrame``/``VideoFrame`` objects.
-
-aiortc gathers all local candidates before it returns a description, so the
-adapter advertises ``trickle_ice=False`` and emits end-of-candidates right after
-each local description. It cannot restart ICE or roll back descriptions; the
-browser client therefore never requests ICE restarts from this engine and the
-server stays the impolite peer during simultaneous offers.
-"""
-
 from __future__ import annotations
 
 import asyncio

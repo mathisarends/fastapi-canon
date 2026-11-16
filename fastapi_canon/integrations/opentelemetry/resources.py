@@ -1,5 +1,3 @@
-"""Resource instance ownership and app-wide resource instrumentation providers."""
-
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
@@ -9,7 +7,7 @@ from threading import Lock
 from typing import TYPE_CHECKING, Any
 from weakref import WeakKeyDictionary
 
-from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.errors import FeatureConfigurationError
 
 if TYPE_CHECKING:
     from dishka import Provider

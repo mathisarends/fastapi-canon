@@ -14,7 +14,7 @@ from fastapi_canon.error.types import (
     OpenAPIResponse,
     OpenAPIResponses,
 )
-from fastapi_canon.exceptions import ErrorConfigurationError
+from fastapi_canon.errors import ErrorConfigurationError
 
 type ResponseHeaders = Sequence[str] | Mapping[str, OpenAPIHeader]
 

@@ -1,4 +1,4 @@
-from ..exceptions import ErrorConfigurationError
+from ..errors import ErrorConfigurationError
 from .catalog import installed_catalog, registry_scope, resolved_registry
 from .contracts import AnyError, ErrorCatalog
 from .error import Error

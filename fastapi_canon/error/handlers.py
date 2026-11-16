@@ -24,7 +24,7 @@ from fastapi_canon.error.contracts import (
 from fastapi_canon.error.openapi import install_openapi
 from fastapi_canon.error.rendering import render_problem
 from fastapi_canon.error.types import JsonValue, http_problem_title
-from fastapi_canon.exceptions import ErrorConfigurationError
+from fastapi_canon.errors import ErrorConfigurationError
 
 logger = logging.getLogger(__name__)
 _PROBLEM_OBSERVER_STATE_KEY = "_canon_problem_telemetry"

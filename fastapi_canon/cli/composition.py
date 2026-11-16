@@ -1,5 +1,3 @@
-"""CLI adapters for imported composition checks and installed HTTP snapshots."""
-
 import argparse
 import json
 import sys

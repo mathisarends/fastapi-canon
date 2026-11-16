@@ -20,7 +20,7 @@ from fastapi_canon import (
     Feature,
 )
 from fastapi_canon.error import Error, ErrorRegistry
-from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.errors import FeatureConfigurationError
 from fastapi_canon.routing.http import CanonRouter
 
 

@@ -1,9 +1,3 @@
-"""Read-only SDP inspection for policy checks and stale-candidate filtering.
-
-The runtime never rewrites SDP or tracks negotiation state from it; the engine
-remains the only owner of the protocol state machine.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass

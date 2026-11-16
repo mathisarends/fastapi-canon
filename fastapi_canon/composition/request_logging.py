@@ -1,5 +1,3 @@
-"""Opt-in HTTP completion records, outside the application's error middleware."""
-
 import logging
 from time import perf_counter
 

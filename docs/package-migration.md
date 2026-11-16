@@ -29,6 +29,16 @@ them with documented public imports. The `fastapi_canon.contracts` and
 Replace `python -m fastapi_canon.check_error_contracts src` with
 `python -m fastapi_canon check errors src`; the command accepts the same flags.
 
+Import configuration errors from `fastapi_canon.errors` instead of
+`fastapi_canon.exceptions`:
+
+```python
+from fastapi_canon.errors import ConfigurationError, FeatureConfigurationError
+```
+
+Use named imports from public namespaces. Explicit `__all__` lists belong to
+package facades; ordinary modules no longer expose them.
+
 ## Upgrade to 0.23.0
 
 Version 0.23.0 was published on 2026-11-16.

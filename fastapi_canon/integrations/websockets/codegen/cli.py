@@ -26,12 +26,12 @@ from fastapi_canon.integrations.websockets.schema.export import (
     render_contract,
 )
 
-__all__ = ["main"]
-
 LANGUAGES = ("python", "typescript")
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(  # smelt: ignore[SMT429] -- fastapi_canon.commands entry point.
+    argv: Sequence[str] | None = None,
+) -> int:
     """Export OpenRPC contracts and generate WebSocket clients."""
     parser = _parser()
     arguments = parser.parse_args(argv)

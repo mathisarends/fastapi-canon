@@ -1,5 +1,3 @@
-"""Opinionated FastAPI feature composition with Dishka and Problem Details."""
-
 from ._version import __version__
 from .composition import (
     Composition,

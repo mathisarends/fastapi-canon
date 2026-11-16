@@ -1,10 +1,3 @@
-"""Canon commands with lazily loaded transport tools.
-
-Distributions add commands through the ``fastapi_canon.commands`` entry points.
-Each names a ``main(argv) -> int`` function whose docstring's first line is its
-help text; the module is imported only when the command runs or help is shown.
-"""
-
 import argparse
 import shutil
 import sys

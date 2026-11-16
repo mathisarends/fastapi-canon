@@ -1,5 +1,3 @@
-"""App-owned engines and request-owned SQLAlchemy sessions."""
-
 from collections.abc import AsyncGenerator, Callable, Mapping
 from contextlib import AbstractContextManager, asynccontextmanager, nullcontext
 from typing import Any

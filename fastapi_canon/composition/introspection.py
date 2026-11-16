@@ -1,5 +1,3 @@
-"""Adapt effective FastAPI HTTP routes into detached composition metadata."""
-
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping, Sequence
@@ -24,7 +22,7 @@ from fastapi_canon.error.contracts import (
     contracts_from_responses,
 )
 from fastapi_canon.error.openapi import inherited_contract
-from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.errors import FeatureConfigurationError
 from fastapi_canon.routing.http import CanonRouter, route_provenance
 from fastapi_canon.routing.injection import injected_resolver_dependency
 from fastapi_canon.routing.traversal import iter_contract_routes

@@ -21,7 +21,7 @@ from starlette.types import Scope as ASGIScope
 import fastapi_canon.integrations.opentelemetry as telemetry_api
 from fastapi_canon import Composition, ErrorOptions, Feature
 from fastapi_canon.error import Error
-from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.errors import FeatureConfigurationError
 from fastapi_canon.integrations.opentelemetry import (
     Instrumentation,
     Telemetry,

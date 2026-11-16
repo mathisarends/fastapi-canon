@@ -1,7 +1,7 @@
 from typing import Any
 
 import pytest
-from fastapi_canon.exceptions import ConfigurationError
+from fastapi_canon.errors import ConfigurationError
 from fastapi_canon.integrations.websockets import (
     RpcErrorBinding,
     RpcMiddleware,

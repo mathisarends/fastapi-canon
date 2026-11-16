@@ -1,5 +1,3 @@
-"""ICE server configuration, providers and expiring TURN credentials."""
-
 from __future__ import annotations
 
 import base64

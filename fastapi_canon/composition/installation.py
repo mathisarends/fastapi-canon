@@ -21,7 +21,7 @@ from fastapi_canon.composition.scopes import install_scopes
 from fastapi_canon.diagnostics import (
     CompositionInfo,
 )
-from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.errors import FeatureConfigurationError
 from fastapi_canon.integration import Installer
 from fastapi_canon.openapi import (
     validate_openapi_contracts,

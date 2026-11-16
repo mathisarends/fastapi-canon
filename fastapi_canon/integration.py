@@ -1,11 +1,3 @@
-"""Extension points for optional integrations.
-
-An application enables an integration once in ``Composition(integrations=...)``.
-Features give it parts through ``Feature(integrations=...)``. Transports attach an
-``IntegrationRoute`` to their endpoints, so composition checks and contract export
-include them without the core knowing the transport.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
@@ -13,7 +5,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol
 
 from fastapi_canon.diagnostics import CheckIssue, CheckResult
-from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.errors import FeatureConfigurationError
 
 if TYPE_CHECKING:
     from dishka import AsyncContainer, Provider, Scope
@@ -21,21 +13,6 @@ if TYPE_CHECKING:
     from fastapi import APIRouter, FastAPI
     from starlette.types import Lifespan
 
-__all__ = [
-    "ContractExporter",
-    "DeclaredError",
-    "ErrorLookup",
-    "Installer",
-    "Integration",
-    "IntegrationContext",
-    "IntegrationError",
-    "IntegrationPart",
-    "IntegrationRoute",
-    "ProviderContext",
-    "RouteContext",
-    "attach_route",
-    "attached_route",
-]
 
 type Parts[PartT] = tuple[tuple[str, PartT], ...]
 """``(feature name, part)`` pairs in composition order."""

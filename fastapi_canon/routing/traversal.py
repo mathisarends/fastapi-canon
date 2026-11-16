@@ -1,5 +1,3 @@
-"""Read the effective paths of registered routes through FastAPI route contexts."""
-
 from collections.abc import Iterable, Iterator, Sequence
 from typing import Any
 

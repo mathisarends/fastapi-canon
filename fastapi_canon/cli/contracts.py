@@ -1,5 +1,3 @@
-"""Command-line export of application contracts."""
-
 import argparse
 import difflib
 import json

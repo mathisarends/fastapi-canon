@@ -27,7 +27,7 @@ from fastapi_canon.error.types import (
     OpenAPIResponses,
     http_problem_title,
 )
-from fastapi_canon.exceptions import ErrorConfigurationError
+from fastapi_canon.errors import ErrorConfigurationError
 from fastapi_canon.routing.traversal import iter_contract_routes
 
 if TYPE_CHECKING:

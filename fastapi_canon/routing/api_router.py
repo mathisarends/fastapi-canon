@@ -1,5 +1,3 @@
-"""One application router with explicit, lazily loaded transport adapters."""
-
 from __future__ import annotations
 
 import re
@@ -15,7 +13,7 @@ from pydantic import BaseModel
 from starlette.routing import BaseRoute, WebSocketRoute
 
 from fastapi_canon.error.contributions import error_registries
-from fastapi_canon.exceptions import ConfigurationError
+from fastapi_canon.errors import ConfigurationError
 from fastapi_canon.routing.http import APIRouteOptions as APIRouteOptions
 from fastapi_canon.routing.http import CanonRouter
 from fastapi_canon.routing.http import IncludeRouterOptions as IncludeRouterOptions

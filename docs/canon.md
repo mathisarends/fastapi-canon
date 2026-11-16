@@ -44,7 +44,7 @@ scope.
 | WebRTC with Canon admission errors | `fastapi_canon.integrations.webrtc.WebRtcRouter` and `@rtc.session()`, `Session`, `SessionCapacity`; engine adapters in `.webrtc.engines` | [WebRTC admission](webrtc.md) |
 | Contract export | `fastapi_canon.export_contracts`; `fastapi_canon.contracts.Contracts`, `ContractSelection`; `fastapi-canon contracts export` | [Application export](contracts.md) |
 | OpenAPI contracts without `Composition` | `fastapi_canon.openapi.install_openapi_contracts`, `validate_openapi_contracts` | [Composition](composition.md) |
-| Startup configuration errors | `fastapi_canon.exceptions.ConfigurationError` and its subclasses | [Problems](problems.md) |
+| Startup configuration errors | `fastapi_canon.errors.ConfigurationError` and its subclasses | [Problems](problems.md) |
 | Telemetry declarations | `fastapi_canon.integrations.opentelemetry.Telemetry`, `instrument`, `ResourceInstrumentation` | [Telemetry](telemetry.md) |
 | HTTP client and engine instrumentation | `HttpxClients`, `instrument_httpx` in `.opentelemetry.httpx`; `SqlAlchemyEngines`, `instrument_sqlalchemy` in `.opentelemetry.sqlalchemy` | [Resources](telemetry.md#http-clients-and-database-engines) |
 | MCP features | `fastapi_canon.integrations.mcp.McpServer`, `McpMount`, `McpScope`, `Mcp`, `Inject` | [MCP](integrations/mcp/README.md) |

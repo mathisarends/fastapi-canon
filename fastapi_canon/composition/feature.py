@@ -16,7 +16,7 @@ from fastapi_canon.diagnostics import (
     FeatureCheck,
 )
 from fastapi_canon.error import AnyError, ErrorRegistry
-from fastapi_canon.exceptions import ErrorConfigurationError, FeatureConfigurationError
+from fastapi_canon.errors import ErrorConfigurationError, FeatureConfigurationError
 from fastapi_canon.integration import Integration, IntegrationPart
 from fastapi_canon.routing.policy import normalize_raises
 

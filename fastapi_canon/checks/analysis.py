@@ -1,5 +1,3 @@
-"""Explicit-exception propagation for the supported, statically resolved subset."""
-
 from __future__ import annotations
 
 import ast

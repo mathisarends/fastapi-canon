@@ -19,6 +19,10 @@ optional defaults, callable operations, discriminators, provider registrations
 and facade ownership. Use `--show-coverage` for the source inventory.
 Changed-file checks still enforce complete coverage.
 
+Keep library `__all__` lists in package facades (`__init__.py`). Omit module
+docstrings; document classes and functions where their names and types do not
+explain the public contract.
+
 The `information-hiding` group checks implementation functions, constants and
 attributes, including APIs used only by tests. Existing error-level checks remain
 errors. Private literal class constants belong at module scope. Repository-owned

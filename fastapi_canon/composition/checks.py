@@ -41,7 +41,7 @@ from fastapi_canon.diagnostics import (
     qualified_name,
 )
 from fastapi_canon.error import ErrorCatalog, ErrorRegistry, installed_catalog
-from fastapi_canon.exceptions import ErrorConfigurationError, FeatureConfigurationError
+from fastapi_canon.errors import ErrorConfigurationError, FeatureConfigurationError
 from fastapi_canon.integration import (
     Installer,
     Integration,

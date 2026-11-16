@@ -7,7 +7,7 @@ from dishka import AsyncContainer
 from fastmcp.server.auth import AuthProvider
 from fastmcp.server.middleware import Middleware
 
-from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.errors import FeatureConfigurationError
 from fastapi_canon.integrations.mcp import Mcp
 
 

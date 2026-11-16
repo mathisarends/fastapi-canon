@@ -1,5 +1,3 @@
-"""Offline CLI explanations; emitted codes remain owned by their checkers."""
-
 import argparse
 import json
 import sys

@@ -1,14 +1,3 @@
-"""The contract between the session runtime and a WebRTC engine adapter.
-
-An engine owns the actual peer connection: SDP, ICE, DTLS, SRTP, SCTP and media.
-The runtime owns signaling, admission, limits, deadlines and cleanup, and never
-interprets the engine's protocol state beyond the values exposed here.
-
-Adapters must invoke :class:`PeerObserver` callbacks on the event loop that
-called :meth:`Engine.create_peer`. Engines with their own threads (for example
-GStreamer) marshal callbacks with ``loop.call_soon_threadsafe``.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Callable

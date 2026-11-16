@@ -1,5 +1,3 @@
-"""MCP integration declarations: ``Mcp`` for the composition, ``McpMount`` for features."""
-
 from __future__ import annotations
 
 import re
@@ -8,7 +6,7 @@ from dataclasses import dataclass
 from inspect import iscoroutinefunction
 from typing import TYPE_CHECKING, ClassVar
 
-from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.errors import FeatureConfigurationError
 from fastapi_canon.integration import (
     Installer,
     Integration,

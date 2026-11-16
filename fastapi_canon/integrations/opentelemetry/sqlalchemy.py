@@ -1,5 +1,3 @@
-"""Engine-local SQL query telemetry and independent pool observations."""
-
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
@@ -10,7 +8,7 @@ from time import perf_counter
 from typing import TYPE_CHECKING, Any
 from weakref import WeakKeyDictionary, WeakSet, ref
 
-from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.errors import FeatureConfigurationError
 from fastapi_canon.integrations.opentelemetry.declarations import Telemetry
 from fastapi_canon.integrations.opentelemetry.resources import (
     claim_resource,

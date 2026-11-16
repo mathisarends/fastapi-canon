@@ -20,7 +20,7 @@ from fastapi_canon.error.contributions import attach_error_registries, error_reg
 from fastapi_canon.error.openapi import InheritedContract
 from fastapi_canon.error.types import OpenAPIResponses
 from fastapi_canon.error.validation import unique_instances
-from fastapi_canon.exceptions import ConfigurationError, ResponseConfigurationError
+from fastapi_canon.errors import ConfigurationError, ResponseConfigurationError
 from fastapi_canon.response import CanonResponse
 from fastapi_canon.routing.policy import RouterPolicy, normalize_raises, validate_policy
 

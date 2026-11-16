@@ -1,5 +1,3 @@
-"""Lifetime-scoped HTTPX/HTTPX2 instrumentation using the public contrib API."""
-
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -9,7 +7,7 @@ from importlib import import_module
 from importlib.util import find_spec
 from typing import TYPE_CHECKING, Any
 
-from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.errors import FeatureConfigurationError
 from fastapi_canon.integrations.opentelemetry.declarations import Telemetry
 from fastapi_canon.integrations.opentelemetry.resources import (
     claim_resource,

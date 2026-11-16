@@ -1,9 +1,3 @@
-"""Lifecycle events for metrics and audit hooks.
-
-Events carry identifiers, categories and timings only. They never contain SDP,
-ICE candidates, addresses, credentials or message payloads.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Mapping

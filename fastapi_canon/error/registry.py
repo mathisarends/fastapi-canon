@@ -14,7 +14,7 @@ from fastapi_canon.error.handlers import install_handlers
 from fastapi_canon.error.openapi import compile_responses
 from fastapi_canon.error.types import OpenAPIResponses, is_absolute_uri
 from fastapi_canon.error.validation import unique_instances
-from fastapi_canon.exceptions import ErrorConfigurationError
+from fastapi_canon.errors import ErrorConfigurationError
 from fastapi_canon.response import CanonResponse
 
 

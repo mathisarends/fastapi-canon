@@ -1,5 +1,3 @@
-"""The ``sse`` client generator for ``fastapi-canon generate``."""
-
 import hashlib
 import json
 from collections.abc import Mapping
@@ -8,8 +6,6 @@ from pathlib import Path
 from typing import Any
 
 from fastapi_canon.codegen.generators import Rendering, TargetConfig
-
-__all__ = ["GENERATOR", "SseGenerator"]
 
 _DIAGNOSTICS = frozenset(
     {"strict", "diagnostics", "allow-diagnostics", "include-operations"}

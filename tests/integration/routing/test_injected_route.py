@@ -16,7 +16,7 @@ from fastapi_canon import (
     Inject,
     inspect_app,
 )
-from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.errors import FeatureConfigurationError
 
 
 class Store:
