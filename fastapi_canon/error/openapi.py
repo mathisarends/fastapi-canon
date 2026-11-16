@@ -142,11 +142,6 @@ class _OpenAPIConfiguration:
     include_internal_error: bool
 
 
-@dataclass(slots=True)
-class _OpenAPIInstallation:
-    configuration: _OpenAPIConfiguration
-
-
 def compile_responses(
     registry: ErrorCatalog,
     errors: Sequence[AnyError],
@@ -253,6 +248,14 @@ def compile_problem_schema(
             example.pop("status", None)
         schema["examples"] = [example]
     return schema
+
+
+class _OpenAPIInstallation:
+    def __init__(
+        self,
+        configuration: _OpenAPIConfiguration,
+    ) -> None:
+        self.configuration = configuration
 
 
 def _inherited_operations(

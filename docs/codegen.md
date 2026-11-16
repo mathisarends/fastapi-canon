@@ -96,6 +96,9 @@ graphql = "my_package.codegen:GENERATOR"
 ```
 
 Import `Generator`, `TargetConfig` and `Rendering` from that public module.
+In prepared 0.23.0, construct values with named fields, for example
+`Rendering(files=files, write=writer)`; see the
+[migration](package-migration.md#upgrade-to-0230).
 Declare accepted target keys per language in `settings`; unsupported keys now
 fail configuration validation, including keys intended for another language.
 For example, `package` is a Python RPC setting, not a TypeScript RPC setting.

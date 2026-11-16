@@ -4,6 +4,39 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## Unreleased
 
+## 0.23.0 - Unreleased
+
+### Breaking changes
+
+See the [upgrade guide](docs/package-migration.md#upgrade-to-0230).
+
+- **`CANON-023-DATACLASS-VALUES`** — Canon dataclass values require `frozen=True`
+  and `slots=True`, except records using `cached_property`. Use
+  `dataclasses.fields()` or `asdict()` instead of `vars()` and `__dict__`;
+  create modified values with `dataclasses.replace()`. Source-analysis reports
+  expose tuples of immutable operations and diagnostics; `as_dict()` still
+  returns independent JSON-compatible lists and dictionaries.
+- **`CANON-023-GENERATOR-KEYWORDS`** — Construct `TargetConfig` and `Rendering`
+  with named fields, for example `Rendering(files=files, write=writer)`.
+  Internal `Configuration` and `StepResult` constructors are keyword-only too.
+- **`CANON-023-EVENT-ATTRIBUTES`** — `SessionEvent.attributes` is a defensively
+  copied, read-only mapping. Enrich attributes before constructing the event,
+  or copy them with `dict(event.attributes)`. `dataclasses.asdict(event)` keeps
+  its existing JSON-compatible dictionary output.
+- **`CANON-023-LIFECYCLE-OBJECTS`** — WebSocket middleware scopes, `RouteContext`
+  and `RpcTestError` are ordinary objects with identity, rather than dataclass
+  values. Read their documented attributes and outcomes; do not use dataclass
+  equality, `asdict()` or `replace()` on these live objects. Construct
+  `RouteContext` with keywords, and pass `RpcTestError`'s `details` and `problem`
+  by name; its string form is now the error message.
+
+### Development
+
+- Upgrade Smelt to 0.10.0 and enforce dataclass options and state ownership,
+  duration units, explicit conditional branches and reasoned exception recovery.
+  Analyzer accumulators, source caches and transport lifecycles own their state
+  in ordinary classes; completed reports remain immutable snapshots.
+
 ## 0.22.0 - 2026-11-15
 
 ### Breaking changes

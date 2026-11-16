@@ -1,5 +1,5 @@
 import asyncio
-from dataclasses import dataclass, field
+from collections.abc import Coroutine
 from typing import Any
 
 from fastapi_canon.integrations.websockets.envelopes import (
@@ -9,19 +9,54 @@ from fastapi_canon.integrations.websockets.envelopes import (
 )
 
 
-@dataclass
 class PendingCall:
-    message: Any
-    reservation: object | None
-    invalid: bool
-    batch: bool
-    admitted_at: float
-    shutting_down: bool = False
-    # Validated once by the reader and reused for dispatch.
-    envelope: RpcRequestEnvelope | None = None
-    task: asyncio.Task[RpcSuccess | RpcFailure | None] = field(init=False)
-    started: bool = False
-    cancel_requested: bool = False
+    def __init__(
+        self,
+        *,
+        message: Any,
+        reservation: object | None,
+        invalid: bool,
+        batch: bool,
+        admitted_at: float,
+        shutting_down: bool = False,
+        envelope: RpcRequestEnvelope | None = None,
+    ) -> None:
+        self.message = message
+        self.reservation = reservation
+        self.invalid = invalid
+        self.batch = batch
+        self.admitted_at = admitted_at
+        self.shutting_down = shutting_down
+        self.envelope = envelope
+        self._task: asyncio.Task[RpcSuccess | RpcFailure | None] | None = None
+        self._started = False
+        self._cancel_requested = False
+
+    @property
+    def task(self) -> asyncio.Task[RpcSuccess | RpcFailure | None]:
+        if self._task is None:
+            raise RuntimeError("Pending call has not been scheduled")
+        return self._task
+
+    @property
+    def started(self) -> bool:
+        return self._started
+
+    @property
+    def cancel_requested(self) -> bool:
+        return self._cancel_requested
+
+    def schedule(
+        self, operation: Coroutine[Any, Any, RpcSuccess | RpcFailure | None]
+    ) -> None:
+        self._task = asyncio.create_task(operation)
+
+    def start(self) -> None:
+        self._started = True
+
+    def cancel(self, reason: object) -> None:
+        self._cancel_requested = True
+        self.task.cancel(reason)
 
 
 class PendingRequests:

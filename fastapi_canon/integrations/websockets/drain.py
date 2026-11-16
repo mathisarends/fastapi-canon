@@ -5,7 +5,6 @@ import logging
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, field
 from math import isfinite
 
 from fastapi_canon.integrations.websockets.connection import (
@@ -99,13 +98,18 @@ class RpcDrain:
                 task.add_done_callback(_consume)
 
 
-@dataclass(eq=False)
 class _DrainSession:
-    task: asyncio.Task[None]
-    connection: RpcConnection | None = None
-    begin: Callable[[], Awaitable[None]] | None = None
-    ready: asyncio.Event = field(default_factory=asyncio.Event)
-    finished: asyncio.Event = field(default_factory=asyncio.Event)
+    def __init__(
+        self,
+        task: asyncio.Task[None],
+        connection: RpcConnection | None = None,
+        begin: Callable[[], Awaitable[None]] | None = None,
+    ) -> None:
+        self.task = task
+        self.connection = connection
+        self.begin = begin
+        self.ready: asyncio.Event = asyncio.Event()
+        self.finished: asyncio.Event = asyncio.Event()
 
     async def finish(self) -> None:
         await self.ready.wait()

@@ -36,8 +36,8 @@ class WebRtcGenerator:
             allow_nan=False,
         )
         return Rendering(
-            {**generated, ".fastapi-webrtc.json": manifest + "\n"},
-            partial(write_files, target.output, generated),
+            files={**generated, ".fastapi-webrtc.json": manifest + "\n"},
+            write=partial(write_files, target.output, generated),
         )
 
 

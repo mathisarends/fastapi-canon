@@ -35,7 +35,7 @@ type ClientLanguage = Literal["python", "typescript"]
 type HttpClient = Literal["httpx", "httpx2"]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class TargetConfig:
     """One validated ``[[targets]]`` entry of the code generation configuration."""
 
@@ -58,7 +58,7 @@ class TargetConfig:
     """Generator-specific settings that Canon does not interpret."""
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Rendering:
     """Rendered client files and the writer that owns their output directory.
 

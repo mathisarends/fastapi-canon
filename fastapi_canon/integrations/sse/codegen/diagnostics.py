@@ -63,7 +63,7 @@ class UnsupportedConstraintWarning(UserWarning):
     """A source validation keyword cannot be enforced by the selected target."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class GenerationDiagnostic:
     """A source-located limitation with an identity independent of message wording."""
 

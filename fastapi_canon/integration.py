@@ -9,7 +9,7 @@ include them without the core knowing the transport.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol
 
 from fastapi_canon.diagnostics import CheckIssue, CheckResult
@@ -154,23 +154,27 @@ class IntegrationRoute:
         return None
 
 
-@dataclass(frozen=True, slots=True)
 class RouteContext:
-    """One registered integration route during composition checks."""
+    """Report route findings into the composition's active check run."""
 
-    feature: str
-    path: str
-    container: AsyncContainer | None
-    external_container: bool
-    """Whether an application-owned Dishka container replaces Canon's."""
-    available: Callable[[DependencyKey, Scope], bool]
-    """Whether a dependency is bound at or above the given scope."""
-    _issues: list[CheckIssue] = field(
-        repr=False,  # smelt: ignore[SMT360] -- Shared report accumulator.
-    )
-    _checks: list[CheckResult] = field(
-        repr=False,  # smelt: ignore[SMT360] -- Shared report accumulator.
-    )
+    def __init__(
+        self,
+        *,
+        feature: str,
+        path: str,
+        container: AsyncContainer | None,
+        external_container: bool,
+        available: Callable[[DependencyKey, Scope], bool],
+        _issues: list[CheckIssue],
+        _checks: list[CheckResult],
+    ) -> None:
+        self.feature = feature
+        self.path = path
+        self.container = container
+        self.external_container = external_container
+        self.available = available
+        self._issues = _issues
+        self._checks = _checks
 
     def report(self, issue: CheckIssue) -> None:
         self._issues.append(issue)

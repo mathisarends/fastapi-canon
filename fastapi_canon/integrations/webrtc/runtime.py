@@ -8,7 +8,7 @@ import functools
 import logging
 import time
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from anyio import CancelScope
@@ -76,24 +76,32 @@ MINIMUM_CLEANUP_STEP_SECONDS = 1.0
 """Budget ``on_close`` and engine cleanup keep after stuck tasks used the deadline."""
 
 
-@dataclass
 class SessionChannel:
-    spec: DataChannelSpec
-    max_bytes: int
-    queue: asyncio.Queue[Any]
-    engine: EngineDataChannel | None = None
-    opened: asyncio.Event = field(default_factory=asyncio.Event)
-    closed: asyncio.Event = field(default_factory=asyncio.Event)
-    drained: asyncio.Event = field(default_factory=asyncio.Event)
-    send_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
-    consumer: bool = False
+    def __init__(
+        self,
+        spec: DataChannelSpec,
+        max_bytes: int,
+        queue: asyncio.Queue[Any],
+        *,
+        engine: EngineDataChannel | None = None,
+        consumer: bool = False,
+    ) -> None:
+        self.spec = spec
+        self.max_bytes = max_bytes
+        self.queue = queue
+        self.engine = engine
+        self.opened: asyncio.Event = asyncio.Event()
+        self.closed: asyncio.Event = asyncio.Event()
+        self.drained: asyncio.Event = asyncio.Event()
+        self.send_lock: asyncio.Lock = asyncio.Lock()
+        self.consumer = consumer
 
     @property
     def is_open(self) -> bool:
         return self.opened.is_set() and not self.closed.is_set()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RuntimeOptions:
     engine: Engine
     ice_servers: IceServerSource | None

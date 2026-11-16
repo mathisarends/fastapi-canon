@@ -581,16 +581,16 @@ class _RpcSession:
                             )
                             return
                     call = PendingCall(
-                        item,
-                        reservation,
-                        invalid,
-                        batch,
-                        asyncio.get_running_loop().time(),
+                        message=item,
+                        reservation=reservation,
+                        invalid=invalid,
+                        batch=batch,
+                        admitted_at=asyncio.get_running_loop().time(),
                         shutting_down=not invalid
                         and self.endpoint.service.drain.draining,
                         envelope=envelope,
                     )
-                    call.task = asyncio.create_task(self._invoke_one(call))
+                    call.schedule(self._invoke_one(call))
                     self._call_tasks.add(call.task)
                     if key is not None:
                         self.requests[key] = call
@@ -620,7 +620,7 @@ class _RpcSession:
             self.request_close(RpcConnectionClose.INTERNAL_ERROR, "Internal error")
 
     async def _invoke_one(self, call: PendingCall) -> RpcSuccess | RpcFailure | None:
-        call.started = True
+        call.start()
         message = call.message
         try:
             if call.invalid:
@@ -751,8 +751,7 @@ class _RpcSession:
                 and (not call.cancel_requested)
                 and (not call.task.done())
             ):
-                call.cancel_requested = True
-                call.task.cancel(CLIENT_CANCEL)
+                call.cancel(CLIENT_CANCEL)
         return True
 
     async def _events(self) -> None:

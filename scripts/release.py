@@ -40,7 +40,7 @@ _REPORT = Path("dist/release-report/release.json")
 _INDEX_POLL_INTERVAL_SECONDS = 5
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Package:
     name: str
     directory: str

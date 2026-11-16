@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Scalar:
     name: Literal[
         "string", "integer", "number", "boolean", "null", "never", "JsonValue"
@@ -43,44 +43,44 @@ class Scalar:
     constraints: tuple[tuple[str, str | int | float], ...] = ()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LiteralType:
     value: str | int | float | bool | None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class EnumMember:
     name: str
     value: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class StringEnum:
     members: tuple[EnumMember, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class EnumAlias:
     target: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class EnumValue:
     enum: str
     member: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Reference:
     name: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Array:
     item: Type
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Field:
     name: str
     type: Type
@@ -88,20 +88,20 @@ class Field:
     default: LiteralType | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Object:
     fields: tuple[Field, ...]
     additional: Type | None = None
     additional_forbidden: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Union:
     members: tuple[Type, ...]
     discriminator: str | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Intersection:
     members: tuple[Type, ...]
 
@@ -120,13 +120,13 @@ type Type = (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Declaration:
     name: str
     type: Type
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Parameter:
     name: str
     argument: str
@@ -136,21 +136,21 @@ class Parameter:
     explode: bool = True
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Body:
     type: Type
     required: bool
     media_type: str = "application/json"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ErrorResponse:
     status: str
     type: Type
     media_type: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SecurityScheme:
     name: str
     kind: str
@@ -158,7 +158,7 @@ class SecurityScheme:
     parameter: str | None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Operation:
     operation_id: str
     name: str
@@ -179,7 +179,7 @@ class Operation:
     problems: tuple[tuple[str, Type], ...] = ()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Contract:
     operations: tuple[Operation, ...]
     declarations: tuple[Declaration, ...]

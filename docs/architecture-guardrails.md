@@ -45,6 +45,11 @@ frozen records, parallel sequence fields and repeated immutable lookup sets.
 Use explicit branches for nested conditional expressions. Reference-service
 schemas and database models inherit its configured project bases.
 
+Dataclasses hold values: require `frozen` and `slots`, with `kw_only` for codegen
+configuration and result objects. Records with cached properties retain their
+instance dictionary. Keep accumulation, caches and live lifecycle state in
+ordinary classes; return immutable snapshots when reporting completed work.
+
 ## Change the policy
 
 Keep architectural boundaries in Smelt and style rules in Ruff. Do not reproduce

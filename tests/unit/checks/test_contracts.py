@@ -1,11 +1,13 @@
 import json
 from collections.abc import Callable
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 from textwrap import dedent
 from typing import Any
 
 import pytest
 
+from fastapi_canon.checks.contracts import analyze_error_contracts
 from fastapi_canon.cli import main
 
 PRELUDE = """
@@ -46,6 +48,23 @@ def findings(report: dict[str, Any]) -> list[tuple[str, str, str]]:
         for operation in report["operations"]
         for item in operation["diagnostics"]
     ]
+
+
+def test_report_is_an_immutable_snapshot_with_independent_json_data(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "api.py").write_text(
+        PRELUDE + "\n@router.get('/')\ndef endpoint() -> None:\n    raise Missing()\n",
+        encoding="utf-8",
+    )
+    report = analyze_error_contracts([tmp_path])
+    assert report.gaps == 1
+    serialized = report.as_dict()
+    serialized["operations"][0]["diagnostics"].clear()
+    assert len(report.operations[0].diagnostics) == 1
+    assert report.as_dict()["operations"][0]["diagnostics"][0]["code"] == "CAN001"
+    with pytest.raises(FrozenInstanceError):
+        report.operations = ()  # type: ignore[misc]  # Verify runtime rejection of rebinding.
 
 
 @pytest.mark.parametrize(

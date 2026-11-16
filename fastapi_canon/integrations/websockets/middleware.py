@@ -6,7 +6,7 @@ import time
 from collections.abc import AsyncGenerator, Callable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, nullcontext
 from contextvars import ContextVar
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 from fastapi_canon.integrations.websockets.activity import NotifyActivity, activity_for
@@ -84,31 +84,50 @@ class RpcStreamOutcome:
     cancelled: bool = False
 
 
-@dataclass(slots=True)
 class RpcConnectionScope:
-    endpoint: RpcEndpointInfo
-    handshake: RpcHandshake
-    connection: RpcConnection | None = None
-    outcome: RpcConnectionOutcome | None = None
+    def __init__(
+        self,
+        endpoint: RpcEndpointInfo,
+        handshake: RpcHandshake,
+        connection: RpcConnection | None = None,
+        *,
+        outcome: RpcConnectionOutcome | None = None,
+    ) -> None:
+        self.endpoint = endpoint
+        self.handshake = handshake
+        self.connection = connection
+        self.outcome = outcome
 
 
-@dataclass(slots=True)
 class RpcRequestScope:
-    request: RpcRequestContext
-    endpoint: RpcEndpointInfo | None = None
-    method: RpcMethodDefinition | None = None
-    outcome: RpcRequestOutcome | None = None
+    def __init__(
+        self,
+        request: RpcRequestContext,
+        endpoint: RpcEndpointInfo | None = None,
+        method: RpcMethodDefinition | None = None,
+        *,
+        outcome: RpcRequestOutcome | None = None,
+    ) -> None:
+        self.request = request
+        self.endpoint = endpoint
+        self.method = method
+        self.outcome = outcome
 
     @property
     def metadata(self) -> Mapping[str, str] | None:
         return self.request.metadata
 
 
-@dataclass(slots=True)
 class RpcStreamScope:
-    endpoint: RpcStreamEndpointInfo
-    connection: RpcConnection
-    outcome: RpcStreamOutcome | None = None
+    def __init__(
+        self,
+        endpoint: RpcStreamEndpointInfo,
+        connection: RpcConnection,
+        outcome: RpcStreamOutcome | None = None,
+    ) -> None:
+        self.endpoint = endpoint
+        self.connection = connection
+        self.outcome = outcome
 
 
 class RpcMiddlewareLike(Protocol):
@@ -225,18 +244,43 @@ async def middleware_scope(
             raise interrupted
 
 
-@dataclass(slots=True)
 class ServingState:
-    scope: RpcConnectionScope
-    socket: RpcWebSocket
-    middleware: tuple[RpcMiddlewareLike, ...]
-    activity: NotifyActivity | None
-    started_at: float = field(default_factory=time.perf_counter)
-    error: BaseException | None = None
-    disconnect_error: BaseException | None = None
-    rejection: RpcRejection | None = None
-    accepted_at: float | None = None
-    cancelled: bool = False
+    def __init__(
+        self,
+        scope: RpcConnectionScope,
+        socket: RpcWebSocket,
+        middleware: tuple[RpcMiddlewareLike, ...],
+        *,
+        activity: NotifyActivity | None,
+        error: BaseException | None = None,
+        disconnect_error: BaseException | None = None,
+        rejection: RpcRejection | None = None,
+        accepted_at: float | None = None,
+        cancelled: bool = False,
+    ) -> None:
+        self.scope = scope
+        self.socket = socket
+        self.middleware = middleware
+        self.activity = activity
+        self._started_at = time.perf_counter()
+        self.error = error
+        self.disconnect_error = disconnect_error
+        self.rejection = rejection
+        self.accepted_at = accepted_at
+        self.cancelled = cancelled
+
+    def record_error(self, error: BaseException) -> None:
+        if isinstance(error, asyncio.CancelledError):
+            self.cancelled = True
+        if (
+            error is not self.disconnect_error
+            and (self.error is None or isinstance(self.error, asyncio.CancelledError))
+            and not isinstance(error, RpcDisconnect)
+        ):
+            self.error = error
+
+    def record_rejection(self, rejection: RpcRejection) -> None:
+        self.rejection = rejection
 
     def finish(self) -> None:
         connection = self.scope.connection
@@ -246,7 +290,7 @@ class ServingState:
             rejection=self.rejection,
             close_code=None if connection is None else connection.close_code,
             raw_close_code=None if connection is None else connection.raw_close_code,
-            duration=finished - self.started_at,
+            duration=finished - self._started_at,
             error=self.error,
             cancelled=self.cancelled,
             accepted_duration=None
@@ -266,21 +310,14 @@ def current_serving() -> ServingState | None:
 
 def record_error(error: BaseException) -> None:
     state = _serving.get()
-    if state is not None and isinstance(error, asyncio.CancelledError):
-        state.cancelled = True
-    if (
-        state is not None
-        and error is not state.disconnect_error
-        and (state.error is None or isinstance(state.error, asyncio.CancelledError))
-        and not isinstance(error, RpcDisconnect)
-    ):
-        state.error = error
+    if state is not None:
+        state.record_error(error)
 
 
 def record_rejection(rejection: RpcRejection) -> None:
     state = _serving.get()
     if state is not None:
-        state.rejection = rejection
+        state.record_rejection(rejection)
 
 
 @asynccontextmanager
@@ -326,7 +363,7 @@ async def serving_scope(
         RpcConnectionScope(endpoint, socket.handshake),
         socket,
         chain,
-        activity_for(chain),
+        activity=activity_for(chain),
     )
     token = _serving.set(state)
     try:

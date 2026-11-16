@@ -11,6 +11,11 @@ removes two aliases and fixes quoted dependency injection and WebRTC router
 options. Follow the [migration](package-migration.md#upgrade-to-0220) and
 [changelog](../CHANGELOG.md#0220---2026-11-15) before upgrading.
 
+**Prepared, unpublished: 0.23.0.** Dataclass value contracts, generator keyword
+arguments and lifecycle state ownership change; follow the
+[migration](package-migration.md#upgrade-to-0230). Publication requires the
+release checks and workflow below.
+
 Published artifacts, manifests and run results are linked below. They record
 verified publications; prepared source versions are not publication evidence.
 Historical links retain their original repositories.

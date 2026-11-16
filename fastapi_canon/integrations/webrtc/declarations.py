@@ -71,7 +71,7 @@ class Role(StrEnum):
     """The server offers; useful for server-originated media."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MediaPolicy:
     """Media kinds and directions a session accepts.
 
@@ -278,7 +278,7 @@ def _format(model: Any) -> MessageFormat:
     return MessageFormat.JSON
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SessionLimits:
     """Deadlines and resource bounds for every session of a router or endpoint."""
 
@@ -405,7 +405,7 @@ class Session:
         return handlers
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SessionContext:
     """Session identity passed to ICE providers and lifecycle observers."""
 

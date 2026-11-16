@@ -100,8 +100,8 @@ class SseGenerator:
             else generate_typescript(contract)
         )
         return Rendering(
-            planned_files(generated, generation=generation),
-            partial(write_files, target.output, generated, generation=generation),
+            files=planned_files(generated, generation=generation),
+            write=partial(write_files, target.output, generated, generation=generation),
         )
 
 

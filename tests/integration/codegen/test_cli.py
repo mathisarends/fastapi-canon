@@ -2,9 +2,20 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+
+from fastapi_canon.codegen.generators import Rendering, TargetConfig
+
+
+@pytest.mark.parametrize("constructor", [TargetConfig, Rendering])
+def test_generator_extension_values_reject_positional_arguments(
+    constructor: Callable[..., object],
+) -> None:
+    with pytest.raises(TypeError, match="positional"):
+        constructor("first", "second")
 
 
 @pytest.fixture

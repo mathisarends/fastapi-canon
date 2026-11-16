@@ -17,7 +17,7 @@ class FileMissing(Exception):
     pass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class StoredFile:
     id: UUID
     filename: str

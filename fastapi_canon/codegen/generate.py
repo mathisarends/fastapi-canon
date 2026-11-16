@@ -19,7 +19,7 @@ from fastapi_canon.codegen.generators import (
 from fastapi_canon.contracts import export_contracts
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class StepResult:
     name: str
     status: str
@@ -72,18 +72,18 @@ def generate(
     else:
         contract_status = "current"
     contract_result = StepResult(
-        "contracts",
-        contract_status,
-        tuple(str(path) for path in changed),
-        _diff(contracts, changed) if diff else "",
+        name="contracts",
+        status=contract_status,
+        changes=tuple(str(path) for path in changed),
+        diff=_diff(contracts, changed) if diff else "",
     )
     if check and changed:
         return (
             contract_result,
             *(
                 StepResult(
-                    target.name,
-                    "blocked",
+                    name=target.name,
+                    status="blocked",
                     output="Exported contracts are stale; regenerate before checking dependent clients.",
                 )
                 for target in selected
@@ -134,10 +134,10 @@ def generate(
             status = "current"
         results.append(
             StepResult(
-                target.name,
-                status,
-                tuple(str(path) for path in paths),
-                report,
+                name=target.name,
+                status=status,
+                changes=tuple(str(path) for path in paths),
+                diff=report,
             )
         )
     return tuple(results)
@@ -160,7 +160,9 @@ def _external(target: TargetConfig, root: Path, *, check: bool) -> StepResult:
     executable = shutil.which(command[0])
     if executable is None:
         return StepResult(
-            target.name, "error", output=f"Executable not found: {command[0]}"
+            name=target.name,
+            status="error",
+            output=f"Executable not found: {command[0]}",
         )
     try:
         result = subprocess.run(
@@ -173,8 +175,8 @@ def _external(target: TargetConfig, root: Path, *, check: bool) -> StepResult:
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         return StepResult(
-            target.name,
-            "error",
+            name=target.name,
+            status="error",
             output=f"External command failed ({type(error).__name__})",
         )
     if result.returncode == 0:
@@ -183,7 +185,9 @@ def _external(target: TargetConfig, root: Path, *, check: bool) -> StepResult:
         status = "drift"
     else:
         status = "error"
-    return StepResult(target.name, status, output=result.stdout + result.stderr)
+    return StepResult(
+        name=target.name, status=status, output=result.stdout + result.stderr
+    )
 
 
 def _json(value: Any) -> str:

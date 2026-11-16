@@ -274,6 +274,7 @@ structure:
       private_modules: forbid
       future_annotations: when-needed
       max_positional_parameters: 3
+      dataclass_options: [frozen, slots]
       type_dispatch:
         style: match
         min_branches: 3
@@ -289,9 +290,19 @@ structure:
       export_at: 3
     reference-application:
       match: app
+      dataclass_options: [frozen, slots]
       bases:
         pydantic.BaseModel: app.presentation.schema.Schema
         sqlmodel.SQLModel: app.infrastructure.database.models.DatabaseModel
+    generation-values:
+      match: fastapi_canon.codegen
+      dataclass_options: [frozen, slots, kw_only]
+    tooling-values:
+      match: scripts
+      dataclass_options: [frozen, slots]
+    example-values:
+      match: examples
+      dataclass_options: [frozen, slots]
 tests:
   layout: mirror
   mirror: '{path}/test_{module}.py'
@@ -351,11 +362,9 @@ rules:
   anonymous-tuple-type: warning
   # Contract prose belongs where names and types do not explain the behavior.
   missing-interface-docstring: off
-  # Analyzer accumulators and indexes deliberately maintain mutable state.
-  stateful-dataclass: off
+  stateful-dataclass: warning
   missing-broad-except-reason: warning
-  # Dataclass constructor and storage choices are part of each public contract.
-  missing-dataclass-option: off
+  missing-dataclass-option: warning
   # Emitters resolve identical helper text against different language semantics.
   duplicate-function: off
   prefer-project-base-class: warning
