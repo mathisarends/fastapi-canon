@@ -155,7 +155,7 @@ def _measure(root: Path, rounds: int, profile: Path | None) -> dict:
             [
                 sys.executable,
                 "-m",
-                "fastapi_canon.check_error_contracts",
+                "fastapi_canon.checks",
                 str(root),
                 "--strict",
             ],

@@ -6,6 +6,11 @@ version; the reference service is an example. `release.toml` and
 
 ## Current versions
 
+**Prepared source: 0.24.0 (unpublished).** Reorganizes core packages and removes
+old implementation-module imports; see the
+[migration](package-migration.md#upgrade-to-0240) and
+[changelog](../CHANGELOG.md#0240---unreleased).
+
 **Published: 0.23.0 (2026-11-16).** Changes dataclass value contracts, generator
 keyword arguments and lifecycle state ownership. Follow the
 [migration](package-migration.md#upgrade-to-0230) and

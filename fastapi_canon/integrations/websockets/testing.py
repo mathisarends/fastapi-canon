@@ -13,7 +13,6 @@ from fastapi import FastAPI
 from starlette.routing import compile_path
 from starlette.types import ASGIApp, Message, Scope
 
-from fastapi_canon.contract_routes import iter_contract_routes
 from fastapi_canon.error import Problem
 from fastapi_canon.integrations.websockets.adapters.fastapi import CanonWebSocketRouter
 from fastapi_canon.integrations.websockets.connection import (
@@ -41,6 +40,7 @@ from fastapi_canon.integrations.websockets.websocket import (
     CLOSE_CODES,
     REJECTION_CLOSE_CODES,
 )
+from fastapi_canon.routing.traversal import iter_contract_routes
 
 _CLOSED = object()
 

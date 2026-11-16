@@ -1,32 +1,45 @@
 """Opinionated FastAPI feature composition with Dishka and Problem Details."""
 
 from ._version import __version__
-from .api_router import APIRouter
-from .contracts import export_contracts
-from .error import Error
-from .feature import (
+from .composition import (
     Composition,
     ErrorOptions,
     Feature,
+    Scoped,
+    ServiceScope,
     inspect_app,
 )
-from .injection import Inject
-from .policy import RouterPolicy
+from .contracts import export_contracts
+from .error import Error
 from .response import CanonResponse, ResponseHeaders
-from .scopes import Scoped, ServiceScope
+from .routing.api_router import APIRouter, ChannelOptions, StreamOptions
+from .routing.http import (
+    APIRouteOptions,
+    IncludeRouterOptions,
+    RouteOptions,
+    RouterOptions,
+)
+from .routing.injection import Inject
+from .routing.policy import RouterPolicy
 
 __all__ = [
+    "APIRouteOptions",
     "APIRouter",
     "CanonResponse",
+    "ChannelOptions",
     "Composition",
     "Error",
     "ErrorOptions",
     "Feature",
+    "IncludeRouterOptions",
     "Inject",
     "ResponseHeaders",
+    "RouteOptions",
+    "RouterOptions",
     "RouterPolicy",
     "Scoped",
     "ServiceScope",
+    "StreamOptions",
     "__version__",
     "export_contracts",
     "inspect_app",

@@ -4,6 +4,26 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## Unreleased
 
+## 0.24.0 - Unreleased
+
+### Breaking changes
+
+See the [upgrade guide](docs/package-migration.md#upgrade-to-0240).
+
+- **`CANON-024-PACKAGE-LAYOUT`** — Core implementations now live in
+  `composition/`, `routing/`, `contracts/`, `diagnostics/` and `cli/`.
+  Replace imports from the removed root implementation modules with the
+  documented `fastapi_canon` facade. Import HTTP option types such as
+  `RouteOptions` and `RouterOptions` from `fastapi_canon` instead of
+  `fastapi_canon.api_router`. Existing root application-building imports and
+  the `fastapi_canon.contracts` and `fastapi_canon.diagnostics` namespaces remain
+  supported.
+- **`CANON-024-CHECK-COMMAND`** — Replace
+  `python -m fastapi_canon.check_error_contracts src` with
+  `python -m fastapi_canon check errors src` or
+  `fastapi-canon check errors src`. The old module entry point is removed;
+  arguments and exit policies are unchanged.
+
 ## 0.23.0 - 2026-11-16
 
 ### Breaking changes

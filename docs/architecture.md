@@ -6,9 +6,14 @@ example, not a release target.
 
 ```text
 fastapi_canon/          Library and public facades
+  composition/         Features, installation, checks and application lifecycle
+  routing/             HTTP routing, transport composition and dependency injection
+  contracts/           Application contract export
+  diagnostics/         Immutable descriptions and check results
+  cli/                 Command dispatch and application-loading adapters
   error/               Error values and HTTP/OpenAPI adapters
   integrations/        Optional transports, database, MCP and telemetry
-  codegen/             Contract export and generation workflow
+  codegen/             Client generation workflow and shared emitters
   checks/              Static error-contract analysis
 tests/                 Unit, integration, contract, TypeScript and browser suites
   fixtures/            Shared support, snapshots and generated clients
@@ -28,8 +33,10 @@ The dependency map and source policies are enforced by [Smelt](../smelt.yml).
 | HTTP/OpenAPI adapters | Consume values and the read-only `ErrorCatalog` protocol |
 | Routing | Builds on HTTP adapters |
 | Composition | Owns feature installation, routing, Dishka and lifecycle integration |
+| Contracts | Exports the installed application's contracts without starting its runtime |
 | Integrations | Own their transport or resource lifecycle; transports do not import siblings |
 | Generation | Reads contracts and coordinates specialized or external generators |
+| CLI | Adapts commands to composition, analysis, export and generation |
 | Analysis | Checks source without importing application code; standard library only |
 
 The root facade exports application-building names. Optional types such as

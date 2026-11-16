@@ -7,8 +7,8 @@ from typing import Any, get_type_hints
 
 from dishka import AsyncContainer, Scope
 
-from fastapi_canon.injection import Inject as Inject
-from fastapi_canon.injection import injected_dependency
+from fastapi_canon.routing.injection import Inject as Inject
+from fastapi_canon.routing.injection import injected_dependency
 
 _ACTIVE: ContextVar[AsyncContainer] = ContextVar("canon_mcp_container")
 

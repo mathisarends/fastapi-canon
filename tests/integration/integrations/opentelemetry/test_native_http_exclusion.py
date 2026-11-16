@@ -25,7 +25,7 @@ from starlette.types import Scope as ASGIScope
 
 from fastapi_canon import Composition, Feature
 from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
-from fastapi_canon.router import CanonRouter
+from fastapi_canon.routing.http import CanonRouter
 from tests.fixtures.telemetry import SpanCapture
 
 

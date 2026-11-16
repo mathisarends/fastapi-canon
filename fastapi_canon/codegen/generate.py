@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from fastapi_canon.application_loading import load_application
+from fastapi_canon.cli.application import load_application
 from fastapi_canon.codegen.config import Configuration
 from fastapi_canon.codegen.generators import (
     TargetConfig,

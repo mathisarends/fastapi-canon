@@ -1,0 +1,194 @@
+"""Canon commands with lazily loaded transport tools.
+
+Distributions add commands through the ``fastapi_canon.commands`` entry points.
+Each names a ``main(argv) -> int`` function whose docstring's first line is its
+help text; the module is imported only when the command runs or help is shown.
+"""
+
+import argparse
+import shutil
+import sys
+from collections.abc import Callable, Sequence
+from contextlib import ExitStack
+from importlib.metadata import entry_points
+from importlib.resources import as_file, files
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from typing import NamedTuple
+
+from fastapi_canon._version import __version__
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="fastapi-canon",
+        description="Declare and check Canon applications, export contracts and coordinate client generation.",
+        epilog="Use COMMAND --help for target syntax, defaults, side effects and exit policies.",
+    )
+    parser.add_argument("--version", action="version", version=__version__)
+    commands = parser.add_subparsers(dest="command", required=True)
+    builtin = (
+        ("contracts", "Export contracts from the registered application routes"),
+        ("check", "Check source contracts or an imported application composition"),
+        ("inspect", "Describe an installed application composition"),
+        ("explain", "Explain a built-in source, composition or generation diagnostic"),
+        ("generate", "Export contracts and run specialized or external generators"),
+        ("skill", "Install the bundled backend-building skill in your project"),
+    )
+    extensions = {
+        point.name: point
+        for point in entry_points(group=COMMANDS)
+        if point.name not in dict(builtin)
+    }
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    describe = not arguments or arguments[0] in {"-h", "--help"}
+    for name, description in builtin:
+        commands.add_parser(name, help=description, add_help=False)
+    for name, point in sorted(extensions.items()):
+        commands.add_parser(
+            name, help=_describe(point.load) if describe else None, add_help=False
+        )
+    args, remaining = parser.parse_known_args(arguments)
+    if args.command in extensions:
+        command: Callable[[Sequence[str]], int] = extensions[args.command].load()
+        return command(remaining)
+    if args.command == "contracts":
+        from fastapi_canon.cli.contracts import main as contracts_main
+
+        return contracts_main(remaining)
+    elif args.command == "inspect":
+        from fastapi_canon.cli.composition import main as inspect_main
+
+        return inspect_main(remaining, inspect=True)
+    elif args.command == "explain":
+        from fastapi_canon.cli.explanations import main as explain_main
+
+        return explain_main(remaining)
+    elif args.command == "skill":
+        return _skill_main(remaining)
+    elif args.command == "generate":
+        from fastapi_canon.codegen.cli import main as generate_main
+
+        return generate_main(remaining)
+    else:
+        return _check_main(remaining)
+
+
+COMMANDS = "fastapi_canon.commands"
+"""The entry-point group of ``fastapi-canon`` subcommands."""
+
+
+def _describe(load: Callable[[], object]) -> str:
+    try:
+        command = load()
+    except ImportError:
+        return "Unavailable; install the extra that provides this command"
+    summary = (getattr(command, "__doc__", None) or "").strip().splitlines()
+    return summary[0].rstrip(".") if summary else ""
+
+
+def _check_main(argv: Sequence[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="fastapi-canon check",
+        description="Source error checking never imports application code; composition checking imports its target modules.",
+    )
+    commands = parser.add_subparsers(dest="kind", required=True)
+    commands.add_parser("errors", help="Check source error contracts", add_help=False)
+    commands.add_parser(
+        "composition", help="Check an application composition", add_help=False
+    )
+    args, remaining = parser.parse_known_args(argv)
+    if args.kind == "composition":
+        from fastapi_canon.cli.composition import main as composition_main
+
+        return composition_main(remaining)
+    from fastapi_canon.checks.cli import main as check_main
+
+    return check_main(remaining, prog="fastapi-canon check errors")
+
+
+def _skill_main(argv: Sequence[str]) -> int:
+    parser = argparse.ArgumentParser(prog="fastapi-canon skill")
+    commands = parser.add_subparsers(dest="command", required=True)
+    install = commands.add_parser("install", help="Copy the bundled skill")
+    install.add_argument(
+        "--destination",
+        type=Path,
+        help="Install only into this skill directory instead of .agents and .claude",
+    )
+    install.add_argument(
+        "--force",
+        action="store_true",
+        help="Replace existing skill directories, including obsolete resources",
+    )
+    args = parser.parse_args(argv)
+    destinations = (
+        [args.destination]
+        if args.destination is not None
+        else [
+            Path(".agents/skills/build-canon-backend"),
+            Path(".claude/skills/build-canon-backend"),
+        ]
+    )
+    source = files("fastapi_canon").joinpath("skills", "build-canon-backend")
+    try:
+        with as_file(source) as source_path:
+            _install_skill(source_path, destinations, force=args.force)
+    except OSError as exc:
+        print(f"Could not install skill: {exc}", file=sys.stderr)
+        return 2
+    for destination in destinations:
+        print(
+            f"Installed build-canon-backend (Canon {__version__}) "
+            f"in {destination.resolve()}"
+        )
+    return 0
+
+
+def _install_skill(source: Path, destinations: Sequence[Path], *, force: bool) -> None:
+    resolved = [destination.resolve() for destination in destinations]
+    if len(set(resolved)) != len(resolved):
+        raise OSError("Skill destinations must be distinct directories")
+    current = Path.cwd().resolve()
+    for destination, target in zip(destinations, resolved, strict=True):
+        if destination.is_symlink() or destination.is_junction():
+            raise OSError(f"Skill destination must not be a link: {destination}")
+        if current.is_relative_to(target) or source.resolve().is_relative_to(target):
+            raise OSError(f"Skill destination contains the project or bundle: {target}")
+        if destination.exists() and (not force or not destination.is_dir()):
+            raise FileExistsError(
+                f"{destination} already exists; use --force to replace a skill directory"
+            )
+
+    # Stage every copy before replacing any destination. Keep the previous trees
+    # until all replacements succeed so an installation error can restore them.
+    with ExitStack() as stack:
+        prepared: list[_StagedSkill] = []
+        for destination in destinations:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            temporary = Path(
+                stack.enter_context(
+                    TemporaryDirectory(prefix=".canon-skill-", dir=destination.parent)
+                )
+            )
+            staged, backup = temporary / "skill", temporary / "previous"
+            shutil.copytree(source, staged)
+            prepared.append(_StagedSkill(destination, staged, backup))
+        try:
+            for destination, staged, backup in prepared:
+                if destination.exists():
+                    destination.rename(backup)
+                staged.rename(destination)
+        except OSError:
+            for destination, staged, backup in reversed(prepared):
+                if not staged.exists():
+                    destination.rename(staged)
+                if backup.exists():
+                    backup.rename(destination)
+            raise
+
+
+class _StagedSkill(NamedTuple):
+    destination: Path
+    staged: Path
+    backup: Path

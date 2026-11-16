@@ -20,7 +20,6 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket
 from fastapi.params import Depends as DependsParam
 from starlette.requests import HTTPConnection
 
-from fastapi_canon.injection import injected_dependency
 from fastapi_canon.integration import attach_route
 from fastapi_canon.integrations.webrtc.capacity import SessionCapacity, SlotReservation
 from fastapi_canon.integrations.webrtc.declarations import (
@@ -49,7 +48,8 @@ from fastapi_canon.integrations.webrtc.runtime import (
     RuntimeOptions,
     SessionRuntime,
 )
-from fastapi_canon.router import FastAPIRouterOptions
+from fastapi_canon.routing.http import FastAPIRouterOptions
+from fastapi_canon.routing.injection import injected_dependency
 
 logger = logging.getLogger("fastapi_canon.integrations.webrtc")
 

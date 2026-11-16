@@ -22,7 +22,7 @@ from fastapi_canon.error import (
     resolved_registry,
 )
 from fastapi_canon.error.catalog import app_registry, problem_for, problem_schema
-from fastapi_canon.router import CanonRouter
+from fastapi_canon.routing.http import CanonRouter
 
 
 class Missing(Exception):

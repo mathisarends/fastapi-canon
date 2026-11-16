@@ -28,7 +28,7 @@ generators. Existing specialized routers remain supported.
 **TL;DR:** HTTP decorators, the router constructor and `include_router()` expose
 their forwarded keyword options to editors and type checkers. The option types
 are `RouteOptions`, `APIRouteOptions`, `RouterOptions` and `IncludeRouterOptions`
-in `fastapi_canon.api_router`.
+in `fastapi_canon`.
 
 ```python
 router = APIRouter(namespace="projects", prefix="/v1", redirect_slashes=False)

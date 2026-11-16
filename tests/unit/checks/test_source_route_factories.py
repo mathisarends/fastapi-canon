@@ -11,7 +11,7 @@ from fastapi_canon.cli import main
 PRELUDE = """
 from fastapi_canon import APIRouter, Error, Feature
 from fastapi_canon.integrations.websockets import RpcChannel
-from fastapi_canon.router import CanonRouter
+from fastapi_canon.routing.http import CanonRouter
 raise RuntimeError('Source must never be imported')
 class Missing(Exception): pass
 def fail(): raise Missing()

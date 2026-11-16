@@ -4,8 +4,8 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, Protocol, TypeAliasType, cast, get_origin
 
-from fastapi_canon.injection import Inject as Inject
-from fastapi_canon.injection import injected_dependency
+from fastapi_canon.routing.injection import Inject as Inject
+from fastapi_canon.routing.injection import injected_dependency
 
 
 class RpcResolver(Protocol):

@@ -1,5 +1,14 @@
 # Compatibility
 
+## Canon 0.24.0 (prepared)
+
+Unpublished source; see the [package-layout migration](package-migration.md#upgrade-to-0240).
+
+Local Windows validation passed both 20-combination wheel matrices: current
+dependencies on Python 3.14 and minimum dependencies on Python 3.12. Installed
+SSE/WebRTC CLI and generated-client checks passed, together with Python and
+TypeScript tests, architecture, lint and type checks.
+
 ## Canon 0.23.0
 
 Published on 2026-11-16. Follow the

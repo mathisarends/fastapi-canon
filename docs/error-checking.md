@@ -10,7 +10,7 @@ fastapi-canon check errors src
 
 Pass Python import roots: for `src/app/features/...`, use `src`, not `src/app`.
 The equivalent module command is
-`python -m fastapi_canon.check_error_contracts src`.
+`python -m fastapi_canon.checks src`.
 Multiple roots are accepted when they contain different modules. In this
 workspace, run:
 
@@ -86,7 +86,7 @@ It reads both from source; it does not execute the application.
 
 ```mermaid
 flowchart TD
-    CLI["check_error_contracts src"] --> AST["Parse Python files into an AST"]
+    CLI["fastapi-canon check errors src"] --> AST["Parse Python files into an AST"]
     AST --> INDEX["Resolve imports, aliases, types and definitions"]
     INDEX --> CONTRACT["Combine policy + router + operation raises; catalog from raises= and errors="]
     INDEX --> CALLS["Follow endpoint, service, helper and dependency calls"]
@@ -177,8 +177,8 @@ and still contain a contract gap. An empty result does not establish coverage.
 `--strict` and `--require-complete` are independent: the former checks
 CAN001/CAN002 contract gaps; the latter checks CAN003 or an empty supported scan.
 Run `fastapi-canon check errors --help` for these defaults and exit codes. The
-module entry point `python -m fastapi_canon.check_error_contracts` remains
-supported. Application code is never imported by source analysis, and a complete
+module entry point is `python -m fastapi_canon.checks`.
+Application code is never imported by source analysis, and a complete
 result covers its supported explicit paths rather than all runtime exceptions.
 
 When an error catalog or `raises` sequence cannot be resolved, the checker reports
