@@ -143,13 +143,12 @@ class _CheckContracts:
                     if isinstance(router, ast.Call)
                     else None
                 )
-                supported = (
-                    _WEBRTC_ROUTERS
-                    if method == "session"
-                    else _API_ROUTERS
-                    if method in TRANSPORT_METHODS
-                    else _CANON_ROUTERS
-                )
+                if method == "session":
+                    supported = _WEBRTC_ROUTERS
+                elif method in TRANSPORT_METHODS:
+                    supported = _API_ROUTERS
+                else:
+                    supported = _CANON_ROUTERS
                 if method == "session" and constructor not in supported:
                     # ``session`` is a common method name; only WebRTC routers declare.
                     continue

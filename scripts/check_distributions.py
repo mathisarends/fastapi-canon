@@ -124,7 +124,7 @@ def _main() -> None:
                 *(["--mcp"] if "mcp" in extras else []),
                 *(["--uploads"] if "uploads" in extras else []),
                 cwd=Path(temporary),
-                timeout=120,
+                timeout_seconds=120,
             )
             installed = subprocess.check_output(
                 ["uv", "pip", "list", "--python", str(python), "--format", "json"],
@@ -254,9 +254,11 @@ def _check_reference(canon_wheel: str, python_version: str) -> None:
         )
 
 
-def _run(*command: str, cwd: Path = _ROOT, timeout: float | None = None) -> None:
+def _run(
+    *command: str, cwd: Path = _ROOT, timeout_seconds: float | None = None
+) -> None:
     print(" ".join(command), flush=True)
-    subprocess.run(command, cwd=cwd, check=True, timeout=timeout)
+    subprocess.run(command, cwd=cwd, check=True, timeout=timeout_seconds)
 
 
 if __name__ == "__main__":

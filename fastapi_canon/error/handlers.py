@@ -170,6 +170,8 @@ def _domain_handler(registry: ErrorCatalog) -> ExceptionHandler:
             raise ErrorConfigurationError(msg)
         try:
             problem, headers = render_problem(error, exception, type_uri=type_uri)
+        # User renderers may fail arbitrarily; serve the safe internal-error response
+        # instead.
         except Exception:
             logger.exception(
                 "Error rendering callback failed",

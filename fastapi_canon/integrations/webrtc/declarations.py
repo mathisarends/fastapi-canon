@@ -448,12 +448,15 @@ class SessionDeclaration:
     @cached_property
     def channel_ids(self) -> dict[str, int | None]:
         """SCTP stream IDs of pre-negotiated channels, in declaration order."""
-        return {
-            spec.name: (index if spec.id is None else spec.id)
-            if spec.negotiated
-            else None
-            for index, spec in enumerate(self.channels)
-        }
+        result: dict[str, int | None] = {}
+        for index, spec in enumerate(self.channels):
+            if not spec.negotiated:
+                result[spec.name] = None
+            elif spec.id is None:
+                result[spec.name] = index
+            else:
+                result[spec.name] = spec.id
+        return result
 
     def channel(self, name: str) -> DataChannelSpec:
         for spec in self.channels:

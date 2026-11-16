@@ -49,6 +49,8 @@ class RpcRoute(IntegrationRoute):
         prefix = f"rpc.method_dependencies:{context.feature}:{context.path}"
         try:
             requirements = tuple(self._roots())
+        # User handler signatures may fail inspection; return an actionable composition
+        # diagnostic.
         except Exception:
             context.report(
                 CheckIssue(

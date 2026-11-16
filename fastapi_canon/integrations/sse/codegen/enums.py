@@ -63,13 +63,12 @@ def with_enums(contract: Contract) -> Contract:
                     ),
                     None,
                 )
-                literals = (
-                    field.type.members
-                    if field and isinstance(field.type, Union)
-                    else (field.type,)
-                    if field
-                    else ()
-                )
+                if field and isinstance(field.type, Union):
+                    literals = field.type.members
+                elif field:
+                    literals = (field.type,)
+                else:
+                    literals = ()
                 if not literals or not all(
                     isinstance(part, LiteralType) and isinstance(part.value, str)
                     for part in literals

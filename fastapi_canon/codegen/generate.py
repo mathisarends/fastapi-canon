@@ -65,9 +65,15 @@ def generate(
         kind: json.loads(_json(document)) for kind, document in documents.items()
     }
     changed = tuple(path for path, text in contracts.items() if _changed(path, text))
+    if check and changed:
+        contract_status = "drift"
+    elif changed:
+        contract_status = "updated"
+    else:
+        contract_status = "current"
     contract_result = StepResult(
         "contracts",
-        "drift" if check and changed else "updated" if changed else "current",
+        contract_status,
         tuple(str(path) for path in changed),
         _diff(contracts, changed) if diff else "",
     )
@@ -120,10 +126,16 @@ def generate(
         )
         if not check:
             writer(check=False)
+        if check and paths:
+            status = "drift"
+        elif paths:
+            status = "updated"
+        else:
+            status = "current"
         results.append(
             StepResult(
                 target.name,
-                "drift" if check and paths else "updated" if paths else "current",
+                status,
                 tuple(str(path) for path in paths),
                 report,
             )
@@ -165,15 +177,12 @@ def _external(target: TargetConfig, root: Path, *, check: bool) -> StepResult:
             "error",
             output=f"External command failed ({type(error).__name__})",
         )
-    status = (
-        "current"
-        if check and result.returncode == 0
-        else "success"
-        if result.returncode == 0
-        else "drift"
-        if check and result.returncode == 1
-        else "error"
-    )
+    if result.returncode == 0:
+        status = "current" if check else "success"
+    elif check and result.returncode == 1:
+        status = "drift"
+    else:
+        status = "error"
     return StepResult(target.name, status, output=result.stdout + result.stderr)
 
 

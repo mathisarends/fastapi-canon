@@ -189,7 +189,10 @@ class SessionRouter(APIRouter):
 
         return decorator
 
-    async def aclose(self, timeout: float | None = None) -> None:
+    async def aclose(
+        self,
+        timeout: float | None = None,  # smelt: ignore[SMT357] -- Seconds API.
+    ) -> None:
         """Close every active session with ``shutdown`` and wait for cleanup.
 
         New sessions are refused afterwards. ``timeout`` defaults to the largest
@@ -305,6 +308,7 @@ class SessionRouter(APIRouter):
             return
         try:
             self.event_hook(event)
+        # Observability hooks must not interrupt admission or session cleanup.
         except Exception:
             logger.exception("Session event hook failed")
 

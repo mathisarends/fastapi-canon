@@ -46,7 +46,9 @@ class SessionEvent:
     """Seconds since admission."""
     code: ErrorCode | None = None
     media_kind: MediaKind | None = None
-    attributes: dict[str, str | int | float | bool] = field(default_factory=dict)
+    attributes: dict[str, str | int | float | bool] = field(
+        default_factory=dict,  # smelt: ignore[SMT360] -- Public mutable attributes.
+    )
 
 
 type EventHook = Callable[[SessionEvent], None]

@@ -287,6 +287,11 @@ structure:
     integration-facades:
       match: fastapi_canon.integrations.*
       export_at: 3
+    reference-application:
+      match: app
+      bases:
+        pydantic.BaseModel: app.presentation.schema.Schema
+        sqlmodel.SQLModel: app.infrastructure.database.models.DatabaseModel
 tests:
   layout: mirror
   mirror: '{path}/test_{module}.py'
@@ -344,6 +349,27 @@ rules:
   redundant-name-alias: warning
   prefer-deferred-annotations: warning
   anonymous-tuple-type: warning
+  # Contract prose belongs where names and types do not explain the behavior.
+  missing-interface-docstring: off
+  # Analyzer accumulators and indexes deliberately maintain mutable state.
+  stateful-dataclass: off
+  missing-broad-except-reason: warning
+  # Dataclass constructor and storage choices are part of each public contract.
+  missing-dataclass-option: off
+  # Emitters resolve identical helper text against different language semantics.
+  duplicate-function: off
+  prefer-project-base-class: warning
+  # Library validation and protocol failures retain their documented exceptions.
+  prefer-domain-exception: off
+  # Module-qualified route types and standalone demo models have distinct owners.
+  duplicate-class-name: off
+  duplicate-narrowing-assert: warning
+  missing-duration-unit: warning
+  prefer-named-duration: warning
+  nested-conditional-expression: warning
+  mutable-field-in-frozen-dataclass: warning
+  parallel-record-fields: warning
+  loop-invariant-collection: warning
   unused-suppression: error
   resolved-debt: error
 suppressions:

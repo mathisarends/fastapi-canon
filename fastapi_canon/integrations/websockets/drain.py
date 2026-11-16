@@ -35,7 +35,11 @@ class RpcDrain:
     def connection_count(self) -> int:
         return len(self._sessions)
 
-    async def drain(self, *, timeout: float = 30.0) -> None:
+    async def drain(
+        self,
+        *,
+        timeout: float = 30.0,  # smelt: ignore[SMT357] -- Seconds API.
+    ) -> None:
         """Reserve the final tenth of the timeout for cooperative cleanup."""
         if isinstance(timeout, bool) or not isfinite(timeout) or timeout < 0:
             raise ValueError("Drain timeout must be finite and nonnegative")
@@ -65,13 +69,13 @@ class RpcDrain:
             session.finished.set()
             session.ready.set()
 
-    async def _drain(self, timeout: float) -> None:
-        deadline = asyncio.get_running_loop().time() + timeout
+    async def _drain(self, timeout_seconds: float) -> None:
+        deadline = asyncio.get_running_loop().time() + timeout_seconds
         sessions = tuple(self._sessions)
         grace = [asyncio.create_task(session.finish()) for session in sessions]
         try:
             if grace:
-                await asyncio.wait(grace, timeout=timeout * 0.9)
+                await asyncio.wait(grace, timeout=timeout_seconds * 0.9)
             for session in sessions:
                 if not session.finished.is_set():
                     session.stop()

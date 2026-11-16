@@ -359,6 +359,8 @@ def check_http_dependencies(
         endpoint = provenance.endpoint if provenance is not None else original.endpoint
         try:
             dependencies = endpoint_dependencies(endpoint)
+        # User endpoint wrappers may fail during inspection; report the dependency check
+        # as a diagnostic.
         except Exception:
             issues.append(
                 CheckIssue(
@@ -581,6 +583,8 @@ def run_feature_checks(
                 ):
                     raise TypeError("checks must return CheckIssue objects")
                 findings: tuple[CheckIssue, ...] = tuple(result)
+            # Feature checks are user callbacks; one failure must not prevent the
+            # remaining diagnostics.
             except Exception:
                 issues.append(
                     CheckIssue(
@@ -1083,7 +1087,7 @@ class _CheckComposition:
         self.container = prepare_container(self.app, self.composition, self.registry)
 
     def _integration_routes(self) -> None:
-        assert self.routers is not None
+        assert self.routers is not None  # smelt: ignore[SMT356] -- Step prerequisite.
         check_integration_routes(
             self.app,
             self.composition.features,
@@ -1121,7 +1125,9 @@ class _CheckComposition:
         )
 
     def _operation_ids(self) -> None:
-        assert self.description is not None
+        assert (
+            self.description is not None
+        )  # smelt: ignore[SMT356] -- Step prerequisite.
         check_operations(
             (*operation_headers(self.app.router), *self.description.operations),
             self.issues,

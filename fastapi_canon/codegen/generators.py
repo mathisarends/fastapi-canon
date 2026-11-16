@@ -49,7 +49,7 @@ class TargetConfig:
     http_client: HttpClient = "httpx"
     generate_command: tuple[str, ...] = ()
     check_command: tuple[str, ...] = ()
-    timeout: int = 120
+    timeout: int = 120  # smelt: ignore[SMT357] -- Seconds API.
     strict: bool = False
     diagnostics: Path | None = None
     allow_diagnostics: Path | None = None

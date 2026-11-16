@@ -165,8 +165,12 @@ class RouteContext:
     """Whether an application-owned Dishka container replaces Canon's."""
     available: Callable[[DependencyKey, Scope], bool]
     """Whether a dependency is bound at or above the given scope."""
-    _issues: list[CheckIssue] = field(repr=False)
-    _checks: list[CheckResult] = field(repr=False)
+    _issues: list[CheckIssue] = field(
+        repr=False,  # smelt: ignore[SMT360] -- Shared report accumulator.
+    )
+    _checks: list[CheckResult] = field(
+        repr=False,  # smelt: ignore[SMT360] -- Shared report accumulator.
+    )
 
     def report(self, issue: CheckIssue) -> None:
         self._issues.append(issue)

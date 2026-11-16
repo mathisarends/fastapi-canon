@@ -536,19 +536,18 @@ class _Types:
                 )
             )
         if kind in ("string", "boolean", "null", "number", "integer"):
-            applicable: set[str] = (
-                {"minLength", "maxLength", "pattern"}
-                if kind == "string"
-                else {
+            if kind == "string":
+                applicable: set[str] = {"minLength", "maxLength", "pattern"}
+            elif kind in ("number", "integer"):
+                applicable = {
                     "minimum",
                     "maximum",
                     "exclusiveMinimum",
                     "exclusiveMaximum",
                     "multipleOf",
                 }
-                if kind in ("number", "integer")
-                else set()
-            )
+            else:
+                applicable = set()
             return Scalar(
                 kind,
                 tuple(

@@ -80,6 +80,8 @@ class IncomingTrack:
         while not self._ended.is_set():
             try:
                 frame = await self._track.recv()
+            # Engine-specific receive failures are expected after track termination;
+            # propagate all others.
             except Exception:
                 if self._ended.is_set():
                     return

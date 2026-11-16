@@ -341,11 +341,14 @@ class _Models:
                                     literal_values[0],
                                 )
                                 default = repr(selected_literal.value)
-                            assignment = (
-                                f" = Field(default={default}, alias={field.name!r})"
-                                if field_name != field.name
-                                else (f" = {default}" if not field.required else "")
-                            )
+                            if field_name != field.name:
+                                assignment = (
+                                    f" = Field(default={default}, alias={field.name!r})"
+                                )
+                            elif not field.required:
+                                assignment = f" = {default}"
+                            else:
+                                assignment = ""
                             lines.append(f"    {field_name}: {annotation}{assignment}")
                         if obj.additional is not None:
                             annotation = self.render_type(

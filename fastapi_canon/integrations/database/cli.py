@@ -75,6 +75,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             asyncio.run(operate())
         return 0
+    # Application loading and database drivers have independent errors; normalize them
+    # at the CLI boundary.
     except Exception as error:
         print(f"Database command failed: {error}", file=sys.stderr)
         return 2

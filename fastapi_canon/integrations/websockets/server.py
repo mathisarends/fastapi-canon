@@ -255,6 +255,8 @@ class RpcServer:
         ) is not None:
             try:
                 mapped = contract.to_error(error)
+            # User error bindings may fail arbitrarily; return the declared safe
+            # internal-error response.
             except Exception:
                 logger.exception(
                     "RPC error binding %s failed for method %s", contract.code, method
@@ -269,6 +271,8 @@ class RpcServer:
                 )
                 if mapped is not None and not isinstance(mapped, RpcError):
                     raise TypeError("RPC error mapper must return RpcError or None")
+            # User error mappers may fail arbitrarily; return the declared safe
+            # internal-error response.
             except Exception:
                 logger.exception("RPC error mapper failed for method %s", method)
                 return _internal_error(declared)
@@ -371,6 +375,8 @@ class RpcServer:
                 raise failure
             invocation = self._dispatcher.parse_request(raw_request, envelope=envelope)
             result = await self._dispatcher.execute(invocation)
+        # Parsing and user handlers may fail arbitrarily; encode their failure in the
+        # RPC response.
         except Exception as error:
             return self._failure_response(
                 raw_request,

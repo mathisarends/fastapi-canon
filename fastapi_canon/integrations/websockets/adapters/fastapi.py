@@ -926,6 +926,8 @@ def _reject_failures(
     async def reject_failures(websocket: WebSocket) -> AsyncGenerator[None, None]:
         try:
             yield
+        # Dependency and endpoint failures must become handshake rejections with
+        # request-scope cleanup.
         except Exception as error:
             state = current_serving()
             if (

@@ -60,16 +60,16 @@ class RpcConnectionOutcome:
     rejection: RpcRejection | None
     close_code: RpcConnectionClose | None
     raw_close_code: int | None
-    duration: float
+    duration: float  # smelt: ignore[SMT357] -- Seconds API.
     error: BaseException | None = None
     cancelled: bool = False
-    accepted_duration: float | None = None
+    accepted_duration: float | None = None  # smelt: ignore[SMT357] -- Seconds API.
 
 
 @dataclass(frozen=True, slots=True)
 class RpcRequestOutcome:
     response: object | None
-    duration: float
+    duration: float  # smelt: ignore[SMT357] -- Seconds API.
     error: BaseException | None = None
     cancelled: bool = False
     error_code: str | None = None
@@ -79,7 +79,7 @@ class RpcRequestOutcome:
 class RpcStreamOutcome:
     close_code: RpcConnectionClose | None
     raw_close_code: int | None
-    duration: float
+    duration: float  # smelt: ignore[SMT357] -- Seconds API.
     error: BaseException | None = None
     cancelled: bool = False
 
@@ -167,6 +167,8 @@ async def middleware_scope(
             try:
                 manager = getattr(item, kind)(scope)
                 await manager.__aenter__()
+            # A broken middleware entry must not prevent the remaining middleware or RPC
+            # operation.
             except Exception:
                 logger.exception("RPC middleware %s enter failed", kind)
             else:
@@ -210,8 +212,11 @@ async def middleware_scope(
                     error,
                     None if error is None else error.__traceback__,
                 )
+            # A broken middleware exit must not prevent cleanup of the remaining scopes.
             except Exception:
                 logger.exception("RPC middleware %s exit failed", kind)
+            # Defer cancellation and other base exceptions until every entered scope has
+            # been cleaned up.
             except BaseException as caught:
                 interrupted = caught
                 if error is None and on_error is not None:

@@ -217,6 +217,8 @@ class SubscriptionSession:
             await self._terminal(definition.name, subscription_id, complete=True)
         except asyncio.CancelledError:
             raise
+        # User subscription sources may fail arbitrarily; send a terminal error before
+        # releasing the subscription.
         except Exception as error:
             failure = self._server.failure(
                 None, error, method=definition.name, declared=definition.raises

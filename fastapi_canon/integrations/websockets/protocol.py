@@ -65,7 +65,7 @@ class RpcMethodDefinition:
     resolver_scope: RpcResolverScope | None = None
     params_parameter: str | None = None
     params_origin: type[BaseModel] | None = None
-    timeout: float | None = None
+    timeout: float | None = None  # smelt: ignore[SMT357] -- Seconds API.
     _has_timeout: bool = False
     idempotent: bool = False
 
@@ -250,6 +250,7 @@ def method_definition(
     raises: tuple[type[RpcError], ...],
     server: str | None,
     resolver_scope: RpcResolverScope,
+    # smelt: ignore[SMT357] -- Seconds; keep the existing public keyword or field.
     timeout: float | None = None,
     has_timeout: bool = False,
     idempotent: bool = False,
@@ -445,6 +446,12 @@ def stream_definition(
             f"RPC binary stream {qualname} declares input_content_type but does "
             "not inject RpcBinaryInput"
         )
+    if not has_input:
+        resolved_input_content_type = None
+    elif input_content_type is not None:
+        resolved_input_content_type = input_content_type
+    else:
+        resolved_input_content_type = content_type
     return RpcStreamDefinition(
         name=name,
         function=function,
@@ -453,11 +460,7 @@ def stream_definition(
         injected_parameters=injected,
         resolver_scope=resolver_scope,
         direction=direction,
-        input_content_type=(
-            input_content_type if input_content_type is not None else content_type
-        )
-        if has_input
-        else None,
+        input_content_type=resolved_input_content_type,
         path_parameters=tuple(parameter.name for parameter in path_parameters),
         path_model=_path_model(function, hints, path_parameters),
     )

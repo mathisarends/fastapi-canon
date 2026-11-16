@@ -235,15 +235,15 @@ class OpenTelemetry(RpcMiddleware):
                             outcome.cancelled,
                             error_type=error_type,
                         )
+                        if outcome.rejection is not None:
+                            outcome_name = outcome.rejection.value
+                        elif outcome.accepted:
+                            outcome_name = "accepted"
+                        else:
+                            outcome_name = "failed"
                         result = {
                             **attributes,
-                            "rpckit.outcome": (
-                                outcome.rejection.value
-                                if outcome.rejection is not None
-                                else "accepted"
-                                if outcome.accepted
-                                else "failed"
-                            ),
+                            "rpckit.outcome": outcome_name,
                         }
                         if self._metrics:
                             if not outcome.accepted:
@@ -306,13 +306,15 @@ class OpenTelemetry(RpcMiddleware):
                         span.set_attribute(
                             "rpc.response.status_code", outcome.error_code
                         )
+                    if outcome.cancelled:
+                        outcome_name = "cancelled"
+                    elif outcome.error is not None or outcome.error_code is not None:
+                        outcome_name = "error"
+                    else:
+                        outcome_name = "success"
                     result = {
                         **attributes,
-                        "rpckit.outcome": "cancelled"
-                        if outcome.cancelled
-                        else "error"
-                        if outcome.error is not None or outcome.error_code is not None
-                        else "success",
+                        "rpckit.outcome": outcome_name,
                     }
                     if self._metrics:
                         self._requests.add(1, result)

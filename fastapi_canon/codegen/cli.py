@@ -66,14 +66,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 check=args.check,
                 diff=args.diff,
             )
+    # Application exports and generator plugins may fail arbitrarily; preserve the CLI
+    # error envelope.
     except Exception as error:
-        message = (
-            "Install fastapi-canon[codegen] to generate specialized clients"
-            if isinstance(error, ImportError)
-            else str(error)
-            if isinstance(error, (ValueError, TypeError, OSError))
-            else f"Generation failed ({type(error).__name__}); check configuration and application export"
-        )
+        if isinstance(error, ImportError):
+            message = "Install fastapi-canon[codegen] to generate specialized clients"
+        elif isinstance(error, (ValueError, TypeError, OSError)):
+            message = str(error)
+        else:
+            message = f"Generation failed ({type(error).__name__}); check configuration and application export"
         if args.format == "json":
             print(
                 json.dumps(
@@ -97,15 +98,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         else int(any(item.status in {"drift", "blocked"} for item in results))
     )
     if args.format == "json":
+        if code == 2:
+            status = "error"
+        elif code == 1:
+            status = "drift"
+        else:
+            status = "success"
         print(
             json.dumps(
                 {
                     "schema_version": 2,
-                    "status": "error"
-                    if code == 2
-                    else "drift"
-                    if code == 1
-                    else "success",
+                    "status": status,
                     "check": args.check or args.diff,
                     "offline": args.offline,
                     "steps": [asdict(item) for item in results],

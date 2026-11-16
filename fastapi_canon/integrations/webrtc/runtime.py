@@ -180,6 +180,8 @@ class SessionRuntime:
             self.terminate(ErrorCode.SHUTDOWN)
         except WebRtcError as error:
             self.terminate(error.code)
+        # Unexpected engine or handler failures must terminate the session and run its
+        # cleanup.
         except Exception:
             logger.exception("Session %s failed unexpectedly", self.declaration.name)
             self.terminate(ErrorCode.ENGINE_FAILURE)
@@ -729,6 +731,8 @@ class SessionRuntime:
         peer = self._require_peer()
         try:
             await peer.add_ice_candidate(candidate)
+        # Engine-specific candidate errors for ignored offers are harmless; report other
+        # negotiation failures.
         except Exception:
             if self._ignored_offer:
                 return
@@ -1009,6 +1013,8 @@ class SessionRuntime:
                 self.terminate(ErrorCode.HANDLER_FAILURE)
             else:
                 self.terminate(error.code)
+        # Engine and application tasks may fail arbitrarily; terminate with the
+        # task-specific failure code.
         except Exception:
             if failure is ErrorCode.HANDLER_FAILURE:
                 logger.exception("Handler %s of %s failed", name, self._label)
@@ -1106,6 +1112,8 @@ class SessionRuntime:
                     await self._session.on_close(self._peer_handle, code)
             except TimeoutError:
                 logger.warning("on_close of %s exceeded its deadline", self._label)
+            # A failing application close hook must not prevent track and engine
+            # cleanup.
             except Exception:
                 logger.exception("on_close of %s failed", self._label)
         for track in self.incoming:
@@ -1132,6 +1140,8 @@ class SessionRuntime:
                 logger.warning(
                     "Engine cleanup of %s exceeded its deadline", self._label
                 )
+            # Engine-specific cleanup failures must not prevent releasing the session
+            # admission slot.
             except Exception:
                 logger.exception("Engine cleanup of %s failed", self._label)
         self._slots.release()
@@ -1176,6 +1186,7 @@ class SessionRuntime:
         )
         try:
             hook(event)
+        # Observability hooks must not interrupt the session lifecycle.
         except Exception:
             logger.exception("Session event hook failed")
 
