@@ -82,6 +82,37 @@ def test_single_error_generates_openapi_component_and_response() -> None:
     }
 
 
+def test_derived_title_is_documented_and_emitted_without_exception_text() -> None:
+    missing = Error(Missing, status=404, code="resource_missing")
+    app, registry = installed_app(missing)
+    router = APIRouter()
+
+    @router.get("/resource", responses=registry.responses(missing))
+    async def endpoint() -> None:
+        raise Missing("private exception message")
+
+    app.include_router(router)
+    registry.install(app)
+    document = app.openapi()
+    response_contract = document["paths"]["/resource"]["get"]["responses"]["404"]
+    schema = document["components"]["schemas"]["ResourceMissingProblem"]
+
+    with TestClient(app) as client:
+        response = client.get("/resource")
+
+    assert response_contract["description"] == "Resource missing"
+    assert "title" in schema["required"]
+    assert schema["properties"]["title"] == {"type": "string"}
+    assert response.status_code == 404
+    assert response.json() == {
+        "type": "https://example.test/problems/resource_missing",
+        "title": "Resource missing",
+        "status": 404,
+        "code": "resource_missing",
+    }
+    Draft202012Validator(schema).validate(response.json())
+
+
 def test_same_status_generates_discriminated_one_of() -> None:
     missing = make_error()
     hidden = make_error(

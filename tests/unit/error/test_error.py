@@ -44,6 +44,40 @@ def test_error_uses_explicit_schema_name() -> None:
 
 
 @pytest.mark.parametrize(
+    ("code", "expected"),
+    [
+        ("session_not_found", "Session not found"),
+        ("unauthorized", "Unauthorized"),
+        ("oauth2_required", "Oauth2 required"),
+    ],
+)
+def test_error_derives_omitted_title_from_code(code: str, expected: str) -> None:
+    error = Error(SessionNotFound, status=404, code=code)
+
+    assert error.title == expected
+
+
+def test_error_derives_title_for_explicit_none() -> None:
+    error = Error(SessionNotFound, status=404, code="session_not_found", title=None)
+
+    assert error.title == "Session not found"
+
+
+def test_error_preserves_explicit_title() -> None:
+    error = make_error(title="Session ID not found")
+
+    assert error.title == "Session ID not found"
+
+
+@pytest.mark.parametrize("code", [None, 123, "NOPE", ""])
+def test_error_rejects_invalid_code_before_deriving_title(code: object) -> None:
+    factory = cast("Callable[..., Error[SessionNotFound]]", Error)
+
+    with pytest.raises(ErrorConfigurationError, match="code must match"):
+        factory(SessionNotFound, status=404, code=code)
+
+
+@pytest.mark.parametrize(
     ("field", "value"),
     [
         ("status", 399),
@@ -51,7 +85,10 @@ def test_error_uses_explicit_schema_name() -> None:
         ("status", True),
         ("code", "NOPE"),
         ("title", ""),
+        ("title", "   "),
         ("title", "two\nlines"),
+        ("title", "two\rlines"),
+        ("title", 123),
         ("type", "/relative"),
         ("detail", 123),
         ("description", 123),

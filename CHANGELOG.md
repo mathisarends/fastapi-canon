@@ -10,6 +10,12 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 See the [upgrade guide](docs/package-migration.md#upgrade-to-0240).
 
+- **`CANON-024-ERROR-TITLE`** — `Error(..., title=None)` and an omitted `title`
+  now derive the public title from `code` by replacing underscores with spaces
+  and capitalizing the first letter. Keep explicit titles to preserve existing
+  wording. Empty, whitespace-only and multiline titles remain invalid;
+  `Error.title` and emitted problem titles remain strings.
+
 - **`CANON-024-ERROR-NAMESPACE`** — Import Canon configuration errors from
   `fastapi_canon.errors` instead of `fastapi_canon.exceptions`; the old module
   is removed. Error class names and inheritance are unchanged.

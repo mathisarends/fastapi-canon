@@ -19,11 +19,16 @@ project_missing = Error(
     ProjectMissing,
     status=404,
     code="project_missing",
-    title="Project not found",
     detail="Choose another project.",
     extensions={"replacement": None},
 )
 ```
+
+In prepared version 0.24.0 (unpublished), omitting `title` or passing `None`
+derives it from `code`: underscores become spaces and the first letter is
+capitalized (`project_missing` becomes `Project missing`). Pass
+`title="Project not found"` to override it. Empty titles remain invalid.
+`title` is always a string on the constructed `Error` and in emitted problems.
 
 The exception stays framework-free. Its exception text is private by default;
 only the declared detail and extension renderers produce public data. For typed

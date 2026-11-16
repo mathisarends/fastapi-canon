@@ -15,6 +15,10 @@ PyPI project or add further Python import changes.
 
 Version 0.24.0 is prepared source and has not been published.
 
+`Error` now derives `title` from `code` when omitted or passed as `None`:
+`project_missing` becomes `Project missing`. Keep `title="Project not found"`
+to preserve custom wording. Empty and multiline titles remain invalid.
+
 Use the root facade for application-building names and HTTP option types:
 
 ```python

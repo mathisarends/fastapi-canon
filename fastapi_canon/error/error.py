@@ -27,7 +27,7 @@ _FORBIDDEN_RESPONSE_HEADERS = frozenset(
 )
 
 
-@dataclass(frozen=True, slots=True, eq=False)
+@dataclass(frozen=True, slots=True, eq=False, init=False)
 class Error[ExceptionT: Exception]:
     """An immutable error contract shared by runtime handling and OpenAPI."""
 
@@ -48,6 +48,38 @@ class Error[ExceptionT: Exception]:
     description: str | None = field(default=None, kw_only=True)
     example: Mapping[str, JsonValue] | None = field(default=None, kw_only=True)
     schema_name: str | None = field(default=None, kw_only=True)
+
+    def __init__(
+        self,
+        exception: builtins.type[ExceptionT],
+        *,
+        status: int,
+        code: str,
+        title: str | None = None,
+        type: str | None = None,
+        detail: Detail[ExceptionT] = None,
+        extensions_model: builtins.type[BaseModel] | None = None,
+        extensions: Extensions[ExceptionT] = None,
+        headers: Headers[ExceptionT] = None,
+        openapi_headers: Mapping[str, OpenAPIHeader] | None = None,
+        description: str | None = None,
+        example: Mapping[str, JsonValue] | None = None,
+        schema_name: str | None = None,
+    ) -> None:
+        object.__setattr__(self, "exception", exception)
+        object.__setattr__(self, "status", status)
+        object.__setattr__(self, "code", code)
+        object.__setattr__(self, "title", title)
+        object.__setattr__(self, "type", type)
+        object.__setattr__(self, "detail", detail)
+        object.__setattr__(self, "extensions_model", extensions_model)
+        object.__setattr__(self, "extensions", extensions)
+        object.__setattr__(self, "headers", headers)
+        object.__setattr__(self, "openapi_headers", openapi_headers)
+        object.__setattr__(self, "description", description)
+        object.__setattr__(self, "example", example)
+        object.__setattr__(self, "schema_name", schema_name)
+        self.__post_init__()
 
     def __post_init__(self) -> None:
         """Validate and detach all static inputs from caller-owned mutation."""
@@ -86,6 +118,9 @@ class Error[ExceptionT: Exception]:
         if not isinstance(code, str) or CODE_PATTERN.fullmatch(code) is None:
             msg = "code must match ^[a-z][a-z0-9_]{2,}$"
             raise ErrorConfigurationError(msg)
+        if title is None:
+            title = code.replace("_", " ").capitalize()
+            object.__setattr__(self, "title", title)
         if (
             not isinstance(title, str)
             or not title.strip()
