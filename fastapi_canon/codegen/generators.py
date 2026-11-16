@@ -35,7 +35,7 @@ type ClientLanguage = Literal["python", "typescript"]
 type HttpClient = Literal["httpx", "httpx2"]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class TargetConfig:
     """One validated ``[[targets]]`` entry of the code generation configuration."""
 
@@ -49,7 +49,7 @@ class TargetConfig:
     http_client: HttpClient = "httpx"
     generate_command: tuple[str, ...] = ()
     check_command: tuple[str, ...] = ()
-    timeout: int = 120
+    timeout: int = 120  # smelt: ignore[SMT357] -- Seconds API.
     strict: bool = False
     diagnostics: Path | None = None
     allow_diagnostics: Path | None = None
@@ -58,7 +58,7 @@ class TargetConfig:
     """Generator-specific settings that Canon does not interpret."""
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Rendering:
     """Rendered client files and the writer that owns their output directory.
 

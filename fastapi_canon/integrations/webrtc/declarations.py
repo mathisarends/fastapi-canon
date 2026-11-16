@@ -71,7 +71,7 @@ class Role(StrEnum):
     """The server offers; useful for server-originated media."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MediaPolicy:
     """Media kinds and directions a session accepts.
 
@@ -278,7 +278,7 @@ def _format(model: Any) -> MessageFormat:
     return MessageFormat.JSON
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SessionLimits:
     """Deadlines and resource bounds for every session of a router or endpoint."""
 
@@ -405,7 +405,7 @@ class Session:
         return handlers
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SessionContext:
     """Session identity passed to ICE providers and lifecycle observers."""
 
@@ -448,12 +448,15 @@ class SessionDeclaration:
     @cached_property
     def channel_ids(self) -> dict[str, int | None]:
         """SCTP stream IDs of pre-negotiated channels, in declaration order."""
-        return {
-            spec.name: (index if spec.id is None else spec.id)
-            if spec.negotiated
-            else None
-            for index, spec in enumerate(self.channels)
-        }
+        result: dict[str, int | None] = {}
+        for index, spec in enumerate(self.channels):
+            if not spec.negotiated:
+                result[spec.name] = None
+            elif spec.id is None:
+                result[spec.name] = index
+            else:
+                result[spec.name] = spec.id
+        return result
 
     def channel(self, name: str) -> DataChannelSpec:
         for spec in self.channels:

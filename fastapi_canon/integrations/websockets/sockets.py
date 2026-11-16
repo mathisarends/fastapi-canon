@@ -102,7 +102,7 @@ class RpcSocket(Generic[_IncomingT, _OutgoingT]):
         "_protocol",
         "_queue",
         "_request_close",
-        "_send_timeout",
+        "_send_timeout_seconds",
         "_socket",
     )
 
@@ -112,7 +112,7 @@ class RpcSocket(Generic[_IncomingT, _OutgoingT]):
     _protocol: RpcSocketProtocol | None
     _message_contract: SocketMessages | None
     _activity: NotifyActivity | None
-    _send_timeout: float | None
+    _send_timeout_seconds: float | None
     _queue: asyncio.Queue[_IncomingT]
     _request_close: Callable[[RpcConnectionClose, str], None]
     _disconnected: Callable[[RpcDisconnect], None]
@@ -143,7 +143,7 @@ class RpcSocket(Generic[_IncomingT, _OutgoingT]):
         self._protocol = protocol
         self._message_contract = message_contract
         self._activity = activity
-        self._send_timeout = limits.send_timeout
+        self._send_timeout_seconds = limits.send_timeout
         self._queue = asyncio.Queue[_IncomingT](limits.max_queue_size)
         self._lock = asyncio.Lock()
         self._request_close = request_close
@@ -207,7 +207,7 @@ class RpcSocket(Generic[_IncomingT, _OutgoingT]):
             if self.closed:
                 raise RpcDisconnect(reason="The socket is closed")
             try:
-                async with asyncio.timeout(self._send_timeout):
+                async with asyncio.timeout(self._send_timeout_seconds):
                     if isinstance(frame, str):
                         await self._socket.send(frame)
                         size = len(frame.encode())

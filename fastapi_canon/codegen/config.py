@@ -8,7 +8,7 @@ from typing import cast
 from fastapi_canon.codegen.generators import HttpClient, TargetConfig, load_generator
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Configuration:
     path: Path
     app: str
@@ -71,7 +71,7 @@ def load_config(path: Path) -> Configuration:
             raise ValueError(
                 "Diagnostics reports must be distinct and outside inputs and generated outputs"
             )
-    return Configuration(path, app, contracts, targets)
+    return Configuration(path=path, app=app, contracts=contracts, targets=targets)
 
 
 def _target(root: Path, name: str, value: object) -> TargetConfig:
@@ -90,8 +90,8 @@ def _target(root: Path, name: str, value: object) -> TargetConfig:
         if type(timeout) is not int or timeout <= 0:
             raise ValueError(f"Target {name} timeout must be a positive integer")
         return TargetConfig(
-            name,
-            "external",
+            name=name,
+            generator="external",
             generate_command=_command(value.get("generate-command")),
             check_command=_command(value.get("check-command")),
             timeout=timeout,
@@ -141,13 +141,13 @@ def _target(root: Path, name: str, value: object) -> TargetConfig:
     ):
         raise ValueError(f"Invalid package or client-name for target {name}")
     return TargetConfig(
-        name,
-        generator,
-        language,
-        _path(root, value.get("output")),
-        package,
-        client,
-        cast(HttpClient, http),
+        name=name,
+        generator=generator,
+        language=language,
+        output=_path(root, value.get("output")),
+        package=package,
+        client_name=client,
+        http_client=cast(HttpClient, http),
         strict=strict,
         diagnostics=_path(root, value["diagnostics"])
         if "diagnostics" in value

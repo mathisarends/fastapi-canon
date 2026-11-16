@@ -99,6 +99,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 else:
                     path.unlink()
         return int(changed and (args.check or args.diff))
+    # Application imports and exporters may fail arbitrarily; return the CLI failure
+    # status.
     except Exception as exc:
         print(f"fastapi-canon contracts export: {exc}", file=sys.stderr)
         return 2

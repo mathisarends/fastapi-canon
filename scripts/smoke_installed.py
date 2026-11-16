@@ -30,6 +30,8 @@ _MODULES = {
     "webrtc": "fastapi_canon.integrations.webrtc",
 }
 _STACK = {"fastapi-canon", "sse", "websockets"}
+_MCP_SMOKE_TIMEOUT_SECONDS = 10
+_SCOPED_SMOKE_TIMEOUT_SECONDS = 5
 
 
 class EventType(StrEnum):
@@ -329,7 +331,7 @@ def _mcp_check(selected: set[str]) -> None:
             "http://testserver/mcp", httpx_client_factory=factory
         )
         async with (
-            asyncio.timeout(10),
+            asyncio.timeout(_MCP_SMOKE_TIMEOUT_SECONDS),
             app.router.lifespan_context(app),
             Client(transport, timeout=5) as client,
         ):
@@ -955,7 +957,10 @@ async def _scoped_check() -> None:
 
     provider = Resources()
     provider.provide(Add, scope=Scope.REQUEST)
-    async with asyncio.timeout(5), make_async_container(provider) as container:
+    async with (
+        asyncio.timeout(_SCOPED_SMOKE_TIMEOUT_SECONDS),
+        make_async_container(provider) as container,
+    ):
         add = Scoped(container, Add)
         assert await add(increment=2) == 42
         assert events == ["open", "close"]

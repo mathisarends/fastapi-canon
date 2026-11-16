@@ -59,7 +59,9 @@ class WebSocketGenerator:
                 )
             )
         )
-        return Rendering(generated, partial(write_files, target.output, generated))
+        return Rendering(
+            files=generated, write=partial(write_files, target.output, generated)
+        )
 
 
 GENERATOR = WebSocketGenerator()

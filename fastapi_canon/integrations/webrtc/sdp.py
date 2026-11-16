@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from fastapi_canon.integrations.webrtc.engine import TransceiverDirection
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MediaSection:
     kind: str
     mid: str | None
@@ -39,7 +39,7 @@ class MediaSection:
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DescriptionSummary:
     sections: tuple[MediaSection, ...]
 

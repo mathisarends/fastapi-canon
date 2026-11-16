@@ -163,12 +163,12 @@ class RpcLimits:
     max_concurrency: int = 32
     max_queue_size: int = 128
     max_message_bytes: int | None = 1_048_576
-    send_timeout: float | None = 10.0
+    send_timeout: float | None = 10.0  # smelt: ignore[SMT357] -- Seconds API.
     max_batch_size: int = 32
     max_streams: int = 100
     # Admitted request/notification items, including executing batch members.
     max_pending_requests: int = 1024
-    request_timeout: float | None = None
+    request_timeout: float | None = None  # smelt: ignore[SMT357] -- Seconds API.
 
     def __post_init__(self) -> None:
         if self.request_timeout is not None and (

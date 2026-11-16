@@ -96,6 +96,8 @@ def map_rejection(
 ) -> RpcReject | None:
     try:
         return rejection_for(error, rejections)
+    # User rejection mappers may fail arbitrarily; callers must fall back to an internal
+    # error.
     except Exception:
         logger.exception("RPC rejection mapper failed")
         return None
@@ -289,12 +291,16 @@ async def _run_rpc_endpoint(
 
 
 async def _flush(
-    outgoing: asyncio.Queue[str], writer: asyncio.Task[None], timeout: float | None
+    outgoing: asyncio.Queue[str],
+    writer: asyncio.Task[None],
+    timeout_seconds: float | None,
 ) -> None:
     drained = asyncio.create_task(outgoing.join())
     try:
         await asyncio.wait(
-            (drained, writer), timeout=timeout, return_when=asyncio.FIRST_COMPLETED
+            (drained, writer),
+            timeout=timeout_seconds,
+            return_when=asyncio.FIRST_COMPLETED,
         )
     finally:
         drained.cancel()
@@ -455,6 +461,8 @@ class _RpcSession:
             logger.warning("RPC client too slow: socket send blocked")
             self.request_close(RpcConnectionClose.POLICY_VIOLATION, "Client too slow")
             await self._report_slow_consumer()
+        # Adapter-specific writer failures must close the connection and release pending
+        # work.
         except Exception as error:
             record_error(error)
             logger.exception("RPC writer failed")
@@ -573,16 +581,16 @@ class _RpcSession:
                             )
                             return
                     call = PendingCall(
-                        item,
-                        reservation,
-                        invalid,
-                        batch,
-                        asyncio.get_running_loop().time(),
+                        message=item,
+                        reservation=reservation,
+                        invalid=invalid,
+                        batch=batch,
+                        admitted_at=asyncio.get_running_loop().time(),
                         shutting_down=not invalid
                         and self.endpoint.service.drain.draining,
                         envelope=envelope,
                     )
-                    call.task = asyncio.create_task(self._invoke_one(call))
+                    call.schedule(self._invoke_one(call))
                     self._call_tasks.add(call.task)
                     if key is not None:
                         self.requests[key] = call
@@ -605,12 +613,14 @@ class _RpcSession:
         except RpcDisconnect as error:
             self.client_closed = True
             self.request_close(error.code, error.reason, error.raw_close_code)
+        # Adapter and request-processing failures must close the connection and release
+        # pending work.
         except Exception as error:
             record_error(error)
             self.request_close(RpcConnectionClose.INTERNAL_ERROR, "Internal error")
 
     async def _invoke_one(self, call: PendingCall) -> RpcSuccess | RpcFailure | None:
-        call.started = True
+        call.start()
         message = call.message
         try:
             if call.invalid:
@@ -741,8 +751,7 @@ class _RpcSession:
                 and (not call.cancel_requested)
                 and (not call.task.done())
             ):
-                call.cancel_requested = True
-                call.task.cancel(CLIENT_CANCEL)
+                call.cancel(CLIENT_CANCEL)
         return True
 
     async def _events(self) -> None:
@@ -762,6 +771,8 @@ class _RpcSession:
             )
         except asyncio.CancelledError:
             raise
+        # Application event sources may fail arbitrarily; translate failures into the
+        # configured connection close.
         except Exception as error:
             record_error(error)
             rejected = map_rejection(error, self.rejections)
@@ -814,6 +825,8 @@ async def _event_source(
                         event.name, value, event.payload
                     )
                 )
+            # User event serializers may fail arbitrarily; apply the event declaration's
+            # skip-or-close policy.
             except Exception:
                 logger.exception("RPC event %s produced an invalid payload", event.name)
                 if event.on_error == "close":
@@ -825,6 +838,8 @@ async def _event_source(
             )
     except asyncio.CancelledError:
         raise
+    # Application event sources may fail arbitrarily; map declared errors before closing
+    # the connection.
     except Exception as error:
         binding = contract_for(
             error,
@@ -952,6 +967,8 @@ async def _prepare(
     if before_accept is not None:
         try:
             accepted_values = await before_accept(socket.handshake)
+        # User admission hooks may fail arbitrarily; reject the handshake before
+        # accepting the socket.
         except Exception as error:
             record_error(error)
             rejected = map_rejection(error, rejections)
@@ -1122,6 +1139,8 @@ class _StreamSession:
                     if self.generator is not None:
                         try:
                             await self.generator.aclose()
+                        # Application generator cleanup can fail; map it without
+                        # skipping the remaining session cleanup.
                         except Exception as error:
                             self._close_stream_error(error)
                         self.generator = None
@@ -1130,12 +1149,16 @@ class _StreamSession:
             self.close_value = (shutdown, self.connection.close_reason)
             self.connection.record_close(shutdown, self.connection.close_reason)
             raise
+        # Binary stream tasks may fail arbitrarily; translate failures into a connection
+        # close.
         except Exception as error:
             self._close_stream_error(error)
         finally:
             if self.generator is not None:
                 try:
                     await self.generator.aclose()
+                # Application generator cleanup can fail; still close the socket and
+                # mark the connection closed.
                 except Exception as error:
                     self._close_stream_error(error)
             if not self.client_closed:
@@ -1180,6 +1203,8 @@ class _StreamSession:
             raise
         except RpcDisconnect as error:
             self.client_disconnected(error)
+        # Adapter and output-generator failures must follow the binary stream close
+        # policy.
         except Exception as error:
             self._close_stream_error(error)
 
@@ -1191,6 +1216,8 @@ class _StreamSession:
             raise
         except RpcDisconnect as error:
             self.client_disconnected(error)
+        # User binary stream handlers may fail arbitrarily; apply the configured close
+        # policy.
         except Exception as error:
             self._close_stream_error(error)
 
@@ -1236,6 +1263,8 @@ class _StreamSession:
                     )
         except RpcDisconnect as error:
             self.client_disconnected(error)
+        # Adapter and input-processing failures must follow the binary stream close
+        # policy.
         except Exception as error:
             self._close_stream_error(error)
 
@@ -1249,13 +1278,14 @@ class _StreamSession:
             self.request_close(REJECTION_CLOSES[rejected.rejection], rejected.reason)
             return
         try:
-            mapped = (
-                error
-                if isinstance(error, RpcError)
-                else self.error_mapper(error)
-                if self.error_mapper is not None
-                else None
-            )
+            if isinstance(error, RpcError):
+                mapped: RpcError | None = error
+            elif self.error_mapper is not None:
+                mapped = self.error_mapper(error)
+            else:
+                mapped = None
+        # User error mappers may fail arbitrarily; fall back to the safe internal-error
+        # close.
         except Exception:
             logger.exception("RPC binary stream error mapper failed")
             mapped = None
@@ -1379,6 +1409,8 @@ class _SocketSession:
             self.close_value = (shutdown, self.connection.close_reason)
             self.connection.record_close(shutdown, self.connection.close_reason)
             raise
+        # Socket session tasks may fail arbitrarily; map their failures before final
+        # connection cleanup.
         except Exception as error:
             self._close_failure(error)
         finally:
@@ -1414,6 +1446,8 @@ class _SocketSession:
             self.request_close(RpcConnectionClose.NORMAL, "")
         except asyncio.CancelledError:
             raise
+        # User socket handlers may fail arbitrarily; apply declared close bindings and
+        # rejection mapping.
         except Exception as error:
             self._close_failure(error)
 
@@ -1429,6 +1463,8 @@ class _SocketSession:
         if binding is not None:
             try:
                 rejected = binding.reject(failure)
+            # User close bindings may fail arbitrarily; retain fallback rejection
+            # mapping.
             except Exception:
                 logger.exception("RPC socket close binding failed")
         if rejected is None:
@@ -1480,6 +1516,8 @@ class _SocketSession:
                 )
         except RpcDisconnect as error:
             self.client_disconnected(error)
+        # Adapter-specific receive failures must close the connection and release
+        # pending work.
         except Exception as error:
             record_error(error)
             logger.exception("RPC socket reader failed")

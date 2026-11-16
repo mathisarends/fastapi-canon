@@ -11,6 +11,34 @@ The [repository migration](repository-migration.md) records the
 source history and publishing setup. The repository move does not rename the
 PyPI project or add further Python import changes.
 
+## Upgrade to 0.23.0
+
+Version 0.23.0 is prepared source and has not been published.
+
+Pass generator value fields by name:
+
+```python
+from fastapi_canon.codegen.generators import Rendering
+
+rendering = Rendering(files=files, write=writer)
+```
+
+Use `dataclasses.fields()` or `asdict()` to inspect dataclass values and
+`dataclasses.replace()` to derive changed values. Slotted values do not expose
+`__dict__`; records with cached properties retain it. Source-analysis reports
+now expose tuples; their `as_dict()` output remains JSON-compatible and mutable.
+
+Build `SessionEvent.attributes` before creating the event. It is copied and
+read-only; use `dict(event.attributes)` for a writable copy. Event serialization
+with `dataclasses.asdict()` remains supported.
+
+Middleware scopes and `RouteContext` represent a live operation and use object
+identity. Inspect their attributes and the immutable outcome values instead of
+using dataclass equality, `asdict()` or `replace()` on a scope. `RpcTestError` is
+an ordinary exception whose string form is the error message; its error
+attributes remain available. Pass its `details=` and `problem=` by name, and
+use keyword arguments when constructing `RouteContext`.
+
 ## Upgrade to 0.22.0
 
 Version 0.22.0 was published on 2026-11-15. Replace removed aliases with their targets:

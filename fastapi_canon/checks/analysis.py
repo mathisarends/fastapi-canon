@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass, field
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 from typing import NamedTuple
 
 from fastapi_canon.checks.source import (
@@ -24,28 +25,67 @@ _PLAIN_DECORATORS = frozenset(
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _Escape:
     exception: str
     trace: tuple[str, ...]
     line: int
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class UnknownValue:
     message: str
     function: str
     line: int
 
 
-@dataclass
 class ExceptionFlow:
-    escapes: list[_Escape] = field(default_factory=list)
-    unknowns: list[UnknownValue] = field(default_factory=list)
+    """Accumulate one analysis path without sharing writable buffers with callers."""
+
+    def __init__(
+        self,
+        escapes: Iterable[_Escape] = (),
+        unknowns: Iterable[UnknownValue] = (),
+    ) -> None:
+        self._escapes = list(escapes)
+        self._unknowns = list(unknowns)
+
+    @property
+    def escapes(self) -> tuple[_Escape, ...]:
+        return tuple(self._escapes)
+
+    @property
+    def unknowns(self) -> tuple[UnknownValue, ...]:
+        return tuple(self._unknowns)
 
     def extend(self, other: ExceptionFlow) -> None:
-        self.escapes.extend(other.escapes)
-        self.unknowns.extend(other.unknowns)
+        self._escapes.extend(other.escapes)
+        self._unknowns.extend(other.unknowns)
+
+    def add_escape(self, escape: _Escape) -> None:
+        self._escapes.append(escape)
+
+    def add_escapes(self, escapes: Iterable[_Escape]) -> None:
+        self._escapes.extend(escapes)
+
+    def add_unknown(self, unknown: UnknownValue) -> None:
+        self._unknowns.append(unknown)
+
+    def add_unknowns(self, unknowns: Iterable[UnknownValue]) -> None:
+        self._unknowns.extend(unknowns)
+
+    def retain_escapes(self, predicate: Callable[[_Escape], bool]) -> None:
+        self._escapes = [escape for escape in self._escapes if predicate(escape)]
+
+    def discard_escapes(self) -> None:
+        self._escapes.clear()
+
+    def deduplicate(self) -> None:
+        first: dict[str, _Escape] = {}
+        for item in self._escapes:
+            first.setdefault(item.exception, item)
+        self._escapes = list(first.values())
+        self._unknowns = list(dict.fromkeys(self._unknowns))
 
 
 class ContractAnalyzer:
@@ -74,11 +114,9 @@ class ContractAnalyzer:
         )
         if summary_key in self._summaries:
             escapes, unknowns, modules = self._summaries[summary_key]
-            self.source.touched.update(modules)
+            self.source.record_usage(modules)
             return ExceptionFlow(list(escapes), list(unknowns))
-        previous = self.source.touched
-        self.source.touched = set()
-        try:
+        with self.source.track_usage():
             flow = self._analyze_function(
                 function,
                 stack,
@@ -88,11 +126,7 @@ class ContractAnalyzer:
             )
             # The report retains the first path per exception. Propagation and
             # catching depend on exception types, not duplicate paths to them.
-            first: dict[str, _Escape] = {}
-            for item in flow.escapes:
-                first.setdefault(item.exception, item)
-            flow.escapes = list(first.values())
-            flow.unknowns = list(dict.fromkeys(flow.unknowns))
+            flow.deduplicate()
             if not any(item.message == "recursive call" for item in flow.unknowns):
                 self._summaries[summary_key] = _Summary(
                     tuple(flow.escapes),
@@ -100,9 +134,6 @@ class ContractAnalyzer:
                     frozenset(self.source.touched),
                 )
             return flow
-        finally:
-            previous.update(self.source.touched)
-            self.source.touched = previous
 
     def expression(
         self,
@@ -127,7 +158,7 @@ class ContractAnalyzer:
             flow.extend(
                 self.expression(node.generators[0].iter, function, env, stack=stack)
             )
-            flow.unknowns.append(
+            flow.add_unknown(
                 UnknownValue(
                     "generator expression execution is deferred until iterated",
                     function.name,
@@ -140,7 +171,7 @@ class ContractAnalyzer:
         ):
             return self._comprehension(node, function, env, stack=stack)
         if isinstance(node, ast.NamedExpr):
-            flow.unknowns.append(
+            flow.add_unknown(
                 UnknownValue(
                     f"unsupported expression: {type(node).__name__}",
                     function.name,
@@ -152,7 +183,7 @@ class ContractAnalyzer:
                 flow.extend(self.expression(argument, function, env, stack=stack))
             target = self.source.infer(node.func, function.module, env)
             name = target.name or self.source.resolve(node.func, function.module, env)
-            definition = self.source.definitions.get(name or "")
+            definition = self.source.definition(name or "")
             if definition and isinstance(node.func, ast.Attribute | ast.Call):
                 receiver_expression = (
                     node.func.value
@@ -168,7 +199,7 @@ class ContractAnalyzer:
                 if target.instance:
                     method = self.source.method(definition.name, "__call__")
                     if method is None:
-                        flow.unknowns.append(
+                        flow.add_unknown(
                             UnknownValue(
                                 f"unresolved callable instance: {ast.unparse(node.func)}",
                                 function.name,
@@ -223,7 +254,7 @@ class ContractAnalyzer:
                         and receiver != definition.owner
                         and not self.source.classmethod(definition)
                     ):
-                        flow.unknowns.append(
+                        flow.add_unknown(
                             UnknownValue(
                                 "inherited method dispatch may use subclass overrides",
                                 function.name,
@@ -254,7 +285,7 @@ class ContractAnalyzer:
                 for argument in [*node.args, *(kw.value for kw in node.keywords)]:
                     flow.extend(self._callback(argument, function, env, stack=stack))
             else:
-                flow.unknowns.append(
+                flow.add_unknown(
                     UnknownValue(
                         f"unresolved call: {ast.unparse(node.func)}",
                         function.name,
@@ -267,7 +298,7 @@ class ContractAnalyzer:
                 flow.extend(self.expression(child, function, env, stack=stack))
         if isinstance(node, ast.Attribute):
             name = self.source.resolve(node, function.module, env)
-            member = self.source.definitions.get(name or "")
+            member = self.source.definition(name or "")
             if (
                 member
                 and isinstance(member.node, ast.FunctionDef)
@@ -296,7 +327,7 @@ class ContractAnalyzer:
                 for expression in node.decorator_list:
                     flow.extend(self.expression(expression, function, env, stack=stack))
                 if isinstance(node, ast.ClassDef):
-                    flow.unknowns.append(
+                    flow.add_unknown(
                         UnknownValue(
                             "nested class construction", function.name, node.lineno
                         )
@@ -313,9 +344,9 @@ class ContractAnalyzer:
             if isinstance(node, ast.Raise):
                 if node.exc is None:
                     if reraised:
-                        flow.escapes.extend(reraised)
+                        flow.add_escapes(reraised)
                     else:
-                        flow.unknowns.append(
+                        flow.add_unknown(
                             UnknownValue(
                                 "unresolved re-raise", function.name, node.lineno
                             )
@@ -331,11 +362,9 @@ class ContractAnalyzer:
                     )
                     name = self.source.resolve(target, function.module, env)
                     if name and self.source.exception(name):
-                        flow.escapes.append(
-                            _Escape(name, (function.name,), node.lineno)
-                        )
+                        flow.add_escape(_Escape(name, (function.name,), node.lineno))
                     else:
-                        flow.unknowns.append(
+                        flow.add_unknown(
                             UnknownValue(
                                 f"unresolved raised exception: {ast.unparse(node.exc)}",
                                 function.name,
@@ -347,8 +376,8 @@ class ContractAnalyzer:
                 attempted = self.block(
                     node.body, function, env.copy(), stack=stack, reraised=reraised
                 )
-                flow.unknowns.extend(attempted.unknowns)
-                remaining = attempted.escapes
+                flow.add_unknowns(attempted.unknowns)
+                remaining = list(attempted.escapes)
                 for handler in node.handlers:
                     types = (
                         handler.type.elts
@@ -368,7 +397,7 @@ class ContractAnalyzer:
                         )
                     )
                     if unknown_catch:
-                        flow.unknowns.append(
+                        flow.add_unknown(
                             UnknownValue(
                                 "unresolved exception handler",
                                 function.name,
@@ -403,7 +432,7 @@ class ContractAnalyzer:
                             reraised=tuple(caught),
                         )
                     )
-                flow.escapes.extend(remaining)
+                flow.add_escapes(remaining)
                 flow.extend(
                     self.block(
                         node.orelse,
@@ -426,7 +455,7 @@ class ContractAnalyzer:
                     isinstance(child, ast.Return | ast.Raise)
                     for child in _executed_nodes(node.finalbody)
                 ):
-                    flow.unknowns.append(
+                    flow.add_unknown(
                         UnknownValue(
                             "finally may replace an escaping exception",
                             function.name,
@@ -529,7 +558,7 @@ class ContractAnalyzer:
             if isinstance(node, ast.Pass | ast.Break | ast.Continue):
                 continue
             # Match, try*, etc. need more control-flow knowledge.
-            flow.unknowns.append(
+            flow.add_unknown(
                 UnknownValue(
                     f"unsupported statement: {type(node).__name__}",
                     function.name,
@@ -543,9 +572,7 @@ class ContractAnalyzer:
                     )
                     name = self.source.resolve(target, function.module, env)
                     if name and self.source.exception(name):
-                        flow.escapes.append(
-                            _Escape(name, (function.name,), child.lineno)
-                        )
+                        flow.add_escape(_Escape(name, (function.name,), child.lineno))
             self._invalidate(node, env)
         return flow
 
@@ -577,13 +604,13 @@ class ContractAnalyzer:
                 "builtins.classmethod",
                 "builtins.property",
             } and not _operation_decorator(decorator):
-                flow.unknowns.append(
+                flow.add_unknown(
                     UnknownValue(
                         "unresolved decorator", function.name, decorator.lineno
                     )
                 )
         if not iterated and _generator(node):
-            flow.unknowns.append(
+            flow.add_unknown(
                 UnknownValue(
                     "generator execution is outside the HTTP response boundary",
                     function.name,
@@ -613,7 +640,7 @@ class ContractAnalyzer:
                 isinstance(child, ast.Attribute | ast.Subscript)
                 for child in ast.walk(generator.target)
             ):
-                flow.unknowns.append(
+                flow.add_unknown(
                     UnknownValue(
                         "unsupported comprehension target",
                         function.name,
@@ -650,7 +677,7 @@ class ContractAnalyzer:
     ) -> ExceptionFlow:
         flow = self.expression(node, function, env, stack=stack, iterated=True)
         target = node.func if isinstance(node, ast.Call) else node
-        definition = self.source.definitions.get(
+        definition = self.source.definition(
             self.source.resolve(target, function.module, env) or ""
         )
         value_type = definition
@@ -660,11 +687,11 @@ class ContractAnalyzer:
             and isinstance(definition.node, ast.FunctionDef | ast.AsyncFunctionDef)
             and definition.node.returns
         ):
-            value_type = self.source.definitions.get(
+            value_type = self.source.definition(
                 self.source.annotation(definition.node.returns, definition.module) or ""
             )
         if value_type and isinstance(value_type.node, ast.ClassDef):
-            flow.unknowns.append(
+            flow.add_unknown(
                 UnknownValue(
                     "unsupported comprehension iteration protocol",
                     function.name,
@@ -679,7 +706,7 @@ class ContractAnalyzer:
                 and _generator(definition.node)
             )
         ):
-            flow.unknowns.append(
+            flow.add_unknown(
                 UnknownValue(
                     "unresolved async comprehension iterator",
                     function.name,
@@ -724,7 +751,7 @@ class ContractAnalyzer:
                 or self.source.mro(name) is None
                 for name in names
             ):
-                flow.unknowns.append(
+                flow.add_unknown(
                     UnknownValue(
                         "unresolved contextlib.suppress exception types",
                         function.name,
@@ -732,14 +759,14 @@ class ContractAnalyzer:
                     )
                 )
             else:
-                inner.escapes = [
-                    escape
-                    for escape in inner.escapes
-                    if not any(
-                        name in (self.source.mro(escape.exception) or [])
-                        for name in names
+                inner.retain_escapes(
+                    lambda escape: (
+                        not any(
+                            name in (self.source.mro(escape.exception) or [])
+                            for name in names
+                        )
                     )
-                ]
+                )
             flow.extend(inner)
             return flow
         manager = self._context_type(item.context_expr, function, env)
@@ -768,7 +795,7 @@ class ContractAnalyzer:
             ):
                 supported = False
         if not supported:
-            flow.unknowns.append(
+            flow.add_unknown(
                 UnknownValue(
                     "unresolved or unsupported context manager protocol",
                     function.name,
@@ -797,7 +824,7 @@ class ContractAnalyzer:
                     returned or "", instance=True
                 )
             elif not isinstance(item.optional_vars, ast.Name):
-                flow.unknowns.append(
+                flow.add_unknown(
                     UnknownValue(
                         "unsupported context manager binding target",
                         function.name,
@@ -811,7 +838,7 @@ class ContractAnalyzer:
             assert exit_method is not None
             mode = _suppression(exit_method.node)
             if mode is None:
-                flow.unknowns.append(
+                flow.add_unknown(
                     UnknownValue(
                         "context manager exception suppression is unresolved",
                         function.name,
@@ -819,7 +846,7 @@ class ContractAnalyzer:
                     )
                 )
             if mode is True or _always_raises(exit_method.node):
-                inner.escapes.clear()
+                inner.discard_escapes()
             flow.extend(inner)
             flow.extend(self._traced(function, self.function(exit_method, stack)))
         else:
@@ -833,7 +860,7 @@ class ContractAnalyzer:
         expression = node.value if isinstance(node, ast.Await) else node
         target = expression.func if isinstance(expression, ast.Call) else expression
         resolved = self.source.resolve(target, function.module, env)
-        definition = self.source.definitions.get(resolved or "")
+        definition = self.source.definition(resolved or "")
         if isinstance(expression, ast.Call) and definition:
             if isinstance(definition.node, ast.ClassDef):
                 return definition.name if not awaited else None
@@ -846,7 +873,7 @@ class ContractAnalyzer:
                 returned = self.source.annotation(
                     definition.node.returns, definition.module
                 )
-                result = self.source.definitions.get(returned or "")
+                result = self.source.definition(returned or "")
                 if result and isinstance(result.node, ast.ClassDef):
                     return result.name
         elif (
@@ -869,7 +896,7 @@ class ContractAnalyzer:
         flow = ExceptionFlow()
         lineage = self.source.lineage(definition.name)
         if lineage is None:
-            flow.unknowns.append(
+            flow.add_unknown(
                 UnknownValue(
                     f"unresolved constructor: {definition.name}", function.name, line
                 )
@@ -888,7 +915,7 @@ class ContractAnalyzer:
         for change in changes:
             name = self.source.resolve(change, definition.module)
             if name is None or not self.source.external(name):
-                flow.unknowns.append(
+                flow.add_unknown(
                     UnknownValue(
                         "class decorators or metaclasses may change construction",
                         function.name,
@@ -899,7 +926,7 @@ class ContractAnalyzer:
             external = True
         if not external and node.keywords:
             # Class keywords of a scanned hierarchy reach its own __init_subclass__.
-            flow.unknowns.append(
+            flow.add_unknown(
                 UnknownValue(
                     "class decorators or metaclasses may change construction",
                     function.name,
@@ -940,7 +967,7 @@ class ContractAnalyzer:
                         not in _PLAIN_DECORATORS
                         for item in member_node.decorator_list
                     ):
-                        flow.unknowns.append(
+                        flow.add_unknown(
                             UnknownValue(
                                 "library construction may call decorated hook: "
                                 f"{owner}.{member_node.name}",
@@ -976,7 +1003,7 @@ class ContractAnalyzer:
             return ExceptionFlow()
         inferred = self.source.infer(argument, function.module, env)
         name = inferred.name or self.source.resolve(argument, function.module, env)
-        definition = self.source.definitions.get(name or "")
+        definition = self.source.definition(name or "")
         if definition is None:
             return ExceptionFlow()
         if isinstance(definition.node, ast.ClassDef):
@@ -1041,7 +1068,7 @@ class ContractAnalyzer:
             and not awaited
             and not iterated_generator
         ):
-            flow.unknowns.append(
+            flow.add_unknown(
                 UnknownValue(
                     "coroutine execution is deferred until awaited",
                     function.name,
@@ -1052,11 +1079,11 @@ class ContractAnalyzer:
         called = self.function(
             definition, stack, iterated=iterated_generator, receiver=receiver
         )
-        flow.escapes.extend(
+        flow.add_escapes(
             _Escape(item.exception, (function.name, *item.trace), item.line)
             for item in called.escapes
         )
-        flow.unknowns.extend(called.unknowns)
+        flow.add_unknowns(called.unknowns)
         return flow
 
     def _dispatch(
@@ -1089,7 +1116,7 @@ class ContractAnalyzer:
                     else None
                 )
                 if method is None or self.source.abstract(method):
-                    flow.unknowns.append(
+                    flow.add_unknown(
                         UnknownValue(
                             f"unresolved Dishka implementation of {port.name}",
                             function.name,
@@ -1104,7 +1131,7 @@ class ContractAnalyzer:
                 if method is not None and not self.source.abstract(method):
                     candidates.append(method)
         if not bound and not candidates:
-            flow.unknowns.append(
+            flow.add_unknown(
                 UnknownValue(
                     f"abstract implementation without Dishka binding: {port.name}",
                     function.name,

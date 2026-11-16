@@ -6,9 +6,11 @@ ICE candidates, addresses, credentials or message payloads.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from types import MappingProxyType
+from typing import Any
 
 from fastapi_canon.integrations.webrtc.engine import MediaKind
 from fastapi_canon.integrations.webrtc.errors import ErrorCode
@@ -25,7 +27,7 @@ class SessionEventKind(StrEnum):
     CLOSED = "closed"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SessionEvent:
     """One step in a session's lifecycle.
 
@@ -46,8 +48,29 @@ class SessionEvent:
     """Seconds since admission."""
     code: ErrorCode | None = None
     media_kind: MediaKind | None = None
-    attributes: dict[str, str | int | float | bool] = field(default_factory=dict)
+    attributes: Mapping[str, str | int | float | bool] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "attributes", _EventAttributes(self.attributes))
 
 
 type EventHook = Callable[[SessionEvent], None]
 """A synchronous, non-blocking observer. Exceptions are logged and ignored."""
+
+
+class _EventAttributes(Mapping[str, str | int | float | bool]):
+    def __init__(self, attributes: Mapping[str, str | int | float | bool]) -> None:
+        self._values = MappingProxyType(dict(attributes))
+
+    def __getitem__(self, key: str) -> str | int | float | bool:
+        return self._values[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._values)
+
+    def __len__(self) -> int:
+        return len(self._values)
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> dict[str, str | int | float | bool]:
+        # dataclasses.asdict keeps its existing JSON-compatible dictionary output.
+        return dict(self._values)

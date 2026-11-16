@@ -17,6 +17,7 @@ class NotifyActivity:
                 continue
             try:
                 await callback(*args)
+            # Activity observers must not interrupt RPC delivery or later observers.
             except Exception:
                 logger.exception("RPC middleware %s callback failed", method)
 

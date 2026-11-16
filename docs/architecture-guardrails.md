@@ -1,7 +1,7 @@
 # Architecture and test guardrails
 
 [smelt.yml](../smelt.yml) defines dependency boundaries, source conventions and
-test policies. The development lockfile pins `smelt-cli==0.8.0`;
+test policies. The development lockfile pins `smelt-cli==0.10.0`;
 [.smelt.schema.json](../.smelt.schema.json) provides editor completion.
 
 ## Run the policy
@@ -38,6 +38,18 @@ names, dependency lifetimes or defaults; syntax alone cannot establish that a
 change preserves compatibility. `AcquireTransactionLock`, for example, provides
 a callable operation while retaining its named `acquire` operation.
 
+Explain broad exception recovery at the handler. Name numeric durations with
+their unit and repeated waits with their purpose; preserve established public
+names with a reasoned exception stating the unit. Review mutable fields in
+frozen records, parallel sequence fields and repeated immutable lookup sets.
+Use explicit branches for nested conditional expressions. Reference-service
+schemas and database models inherit its configured project bases.
+
+Dataclasses hold values: require `frozen` and `slots`, with `kw_only` for codegen
+configuration and result objects. Records with cached properties retain their
+instance dictionary. Keep accumulation, caches and live lifecycle state in
+ordinary classes; return immutable snapshots when reporting completed work.
+
 ## Change the policy
 
 Keep architectural boundaries in Smelt and style rules in Ruff. Do not reproduce
@@ -58,8 +70,8 @@ the few existing exceptions and their reasons.
 ## Upgrade Smelt
 
 Regenerate the editor schema as UTF-8 and review the
-[upstream rule catalog](https://github.com/mathisarends/smelt/blob/v0.8.0/docs/rules/README.md)
-and [upgrade guide](https://github.com/mathisarends/smelt/blob/v0.8.0/docs/upgrading.md#070-to-080).
+[upstream rule catalog](https://github.com/mathisarends/smelt/blob/v0.10.0/docs/rules/README.md)
+and [upgrade guide](https://github.com/mathisarends/smelt/blob/v0.10.0/docs/upgrading.md).
 Run the full policy and inspect new findings before adopting rules.
 Keep suppressions and exclusions tied to actual contracts.
 

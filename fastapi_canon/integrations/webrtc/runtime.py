@@ -8,7 +8,7 @@ import functools
 import logging
 import time
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from anyio import CancelScope
@@ -76,24 +76,32 @@ MINIMUM_CLEANUP_STEP_SECONDS = 1.0
 """Budget ``on_close`` and engine cleanup keep after stuck tasks used the deadline."""
 
 
-@dataclass
 class SessionChannel:
-    spec: DataChannelSpec
-    max_bytes: int
-    queue: asyncio.Queue[Any]
-    engine: EngineDataChannel | None = None
-    opened: asyncio.Event = field(default_factory=asyncio.Event)
-    closed: asyncio.Event = field(default_factory=asyncio.Event)
-    drained: asyncio.Event = field(default_factory=asyncio.Event)
-    send_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
-    consumer: bool = False
+    def __init__(
+        self,
+        spec: DataChannelSpec,
+        max_bytes: int,
+        queue: asyncio.Queue[Any],
+        *,
+        engine: EngineDataChannel | None = None,
+        consumer: bool = False,
+    ) -> None:
+        self.spec = spec
+        self.max_bytes = max_bytes
+        self.queue = queue
+        self.engine = engine
+        self.opened: asyncio.Event = asyncio.Event()
+        self.closed: asyncio.Event = asyncio.Event()
+        self.drained: asyncio.Event = asyncio.Event()
+        self.send_lock: asyncio.Lock = asyncio.Lock()
+        self.consumer = consumer
 
     @property
     def is_open(self) -> bool:
         return self.opened.is_set() and not self.closed.is_set()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RuntimeOptions:
     engine: Engine
     ice_servers: IceServerSource | None
@@ -180,6 +188,8 @@ class SessionRuntime:
             self.terminate(ErrorCode.SHUTDOWN)
         except WebRtcError as error:
             self.terminate(error.code)
+        # Unexpected engine or handler failures must terminate the session and run its
+        # cleanup.
         except Exception:
             logger.exception("Session %s failed unexpectedly", self.declaration.name)
             self.terminate(ErrorCode.ENGINE_FAILURE)
@@ -729,6 +739,8 @@ class SessionRuntime:
         peer = self._require_peer()
         try:
             await peer.add_ice_candidate(candidate)
+        # Engine-specific candidate errors for ignored offers are harmless; report other
+        # negotiation failures.
         except Exception:
             if self._ignored_offer:
                 return
@@ -1009,6 +1021,8 @@ class SessionRuntime:
                 self.terminate(ErrorCode.HANDLER_FAILURE)
             else:
                 self.terminate(error.code)
+        # Engine and application tasks may fail arbitrarily; terminate with the
+        # task-specific failure code.
         except Exception:
             if failure is ErrorCode.HANDLER_FAILURE:
                 logger.exception("Handler %s of %s failed", name, self._label)
@@ -1106,6 +1120,8 @@ class SessionRuntime:
                     await self._session.on_close(self._peer_handle, code)
             except TimeoutError:
                 logger.warning("on_close of %s exceeded its deadline", self._label)
+            # A failing application close hook must not prevent track and engine
+            # cleanup.
             except Exception:
                 logger.exception("on_close of %s failed", self._label)
         for track in self.incoming:
@@ -1132,6 +1148,8 @@ class SessionRuntime:
                 logger.warning(
                     "Engine cleanup of %s exceeded its deadline", self._label
                 )
+            # Engine-specific cleanup failures must not prevent releasing the session
+            # admission slot.
             except Exception:
                 logger.exception("Engine cleanup of %s failed", self._label)
         self._slots.release()
@@ -1176,6 +1194,7 @@ class SessionRuntime:
         )
         try:
             hook(event)
+        # Observability hooks must not interrupt the session lifecycle.
         except Exception:
             logger.exception("Session event hook failed")
 

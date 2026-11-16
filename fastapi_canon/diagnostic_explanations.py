@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _Explanation:
     meaning: str
     example: str

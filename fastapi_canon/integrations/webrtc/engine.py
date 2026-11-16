@@ -59,7 +59,7 @@ class DescriptionType(StrEnum):
     ANSWER = "answer"
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(frozen=True, kw_only=True, slots=True)
 class EngineCapabilities:
     """Optional engine behavior, advertised to clients in the session hello."""
 
@@ -71,13 +71,13 @@ class EngineCapabilities:
     negotiated_data_channels: bool = True
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SessionDescription:
     type: DescriptionType
     sdp: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class IceCandidate:
     """A trickled candidate in the browser's ``RTCIceCandidateInit`` shape."""
 
@@ -87,7 +87,7 @@ class IceCandidate:
     username_fragment: str | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ChannelParameters:
     label: str
     _: KW_ONLY
@@ -99,12 +99,12 @@ class ChannelParameters:
     id: int | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PeerConfig:
     ice_servers: tuple[IceServer, ...] = ()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CandidatePairStats:
     local_type: str | None = None
     remote_type: str | None = None
@@ -115,7 +115,7 @@ class CandidatePairStats:
         return "relay" in (self.local_type, self.remote_type)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MediaStats:
     """Per-stream RTP statistics in one direction."""
 
@@ -126,7 +126,7 @@ class MediaStats:
     jitter_seconds: float | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConnectionStats:
     """Engine-neutral connection statistics; unsupported values are ``None``.
 

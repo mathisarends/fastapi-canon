@@ -72,7 +72,7 @@ class RpcRoute:
     summary: str | None
     raises: tuple[type[RpcError], ...]
     resolver_scope: RpcResolverScope
-    timeout: float | None = None
+    timeout: float | None = None  # smelt: ignore[SMT357] -- Seconds API.
     _has_timeout: bool = False
     idempotent: bool = False
 
@@ -94,11 +94,12 @@ class RpcChannel:
         raises: Iterable[RpcErrorDeclaration] = (),
         resolver_scope: RpcResolverScope = call_scope,
     ) -> None:
-        resolved_namespace = (
-            (normalize_namespace(name) if name is not None else "")
-            if namespace is None
-            else normalize_namespace(namespace)
-        )
+        if namespace is not None:
+            resolved_namespace = normalize_namespace(namespace)
+        elif name is not None:
+            resolved_namespace = normalize_namespace(name)
+        else:
+            resolved_namespace = ""
         self._name = (
             normalize_namespace(name)
             if name is not None

@@ -19,7 +19,7 @@ from fastapi_canon.codegen.generators import (
 from fastapi_canon.contracts import export_contracts
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class StepResult:
     name: str
     status: str
@@ -65,19 +65,25 @@ def generate(
         kind: json.loads(_json(document)) for kind, document in documents.items()
     }
     changed = tuple(path for path, text in contracts.items() if _changed(path, text))
+    if check and changed:
+        contract_status = "drift"
+    elif changed:
+        contract_status = "updated"
+    else:
+        contract_status = "current"
     contract_result = StepResult(
-        "contracts",
-        "drift" if check and changed else "updated" if changed else "current",
-        tuple(str(path) for path in changed),
-        _diff(contracts, changed) if diff else "",
+        name="contracts",
+        status=contract_status,
+        changes=tuple(str(path) for path in changed),
+        diff=_diff(contracts, changed) if diff else "",
     )
     if check and changed:
         return (
             contract_result,
             *(
                 StepResult(
-                    target.name,
-                    "blocked",
+                    name=target.name,
+                    status="blocked",
                     output="Exported contracts are stale; regenerate before checking dependent clients.",
                 )
                 for target in selected
@@ -120,12 +126,18 @@ def generate(
         )
         if not check:
             writer(check=False)
+        if check and paths:
+            status = "drift"
+        elif paths:
+            status = "updated"
+        else:
+            status = "current"
         results.append(
             StepResult(
-                target.name,
-                "drift" if check and paths else "updated" if paths else "current",
-                tuple(str(path) for path in paths),
-                report,
+                name=target.name,
+                status=status,
+                changes=tuple(str(path) for path in paths),
+                diff=report,
             )
         )
     return tuple(results)
@@ -148,7 +160,9 @@ def _external(target: TargetConfig, root: Path, *, check: bool) -> StepResult:
     executable = shutil.which(command[0])
     if executable is None:
         return StepResult(
-            target.name, "error", output=f"Executable not found: {command[0]}"
+            name=target.name,
+            status="error",
+            output=f"Executable not found: {command[0]}",
         )
     try:
         result = subprocess.run(
@@ -161,20 +175,19 @@ def _external(target: TargetConfig, root: Path, *, check: bool) -> StepResult:
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         return StepResult(
-            target.name,
-            "error",
+            name=target.name,
+            status="error",
             output=f"External command failed ({type(error).__name__})",
         )
-    status = (
-        "current"
-        if check and result.returncode == 0
-        else "success"
-        if result.returncode == 0
-        else "drift"
-        if check and result.returncode == 1
-        else "error"
+    if result.returncode == 0:
+        status = "current" if check else "success"
+    elif check and result.returncode == 1:
+        status = "drift"
+    else:
+        status = "error"
+    return StepResult(
+        name=target.name, status=status, output=result.stdout + result.stderr
     )
-    return StepResult(target.name, status, output=result.stdout + result.stderr)
 
 
 def _json(value: Any) -> str:

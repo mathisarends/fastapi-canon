@@ -1,7 +1,6 @@
 import inspect
 from collections.abc import AsyncGenerator, Callable, Sequence
 from contextlib import AbstractAsyncContextManager, AsyncExitStack
-from dataclasses import dataclass, field
 from typing import Annotated, Any, get_type_hints
 
 from fastapi import Depends, WebSocket
@@ -136,11 +135,15 @@ class ContextDependencies:
         return self._getters[dependency]
 
 
-@dataclass
 class Preparation:
-    resolver: RpcResolver
-    stack: AsyncExitStack
-    values: dict[type[Any], object] = field(default_factory=dict)
+    def __init__(
+        self,
+        resolver: RpcResolver,
+        stack: AsyncExitStack,
+    ) -> None:
+        self.resolver = resolver
+        self.stack = stack
+        self.values: dict[type[Any], object] = dict()
 
 
 def _result_type(function: Callable[..., Any]) -> type[Any]:

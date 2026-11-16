@@ -27,7 +27,7 @@ class IceServer(BaseModel):
     credential: str | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class IceServers:
     """ICE servers for both peers of a session.
 
@@ -72,7 +72,7 @@ async def resolve_ice_servers(
     return IceServers(client=servers)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TurnRestCredentials:
     """Short-lived TURN credentials in the coturn REST scheme.
 

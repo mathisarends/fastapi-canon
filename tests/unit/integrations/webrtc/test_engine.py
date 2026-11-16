@@ -51,6 +51,27 @@ def test_stats_and_events_serialize_with_existing_string_values() -> None:
     assert restored.inbound[0].kind is MediaKind.AUDIO
 
 
+def test_event_attributes_are_owned_read_only_and_serialize_as_a_dictionary() -> None:
+    attributes: dict[str, str | int | float | bool] = {"frames": 1}
+    event = SessionEvent(
+        kind=SessionEventKind.READY,
+        name="practice",
+        session_id="session",
+        elapsed_seconds=0,
+        attributes=attributes,
+    )
+    attributes["frames"] = 2
+    assert event.attributes == {"frames": 1}
+    assert list(event.attributes) == ["frames"]
+    assert len(event.attributes) == 1
+    with pytest.raises(TypeError):
+        event.attributes["frames"] = 3  # type: ignore[index]  # Verify runtime write protection.
+    serialized = asdict(event)
+    assert serialized["attributes"] == {"frames": 1}
+    serialized["attributes"]["frames"] = 4
+    assert event.attributes["frames"] == 1
+
+
 def test_signaling_reuses_public_enums_without_changing_hello_values() -> None:
     payload = {
         "session_id": "session",

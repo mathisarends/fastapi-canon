@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import ast
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -39,7 +39,7 @@ _DEPENDENCIES = {
 }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _Diagnostic:
     code: str
     message: str
@@ -48,12 +48,12 @@ class _Diagnostic:
     trace: tuple[str, ...] = ()
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class _Operation:
     function: str
     path: str
     line: int
-    diagnostics: list[_Diagnostic] = field(default_factory=list)
+    diagnostics: tuple[_Diagnostic, ...] = ()
     transport: str = "http"
 
     @property
@@ -61,9 +61,9 @@ class _Operation:
         return not any(item.code == "CAN003" for item in self.diagnostics)
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class ContractReport:
-    operations: list[_Operation]
+    operations: tuple[_Operation, ...]
 
     @property
     def gaps(self) -> int:
@@ -80,7 +80,14 @@ class ContractReport:
     def as_dict(self) -> dict[str, Any]:
         return {
             "operations": [
-                {**asdict(operation), "complete": operation.complete}
+                {
+                    "function": operation.function,
+                    "path": operation.path,
+                    "line": operation.line,
+                    "diagnostics": [asdict(item) for item in operation.diagnostics],
+                    "transport": operation.transport,
+                    "complete": operation.complete,
+                }
                 for operation in self.operations
             ],
             "contract_gaps": self.gaps,
@@ -100,9 +107,9 @@ class _CheckContracts:
         self._analyzer = ContractAnalyzer(source)
 
     def __call__(self) -> ContractReport:
-        operations: list[_Operation] = []
+        operations: list[_CheckOperation] = []
         nested = {id(function.node) for function in self.source.nested}
-        for function in [*self.source.definitions.values(), *self.source.nested]:
+        for function in [*self.source.iter_definitions(), *self.source.nested]:
             if not isinstance(function.node, ast.FunctionDef | ast.AsyncFunctionDef):
                 continue
             for decorator in function.node.decorator_list:
@@ -125,7 +132,7 @@ class _CheckContracts:
                 }:
                     continue
                 module, router = self.source.value(owner, function.module)
-                operation = _Operation(
+                operation = _CheckOperation(
                     function.name,
                     str(self.source.paths[function.module]),
                     decorator.lineno,
@@ -143,13 +150,12 @@ class _CheckContracts:
                     if isinstance(router, ast.Call)
                     else None
                 )
-                supported = (
-                    _WEBRTC_ROUTERS
-                    if method == "session"
-                    else _API_ROUTERS
-                    if method in TRANSPORT_METHODS
-                    else _CANON_ROUTERS
-                )
+                if method == "session":
+                    supported = _WEBRTC_ROUTERS
+                elif method in TRANSPORT_METHODS:
+                    supported = _API_ROUTERS
+                else:
+                    supported = _CANON_ROUTERS
                 if method == "session" and constructor not in supported:
                     # ``session`` is a common method name; only WebRTC routers declare.
                     continue
@@ -170,7 +176,7 @@ class _CheckContracts:
                 self._operation(
                     operation, function, decorator, module=module, router=router
                 )
-        return ContractReport(operations)
+        return ContractReport(tuple(operation.snapshot() for operation in operations))
 
     def _rpc_method(
         self,
@@ -179,9 +185,9 @@ class _CheckContracts:
         owner: ast.expr,
         *,
         nested: set[int],
-    ) -> _Operation | None:
+    ) -> _CheckOperation | None:
         # `method` is a common attribute name: only resolved RpcChannels count.
-        self.source.touched = {function.module}
+        self.source.reset_usage({function.module})
         module, channel = self.source.value(owner, function.module)
         if not isinstance(channel, ast.Call):
             return None
@@ -189,7 +195,7 @@ class _CheckContracts:
         if declaration is None:
             return None
         declaration_modules = frozenset(self.source.touched)
-        operation = _Operation(
+        operation = _CheckOperation(
             function.name,
             str(self.source.paths[function.module]),
             decorator.lineno,
@@ -219,7 +225,7 @@ class _CheckContracts:
 
     def _operation(
         self,
-        operation: _Operation,
+        operation: _CheckOperation,
         function: SourceDefinition,
         decorator: ast.Call | None,
         *,
@@ -227,7 +233,7 @@ class _CheckContracts:
         router: ast.Call,
         declaration_modules: frozenset[str] = frozenset(),
     ) -> None:
-        self.source.touched = {function.module, module, *declaration_modules}
+        self.source.reset_usage({function.module, module, *declaration_modules})
         layers = [(module, router)]
         policy_node = (
             _keyword(router, "policy") if operation.transport != "rpc" else None
@@ -245,7 +251,7 @@ class _CheckContracts:
                 else:
                     self._unknown(operation, "unresolved RouterPolicy declaration")
         for scope, line in self.source.inherited_contracts:
-            operation.diagnostics.append(
+            operation.report(
                 _Diagnostic(
                     "CAN003",
                     "router contracts inherited through include_router are outside "
@@ -287,14 +293,14 @@ class _CheckContracts:
                 self._router_dependencies(decorator, function.module, operation)
             )
         contracts_known = contracts_known and not any(
-            self.source.uncertain.get(scope) for scope in self.source.touched
+            self.source.uncertainties(scope) for scope in self.source.touched
         )
         self._compare(
             operation, flow, catalog, declared=declared, contracts_known=contracts_known
         )
         for scope in sorted(self.source.touched):
-            for message in dict.fromkeys(self.source.uncertain.get(scope, [])):
-                operation.diagnostics.append(
+            for message in dict.fromkeys(self.source.uncertainties(scope)):
+                operation.report(
                     _Diagnostic("CAN003", message, str(self.source.paths[scope]), 1)
                 )
 
@@ -310,7 +316,7 @@ class _CheckContracts:
                     mapped = self._mapped_error(element, scope)
                     if mapped is not None:
                         catalog[mapped.exception] = mapped.error
-            self.source.touched = touched
+            self.source.reset_usage(touched)
             self._catalog_cache = catalog
         return self._catalog_cache
 
@@ -334,7 +340,7 @@ class _CheckContracts:
         return _ErrorMapping(exception, identity)
 
     def _errors(
-        self, node: ast.expr | None, module: str, operation: _Operation
+        self, node: ast.expr | None, module: str, operation: _CheckOperation
     ) -> dict[str, str]:
         result: dict[str, str] = {}
         for scope, element in self._sequence(node, module, operation):
@@ -369,7 +375,7 @@ class _CheckContracts:
         return result
 
     def _router_dependencies(
-        self, node: ast.Call, module: str, operation: _Operation
+        self, node: ast.Call, module: str, operation: _CheckOperation
     ) -> ExceptionFlow:
         flow = ExceptionFlow()
         for scope, dependency in self._sequence(
@@ -403,7 +409,7 @@ class _CheckContracts:
         self,
         node: ast.expr | None,
         module: str,
-        operation: _Operation,
+        operation: _CheckOperation,
         *,
         seen: frozenset[int] = frozenset(),
     ) -> list[tuple[str, ast.expr]]:
@@ -432,9 +438,9 @@ class _CheckContracts:
         return []
 
     def _unknown(
-        self, operation: _Operation, message: str, line: int | None = None
+        self, operation: _CheckOperation, message: str, line: int | None = None
     ) -> None:
-        operation.diagnostics.append(
+        operation.report(
             _Diagnostic(
                 "CAN003",
                 message,
@@ -452,7 +458,7 @@ class _CheckContracts:
     ) -> ExceptionFlow:
         flow = ExceptionFlow()
         if function.name in seen:
-            flow.unknowns.append(
+            flow.add_unknown(
                 UnknownValue(
                     "recursive dependency", function.name, function.node.lineno
                 )
@@ -471,7 +477,7 @@ class _CheckContracts:
                 try:
                     expression = ast.parse(expression.value, mode="eval").body
                 except SyntaxError:
-                    flow.unknowns.append(
+                    flow.add_unknown(
                         UnknownValue(
                             "unresolved dependency annotation",
                             function.name,
@@ -488,7 +494,7 @@ class _CheckContracts:
                     continue
                 target = child.args[0] if child.args else _keyword(child, "dependency")
                 name = self.source.resolve(target, module) if target else None
-                dependency = self.source.definitions.get(name or "")
+                dependency = self.source.definition(name or "")
                 if dependency and isinstance(
                     dependency.node, ast.FunctionDef | ast.AsyncFunctionDef
                 ):
@@ -508,7 +514,7 @@ class _CheckContracts:
                     # sub-dependencies.
                     continue
                 else:
-                    flow.unknowns.append(
+                    flow.add_unknown(
                         UnknownValue(
                             "unresolved FastAPI dependency", function.name, child.lineno
                         )
@@ -517,7 +523,7 @@ class _CheckContracts:
 
     def _compare(
         self,
-        operation: _Operation,
+        operation: _CheckOperation,
         flow: ExceptionFlow,
         catalog: dict[str, str],
         *,
@@ -531,7 +537,7 @@ class _CheckContracts:
                     escape.exception
                 ) and operation.transport in {"http", "sse", "webrtc"}:
                     origin = self.source.definitions[escape.trace[-1]]
-                    operation.diagnostics.append(
+                    operation.report(
                         _Diagnostic(
                             "CAN003",
                             "WebSocketException may escape an HTTP operation; transport narrowing is unresolved",
@@ -567,7 +573,7 @@ class _CheckContracts:
                 else f"{escape.exception}: no Error mapping in raises or the application catalog"
             )
             origin = self.source.definitions[escape.trace[-1]]
-            operation.diagnostics.append(
+            operation.report(
                 _Diagnostic(
                     code,
                     message,
@@ -577,7 +583,7 @@ class _CheckContracts:
                 )
             )
         for unknown in flow.unknowns:
-            unknown_origin = self.source.definitions.get(unknown.function)
+            unknown_origin = self.source.definition(unknown.function)
             path = (
                 str(self.source.paths[unknown_origin.module])
                 if unknown_origin
@@ -587,7 +593,7 @@ class _CheckContracts:
                 "CAN003", unknown.message, path, unknown.line, (unknown.function,)
             )
             if diagnostic not in operation.diagnostics:
-                operation.diagnostics.append(diagnostic)
+                operation.report(diagnostic)
 
 
 def analyze_error_contracts(roots: list[Path]) -> ContractReport:
@@ -602,3 +608,26 @@ class _ErrorMapping(NamedTuple):
 class _Finding(NamedTuple):
     code: str
     exception: str
+
+
+class _CheckOperation:
+    def __init__(
+        self, function: str, path: str, line: int, *, transport: str = "http"
+    ) -> None:
+        self.function = function
+        self.path = path
+        self.line = line
+        self.transport = transport
+        self._diagnostics: list[_Diagnostic] = []
+
+    @property
+    def diagnostics(self) -> tuple[_Diagnostic, ...]:
+        return tuple(self._diagnostics)
+
+    def report(self, diagnostic: _Diagnostic) -> None:
+        self._diagnostics.append(diagnostic)
+
+    def snapshot(self) -> _Operation:
+        return _Operation(
+            self.function, self.path, self.line, self.diagnostics, self.transport
+        )

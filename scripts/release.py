@@ -37,9 +37,10 @@ _ALLOWED = frozenset({"fastapi-canon"})
 _NUMBER = r"(?:0|[1-9][0-9]*)"
 _VERSION = re.compile(rf"{_NUMBER}\.{_NUMBER}\.{_NUMBER}(?:(?:a|b|rc){_NUMBER})?")
 _REPORT = Path("dist/release-report/release.json")
+_INDEX_POLL_INTERVAL_SECONDS = 5
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Package:
     name: str
     directory: str
@@ -211,7 +212,7 @@ def verify_published(report: dict[str, Any], root: Path = ROOT) -> None:
             break
         if attempt == 11:
             raise ValueError("PyPI does not yet expose all expected artifact hashes")
-        time.sleep(5)
+        time.sleep(_INDEX_POLL_INTERVAL_SECONDS)
     combinations = [
         (f"fastapi-canon{extras}=={report['version']}",)
         for extras in (

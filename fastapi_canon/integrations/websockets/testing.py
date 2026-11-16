@@ -5,7 +5,6 @@ import json
 from collections import deque
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from contextlib import suppress
-from dataclasses import dataclass
 from typing import Any, Self, cast
 from urllib.parse import unquote, urlsplit
 
@@ -429,13 +428,22 @@ class InMemorySocketFactory:
                 raise outcome
 
 
-@dataclass(slots=True)
 class RpcTestError(Exception):
-    rpc_code: int
-    code: str
-    message: str
-    details: Any = None
-    problem: Problem | None = None
+    def __init__(
+        self,
+        rpc_code: int,
+        code: str,
+        message: str,
+        *,
+        details: Any = None,
+        problem: Problem | None = None,
+    ) -> None:
+        self.rpc_code = rpc_code
+        self.code = code
+        self.message = message
+        self.details = details
+        self.problem = problem
+        super().__init__(message)
 
 
 class RpcTestConnectionClosed(Exception):
@@ -550,8 +558,8 @@ class RpcTestClient:
                 item["code"],
                 problem.code if problem is not None else data.get("code", ""),
                 item["message"],
-                data.get("details"),
-                problem,
+                details=data.get("details"),
+                problem=problem,
             )
         return value["result"]
 
@@ -569,7 +577,10 @@ class RpcTestClient:
         )
 
     async def next_notification(
-        self, *, timeout: float | None = None
+        # smelt: ignore[SMT357] -- Seconds; keep the existing public keyword or field.
+        self,
+        *,
+        timeout: float | None = None,
     ) -> tuple[str, Any]:
         async with asyncio.timeout(timeout):
             item = await self._notifications.get()
