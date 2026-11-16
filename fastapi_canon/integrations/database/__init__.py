@@ -1,5 +1,3 @@
-"""Optional SQLAlchemy database ownership and Alembic migrations."""
-
 from importlib import import_module
 from typing import TYPE_CHECKING, Any
 

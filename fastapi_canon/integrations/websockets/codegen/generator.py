@@ -1,13 +1,9 @@
-"""The ``websockets`` client generator for ``fastapi-canon generate``."""
-
 from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
 from typing import Any
 
 from fastapi_canon.codegen.generators import Rendering, TargetConfig
-
-__all__ = ["GENERATOR", "WebSocketGenerator"]
 
 
 class WebSocketGenerator:

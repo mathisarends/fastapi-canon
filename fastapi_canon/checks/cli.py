@@ -1,5 +1,3 @@
-"""Find missing route error contracts: ``python -m fastapi_canon.checks``."""
-
 import argparse
 import json
 from collections.abc import Sequence

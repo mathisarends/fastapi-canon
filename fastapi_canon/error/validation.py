@@ -1,6 +1,6 @@
 from collections.abc import Iterator, Sequence
 
-from fastapi_canon.exceptions import ErrorConfigurationError
+from fastapi_canon.errors import ErrorConfigurationError
 
 
 def unique_instances[ItemT](

@@ -1,5 +1,3 @@
-"""Short service scopes and HTTP resource lifetimes owned by composition."""
-
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Awaitable, Callable

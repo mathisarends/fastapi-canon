@@ -1,5 +1,3 @@
-"""Port instrumentation loaded only by an enabled telemetry composition."""
-
 from collections.abc import Callable
 from contextlib import nullcontext
 from contextvars import ContextVar

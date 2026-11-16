@@ -1,5 +1,3 @@
-"""Immutable composition descriptions and system-check results."""
-
 from collections.abc import Callable
 from dataclasses import InitVar, dataclass
 from typing import Literal

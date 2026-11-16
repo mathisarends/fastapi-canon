@@ -1,5 +1,3 @@
-"""The guarded FastAPI configuration bridge and non-owning span adapter."""
-
 from collections.abc import Mapping
 from contextlib import nullcontext
 from typing import Any, override
@@ -15,7 +13,7 @@ from opentelemetry.trace import Span, SpanContext, SpanKind, Status, StatusCode
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from fastapi_canon.error.handlers import install_problem_observer
-from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.errors import FeatureConfigurationError
 from fastapi_canon.integrations.opentelemetry.declarations import Telemetry
 from fastapi_canon.integrations.opentelemetry.ports import excluded
 

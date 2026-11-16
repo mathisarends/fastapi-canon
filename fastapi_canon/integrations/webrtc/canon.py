@@ -1,5 +1,3 @@
-"""``WebRtcRouter``: declare WebRTC sessions with Canon admission contracts."""
-
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, TypeVar, Unpack
 
@@ -28,8 +26,6 @@ from fastapi_canon.integrations.webrtc.ice import IceServerSource
 from fastapi_canon.integrations.webrtc.router import SessionRouter
 from fastapi_canon.routing.http import CanonRouter, RouterOptions, distinct_errors
 from fastapi_canon.routing.policy import normalize_raises as _normalize_raises
-
-__all__ = ["WebRtcRouter"]
 
 Factory = TypeVar("Factory", bound=Callable[..., Any])
 

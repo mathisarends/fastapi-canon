@@ -1,9 +1,3 @@
-"""``SessionRouter``: the session runtime behind ``WebRtcRouter``.
-
-This module evaluates annotations eagerly: FastAPI reads the generated
-endpoint signature, whose dependency refers to a closure-local factory.
-"""
-
 import asyncio
 import inspect
 import logging

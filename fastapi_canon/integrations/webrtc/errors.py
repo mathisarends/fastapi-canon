@@ -1,5 +1,3 @@
-"""Stable error categories shared by the server runtime and generated clients."""
-
 from enum import StrEnum
 
 

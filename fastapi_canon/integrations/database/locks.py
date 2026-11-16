@@ -1,5 +1,3 @@
-"""Explicit PostgreSQL advisory transaction locks on the scoped session."""
-
 from typing import Literal
 
 from sqlalchemy import text

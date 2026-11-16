@@ -1,5 +1,3 @@
-"""Export the contracts of a composed application without starting its runtime."""
-
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType

@@ -1,5 +1,3 @@
-"""Composition checks and contract export for registered WebRTC sessions."""
-
 from collections.abc import Sequence
 from typing import Any
 
@@ -8,8 +6,6 @@ from fastapi import FastAPI
 
 from fastapi_canon.diagnostics import CheckIssue, CheckResult, qualified_name
 from fastapi_canon.integration import IntegrationRoute, RouteContext
-
-__all__ = ["WEBRTC", "WebRtcRoute"]
 
 
 class WebRtcExporter:

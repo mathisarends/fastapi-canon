@@ -1,5 +1,3 @@
-"""Optional OpenTelemetry integration declared on Canon features."""
-
 from .declarations import (
     Instrumentation,
     ResourceInstrumentation,

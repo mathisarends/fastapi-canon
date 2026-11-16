@@ -3,7 +3,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 
 from fastapi_canon import Composition, Feature
-from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.errors import FeatureConfigurationError
 from fastapi_canon.integrations.mcp import Mcp
 
 

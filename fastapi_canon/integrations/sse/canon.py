@@ -22,10 +22,6 @@ from fastapi_canon.routing.http import CanonRouter
 from fastapi_canon.routing.policy import normalize_raises
 from fastapi_canon.routing.traversal import iter_contract_routes
 
-__all__ = [
-    "CanonStreamRouter",
-]
-
 logger = logging.getLogger(__name__)
 
 

@@ -1,5 +1,3 @@
-"""Non-owning span filtering for the contrib HTTP client adapter."""
-
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from typing import Any, override

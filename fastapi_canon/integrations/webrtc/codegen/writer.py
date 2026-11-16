@@ -1,5 +1,3 @@
-"""Deterministic generated-file output owned by a manifest."""
-
 import json
 from collections.abc import Mapping
 from pathlib import Path

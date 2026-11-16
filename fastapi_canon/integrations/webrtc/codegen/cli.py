@@ -1,5 +1,3 @@
-"""``fastapi-canon webrtc`` command line: export contracts and generate clients."""
-
 import argparse
 import hashlib
 import importlib
@@ -18,10 +16,10 @@ from fastapi_canon.integrations.webrtc.codegen.typescript import (
 )
 from fastapi_canon.integrations.webrtc.codegen.writer import write_files
 
-__all__ = ["main"]
 
-
-def main(argv: list[str] | None = None) -> int:
+def main(  # smelt: ignore[SMT429] -- fastapi_canon.commands entry point.
+    argv: list[str] | None = None,
+) -> int:
     """Export WebRTC contracts and generate browser clients."""
     parser = argparse.ArgumentParser(prog="fastapi-canon webrtc")
     parser.add_argument("--version", action="version", version=__version__)

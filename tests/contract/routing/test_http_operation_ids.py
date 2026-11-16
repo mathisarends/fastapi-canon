@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
 from fastapi_canon import APIRouter, Composition, Feature, inspect_app
-from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.errors import FeatureConfigurationError
 from fastapi_canon.integrations.sse.canon import CanonStreamRouter
 from tests.fixtures.injected_endpoints import EndpointStore, reader
 

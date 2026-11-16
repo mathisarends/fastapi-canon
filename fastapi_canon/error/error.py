@@ -18,7 +18,7 @@ from fastapi_canon.error.types import (
     OpenAPIHeader,
     is_absolute_uri,
 )
-from fastapi_canon.exceptions import ErrorConfigurationError
+from fastapi_canon.errors import ErrorConfigurationError
 
 _RESERVED_MEMBERS = frozenset({"type", "title", "status", "detail", "instance", "code"})
 _HEADER_NAME_PATTERN = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")

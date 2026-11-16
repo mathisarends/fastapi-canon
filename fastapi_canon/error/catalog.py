@@ -14,7 +14,7 @@ from fastapi_canon.error.openapi import compile_problem_schema
 from fastapi_canon.error.problem import Problem
 from fastapi_canon.error.registry import ErrorRegistry
 from fastapi_canon.error.rendering import render_problem_payload
-from fastapi_canon.exceptions import ErrorConfigurationError
+from fastapi_canon.errors import ErrorConfigurationError
 
 _current_registry: ContextVar[ErrorCatalog | None] = ContextVar(
     "canon_error_registry", default=None

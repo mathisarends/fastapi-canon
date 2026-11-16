@@ -1,5 +1,3 @@
-"""Composition checks and OpenRPC export for registered RPC endpoints."""
-
 from collections.abc import Callable, Iterable, Sequence
 from typing import Any
 
@@ -8,8 +6,6 @@ from fastapi import FastAPI
 
 from fastapi_canon.diagnostics import CheckIssue, CheckResult, qualified_name
 from fastapi_canon.integration import IntegrationRoute, RouteContext
-
-__all__ = ["OPENRPC", "RpcRoute"]
 
 type DependencyRoots = Iterable[tuple[str, Sequence[Any] | None]]
 

@@ -1,5 +1,3 @@
-"""Read Canon declarations and compare them with explicit escaping exceptions."""
-
 from __future__ import annotations
 
 import ast

@@ -5,7 +5,7 @@ from fastmcp import FastMCP
 from fastmcp.server.middleware import Middleware, MiddlewareContext
 from fastmcp.utilities.components import FastMCPComponent
 
-from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.errors import FeatureConfigurationError
 
 
 class ComponentValidation(Middleware):

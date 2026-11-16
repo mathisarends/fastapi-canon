@@ -1,14 +1,3 @@
-"""Client generators registered through the ``fastapi_canon.generators`` entry points.
-
-A distribution registers a generator under its target name, for example::
-
-    [project.entry-points."fastapi_canon.generators"]
-    graphql = "my_package.codegen:GENERATOR"
-
-The referenced object implements ``Generator``. Keep its module light: import
-rendering dependencies inside ``render`` so configuration loading stays cheap.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
@@ -17,17 +6,6 @@ from functools import cache
 from importlib.metadata import entry_points
 from pathlib import Path
 from typing import Any, Literal, Protocol
-
-__all__ = [
-    "GROUP",
-    "ClientLanguage",
-    "Generator",
-    "HttpClient",
-    "Rendering",
-    "TargetConfig",
-    "contract_kinds",
-    "load_generator",
-]
 
 GROUP = "fastapi_canon.generators"
 

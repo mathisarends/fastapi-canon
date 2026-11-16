@@ -34,7 +34,7 @@ from fastapi_canon.diagnostics import (
     CheckResult,
     CompositionInfo,
 )
-from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.errors import FeatureConfigurationError
 from fastapi_canon.integration import Integration
 from fastapi_canon.openapi import (
     validate_openapi_contracts,

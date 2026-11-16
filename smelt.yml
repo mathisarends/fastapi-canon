@@ -34,7 +34,7 @@ architecture:
   modules:
     scripts: tooling
     examples: showcase
-    fastapi_canon.exceptions: values
+    fastapi_canon.errors: values
     fastapi_canon.error: adapters
     fastapi_canon.error.types: values
     fastapi_canon.error.error: values
@@ -316,9 +316,12 @@ structure:
       match: fastapi_canon
       export_at: 3
       required: [error, composition, routing, cli, contracts, diagnostics, openapi, response]
-      public: [., error, diagnostics, exceptions, openapi, contracts, integrations.**]
+      public: [., error, diagnostics, errors, openapi, contracts, integrations.**]
       imports:
         style: absolute
+      module_docstrings: forbid
+      rules:
+        package-only-dunder-all: error
       private_modules: forbid
       future_annotations: when-needed
       max_positional_parameters: 3
@@ -387,7 +390,6 @@ rules:
   caller-before-callee: warning
   prefer-callable-instance: warning
   redundant-module-name: warning
-  package-only-dunder-all: off
   unnecessary-future-annotations: warning
   prefer-match-type-dispatch: warning
   private-test-access: error

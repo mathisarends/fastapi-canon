@@ -44,18 +44,6 @@ from fastapi_canon.routing.traversal import iter_contract_routes
 
 _CLOSED = object()
 
-__all__ = [
-    "InMemoryClientSocket",
-    "InMemorySocket",
-    "InMemorySocketFactory",
-    "RpcTestClient",
-    "RpcTestConnectionClosed",
-    "RpcTestError",
-    "RpcTestHandshakeRejected",
-    "RpcTestStream",
-    "SocketFaults",
-]
-
 
 class SocketFaults:
     """Directional faults for one in-memory socket; gates create no worker tasks."""
@@ -82,9 +70,9 @@ class SocketFaults:
         self.delay = delay
         self.sleep = sleep
         self.half_open = half_open
-        self.frames_sent = 0
+        self.frames_sent = 0  # smelt: ignore[SMT335] -- Consumer frame counter.
         # Public testing-library state is deliberately inspected by consumer tests.
-        self.blocked = asyncio.Event()
+        self.blocked = asyncio.Event()  # smelt: ignore[SMT430] -- Public send gate.
         self.held = asyncio.Event()
         self._send_gate = asyncio.Event()
         self._send_gate.set()
@@ -341,7 +329,7 @@ class InMemorySocketFactory:
         self.context = context
         self.limits = limits
         # Public testing-library state is deliberately inspected by consumer tests.
-        self.attempts = 0
+        self.attempts = 0  # smelt: ignore[SMT430] -- Consumer retry counter.
         self.sockets: list[InMemorySocket] = []
         self._tasks: list[asyncio.Task[None]] = []
         self._rejections: deque[RpcTestHandshakeRejected] = deque()

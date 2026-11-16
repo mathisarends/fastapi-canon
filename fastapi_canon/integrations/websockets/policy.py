@@ -4,7 +4,7 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from fastapi_canon.exceptions import ConfigurationError
+from fastapi_canon.errors import ConfigurationError
 
 if TYPE_CHECKING:
     from fastapi_canon.integrations.websockets.adapters.fastapi import FastApiResolver

@@ -1,11 +1,3 @@
-"""Signaling protocol ``fastapi-webrtc.v1``: JSON text frames over one WebSocket.
-
-See ``docs/protocol.md`` for the normative description. Every message is a JSON
-object with a ``type`` field. Unknown fields are ignored so that later minor
-protocol revisions can add optional fields; unknown ``type`` values are a
-``protocol_error``.
-"""
-
 from __future__ import annotations
 
 from enum import StrEnum

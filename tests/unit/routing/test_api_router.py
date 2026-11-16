@@ -15,7 +15,7 @@ from fastapi_canon import (
     RouteOptions,
     StreamOptions,
 )
-from fastapi_canon.exceptions import ConfigurationError
+from fastapi_canon.errors import ConfigurationError
 from fastapi_canon.integrations.sse.canon import CanonStreamRouter
 from fastapi_canon.integrations.websockets import CanonWebSocketRouter, WebSocketPolicy
 from fastapi_canon.routing.http import (

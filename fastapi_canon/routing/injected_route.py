@@ -1,5 +1,3 @@
-"""HTTP routes that resolve ``Inject[T]`` and ``FromDishka[T]`` parameters."""
-
 from __future__ import annotations
 
 import functools

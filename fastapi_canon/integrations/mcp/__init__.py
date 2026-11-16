@@ -1,9 +1,3 @@
-"""Optional FastMCP composition and Dishka injection.
-
-Enable ``Mcp`` in ``Composition(integrations=...)`` and mount feature servers with
-``McpMount`` in ``Feature(integrations=...)``.
-"""
-
 from importlib import import_module
 from typing import TYPE_CHECKING, Any
 

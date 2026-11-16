@@ -1,5 +1,3 @@
-"""Database commands; optional runtimes are loaded after argument parsing."""
-
 import argparse
 import asyncio
 import importlib
@@ -8,8 +6,6 @@ import sys
 import tomllib
 from collections.abc import Sequence
 from pathlib import Path
-
-__all__ = ["main"]
 
 
 def main(argv: Sequence[str] | None = None) -> int:

@@ -1,5 +1,3 @@
-"""The per-session state machine around signaling, limits and cleanup."""
-
 from __future__ import annotations
 
 import asyncio

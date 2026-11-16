@@ -10,6 +10,13 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 See the [upgrade guide](docs/package-migration.md#upgrade-to-0240).
 
+- **`CANON-024-ERROR-NAMESPACE`** — Import Canon configuration errors from
+  `fastapi_canon.errors` instead of `fastapi_canon.exceptions`; the old module
+  is removed. Error class names and inheritance are unchanged.
+- **`CANON-024-MODULE-EXPORTS`** — Ordinary modules no longer define `__all__`.
+  Use named imports from documented public namespaces instead of relying on
+  module export lists or wildcard imports. Package facades keep their explicit
+  exports.
 - **`CANON-024-PACKAGE-LAYOUT`** — Core implementations now live in
   `composition/`, `routing/`, `contracts/`, `diagnostics/` and `cli/`.
   Replace imports from the removed root implementation modules with the

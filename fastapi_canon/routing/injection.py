@@ -1,11 +1,3 @@
-"""Transport-independent annotations for values supplied by Canon.
-
-``Inject[T]`` marks a parameter whose value comes from the application's Dishka
-container. RPC methods, MCP tools and WebRTC factories read the marker. In
-FastAPI, the annotation also carries a ``Depends`` resolver, so ``Inject[T]``
-works in endpoint parameters and in ordinary FastAPI dependencies alike.
-"""
-
 from functools import cache
 from typing import TYPE_CHECKING, Annotated, Any, TypeAliasType, get_args, get_origin
 

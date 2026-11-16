@@ -1,5 +1,3 @@
-"""Alembic revision files with Canon's database configuration and async engines."""
-
 from __future__ import annotations
 
 from collections.abc import Callable

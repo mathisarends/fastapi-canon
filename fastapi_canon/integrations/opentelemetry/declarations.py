@@ -1,5 +1,3 @@
-"""Optional telemetry declarations; importing this module needs no OTEL packages."""
-
 from __future__ import annotations
 
 import inspect
@@ -17,7 +15,7 @@ from typing import (
 
 from starlette.types import Scope as ASGIScope
 
-from fastapi_canon.exceptions import FeatureConfigurationError
+from fastapi_canon.errors import FeatureConfigurationError
 from fastapi_canon.integration import (
     ErrorLookup,
     Installer,
@@ -35,13 +33,6 @@ if TYPE_CHECKING:
     from fastapi_canon.integrations.websockets.adapters.opentelemetry import (
         OpenTelemetry,
     )
-
-__all__ = [
-    "Instrumentation",
-    "ResourceInstrumentation",
-    "Telemetry",
-    "instrument",
-]
 
 
 @runtime_checkable
