@@ -1,7 +1,7 @@
 # Resources, persistence and scopes
 
 Use this before adding a database, changing transactions or moving work into a
-stream, socket or worker. The detailed API authority is [database.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/database.md).
+stream, socket or worker. The detailed API authority is [database.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/database.md).
 
 ## Ownership map
 

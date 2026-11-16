@@ -72,10 +72,11 @@ factories; REQUEST resources own a single operation. See the
 [HTTP walkthrough](http-feature.md) for the complete router/service/provider and
 [resources](resources.md) before adding persistence or long-lived work.
 
-Inspect the composed app and export its contracts:
+Inspect the composed app. Install the `codegen` extra before exporting contracts:
 
 ```console
 uv run fastapi-canon inspect backend.app:create_app --factory
+uv add "fastapi-canon[codegen]"
 uv run fastapi-canon contracts export --app backend.app:create_app --output-dir contracts
 ```
 
@@ -86,6 +87,6 @@ Do not assume they validate every transport's runtime behavior.
 
 Read [transports and SDKs](transports-and-sdk.md) only when exposing another
 protocol or generating clients. For MCP, consult the
-[MCP guide](https://github.com/mathisarends/fastapi_canon/blob/main/docs/integrations/mcp/README.md)
+[MCP guide](https://github.com/mathisarends/fastapi-canon/blob/main/docs/integrations/mcp/README.md)
 for separate injection, authentication and scope rules. HTTP dependencies do not
 protect the MCP mount, and this integration does not generate MCP clients.
