@@ -1,5 +1,22 @@
 # Compatibility
 
+## Canon 0.23.0
+
+Published on 2026-11-16. Follow the
+[migration](package-migration.md#upgrade-to-0230) for dataclass values, generator
+keyword arguments and lifecycle objects.
+
+Exact-source CI passed Linux/Python 3.12–3.14 and Windows/Python 3.14, including
+PostgreSQL and Chromium/WebRTC contracts. Both 20-combination wheel matrices
+passed: minimum direct dependencies on Python 3.12 and current dependencies on
+Python 3.14. Installed SSE/WebRTC CLI and generated-client checks passed.
+
+The publication run verified public-index installs and artifact hashes; its
+original artifacts were reused after an index-visibility retry. A fresh
+Windows/Python 3.12 public-index core install also passed the CLI version check.
+The PyPI files, tag, GitHub Release and attached wheel, sdist and manifest are
+verified; see the [publication record](releases.md#current-versions).
+
 ## Canon 0.22.0
 
 Published on 2026-11-15. This release adds shared WebSocket connection policies,

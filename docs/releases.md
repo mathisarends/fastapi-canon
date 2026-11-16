@@ -6,15 +6,10 @@ version; the reference service is an example. `release.toml` and
 
 ## Current versions
 
-**Published: 0.22.0 (2026-11-15).** Adds shared WebSocket connection policies,
-removes two aliases and fixes quoted dependency injection and WebRTC router
-options. Follow the [migration](package-migration.md#upgrade-to-0220) and
-[changelog](../CHANGELOG.md#0220---2026-11-15) before upgrading.
-
-**Prepared, unpublished: 0.23.0.** Dataclass value contracts, generator keyword
-arguments and lifecycle state ownership change; follow the
-[migration](package-migration.md#upgrade-to-0230). Publication requires the
-release checks and workflow below.
+**Published: 0.23.0 (2026-11-16).** Changes dataclass value contracts, generator
+keyword arguments and lifecycle state ownership. Follow the
+[migration](package-migration.md#upgrade-to-0230) and
+[changelog](../CHANGELOG.md#0230---2026-11-16) before upgrading.
 
 Published artifacts, manifests and run results are linked below. They record
 verified publications; prepared source versions are not publication evidence.
@@ -22,6 +17,7 @@ Historical links retain their original repositories.
 
 | Version | Source | CI | Dry run | Publication | Wheel, sdist and manifest |
 | --- | --- | --- | --- | --- | --- |
+| 0.23.0 (2026-11-16) | [Source](https://github.com/mathisarends/fastapi-canon/commit/7c7ca2d9ff3807a8a70f531cfcbc989cdb67e555) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/43852102782) | [Dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/43853467478) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/43854315962) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.23.0) |
 | 0.22.0 (2026-11-15) | [Source](https://github.com/mathisarends/fastapi-canon/commit/b5b43e7860b59591b6d8c6ac28b32f7b36b1f698) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/43708460509) | [Preparatory dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/43705432313) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/43709163883) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.22.0) |
 | 0.21.0 (2026-11-14) | [Source](https://github.com/mathisarends/fastapi-canon/commit/96ab6fba652f8ab9e574d2e43c3c574c30b13ab2) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/43610469562) | [Dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/43611339346) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/43611879247) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.21.0) |
 | 0.20.0 (2026-11-13) | [Source](https://github.com/mathisarends/fastapi-canon/commit/69639cfc5cba40ff299fe3ccb210d8dd1e42823c) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/43397811359) | [Dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/43492517877) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/43493725691) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.20.0) |
@@ -40,7 +36,9 @@ The 0.22.0, 0.19.0 and 0.17.0 preparatory dry runs predate changelog finalizatio
 revalidated each final dated source; its public installs and attached artifacts
 are verified.
 
-Recovery notes: 0.20.0 retried public verification after delayed PyPI metadata;
+Recovery notes: 0.23.0 resumed public-index verification on the original run
+after delayed index visibility; the original artifacts were retained.
+0.20.0 retried public verification after delayed PyPI metadata;
 the original run retained the verified artifact bytes. Versions 0.19.0, 0.18.0,
 0.15.0 and 0.14.0 needed public-index verification after stale index results.
 The 0.19.0 retry invalidated the stale uv cache and reused

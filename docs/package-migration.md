@@ -13,7 +13,7 @@ PyPI project or add further Python import changes.
 
 ## Upgrade to 0.23.0
 
-Version 0.23.0 is prepared source and has not been published.
+Version 0.23.0 was published on 2026-11-16.
 
 Pass generator value fields by name:
 
