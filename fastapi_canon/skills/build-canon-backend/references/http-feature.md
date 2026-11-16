@@ -163,13 +163,13 @@ public failures. Keep arbitrary exception text out of public details. For shared
 auth use `RouterPolicy` with real dependencies; declarations do not authorize
 requests. For empty/binary success use `CanonResponse.empty()` /
 `CanonResponse.binary(...)` and return the matching response. Details:
-[problems.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/problems.md) and [composition.md](https://github.com/mathisarends/fastapi_canon/blob/main/docs/composition.md).
+[problems.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/problems.md) and [composition.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/composition.md).
 
 ## Operation IDs
 
 The router's `namespace="projects"` and handler name `get` produce the OpenAPI
-ID `projects.get` and SDK member `client.projects.get(...)`. Use the same rule
-for HTTP and typed SSE:
+ID `projects.get`. HTTP SDK member names depend on the external OpenAPI generator
+and its configuration. The operation-ID rules apply to HTTP and typed SSE:
 
 - An explicit `operation_id=` wins unchanged. Otherwise Canon uses
   `<namespace>.<function_name>`, or just `<function_name>` without a namespace.
@@ -191,7 +191,7 @@ Verify the installed `APIRouter` signature before using `namespace=`. For an
 older release without that parameter, retain explicit `operation_id` values.
 Run the [composition and CLI checks](testing.md#composition-and-operation-ids)
 before exporting contracts. See the
-[router guide](https://github.com/mathisarends/fastapi_canon/blob/main/docs/routers.md#automatic-http-and-sse-operation-names)
+[router guide](https://github.com/mathisarends/fastapi-canon/blob/main/docs/routers.md#automatic-http-and-sse-operation-names)
 for naming and compatibility details.
 
 ## Feature and application composition
