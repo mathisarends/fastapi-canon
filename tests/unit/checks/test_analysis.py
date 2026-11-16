@@ -4,13 +4,13 @@ from textwrap import dedent
 
 import pytest
 
-from fastapi_canon.check_error_contracts import main as check_errors_main
+from fastapi_canon.checks.cli import main as check_errors_main
 from fastapi_canon.checks.contracts import ContractReport, analyze_error_contracts
 from fastapi_canon.checks.source import SourceDefinition, SourceIndex, SymbolEnvironment
 
 PRELUDE = """
 from fastapi_canon import Error, Feature
-from fastapi_canon.router import CanonRouter
+from fastapi_canon.routing.http import CanonRouter
 
 class Missing(Exception):
     pass
@@ -85,12 +85,15 @@ def endpoint() -> None:
     assert report.operations[0].complete
 
 
-def test_api_router_operations_are_checked(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "namespace", ["fastapi_canon", "fastapi_canon.routing.api_router"]
+)
+def test_api_router_operations_are_checked(tmp_path: Path, namespace: str) -> None:
     report = analyze(
         tmp_path,
         PRELUDE.replace(
-            "from fastapi_canon.router import CanonRouter",
-            "from fastapi_canon import APIRouter",
+            "from fastapi_canon.routing.http import CanonRouter",
+            f"from {namespace} import APIRouter",
         ).replace("CanonRouter(", "APIRouter(")
         + """
 @router.get('/')
@@ -121,7 +124,7 @@ def test_import_aliases_reexports_and_dishka_services(tmp_path: Path) -> None:
     report = analyze(
         tmp_path,
         """
-from fastapi_canon.router import CanonRouter as Router
+from fastapi_canon.routing.http import CanonRouter as Router
 from dishka.integrations.fastapi import FromDishka
 from app import Service, missing
 
@@ -520,7 +523,7 @@ def test_direct_nested_route_factory_is_complete(tmp_path: Path) -> None:
     report = analyze(
         tmp_path,
         """
-from fastapi_canon.router import CanonRouter
+from fastapi_canon.routing.http import CanonRouter
 def create_router():
     router = CanonRouter()
     @router.get('/')
@@ -718,7 +721,7 @@ def test_cli_help_names_the_error_contract_check(
         check_errors_main(["--help"])
     assert result.value.code == 0
     output = capsys.readouterr().out
-    assert "python -m fastapi_canon.check_error_contracts" in output
+    assert "python -m fastapi_canon.checks" in output
     assert "raises declarations" in " ".join(output.split())
 
 
@@ -890,7 +893,7 @@ def test_cached_inheritance_preserves_uncertain_modules(tmp_path: Path) -> None:
     report = analyze(
         tmp_path,
         """
-from fastapi_canon.router import CanonRouter
+from fastapi_canon.routing.http import CanonRouter
 from errors import missing
 router = CanonRouter(raises=[missing])
 @router.get('/first')

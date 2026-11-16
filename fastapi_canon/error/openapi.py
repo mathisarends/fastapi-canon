@@ -10,7 +10,6 @@ from pydantic import ValidationError
 from starlette.routing import BaseRoute, Match, NoMatchFound
 from starlette.types import Receive, Scope, Send
 
-from fastapi_canon.contract_routes import iter_contract_routes
 from fastapi_canon.error.contracts import (
     ERRORS_EXTENSION,
     HTTP_STATUSES_EXTENSION,
@@ -29,6 +28,7 @@ from fastapi_canon.error.types import (
     http_problem_title,
 )
 from fastapi_canon.exceptions import ErrorConfigurationError
+from fastapi_canon.routing.traversal import iter_contract_routes
 
 if TYPE_CHECKING:
     from starlette.datastructures import URLPath

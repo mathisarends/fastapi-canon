@@ -63,8 +63,8 @@ _RPC_CHANNELS = frozenset(
 _ROUTER_DECLARATIONS = _RPC_CHANNELS | frozenset(
     {
         "fastapi_canon.APIRouter",
-        "fastapi_canon.api_router.APIRouter",
-        "fastapi_canon.router.CanonRouter",
+        "fastapi_canon.routing.api_router.APIRouter",
+        "fastapi_canon.routing.http.CanonRouter",
     }
 )
 _FACTORY_DECLARATIONS = _ROUTER_DECLARATIONS | {
@@ -72,7 +72,7 @@ _FACTORY_DECLARATIONS = _ROUTER_DECLARATIONS | {
     "fastapi_canon.error.Error",
     "fastapi_canon.error.error.Error",
     "fastapi_canon.RouterPolicy",
-    "fastapi_canon.policy.RouterPolicy",
+    "fastapi_canon.routing.policy.RouterPolicy",
 }
 
 _REQUESTS = frozenset(
@@ -285,7 +285,7 @@ class SourceIndex:
                 parent: ast.expr | None = call.func.value
             elif source.resolve(call.func, module) in {
                 "fastapi_canon.Composition",
-                "fastapi_canon.feature.Composition",
+                "fastapi_canon.composition.application.Composition",
             }:
                 parent = _keyword(call, "router_factory")
             else:
@@ -1016,7 +1016,7 @@ class SourceIndex:
                 "dishka.FromDishka",
                 "dishka.integrations.fastapi.FromDishka",
                 "fastapi_canon.Inject",
-                "fastapi_canon.injection.Inject",
+                "fastapi_canon.routing.injection.Inject",
                 "fastapi_canon.integrations.websockets.Inject",
             }:
                 first = (

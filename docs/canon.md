@@ -53,8 +53,8 @@ scope.
 
 Import application-building names from `fastapi_canon` and optional types from
 their integration facade. Other implementation modules are internal, even without
-a leading underscore, and may change in any release. The source checker also
-supports `python -m fastapi_canon.check_error_contracts`; see
+a leading underscore, and may change in any release. Run the source checker with
+`python -m fastapi_canon check errors`; see
 [error checking](error-checking.md).
 
 ```python

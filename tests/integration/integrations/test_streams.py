@@ -45,7 +45,7 @@ from fastapi_canon import (
 from fastapi_canon.error import ErrorConfigurationError
 from fastapi_canon.integrations.sse.canon import CanonStreamRouter
 from fastapi_canon.integrations.sse.router import StreamRouter
-from fastapi_canon.router import CanonRouter
+from fastapi_canon.routing.http import CanonRouter
 
 AUTH = {"Authorization": "Bearer demo"}
 

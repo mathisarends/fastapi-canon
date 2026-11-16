@@ -27,7 +27,7 @@ from fastapi_canon.exceptions import (
     FeatureConfigurationError,
     ResponseConfigurationError,
 )
-from fastapi_canon.router import CanonRouter
+from fastapi_canon.routing.http import CanonRouter
 
 
 class Missing(Exception):

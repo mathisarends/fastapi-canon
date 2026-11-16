@@ -18,9 +18,12 @@ from fastapi_canon.checks.analysis import (
 from fastapi_canon.checks.source import SourceDefinition, SourceIndex
 
 _API_ROUTERS = frozenset(
-    {"fastapi_canon.APIRouter", "fastapi_canon.api_router.APIRouter"}
+    {
+        "fastapi_canon.APIRouter",
+        "fastapi_canon.routing.api_router.APIRouter",
+    }
 )
-_CANON_ROUTERS = frozenset({"fastapi_canon.router.CanonRouter", *_API_ROUTERS})
+_CANON_ROUTERS = frozenset({"fastapi_canon.routing.http.CanonRouter", *_API_ROUTERS})
 _WEBRTC_ROUTERS = frozenset(
     {
         "fastapi_canon.integrations.webrtc.WebRtcRouter",
@@ -245,7 +248,7 @@ class _CheckContracts:
                     policy.func, scope
                 ) in {
                     "fastapi_canon.RouterPolicy",
-                    "fastapi_canon.policy.RouterPolicy",
+                    "fastapi_canon.routing.policy.RouterPolicy",
                 }:
                     layers.insert(0, (scope, policy))
                 else:

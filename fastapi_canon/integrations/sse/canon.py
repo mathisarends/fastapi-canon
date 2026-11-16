@@ -10,7 +10,6 @@ from pydantic import TypeAdapter
 from starlette.concurrency import iterate_in_threadpool
 from starlette.routing import Match
 
-from fastapi_canon.contract_routes import iter_contract_routes
 from fastapi_canon.error import AnyError, ErrorConfigurationError, ErrorRegistry
 from fastapi_canon.error.catalog import app_registry, internal_problem, problem_for
 from fastapi_canon.error.openapi import inherited_contract
@@ -19,8 +18,9 @@ from fastapi_canon.integrations.sse.router import (
     StreamRouter,
     validate_endpoint,
 )
-from fastapi_canon.policy import normalize_raises
-from fastapi_canon.router import CanonRouter
+from fastapi_canon.routing.http import CanonRouter
+from fastapi_canon.routing.policy import normalize_raises
+from fastapi_canon.routing.traversal import iter_contract_routes
 
 __all__ = [
     "CanonStreamRouter",

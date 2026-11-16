@@ -11,6 +11,24 @@ The [repository migration](repository-migration.md) records the
 source history and publishing setup. The repository move does not rename the
 PyPI project or add further Python import changes.
 
+## Upgrade to 0.24.0
+
+Version 0.24.0 is prepared source and has not been published.
+
+Use the root facade for application-building names and HTTP option types:
+
+```python
+from fastapi_canon import APIRouter, Composition, Feature, RouteOptions
+```
+
+Root implementation modules such as `feature`, `router`, `policy`, `injection`
+and `api_router` have moved into focused packages. Replace direct imports from
+them with documented public imports. The `fastapi_canon.contracts` and
+`fastapi_canon.diagnostics` namespaces retain their names.
+
+Replace `python -m fastapi_canon.check_error_contracts src` with
+`python -m fastapi_canon check errors src`; the command accepts the same flags.
+
 ## Upgrade to 0.23.0
 
 Version 0.23.0 was published on 2026-11-16.

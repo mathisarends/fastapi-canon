@@ -5,7 +5,6 @@ from typing import Any
 
 from fastapi import FastAPI
 
-from fastapi_canon.contract_routes import iter_contract_routes
 from fastapi_canon.error import installed_catalog, registry_scope
 from fastapi_canon.integrations.websockets.channel import request_name
 from fastapi_canon.integrations.websockets.contract import contract_from_endpoints
@@ -25,6 +24,7 @@ from fastapi_canon.integrations.websockets.protocol import (
     RpcStreamDefinition,
     RpcSubscriptionDefinition,
 )
+from fastapi_canon.routing.traversal import iter_contract_routes
 
 
 def export_rpc_contract(

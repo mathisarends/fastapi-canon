@@ -47,29 +47,33 @@ architecture:
     fastapi_canon.error.handlers: adapters
     fastapi_canon.error.registry: adapters
     fastapi_canon.openapi: adapters
-    fastapi_canon.router: routing
-    fastapi_canon.feature: composition
-    fastapi_canon.composition_checks: composition
-    fastapi_canon.composition_installation: composition
-    fastapi_canon.api_router: composition
+    fastapi_canon.routing: routing
+    fastapi_canon.routing.http: routing
+    fastapi_canon.composition: composition
+    fastapi_canon.composition.feature: composition
+    fastapi_canon.composition.checks: composition
+    fastapi_canon.composition.installation: composition
+    fastapi_canon.routing.api_router: composition
     fastapi_canon.diagnostics: values
-    fastapi_canon.introspection: composition
-    fastapi_canon.composition_cli: generation
-    fastapi_canon.application_loading: generation
-    fastapi_canon.diagnostic_explanations: generation
-    fastapi_canon.scopes: composition
-    fastapi_canon.injection: routing
-    fastapi_canon.injected_route: composition
+    fastapi_canon.diagnostics.models: values
+    fastapi_canon.composition.introspection: composition
+    fastapi_canon.cli.composition: cli
+    fastapi_canon.cli.application: generation
+    fastapi_canon.cli.explanations: cli
+    fastapi_canon.composition.scopes: composition
+    fastapi_canon.routing.injection: routing
+    fastapi_canon.routing.injected_route: composition
     fastapi_canon.integrations.database: persistence
 
-    fastapi_canon.request_logging: composition
+    fastapi_canon.composition.request_logging: composition
     fastapi_canon._version: values
-    fastapi_canon.policy: routing
+    fastapi_canon.routing.policy: routing
     fastapi_canon.error.catalog: adapters
     fastapi_canon.codegen: generation
-    fastapi_canon.contracts: composition
-    fastapi_canon.contract_cli: generation
-    fastapi_canon.contract_routes: adapters
+    fastapi_canon.contracts: contracts
+    fastapi_canon.contracts.export: contracts
+    fastapi_canon.cli.contracts: cli
+    fastapi_canon.routing.traversal: adapters
     fastapi_canon.integration: extension
     fastapi_canon.integrations: transport
     fastapi_canon.integrations.mcp: mcp
@@ -79,9 +83,10 @@ architecture:
     fastapi_canon.integrations.opentelemetry: telemetry
     app: application
     fastapi_canon.checks: analysis
-    fastapi_canon.check_error_contracts: analysis
-    fastapi_canon.cli: generation
-    fastapi_canon.__main__: generation
+    fastapi_canon.checks.cli: analysis
+    fastapi_canon.cli: cli
+    fastapi_canon.cli.main: cli
+    fastapi_canon.__main__: cli
     fastapi_canon.integrations.sse.codegen: generation
     fastapi_canon.integrations.websockets.codegen: generation
     fastapi_canon.integrations.webrtc.codegen: generation
@@ -89,19 +94,19 @@ architecture:
   layers:
     tooling:
       path: scripts
-      may_depend_on: [values, responses, adapters, routing, extension, composition, transport, sse, rpc, rtc, telemetry, generation, analysis, persistence, mcp]
+      may_depend_on: [values, responses, adapters, routing, extension, composition, contracts, transport, sse, rpc, rtc, telemetry, generation, cli, analysis, persistence, mcp]
       third_party:
         default: deny
         # Installed-wheel resource smoke checks also exercise SQLAlchemy.
         allow: [packaging, fastapi, pydantic, pydantic_core, typing_extensions, starlette, dishka, httpx, httpx2, jsonschema, jinja2, pytest, uvicorn, anyio, aiortc, av, opentelemetry, sqlalchemy, sqlmodel, alembic, fastmcp]
     showcase:
       path: examples
-      may_depend_on: [values, responses, adapters, routing, extension, composition, transport, sse, rpc, rtc, telemetry, generation, analysis, application, persistence, mcp]
+      may_depend_on: [values, responses, adapters, routing, extension, composition, contracts, transport, sse, rpc, rtc, telemetry, generation, cli, analysis, application, persistence, mcp]
       third_party:
         default: deny
         allow: [fastapi, pydantic, pydantic_core, typing_extensions, starlette, dishka, opentelemetry, httpx, httpx2, sqlmodel, sqlalchemy, pydantic_settings, uvicorn, anyio, alembic, fastmcp]
     values:
-      path: values
+      path: diagnostics
       third_party:
         default: deny
         allow: [pydantic]
@@ -118,7 +123,7 @@ architecture:
         default: deny
         allow: [fastapi, starlette, pydantic]
     routing:
-      path: router
+      path: routing
       may_depend_on: [values, responses, adapters]
       third_party:
         default: deny
@@ -131,7 +136,7 @@ architecture:
         # Type-only references for the extension contract.
         allow: [dishka, fastapi, starlette]
     composition:
-      path: feature
+      path: composition
       may_depend_on: [values, responses, adapters, routing, extension, sse, rpc]
       third_party:
         default: deny
@@ -209,6 +214,7 @@ architecture:
       - rpc
       - rtc
       - composition
+      - contracts
       - telemetry
       - analysis
       - persistence
@@ -231,9 +237,51 @@ architecture:
         - sqlalchemy
         - alembic
         - fastmcp
+    cli:
+      path: cli
+      may_depend_on:
+      - values
+      - responses
+      - adapters
+      - routing
+      - extension
+      - sse
+      - rpc
+      - rtc
+      - composition
+      - contracts
+      - generation
+      - telemetry
+      - analysis
+      - persistence
+      - mcp
+      third_party:
+        default: deny
+        allow:
+        - dishka
+        - fastapi
+        - starlette
+        - pydantic
+        - typing_extensions
+        - pydantic_core
+        - jsonschema
+        - jinja2
+        - anyio
+        - aiortc
+        - av
+        - opentelemetry
+        - sqlalchemy
+        - alembic
+        - fastmcp
+    contracts:
+      path: contracts
+      may_depend_on: [values, responses, adapters, routing, extension, composition, sse, rpc]
+      third_party:
+        default: deny
+        allow: [dishka, fastapi, starlette, pydantic, opentelemetry, typing_extensions, pydantic_core, fastmcp, anyio]
     application:
       path: application
-      may_depend_on: [values, responses, adapters, routing, extension, composition, telemetry, sse, rpc, rtc, persistence, mcp]
+      may_depend_on: [values, responses, adapters, routing, extension, composition, contracts, telemetry, sse, rpc, rtc, persistence, mcp]
       third_party:
         default: deny
         allow:
@@ -267,8 +315,8 @@ structure:
     canon:
       match: fastapi_canon
       export_at: 3
-      required: [error, feature, openapi, response, router]
-      public: [., error, diagnostics, exceptions, openapi, contracts, integrations.**, check_error_contracts]
+      required: [error, composition, routing, cli, contracts, diagnostics, openapi, response]
+      public: [., error, diagnostics, exceptions, openapi, contracts, integrations.**]
       imports:
         style: absolute
       private_modules: forbid

@@ -28,7 +28,7 @@ from fastapi_canon.integrations.opentelemetry import (
     instrument,
 )
 from fastapi_canon.integrations.websockets import CanonWebSocketRouter
-from fastapi_canon.router import CanonRouter
+from fastapi_canon.routing.http import CanonRouter
 from tests.fixtures.telemetry import SpanCapture
 
 

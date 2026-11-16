@@ -26,8 +26,8 @@ from fastapi_canon.integrations.webrtc.engine import Engine
 from fastapi_canon.integrations.webrtc.events import EventHook
 from fastapi_canon.integrations.webrtc.ice import IceServerSource
 from fastapi_canon.integrations.webrtc.router import SessionRouter
-from fastapi_canon.policy import normalize_raises as _normalize_raises
-from fastapi_canon.router import CanonRouter, RouterOptions, distinct_errors
+from fastapi_canon.routing.http import CanonRouter, RouterOptions, distinct_errors
+from fastapi_canon.routing.policy import normalize_raises as _normalize_raises
 
 __all__ = ["WebRtcRouter"]
 

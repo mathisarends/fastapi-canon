@@ -6,17 +6,23 @@ import fastapi_canon
 import fastapi_canon.error
 
 APPLICATION_NAMES = {
+    "APIRouteOptions",
     "APIRouter",
     "CanonResponse",
+    "ChannelOptions",
     "Composition",
     "Error",
     "ErrorOptions",
     "Feature",
+    "IncludeRouterOptions",
     "Inject",
     "ResponseHeaders",
+    "RouteOptions",
+    "RouterOptions",
     "RouterPolicy",
     "Scoped",
     "ServiceScope",
+    "StreamOptions",
     "__version__",
     "export_contracts",
     "inspect_app",
