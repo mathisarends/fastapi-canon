@@ -3,8 +3,12 @@ from enum import StrEnum
 from typing import Literal
 
 import pytest
-from fastapi_canon.integrations.websockets import Inject, RpcChannel, RpcError
-from fastapi_canon.integrations.websockets.protocol import RpcProtocol
+from fastapi_canon.integrations.websockets import (
+    Inject,
+    RpcChannel,
+    RpcError,
+    RpcProtocol,
+)
 from pydantic import BaseModel
 
 

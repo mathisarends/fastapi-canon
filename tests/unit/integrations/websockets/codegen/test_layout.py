@@ -5,10 +5,10 @@ from typing import Any
 
 import pytest
 from fastapi_canon.integrations.websockets.codegen import (
+    UnsupportedSchemaError,
     render_python_client,
     render_typescript_client,
 )
-from fastapi_canon.integrations.websockets.codegen.ir import UnsupportedSchemaError
 from fastapi_canon.integrations.websockets.codegen.python import PythonClientOptions
 from fastapi_canon.integrations.websockets.codegen.typescript import (
     TypeScriptClientOptions,

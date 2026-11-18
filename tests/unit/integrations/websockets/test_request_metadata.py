@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 import pytest
 from fastapi_canon.integrations.websockets import RpcChannel, RpcMiddleware
-from fastapi_canon.integrations.websockets.codegen.ir import build_ir
+from fastapi_canon.integrations.websockets.codegen import build_ir
 from fastapi_canon.integrations.websockets.envelopes import RpcRequestEnvelope
 from fastapi_canon.integrations.websockets.request_metadata import (
     REQUEST_METADATA_CAPABILITY,

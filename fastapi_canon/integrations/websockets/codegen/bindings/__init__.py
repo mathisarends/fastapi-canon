@@ -97,10 +97,11 @@ def load_binding(reference: str) -> ProtocolBinding:
     return binding
 
 
-def bind_sockets(  # smelt: ignore[SMT345] -- public binding API signature
+def bind_sockets(
     sockets: Iterable[SocketDecl],
     bindings: Sequence[ProtocolBinding],
     language: ClientLanguage,
+    *,
     contract: str | Path | None = None,
 ) -> dict[str, SocketBinding]:
     """Bind each configured protocol once; the result is keyed by protocol name."""

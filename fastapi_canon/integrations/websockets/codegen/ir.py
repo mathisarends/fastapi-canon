@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from itertools import chain
 from pathlib import Path
@@ -432,6 +432,24 @@ def ref_name(schema: dict[str, Any]) -> str:
 _STREAM_DIRECTIONS = ("server-to-client", "client-to-server", "bidirectional")
 
 
+def connect_variables(ir: ClientIr) -> tuple[ServerVariableDecl, ...]:
+    """The server URL variables ``connect`` accepts; streams inherit them too."""
+    declared = {variable.name for server in ir.servers for variable in server.variables}
+    merged: dict[str, ServerVariableDecl] = {}
+    for declaration in chain[ServerDecl | BinaryStreamDecl | SocketDecl](
+        ir.servers, ir.binary_streams, ir.sockets
+    ):
+        for variable in declaration.variables:
+            if variable.name not in declared:
+                continue
+            previous = merged.get(variable.name)
+            if previous is None:
+                merged[variable.name] = variable
+            elif previous.enum != variable.enum:
+                merged[variable.name] = replace(previous, enum=())
+    return tuple(merged.values())
+
+
 def _roots(
     operations: tuple[RouteDecl, ...],
     notifications: tuple[NotificationDecl, ...],
@@ -514,11 +532,9 @@ def _schema_declarations(
 
 def _enum_declaration(name: str, schema: dict[str, Any]) -> EnumDecl:
     values = schema["enum"]
-    return EnumDecl(
-        name,
-        tuple(EnumMember(_member_name(value), value) for value in values),
-        integral=all(isinstance(value, int) for value in values),
-    )
+    members = tuple(EnumMember(_member_name(value), value) for value in values)
+    integral = all(isinstance(value, int) for value in values)
+    return EnumDecl(name, members, integral=integral)
 
 
 def _model(
@@ -990,16 +1006,15 @@ def _validate_server_references(
     servers: tuple[ServerDecl, ...],
 ) -> None:
     declared = {server.name for server in servers}
-    missing = sorted(
-        {
-            item.server
-            for item in chain[RouteDecl | NotificationDecl](routes, notifications)
-            if item.server is not None and item.server not in declared
-        }
-    )
+    missing = {
+        item.server
+        for item in chain[RouteDecl | NotificationDecl](routes, notifications)
+        if item.server is not None and item.server not in declared
+    }
     if missing:
+        missing_names = ", ".join(sorted(missing))
         raise UnsupportedSchemaError(
-            "Routes reference undeclared OpenRPC servers: " + ", ".join(missing)
+            "Routes reference undeclared OpenRPC servers: " + missing_names
         )
 
 

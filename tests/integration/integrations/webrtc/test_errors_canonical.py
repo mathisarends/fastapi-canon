@@ -13,8 +13,7 @@ from fastapi_canon import (
     RouterPolicy,
 )
 from fastapi_canon.error import ErrorConfigurationError
-from fastapi_canon.integrations.webrtc import Session
-from fastapi_canon.integrations.webrtc.canon import WebRtcRouter
+from fastapi_canon.integrations.webrtc import Session, WebRtcRouter
 from fastapi_canon.integrations.webrtc.codegen.typescript import generate_typescript
 from fastapi_canon.integrations.webrtc.contract import build_contract
 from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine

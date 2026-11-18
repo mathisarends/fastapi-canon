@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import difflib
 import hashlib
-import importlib
 import json
 import sys
 import tomllib
@@ -14,6 +13,7 @@ from typing import TYPE_CHECKING, Any, cast
 from fastapi import FastAPI
 
 from fastapi_canon import __version__
+from fastapi_canon.cli.application import load_application
 from fastapi_canon.integrations.sse.codegen.openapi import (
     ContractError,
     Document,
@@ -107,7 +107,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "sync":
             return _sync(args.config, check=args.check, diff=args.diff)
         if args.command == "schema":
-            content = _schema_text(_load_app(args.app))
+            content = _schema_text(load_application(args.app, root=Path.cwd()))
             output = cast(Path, args.output)
             if args.check:
                 if not output.is_file() or output.read_bytes() != content.encode(
@@ -153,7 +153,7 @@ def main(argv: list[str] | None = None) -> int:
                 document, args.language, args.python_http_client or "httpx"
             )
             if args.command == "check" and args.app:
-                expected = export_schema(_load_app(args.app))
+                expected = export_schema(load_application(args.app, root=Path.cwd()))
                 if expected != document:
                     print(
                         f"Out of date: {args.schema} (application contract changed)",
@@ -228,7 +228,14 @@ def main(argv: list[str] | None = None) -> int:
                             planned.get(name),
                         )
                 return 1
-    except (ContractError, OSError, ValueError, ImportError, AttributeError) as exc:
+    except (
+        ContractError,
+        OSError,
+        TypeError,
+        ValueError,
+        ImportError,
+        AttributeError,
+    ) as exc:
         message = str(exc)
         if isinstance(exc, ImportError) and exc.name in {"jinja2", "jsonschema"}:
             message = "Install fastapi-canon[codegen] to generate clients"
@@ -374,18 +381,6 @@ def _print_diff(path: Path, before: str | None, after: str | None) -> None:
     )
     for line in lines:
         sys.stdout.write(line if line.endswith("\n") else line + "\n")
-
-
-def _load_app(value: str) -> FastAPI:
-    module, separator, attribute = value.partition(":")
-    if not separator or not module or not attribute:
-        raise ContractError("--app must use module:attribute syntax")
-    # Console scripts start with their installation directory on sys.path.
-    sys.path.insert(0, str(Path.cwd()))
-    app = getattr(importlib.import_module(module), attribute)
-    if not isinstance(app, FastAPI):
-        raise ContractError(f"{value} is not a FastAPI application")
-    return app
 
 
 def _generation_metadata(

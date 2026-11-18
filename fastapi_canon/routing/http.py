@@ -238,18 +238,17 @@ class CanonRouter(APIRouter):
             configured=configured_responses,
         )
         dependency_origins = {str(id(dep)): "router" for dep in self.dependencies}
-        dependency_origins.update(
-            {str(id(dep)): "operation" for dep in (kwargs.get("dependencies") or ())}
-        )
+        operation_dependencies = kwargs.get("dependencies") or ()
+        for dependency in operation_dependencies:
+            dependency_origins[str(id(dependency))] = "operation"
         error_origins = {str(id(error)): "operation" for error in local_raises}
-        error_origins.update({str(id(error)): "router" for error in self.raises})
+        for error in self.raises:
+            error_origins[str(id(error))] = "router"
         if self.policy is not None:
-            dependency_origins.update(
-                {str(id(dep)): "router.policy" for dep in self.policy.dependencies}
-            )
-            error_origins.update(
-                {str(id(error)): "router.policy" for error in self.policy.raises}
-            )
+            for dependency in self.policy.dependencies:
+                dependency_origins[str(id(dependency))] = "router.policy"
+            for error in self.policy.raises:
+                error_origins[str(id(error))] = "router.policy"
 
         def register(endpoint: CallableT) -> CallableT:
             configured: APIRouteOptions = {
@@ -499,8 +498,9 @@ class _RouteMetadata(dict[str, Any]):
         registry: ErrorRegistry | None,
     ) -> None:
         super().__init__(values)
+        dependency_ids = {int(key): value for key, value in dependencies.items()}
         self.provenance = RouteProvenance(
-            MappingProxyType({int(key): value for key, value in dependencies.items()}),
+            MappingProxyType(dependency_ids),
             MappingProxyType(dict(errors)),
             getattr(endpoint, "__canon_declared_endpoint__", endpoint),
             registry,

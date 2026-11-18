@@ -7,12 +7,15 @@ from typing import Any
 import pytest
 from fastapi import FastAPI, WebSocket
 from fastapi.testclient import TestClient
-from fastapi_canon.integrations.websockets import Inject, RpcChannel
+from fastapi_canon.integrations.websockets import (
+    CanonWebSocketRouter,
+    Inject,
+    RpcChannel,
+)
 from fastapi_canon.integrations.websockets.adapters.dishka import (
     Dishka,
     DishkaResolver,
 )
-from fastapi_canon.integrations.websockets.adapters.fastapi import CanonWebSocketRouter
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
 
 from tests.fixtures.websockets import router_for

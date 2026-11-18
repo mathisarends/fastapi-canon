@@ -65,7 +65,7 @@ class RpcMethodDefinition:
     resolver_scope: RpcResolverScope | None = None
     params_parameter: str | None = None
     params_origin: type[BaseModel] | None = None
-    timeout: float | None = None  # smelt: ignore[SMT357] -- Seconds API.
+    timeout_seconds: float | None = None
     _has_timeout: bool = False
     idempotent: bool = False
 
@@ -250,8 +250,7 @@ def method_definition(
     raises: tuple[type[RpcError], ...],
     server: str | None,
     resolver_scope: RpcResolverScope,
-    # smelt: ignore[SMT357] -- Seconds; keep the existing public keyword or field.
-    timeout: float | None = None,
+    timeout_seconds: float | None = None,
     has_timeout: bool = False,
     idempotent: bool = False,
     request_name: str | None = None,
@@ -259,7 +258,7 @@ def method_definition(
     request_name = request_name or f"{_pascal_case(handler_name)}Request"
     params, params_parameter, injected = _router_params_model(function)
     return RpcMethodDefinition(
-        timeout=timeout,
+        timeout_seconds=timeout_seconds,
         _has_timeout=has_timeout,
         idempotent=idempotent,
         name=name,

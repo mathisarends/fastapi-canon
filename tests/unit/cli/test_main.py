@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
+import fastapi_canon.cli as canon_cli
 from fastapi_canon import __version__
-from fastapi_canon.cli import main
 
 
 @pytest.mark.parametrize(
@@ -16,7 +16,7 @@ def test_subcommand_help_uses_the_fastapi_canon_command(
     transport: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
     with pytest.raises(SystemExit) as exit_info:
-        main([transport, "--help"])
+        canon_cli.main([transport, "--help"])
     assert exit_info.value.code == 0
     assert f"fastapi-canon {transport}" in capsys.readouterr().out
 
@@ -34,7 +34,7 @@ def test_check_help_describes_the_selected_subcommand(
     kind: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
     with pytest.raises(SystemExit) as exit_info:
-        main(["check", kind, "--help"])
+        canon_cli.main(["check", kind, "--help"])
     assert exit_info.value.code == 0
     output = capsys.readouterr().out
     assert f"usage: fastapi-canon check {kind}" in output
@@ -45,14 +45,14 @@ def test_check_errors_missing_roots_uses_the_public_command_name(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     with pytest.raises(SystemExit) as exit_info:
-        main(["check", "errors"])
+        canon_cli.main(["check", "errors"])
     assert exit_info.value.code == 2
     assert "usage: fastapi-canon check errors" in capsys.readouterr().err
 
 
 def test_check_help_lists_its_subcommands(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as exit_info:
-        main(["check", "--help"])
+        canon_cli.main(["check", "--help"])
     assert exit_info.value.code == 0
     output = capsys.readouterr().out
     assert "errors" in output and "composition" in output
@@ -96,7 +96,9 @@ def test_skill_install_restores_previous_tree_when_replacement_fails(
 
     monkeypatch.setattr(Path, "rename", fail_install)
 
-    result = main(["skill", "install", "--destination", str(destination), "--force"])
+    result = canon_cli.main(
+        ["skill", "install", "--destination", str(destination), "--force"]
+    )
 
     assert result == 2
     assert "Destination is busy" in capsys.readouterr().err
@@ -163,7 +165,7 @@ def test_source_read_failure_uses_the_installed_command_name(
 ) -> None:
     (tmp_path / "broken.py").write_text("def broken(:\n", encoding="utf-8")
     with pytest.raises(SystemExit) as error:
-        main(["check", "errors", str(tmp_path)])
+        canon_cli.main(["check", "errors", str(tmp_path)])
     assert error.value.code == 2
     message = capsys.readouterr().err
     assert message.startswith("fastapi-canon check errors:")
@@ -172,6 +174,6 @@ def test_source_read_failure_uses_the_installed_command_name(
 
 def _help_text(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> str:
     with pytest.raises(SystemExit) as error:
-        main(arguments)
+        canon_cli.main(arguments)
     assert error.value.code == 0
     return " ".join(capsys.readouterr().out.lower().split())

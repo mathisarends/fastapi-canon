@@ -1040,13 +1040,11 @@ class ContractAnalyzer:
     def _traced(
         self, function: SourceDefinition, called: ExceptionFlow
     ) -> ExceptionFlow:
-        return ExceptionFlow(
-            [
-                _Escape(item.exception, (function.name, *item.trace), item.line)
-                for item in called.escapes
-            ],
-            list(called.unknowns),
-        )
+        escapes = [
+            _Escape(item.exception, (function.name, *item.trace), item.line)
+            for item in called.escapes
+        ]
+        return ExceptionFlow(escapes, list(called.unknowns))
 
     def _call(
         self,

@@ -1,7 +1,6 @@
 import json
 import keyword
 from collections.abc import Iterable, Mapping
-from dataclasses import replace
 from itertools import chain
 from typing import Any
 
@@ -27,11 +26,11 @@ from fastapi_canon.integrations.websockets.codegen.ir import (
     PrimitiveType,
     RouteDecl,
     ServerDecl,
-    ServerVariableDecl,
     SocketDecl,
     TypeExpr,
     UnionType,
     UnsupportedSchemaError,
+    connect_variables,
     named_types,
 )
 from fastapi_canon.integrations.websockets.codegen.names import (
@@ -41,6 +40,9 @@ from fastapi_canon.integrations.websockets.codegen.names import (
     client_view,
     pascal_case,
     snake_case,
+    validate_namespace_names,
+    walk_namespaces,
+    walk_namespaces_postorder,
 )
 from fastapi_canon.integrations.websockets.codegen.options import PythonClientOptions
 from fastapi_canon.integrations.websockets.codegen.templating import render_template
@@ -100,7 +102,9 @@ def render_files(ir: ClientIr, options: PythonClientOptions) -> dict[str, str]:
         options=options,
         client_name=client_name,
     )
-    bound = bind_sockets(ir.sockets, options.bindings, "python", options.contract)
+    bound = bind_sockets(
+        ir.sockets, options.bindings, "python", contract=options.contract
+    )
     files = {
         "__init__.py": _render_package_init(ir, options, client_name, nodes=view.nodes),
         **_render_runtime(ir, options),
@@ -485,7 +489,7 @@ def _render_api(
 ) -> str:
     imports = _Imports()
     imports.add(_runtime_module(options), "RpcClientCore")
-    nodes = tuple(_walk_postorder((root,)))
+    nodes = tuple(walk_namespaces_postorder((root,)))
     if any(node.streams for node in nodes):
         imports.add("contextlib", "AbstractAsyncContextManager")
         imports.add(
@@ -612,7 +616,7 @@ def _render_client(
         filters=_template_filters(imports, options, bound),
         client_name=client_name,
         servers=ir.servers,
-        variables=_connect_variables(ir),
+        variables=connect_variables(ir),
         nodes=nodes,
         operations=root_operations,
         notifications=root_events,
@@ -678,24 +682,6 @@ def _add_notification_imports(
         imports.add(f"{options.package}.models", _schema_name(event.params_model))
     imports.add(f"{options.package}.routes", _constant(event.rpc_name))
     _annotation(event.payload, imports)
-
-
-def _connect_variables(ir: ClientIr) -> tuple[ServerVariableDecl, ...]:
-    """The server URL variables ``connect`` accepts; streams inherit them too."""
-    declared = {variable.name for server in ir.servers for variable in server.variables}
-    merged: dict[str, ServerVariableDecl] = {}
-    for declaration in chain[ServerDecl | BinaryStreamDecl | SocketDecl](
-        ir.servers, ir.binary_streams, ir.sockets
-    ):
-        for variable in declaration.variables:
-            if variable.name not in declared:
-                continue
-            previous = merged.get(variable.name)
-            if previous is None:
-                merged[variable.name] = variable
-            elif previous.enum != variable.enum:
-                merged[variable.name] = replace(previous, enum=())
-    return tuple(merged.values())
 
 
 def _render_package_init(
@@ -1189,7 +1175,7 @@ def _validate(
             *(NameBinding(option, option) for option in _CONNECT_OPTIONS),
             *(
                 NameBinding(variable.name, _identifier(variable.name))
-                for variable in _connect_variables(ir)
+                for variable in connect_variables(ir)
             ),
         ]
         if len(ir.servers) == 1:
@@ -1207,13 +1193,13 @@ def _validate(
         assert_unique_names("connect options", connect_options)
     assert_unique_names("root client", client_members)
     _assert_unique_package_exports(ir, options, nodes, client_name=client_name)
-    _validate_nodes(nodes)
+    validate_namespace_names(nodes, _identifier)
     for node in nodes:
         assert_unique_names(
             f"Python namespace module {_identifier(node.segment)!r}",
             (
                 NameBinding(".".join(item.source_path), _api_class(item.path))
-                for item in _walk((node,))
+                for item in walk_namespaces((node,))
             ),
         )
     assert_unique_names(
@@ -1284,30 +1270,6 @@ def _assert_unique_package_exports(
     assert_unique_names("package exports", exports)
 
 
-def _validate_nodes(nodes: tuple[NamespaceViewNode, ...]) -> None:
-    for node in nodes:
-        values = [
-            NameBinding(child.segment, _identifier(child.segment))
-            for child in node.children
-        ]
-        values.extend(
-            NameBinding(route.rpc_name, _identifier(route.operation_name))
-            for route in node.operations
-        )
-        values.extend(
-            NameBinding(event.rpc_name, _identifier(event.operation_name))
-            for event in node.notifications
-        )
-        values.extend(
-            NameBinding(stream.rpc_name, _identifier(stream.operation_name))
-            for stream in chain[BinaryStreamDecl | SocketDecl](
-                node.streams, node.sockets
-            )
-        )
-        assert_unique_names(f"API path {'.'.join(node.path)}", values)
-        _validate_nodes(node.children)
-
-
 def _client_name(ir: ClientIr, options: PythonClientOptions) -> str:
     return options.client_name or f"{pascal_case(ir.title)}Client"
 
@@ -1365,20 +1327,6 @@ def _identifier(value: str) -> str:
     if keyword.iskeyword(identifier):
         identifier = f"{identifier}_"
     return identifier
-
-
-def _walk(nodes: tuple[NamespaceViewNode, ...]) -> Iterable[NamespaceViewNode]:
-    for node in nodes:
-        yield node
-        yield from _walk(node.children)
-
-
-def _walk_postorder(
-    nodes: tuple[NamespaceViewNode, ...],
-) -> Iterable[NamespaceViewNode]:
-    for node in nodes:
-        yield from _walk_postorder(node.children)
-        yield node
 
 
 def _named_errors(ir: ClientIr) -> bool:

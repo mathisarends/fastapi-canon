@@ -3,9 +3,9 @@ from fastapi_canon.integrations.websockets import (
     RpcChannel,
     RpcInvalidParamsError,
     RpcMethodNotFoundError,
+    RpcProtocol,
 )
 from fastapi_canon.integrations.websockets.dispatch import RpcDispatcher
-from fastapi_canon.integrations.websockets.protocol import RpcProtocol
 from pydantic import BaseModel
 
 from tests.unit.integrations.websockets.conftest import (

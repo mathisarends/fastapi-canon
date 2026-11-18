@@ -36,6 +36,24 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0240).
   `python -m fastapi_canon check errors src` or
   `fastapi-canon check errors src`. The old module entry point is removed;
   arguments and exit policies are unchanged.
+- **`CANON-024-DURATION-UNITS`** — Use the `_seconds` suffix on
+  `RpcLimits.send_timeout_seconds` and `request_timeout_seconds`, the RPC method
+  declaration's `timeout_seconds`, and the timeout keywords for
+  `RpcDrain.drain()`, `RpcTestClient.next_notification()` and `WebRtcRouter.aclose()`.
+  Read `duration_seconds` and `accepted_duration_seconds` on WebSocket middleware
+  outcomes. For external codegen targets, use `timeout-seconds` in TOML and
+  `timeout_seconds` on `TargetConfig`.
+- **`CANON-024-RPC-DECLARATIONS`** — Use `RpcChannelMethod` for declarations from
+  `websockets.channel` and `RegisteredRpcRoute` for mounted routes from
+  `websockets.routes`. Pass arguments after `messages` to `RpcSocket.create()`
+  and `contract` to `bind_sockets()` by keyword.
+- **`CANON-024-TRANSACTION-LOCK-CALL`** — Replace `await lock.acquire(key)` with
+  `await lock(key)` on the injected `AcquireTransactionLock`.
+
+### Added
+
+- SSE schema and WebRTC contract commands accept synchronous zero-argument app
+  factories and dotted attributes through the shared CLI loader.
 
 ## 0.23.0 - 2026-11-16
 

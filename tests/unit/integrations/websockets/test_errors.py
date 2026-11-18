@@ -8,12 +8,12 @@ from fastapi_canon.integrations.websockets import (
     RpcError,
     RpcErrorBinding,
     RpcErrorCode,
+    RpcFailure,
     RpcInvalidParamsError,
     RpcModel,
     RpcRejection,
 )
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
-from fastapi_canon.integrations.websockets.envelopes import RpcFailure
 from pydantic import BaseModel, ValidationError
 
 

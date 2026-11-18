@@ -163,27 +163,29 @@ class RpcLimits:
     max_concurrency: int = 32
     max_queue_size: int = 128
     max_message_bytes: int | None = 1_048_576
-    send_timeout: float | None = 10.0  # smelt: ignore[SMT357] -- Seconds API.
+    send_timeout_seconds: float | None = 10.0
     max_batch_size: int = 32
     max_streams: int = 100
     # Admitted request/notification items, including executing batch members.
     max_pending_requests: int = 1024
-    request_timeout: float | None = None  # smelt: ignore[SMT357] -- Seconds API.
+    request_timeout_seconds: float | None = None
 
     def __post_init__(self) -> None:
-        if self.request_timeout is not None and (
-            not isinstance(self.request_timeout, (int, float))
-            or isinstance(self.request_timeout, bool)
-            or not isfinite(self.request_timeout)
-            or self.request_timeout <= 0
+        if self.request_timeout_seconds is not None and (
+            not isinstance(self.request_timeout_seconds, (int, float))
+            or isinstance(self.request_timeout_seconds, bool)
+            or not isfinite(self.request_timeout_seconds)
+            or self.request_timeout_seconds <= 0
         ):
-            raise ValueError("request_timeout must be finite and positive or None")
+            raise ValueError(
+                "request_timeout_seconds must be finite and positive or None"
+            )
         if self.max_concurrency < 1 or self.max_queue_size < 1:
             raise ValueError("RPC limits must be at least 1")
         if self.max_message_bytes is not None and self.max_message_bytes < 1:
             raise ValueError("max_message_bytes must be at least 1 or None")
-        if self.send_timeout is not None and self.send_timeout <= 0:
-            raise ValueError("send_timeout must be positive or None")
+        if self.send_timeout_seconds is not None and self.send_timeout_seconds <= 0:
+            raise ValueError("send_timeout_seconds must be positive or None")
         if self.max_batch_size < 0:
             raise ValueError("max_batch_size must be at least 0")
         if self.max_streams < 1:

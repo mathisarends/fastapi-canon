@@ -772,7 +772,8 @@ class SourceIndex:
             if order is None:
                 return None
             sequences.append(list(order))
-        sequences.append([base for base in bases if base is not None])
+        direct_bases = [base for base in bases if base is not None]
+        sequences.append(direct_bases)
         result = [name]
         while remaining := [sequence for sequence in sequences if sequence]:
             candidate = next(

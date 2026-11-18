@@ -18,12 +18,12 @@ from fastapi_canon.integrations.sse.router import StreamRouter
 from pydantic import BaseModel
 
 
-class EventType(StrEnum):
+class SmokeEventType(StrEnum):
     EVENT = "event"
 
 
 class Event(BaseModel):
-    type: Literal[EventType.EVENT] = EventType.EVENT
+    type: Literal[SmokeEventType.EVENT] = SmokeEventType.EVENT
     text: str
 
 

@@ -40,7 +40,7 @@ guide for removed predecessor modules.
 
 | Feature | Default | How to opt in or change it |
 |---|---|---|
-| Server request deadline | Unlimited | `RpcLimits(request_timeout=...)`; method `timeout=` overrides, `None` disables inheritance |
+| Server request deadline | Unlimited | `RpcLimits(request_timeout_seconds=...)`; method `timeout_seconds=` overrides, `None` disables inheritance |
 | SDK request budget | 30 seconds, now includes acquisition | Connection `request_timeout` / `requestTimeoutMs` |
 | Reconnect | Disabled | `reconnect=True` / `reconnect: true` |
 | Recovery attempt limit | Unlimited | `reconnect_max_attempts` / `reconnectMaxAttempts`; zero disables recovery |
@@ -103,7 +103,7 @@ responsibilities. See [Notification delivery](connections-and-events.md#notifica
 
 ## Shutdown and credentials
 
-Call `await service.drain.drain(timeout=...)` through an authenticated pre-stop
+Call `await service.drain.drain(timeout_seconds=...)` through an authenticated pre-stop
 path **before** process termination. It rejects new connections, denies new
 ordinary calls with `server_shutting_down`, stops passive producers, and allows
 admitted work/replies to finish within the budget. Remaining sockets close with

@@ -124,11 +124,12 @@ class RpcSocket(Generic[_IncomingT, _OutgoingT]):
         )
 
     @classmethod
-    def create(  # smelt: ignore[SMT345] -- public RpcSocket factory signature
+    def create(
         cls,
         socket: RpcWebSocket,
         connection: RpcConnection,
         messages: tuple[RpcMessageType, ...],
+        *,
         protocol: RpcSocketProtocol | None,
         message_contract: SocketMessages | None,
         limits: RpcLimits,
@@ -143,7 +144,7 @@ class RpcSocket(Generic[_IncomingT, _OutgoingT]):
         self._protocol = protocol
         self._message_contract = message_contract
         self._activity = activity
-        self._send_timeout_seconds = limits.send_timeout
+        self._send_timeout_seconds = limits.send_timeout_seconds
         self._queue = asyncio.Queue[_IncomingT](limits.max_queue_size)
         self._lock = asyncio.Lock()
         self._request_close = request_close

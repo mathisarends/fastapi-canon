@@ -1,7 +1,7 @@
 import subprocess
 from textwrap import dedent
 
-from fastapi_canon.integrations.websockets.codegen.ir import build_ir
+from fastapi_canon.integrations.websockets.codegen import build_ir
 
 
 def test_heartbeat_capability_requires_exact_wire_contract(document):

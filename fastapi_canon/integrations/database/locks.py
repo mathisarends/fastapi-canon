@@ -39,7 +39,3 @@ class AcquireTransactionLock:
         await connection.execute(
             text("SELECT pg_advisory_xact_lock(:key)"), {"key": key}
         )
-
-    async def acquire(self, key: int) -> None:
-        """Acquire a lock through the supported named operation."""
-        await self(key)

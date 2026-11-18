@@ -1,8 +1,7 @@
 import json
 
-from fastapi_canon.integrations.websockets import RpcChannel
+from fastapi_canon.integrations.websockets import RpcChannel, RpcProtocol
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
-from fastapi_canon.integrations.websockets.protocol import RpcProtocol
 from fastapi_canon.integrations.websockets.schema import render_openrpc
 
 from tests.unit.integrations.websockets.conftest import (
@@ -17,10 +16,10 @@ def test_contract_exports_cancellation_and_only_explicit_method_deadlines():
     @channel.method()
     async def inherited() -> None: ...
 
-    @channel.method(timeout=None)
+    @channel.method(timeout_seconds=None)
     async def unbounded() -> None: ...
 
-    @channel.method(timeout=5)
+    @channel.method(timeout_seconds=5)
     async def bounded() -> None: ...
 
     app = RpcDefinition()

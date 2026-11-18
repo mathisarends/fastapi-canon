@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from starlette.responses import Response
 from starlette.types import ExceptionHandler
 
+from fastapi_canon import APIRouter as CanonAPIRouter
 from fastapi_canon import (
     CanonResponse,
     Composition,
@@ -21,7 +22,6 @@ from fastapi_canon import (
 )
 from fastapi_canon.error import Error, ErrorRegistry
 from fastapi_canon.errors import FeatureConfigurationError
-from fastapi_canon.routing.http import CanonRouter
 
 
 def test_feature_copies_inputs_and_is_frozen() -> None:
@@ -533,7 +533,7 @@ def test_feature_collects_declared_errors_from_canon_router() -> None:
         code="item_not_found",
         title="Item not found",
     )
-    router = CanonRouter()
+    router = CanonAPIRouter()
 
     @router.get("/items/{item_id}", raises=[error])
     async def get_item(item_id: str) -> None:
@@ -560,8 +560,8 @@ def test_shared_error_definition_is_registered_once_across_features() -> None:
         code="item_not_found",
         title="Item not found",
     )
-    first = CanonRouter()
-    second = CanonRouter()
+    first = CanonAPIRouter()
+    second = CanonAPIRouter()
     first.get("/first", operation_id="first.get", raises=[error])(lambda: None)
     second.get("/second", operation_id="second.get", raises=[error])(lambda: None)
 

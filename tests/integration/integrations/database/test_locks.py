@@ -70,7 +70,7 @@ async def test_sqlite_advisory_lock_omission_requires_explicit_configuration(
     ):
         locks = await scope.get(AcquireTransactionLock)
         with pytest.raises(NotImplementedError, match="require PostgreSQL"):
-            await locks.acquire(123)
+            await locks(123)
     explicit = Database(
         url=f"sqlite:///{tmp_path / 'locks.db'}", sqlite_advisory_locks="ignore"
     )
@@ -81,4 +81,4 @@ async def test_sqlite_advisory_lock_omission_requires_explicit_configuration(
         permitted.state.dishka_container(scope=Scope.REQUEST) as scope,
     ):
         locks = await scope.get(AcquireTransactionLock)
-        assert await locks.acquire(123) is None
+        assert await locks(123) is None

@@ -127,6 +127,9 @@ fastapi-canon webrtc contract --app app:app --output contract.json
 fastapi-canon webrtc generate --contract contract.json --output src/rtc --client-name PracticeRtcClient
 ```
 
+In prepared 0.24.0, `--app` also accepts a synchronous zero-argument factory
+such as `app:create_app`.
+
 ```ts
 import { PracticeRtcClient, isRtcError } from "./rtc/index.js";
 

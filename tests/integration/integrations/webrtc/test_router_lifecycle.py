@@ -11,9 +11,14 @@ from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
 from fastapi.testclient import TestClient
 from fastapi_canon import Composition, Feature
-from fastapi_canon.integrations.webrtc import SUBPROTOCOL, Session, WebRtcRouter
+from fastapi_canon.integrations.webrtc import (
+    SUBPROTOCOL,
+    Session,
+    SessionEvent,
+    SessionEventKind,
+    WebRtcRouter,
+)
 from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine
-from fastapi_canon.integrations.webrtc.events import SessionEvent, SessionEventKind
 from starlette.types import Message
 
 

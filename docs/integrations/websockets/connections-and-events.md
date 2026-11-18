@@ -43,7 +43,7 @@ async def sign_out(connection: Inject[RpcConnection]) -> None:
 ```
 
 A `NORMAL` or `SHUTDOWN` close first sends the responses and notifications
-already queued for the connection, within `RpcLimits.send_timeout` in total.
+already queued for the connection, within `RpcLimits.send_timeout_seconds` in total.
 Other close codes close at once. Requests still running are cancelled, so their
 responses are not sent.
 
@@ -287,7 +287,7 @@ class GatewayMetrics(RpcMiddleware):
                 "rpc method=%s id=%s duration=%f success=%s",
                 scope.request.method,
                 scope.request.request_id,
-                scope.outcome.duration,
+                scope.outcome.duration_seconds,
                 isinstance(scope.outcome.response, RpcSuccess),
             )
 
@@ -340,7 +340,7 @@ disabling the byte limit.
 ## Draining connections
 
 Pass one `RpcDrain()` instance as `include_channel(..., drain=drain)` to every
-endpoint that should shut down together. `await drain.drain(timeout=30)` is
+endpoint that should shut down together. `await drain.drain(timeout_seconds=30)` is
 idempotent and permanently moves that coordinator into shutdown. The first
 call chooses the budget; cancellation of a caller waiting for drain does not
 cancel the shared drain. `draining` and `connection_count` expose its state.

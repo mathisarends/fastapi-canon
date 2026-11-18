@@ -36,7 +36,7 @@ output = "frontend/src/api/generated-rpc"
 generator = "external"
 generate-command = ["pnpm", "--dir", "frontend", "run", "api:generate"]
 check-command = ["pnpm", "--dir", "frontend", "run", "api:check"]
-timeout = 120
+timeout-seconds = 120
 ```
 
 In `pyproject.toml`, prefix tables with `tool.fastapi-canon`, for example

@@ -4,9 +4,18 @@ from textwrap import dedent
 
 import pytest
 
-from fastapi_canon.checks.cli import main as check_errors_main
-from fastapi_canon.checks.contracts import ContractReport, analyze_error_contracts
-from fastapi_canon.checks.source import SourceDefinition, SourceIndex, SymbolEnvironment
+from fastapi_canon.checks.cli import (  # smelt: ignore[SMT107] -- Standalone check CLI.
+    main as check_errors_main,
+)
+from fastapi_canon.checks.contracts import (  # smelt: ignore[SMT107] -- Analyzer report.
+    ContractReport,
+    analyze_error_contracts,
+)
+from fastapi_canon.checks.source import (  # smelt: ignore[SMT107] -- Source lookup unit.
+    SourceDefinition,
+    SourceIndex,
+    SymbolEnvironment,
+)
 
 PRELUDE = """
 from fastapi_canon import Error, Feature

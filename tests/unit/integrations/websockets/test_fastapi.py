@@ -13,6 +13,8 @@ from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.testclient import TestClient
 from fastapi.websockets import WebSocketState
 from fastapi_canon.integrations.websockets import (
+    CanonWebSocketRouter,
+    FastApiSocket,
     Inject,
     ProtocolDefinitionError,
     RpcBinaryInput,
@@ -25,10 +27,6 @@ from fastapi_canon.integrations.websockets import (
     RpcRejection,
     RpcRejections,
     RpcSocket,
-)
-from fastapi_canon.integrations.websockets.adapters.fastapi import (
-    CanonWebSocketRouter,
-    FastApiSocket,
     serve_websocket,
 )
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
@@ -326,7 +324,7 @@ async def test_serve_websocket_helper_preserves_server_cancellation(
             with pytest.raises(asyncio.CancelledError, match="server cancellation"):
                 await asyncio.wait_for(serving, timeout=5)
         else:
-            await service.drain.drain(timeout=0)
+            await service.drain.drain(timeout_seconds=0)
             await asyncio.wait_for(serving, timeout=5)
 
     assert serving.cancelling() == previous_cancellations + (cancel_source == "caller")

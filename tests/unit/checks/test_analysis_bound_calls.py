@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from fastapi_canon.cli import main
+import fastapi_canon.cli as canon_cli
 
 PRELUDE = """
 from fastapi_canon import APIRouter, Error, Feature
@@ -67,7 +67,7 @@ def scan(
 ) -> Callable[[str], tuple[int, dict[str, Any]]]:
     def run(source: str) -> tuple[int, dict[str, Any]]:
         (tmp_path / "api.py").write_text(dedent(source), encoding="utf-8")
-        status = main(
+        status = canon_cli.main(
             [
                 "check",
                 "errors",

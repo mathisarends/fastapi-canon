@@ -91,9 +91,8 @@ class AiortcEngine:
     async def create_peer(
         self, config: PeerConfig, observer: PeerObserver
     ) -> AiortcPeer:
-        connection = RTCPeerConnection(
-            RTCConfiguration(iceServers=[_ice_server(s) for s in config.ice_servers])
-        )
+        ice_servers = [_ice_server(server) for server in config.ice_servers]
+        connection = RTCPeerConnection(RTCConfiguration(iceServers=ice_servers))
         return AiortcPeer(connection, observer, self._codec_preferences)
 
 

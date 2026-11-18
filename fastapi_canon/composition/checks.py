@@ -1028,23 +1028,21 @@ class _CheckComposition:
         self.container = prepare_container(self.app, self.composition, self.registry)
 
     def _integration_routes(self) -> None:
-        assert self.routers is not None  # smelt: ignore[SMT356] -- Step prerequisite.
         check_integration_routes(
             self.app,
             self.composition.features,
-            self.routers,
+            self._require_routers(),
             container=self.container,
             issues=self.issues,
             checks=self.checks,
         )
 
     def _prepare_integration(self, integration: Integration) -> None:
-        assert self.routers is not None
         installer = integration.prepare(
             IntegrationContext(
                 app=self.app,
                 parts=integration_parts(self.composition, integration),
-                routers=self.routers,
+                routers=self._require_routers(),
                 container=self.container,
             )
         )
@@ -1052,7 +1050,6 @@ class _CheckComposition:
             self.installers.append(installer)
 
     def _describe(self) -> None:
-        assert self.routers is not None
         self.description = describe_composition(
             tuple(
                 FeatureSource(
@@ -1060,26 +1057,23 @@ class _CheckComposition:
                 )
                 for f in self.composition.features
             ),
-            self.routers,
+            self._require_routers(),
             self.registry,
             application_router=self.app.router,
         )
 
     def _operation_ids(self) -> None:
-        assert (
-            self.description is not None
-        )  # smelt: ignore[SMT356] -- Step prerequisite.
+        description = self._require_description()
         check_operations(
-            (*operation_headers(self.app.router), *self.description.operations),
+            (*operation_headers(self.app.router), *description.operations),
             self.issues,
             self.checks,
         )
 
     def _http_paths(self) -> None:
-        assert self.routers is not None
         check_http_paths(
             self.app.router,
-            self.routers,
+            self._require_routers(),
             self.composition.features,
             known=(),
             issues=self.issues,
@@ -1087,28 +1081,36 @@ class _CheckComposition:
         )
 
     def _http_dependencies(self) -> None:
-        assert self.description is not None
         check_http_dependencies(
             self.app,
             self.composition.features,
-            self.description,
+            self._require_description(),
             container=self.container,
             issues=self.issues,
             checks=self.checks,
         )
 
     def _contracts(self) -> None:
-        assert self.routers is not None
         options = self.composition.errors
         validate_error_installation(
             self.app,
-            self.routers,
+            self._require_routers(),
             flatten_handlers(self.composition.features),
             registry=self.registry,
             include_validation_error=options.include_validation_error,
             include_http_exceptions=options.include_http_exceptions,
             include_unhandled_error=options.include_unhandled_error,
         )
+
+    def _require_routers(self) -> tuple[APIRouter, ...]:
+        if self.routers is None:
+            raise RuntimeError("Composition checks require prepared routers")
+        return self.routers
+
+    def _require_description(self) -> CompositionInfo:
+        if self.description is None:
+            raise RuntimeError("Composition checks require a description")
+        return self.description
 
 
 class _WebSocketClaim(NamedTuple):

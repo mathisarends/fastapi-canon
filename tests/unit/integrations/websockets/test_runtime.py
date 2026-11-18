@@ -81,12 +81,14 @@ async def test_hung_calls_expire_including_queued_batch_item_and_release_capacit
         finally:
             finished.append(True)
 
-    @channel.method(timeout=None)
+    @channel.method(timeout_seconds=None)
     async def ping() -> str:
         return "pong"
 
     app = RpcDefinition(
-        limits=RpcLimits(max_concurrency=2, max_pending_requests=3, request_timeout=5),
+        limits=RpcLimits(
+            max_concurrency=2, max_pending_requests=3, request_timeout_seconds=5
+        ),
         strict_errors=True,
         middleware=[recorder],
     )
@@ -378,7 +380,8 @@ async def test_middleware_interruption_returns_and_observes_failure(
             return 42
 
         app = RpcDefinition(
-            middleware=[recorder, Blocking()], limits=RpcLimits(request_timeout=5)
+            middleware=[recorder, Blocking()],
+            limits=RpcLimits(request_timeout_seconds=5),
         )
         app.socket("/rpc", channels=[channel])
         async with deadline_socket(app) as (socket, _):
@@ -398,7 +401,7 @@ async def test_middleware_interruption_returns_and_observes_failure(
             assert scope.outcome.response.model_dump() == response
             assert scope.outcome.error.code == expected
             assert scope.outcome.cancelled is (ending == "cancel")
-            assert scope.outcome.duration > 0
+            assert scope.outcome.duration_seconds > 0
 
 
 async def test_boolean_batch_id_cannot_alias_a_valid_request_id():
@@ -554,7 +557,7 @@ async def test_request_and_connection_context() -> None:
     assert connections[0].close_reason == ""
     assert instrumentation.closed[0].connection is connections[0]
     assert instrumentation.closed[0].outcome.close_code == RpcConnectionClose.NORMAL
-    assert instrumentation.closed[0].outcome.duration >= 0
+    assert instrumentation.closed[0].outcome.duration_seconds >= 0
     assert instrumentation.opened == connections
     assert instrumentation.started[0].connection is connections[0]
 
@@ -691,7 +694,7 @@ async def test_parse_error_is_answered_and_connection_remains_usable(frame, capl
 @pytest.mark.parametrize("timeout", [0, -1, True, float("nan"), float("inf"), "5"])
 def test_request_timeout_limit_requires_positive_finite_seconds(timeout):
     with pytest.raises(ValueError, match="request_timeout"):
-        RpcLimits(request_timeout=timeout)
+        RpcLimits(request_timeout_seconds=timeout)
 
 
 async def test_pending_rejection_logs_are_bounded_even_at_debug(caplog) -> None:
@@ -1105,7 +1108,7 @@ async def test_slow_socket_send_closes_with_policy_violation() -> None:
 
     socket = SlowSocket("/rpc")
     task = asyncio.create_task(
-        service.serve(socket, limits=RpcLimits(send_timeout=0.01))
+        service.serve(socket, limits=RpcLimits(send_timeout_seconds=0.01))
     )
     await socket.client_send(
         json.dumps(

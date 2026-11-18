@@ -43,6 +43,29 @@ from fastapi_canon.errors import ConfigurationError, FeatureConfigurationError
 Use named imports from public namespaces. Explicit `__all__` lists belong to
 package facades; ordinary modules no longer expose them.
 
+### Duration and RPC names
+
+| Previous Python usage | 0.24.0 usage |
+| --- | --- |
+| `RpcLimits(send_timeout=10, request_timeout=30)` | `RpcLimits(send_timeout_seconds=10, request_timeout_seconds=30)` |
+| `channel.method(timeout=5)` | `channel.method(timeout_seconds=5)` |
+| `method.timeout` on an RPC declaration | `method.timeout_seconds` |
+| `drain.drain(timeout=30)`, `client.next_notification(timeout=1)`, `rtc.aclose(timeout=5)` | Pass `timeout_seconds=` to each |
+| `outcome.duration`, `outcome.accepted_duration` on server WebSocket middleware | `outcome.duration_seconds`, `outcome.accepted_duration_seconds` |
+| `TargetConfig(timeout=120, ...)` | `TargetConfig(timeout_seconds=120, ...)` |
+
+Set `timeout-seconds` for an external generator in TOML. Configure generated SDK
+connections with Python `request_timeout` or TypeScript `requestTimeoutMs`.
+
+If you imported `RpcRoute` directly, use `RpcChannelMethod` from
+`fastapi_canon.integrations.websockets.channel` for a channel declaration or
+`RegisteredRpcRoute` from `fastapi_canon.integrations.websockets.routes` for a
+mounted route. Supply `protocol`, `message_contract`, `limits`, `activity`,
+`request_close` and `disconnected` by name to `RpcSocket.create()`. Pass the
+optional `contract=` by name to `bind_sockets()`.
+
+Call an injected `AcquireTransactionLock` with `await lock(key)`.
+
 ## Upgrade to 0.23.0
 
 Version 0.23.0 was published on 2026-11-16.

@@ -7,6 +7,7 @@ import pytest
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.testclient import TestClient
 from fastapi_canon.integrations.websockets import (
+    CanonWebSocketRouter,
     Inject,
     RpcBinaryInput,
     RpcBinaryOutput,
@@ -14,9 +15,6 @@ from fastapi_canon.integrations.websockets import (
     RpcConnectionClose,
     RpcLimits,
     RpcRequestScope,
-)
-from fastapi_canon.integrations.websockets.adapters.fastapi import (
-    CanonWebSocketRouter,
     serve_websocket,
 )
 from fastapi_canon.integrations.websockets.adapters.opentelemetry import OpenTelemetry
@@ -348,7 +346,7 @@ async def test_duplex_counts_empty_messages_and_excludes_input_end(providers):
         await client.end_input()
         await client.closed()
     # Compare both metric directions from the same completed duplex session.
-    for direction in (  # smelt: ignore[SMT427] -- shared scenario
+    for direction in (
         "inbound",
         "outbound",
     ):

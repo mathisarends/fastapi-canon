@@ -373,9 +373,6 @@ async def reserve(self, allocation_key: int) -> None:
     # Read and update the protected records using the injected session.
 ```
 
-Canon 0.21.0 adds this callable operation; `acquire(key)` remains supported
-on the same dependency. Unreleased 0.22.0 removes the `TransactionLocks` alias.
-
 PostgreSQL uses transaction advisory locks on the session's current connection.
 They coordinate separate processes and are released by commit or rollback,
 including scope cancellation. Applications choose signed 64-bit keys and must
@@ -383,7 +380,7 @@ preserve their meaning across deployments. Native `FOR UPDATE`, `SKIP LOCKED`,
 savepoints, dialect-specific upserts and `RETURNING` remain available on the
 unwrapped SQLAlchemy/SQLModel session.
 
-SQLite cannot provide equivalent advisory locks. `acquire` raises by default.
+SQLite cannot provide equivalent advisory locks. The lock call raises by default.
 An application whose isolated SQLite execution deliberately omits these
 guarantees can explicitly set `Database(sqlite_advisory_locks="ignore", ...)`.
 This is no concurrency substitute. Keep real PostgreSQL locking tests; retain

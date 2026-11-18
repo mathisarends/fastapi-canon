@@ -306,7 +306,7 @@ delivered as-is, including empty ones.
 Incoming messages wait in a queue that holds up to `RpcLimits.max_queue_size`
 messages. When the handler falls behind, fastapi_canon.integrations.websockets stops reading from the socket.
 A message larger than `RpcLimits.max_message_bytes` closes the socket with
-1009. A send that blocks longer than `RpcLimits.send_timeout` closes it with
+1009. A send that blocks longer than `RpcLimits.send_timeout_seconds` closes it with
 1008 (`Client too slow`).
 
 ## Lifecycle and closure

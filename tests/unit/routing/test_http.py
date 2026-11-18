@@ -17,7 +17,9 @@ from fastapi_canon import (
 )
 from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
 from fastapi_canon.errors import ConfigurationError, ResponseConfigurationError
-from fastapi_canon.routing.http import CanonRouter
+from fastapi_canon.routing.http import (  # smelt: ignore[SMT107] -- HTTP router unit.
+    CanonRouter,
+)
 
 
 class AuthenticationRequired(Exception):

@@ -14,14 +14,12 @@ from fastapi_canon.integrations.websockets import (
 from fastapi_canon.integrations.websockets.codegen import (
     PythonClientOptions,
     TypeScriptClientOptions,
+    UnsupportedSchemaError,
+    build_ir,
     generate_python_client,
     generate_typescript_client,
 )
 from fastapi_canon.integrations.websockets.codegen.bindings import bind_sockets
-from fastapi_canon.integrations.websockets.codegen.ir import (
-    UnsupportedSchemaError,
-    build_ir,
-)
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from pydantic import Field
 

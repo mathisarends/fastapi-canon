@@ -4,7 +4,7 @@ import sys
 
 import pytest
 
-from fastapi_canon.cli import main
+import fastapi_canon.cli as canon_cli
 
 
 @pytest.mark.parametrize(
@@ -35,7 +35,7 @@ def test_builtin_codes_have_versioned_meaning_example_repair_and_guide(
     code: str,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    assert main(["explain", code, "--format", "json"]) == 0
+    assert canon_cli.main(["explain", code, "--format", "json"]) == 0
     captured = capsys.readouterr()
     assert captured.err == ""
     report = json.loads(captured.out)
@@ -53,7 +53,7 @@ def test_text_explanations_keep_existing_code_names(
     code: str,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    assert main(["explain", code]) == 0
+    assert canon_cli.main(["explain", code]) == 0
     output = capsys.readouterr().out
     assert output.startswith(code + "\n")
     assert "Example:" in output and "Repair:" in output
@@ -67,7 +67,7 @@ def test_unknown_or_application_codes_return_actionable_exit_two(
     output_format: str,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    assert main(["explain", code, "--format", output_format]) == 2
+    assert canon_cli.main(["explain", code, "--format", output_format]) == 2
     captured = capsys.readouterr()
     if output_format == "json":
         report = json.loads(captured.out)

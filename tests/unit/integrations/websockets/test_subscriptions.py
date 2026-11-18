@@ -57,7 +57,7 @@ async def test_subscription_ack_is_not_followed_by_a_second_response(
         send,
         limit=1,
         server=channel.create_server(
-            limits=RpcLimits(request_timeout=5), middleware=[Middleware()]
+            limits=RpcLimits(request_timeout_seconds=5), middleware=[Middleware()]
         ),
     )
     task = asyncio.create_task(
@@ -98,7 +98,7 @@ async def test_deadline_bounds_subscription_handshake_but_does_not_limit_stream(
     stream_stopped = asyncio.Event()
     channel = RpcChannel("session")
 
-    @channel.method(timeout=None)
+    @channel.method(timeout_seconds=None)
     async def occupy() -> None:
         entered.set()
         await asyncio.Future()
@@ -112,7 +112,9 @@ async def test_deadline_bounds_subscription_handshake_but_does_not_limit_stream(
         finally:
             stream_stopped.set()
 
-    service = RpcDefinition(limits=RpcLimits(max_concurrency=1, request_timeout=5))
+    service = RpcDefinition(
+        limits=RpcLimits(max_concurrency=1, request_timeout_seconds=5)
+    )
     service.socket("/rpc", channels=[channel])
     socket = InMemorySocket("/rpc")
     serving = asyncio.create_task(service.serve(socket))
@@ -209,8 +211,8 @@ async def test_subscription_failures_use_scoped_bindings(declared, caplog) -> No
         }
     async with RpcTestClient(service, "/rpc") as client:
         response = await client.request("session.events.open", {"sessionId": "abc"})
-        _, first = await client.next_notification(timeout=1)
-        _, terminal = await client.next_notification(timeout=1)
+        _, first = await client.next_notification(timeout_seconds=1)
+        _, terminal = await client.next_notification(timeout_seconds=1)
     assert first["payload"] == {"value": "first"}
     assert terminal["streamId"] == response["streamId"]
     assert terminal["complete"] is False

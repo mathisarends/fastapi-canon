@@ -53,18 +53,19 @@ async def test_deadlines_include_semaphore_wait_and_method_none_disables_default
                 cancelled.set()
                 raise
 
-        @channel.method(timeout=3)
+        @channel.method(timeout_seconds=3)
         async def queued() -> None:
             nonlocal queued_ran
             queued_ran = True
 
-        @channel.method(timeout=None)
+        @channel.method(timeout_seconds=None)
         async def unbounded() -> str:
             await release.wait()
             return "ok"
 
         server = channel.create_server(
-            limits=RpcLimits(max_concurrency=1, request_timeout=10), strict_errors=True
+            limits=RpcLimits(max_concurrency=1, request_timeout_seconds=10),
+            strict_errors=True,
         )
 
         async def call(method, request_id):
@@ -123,7 +124,7 @@ async def test_deadline_cancels_dependency_resolution_and_exits_its_scope(monkey
 
         channel = RpcChannel("dependencies")
 
-        @channel.method(timeout=2)
+        @channel.method(timeout_seconds=2)
         async def work(value: Inject[str]) -> str:
             pytest.fail("Dependency resolution must expire before the handler starts")
 
@@ -278,7 +279,7 @@ async def test_middleware_receives_request_outcome_and_duration(
     assert instrumentation.requests[0].notification is False
     assert instrumentation.responses[0].request is instrumentation.requests[0]
     assert instrumentation.responses[0].outcome.response is response
-    assert instrumentation.responses[0].outcome.duration >= 0
+    assert instrumentation.responses[0].outcome.duration_seconds >= 0
 
 
 async def test_a_notification_is_served_without_a_response(

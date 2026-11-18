@@ -38,7 +38,7 @@ async def test_requests_reach_the_endpoint() -> None:
 async def test_notification_timeout() -> None:
     async with RpcTestClient(service, "/rooms") as client:
         with pytest.raises(TimeoutError):
-            await client.next_notification(timeout=0.01)
+            await client.next_notification(timeout_seconds=0.01)
 
 
 def test_test_stream_requires_stream_endpoint() -> None:

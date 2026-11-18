@@ -171,7 +171,7 @@ def _external(target: TargetConfig, root: Path, *, check: bool) -> StepResult:
             capture_output=True,
             text=True,
             check=False,
-            timeout=target.timeout,
+            timeout=target.timeout_seconds,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         return StepResult(

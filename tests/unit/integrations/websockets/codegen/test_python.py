@@ -19,10 +19,10 @@ from fastapi_canon.integrations.websockets import (
     RpcModel,
 )
 from fastapi_canon.integrations.websockets.codegen import (
+    UnsupportedSchemaError,
     generate_python_client,
     render_python_client,
 )
-from fastapi_canon.integrations.websockets.codegen.ir import UnsupportedSchemaError
 from fastapi_canon.integrations.websockets.codegen.python import PythonClientOptions
 from fastapi_canon.integrations.websockets.codegen.writer import MANIFEST
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
@@ -504,8 +504,8 @@ def test_generated_python_error_boundaries_are_smelt_clean(
                   may_depend_on: []
                   third_party: allow
             rules:
-              prefer-package-import: warning
-              internal-public-module-symbol: warning
+              imports/prefer-package-import: warning
+              visibility/internal-public-module-symbol: warning
             """),
         encoding="utf-8",
     )

@@ -296,8 +296,8 @@ class RpcServer:
     def _request_timeout(self, raw_request: object) -> float | None:
         method = self._methods.get(_request_method(raw_request) or "")
         if method is not None and method.has_timeout:
-            return method.timeout
-        return self._limits.request_timeout
+            return method.timeout_seconds
+        return self._limits.request_timeout_seconds
 
     @asynccontextmanager
     async def _request_scope(
@@ -327,7 +327,7 @@ class RpcServer:
                 on_error(scope, error)
             if scope.outcome is not None:
                 scope.outcome = replace(
-                    scope.outcome, duration=time.perf_counter() - started
+                    scope.outcome, duration_seconds=time.perf_counter() - started
                 )
 
         async with middleware_scope(
@@ -343,7 +343,7 @@ class RpcServer:
                 outcome_error = caught if previous is None else previous.error or caught
                 scope.outcome = RpcRequestOutcome(
                     response=None if previous is None else previous.response,
-                    duration=time.perf_counter() - started,
+                    duration_seconds=time.perf_counter() - started,
                     error=outcome_error,
                     cancelled=isinstance(caught, asyncio.CancelledError)
                     or (previous is not None and previous.cancelled),

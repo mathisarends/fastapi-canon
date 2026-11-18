@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from itertools import chain
 from typing import NamedTuple
@@ -197,6 +197,48 @@ class NameBinding(NamedTuple):
 
     source: str
     identifier: str
+
+
+def validate_namespace_names(
+    nodes: tuple[NamespaceViewNode, ...], identifier: Callable[[str], str]
+) -> None:
+    for node in nodes:
+        values = [
+            NameBinding(child.segment, identifier(child.segment))
+            for child in node.children
+        ]
+        values.extend(
+            NameBinding(route.rpc_name, identifier(route.operation_name))
+            for route in node.operations
+        )
+        values.extend(
+            NameBinding(event.rpc_name, identifier(event.operation_name))
+            for event in node.notifications
+        )
+        values.extend(
+            NameBinding(stream.rpc_name, identifier(stream.operation_name))
+            for stream in chain[BinaryStreamDecl | SocketDecl](
+                node.streams, node.sockets
+            )
+        )
+        assert_unique_names(f"API path {'.'.join(node.path)}", values)
+        validate_namespace_names(node.children, identifier)
+
+
+def walk_namespaces(
+    nodes: tuple[NamespaceViewNode, ...],
+) -> Iterable[NamespaceViewNode]:
+    for node in nodes:
+        yield node
+        yield from walk_namespaces(node.children)
+
+
+def walk_namespaces_postorder(
+    nodes: tuple[NamespaceViewNode, ...],
+) -> Iterable[NamespaceViewNode]:
+    for node in nodes:
+        yield from walk_namespaces_postorder(node.children)
+        yield node
 
 
 def assert_unique_names(
