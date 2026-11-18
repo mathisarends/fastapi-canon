@@ -7,6 +7,7 @@ import pytest
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.testclient import TestClient
 from fastapi_canon.integrations.websockets import (
+    CanonWebSocketRouter,
     Inject,
     RpcBinaryInput,
     RpcBinaryOutput,
@@ -14,9 +15,6 @@ from fastapi_canon.integrations.websockets import (
     RpcConnectionClose,
     RpcLimits,
     RpcRequestScope,
-)
-from fastapi_canon.integrations.websockets.adapters.fastapi import (
-    CanonWebSocketRouter,
     serve_websocket,
 )
 from fastapi_canon.integrations.websockets.adapters.opentelemetry import OpenTelemetry

@@ -116,27 +116,22 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         for length in (16, 16_384):
             count = args.requests if length < 1024 else max(200, args.requests // 10)
             await _sequential(method, min(count, 200), length)  # warm up adapters
+            round_trip_samples = [
+                await _sequential(method, count, length) for _ in range(args.repeat)
+            ]
+            round_trip = round(statistics.median(round_trip_samples), 2)
+            throughput_samples = [
+                await _pipelined(method, count, length, args.window)
+                for _ in range(args.repeat)
+            ]
             results.append(
                 {
                     "method": method,
                     "text_bytes": length,
                     "requests": count,
-                    "sequential_round_trip_us": round(
-                        statistics.median(
-                            [
-                                await _sequential(method, count, length)
-                                for _ in range(args.repeat)
-                            ]
-                        ),
-                        2,
-                    ),
+                    "sequential_round_trip_us": round_trip,
                     "pipelined_requests_per_s": round(
-                        statistics.median(
-                            [
-                                await _pipelined(method, count, length, args.window)
-                                for _ in range(args.repeat)
-                            ]
-                        )
+                        statistics.median(throughput_samples)
                     ),
                 }
             )

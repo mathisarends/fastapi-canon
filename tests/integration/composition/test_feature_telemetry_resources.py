@@ -16,7 +16,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from fastapi_canon import Composition, Feature
+from fastapi_canon import APIRouter, Composition, Feature
 from fastapi_canon.integrations.opentelemetry import (
     ResourceInstrumentation,
     Telemetry,
@@ -26,7 +26,6 @@ from fastapi_canon.integrations.opentelemetry.httpx import (
     HttpxClients,
     instrument_httpx,
 )
-from fastapi_canon.routing.http import CanonRouter
 from tests.fixtures.telemetry import SpanCapture
 
 
@@ -80,7 +79,7 @@ async def test_http_request_shares_configuration_exclusions_and_resource_lifetim
         resources = provide(Resources, scope=Scope.APP)
         service = provide(Service, scope=Scope.REQUEST)
 
-    router = CanonRouter()
+    router = APIRouter()
 
     @router.get("/{name}")
     @inject

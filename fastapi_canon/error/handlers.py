@@ -115,7 +115,8 @@ def install_handlers(
         reserved.add(Exception)
     overlap = domain_classes & reserved
     if overlap:
-        names = ", ".join(sorted(exception.__qualname__ for exception in overlap))
+        exception_names = sorted(exception.__qualname__ for exception in overlap)
+        names = ", ".join(exception_names)
         raise ErrorConfigurationError(
             f"domain exceptions conflict with enabled normalization handlers: {names}"
         )

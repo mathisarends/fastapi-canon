@@ -25,7 +25,6 @@ from fastapi_canon import (
 )
 from fastapi_canon.errors import FeatureConfigurationError
 from fastapi_canon.integrations.sse.canon import CanonStreamRouter
-from fastapi_canon.routing.http import CanonRouter
 
 
 class NotAuthenticated(Exception):
@@ -58,7 +57,7 @@ def test_snapshot_records_effective_paths_dependencies_and_error_origins() -> No
     project_error = Error(
         ProjectMissing, code="project_missing", status=404, title="Project missing"
     )
-    router = CanonRouter(prefix="/projects")
+    router = ApplicationRouter(prefix="/projects")
     router.get(
         "/{project_id}",
         operation_id="projects.get",
@@ -68,7 +67,7 @@ def test_snapshot_records_effective_paths_dependencies_and_error_origins() -> No
     composition = Composition(
         features=(Feature(name="projects", routers=[router]),),
         errors=ErrorOptions(type_base="https://example.test/problems"),
-        router_factory=lambda: CanonRouter(
+        router_factory=lambda: ApplicationRouter(
             prefix="/api/v1",
             policy=RouterPolicy(
                 raises=[auth_error],
@@ -126,7 +125,7 @@ def test_snapshot_records_effective_paths_dependencies_and_error_origins() -> No
 
 
 def test_nested_router_prefixes_and_hidden_routes_are_described() -> None:
-    child = CanonRouter(
+    child = ApplicationRouter(
         prefix="/projects", policy=RouterPolicy(dependencies=[Depends(require_project)])
     )
     child.get("", operation_id="projects.list")(lambda: [])
@@ -137,7 +136,7 @@ def test_nested_router_prefixes_and_hidden_routes_are_described() -> None:
     parent.include_router(child, prefix="/v2")
     composition = Composition(
         features=(Feature(name="projects", routers=[parent]),),
-        router_factory=lambda: CanonRouter(prefix="/api"),
+        router_factory=lambda: ApplicationRouter(prefix="/api"),
     )
     app = composition.build(FastAPI())
 
@@ -154,7 +153,7 @@ def test_nested_router_prefixes_and_hidden_routes_are_described() -> None:
 
 
 def test_inspect_requires_an_installation_and_keeps_a_snapshot() -> None:
-    router = CanonRouter()
+    router = ApplicationRouter()
     router.get("/first", operation_id="first")(lambda: "first")
     composition = Composition(features=(Feature(name="projects", routers=[router]),))
     app = FastAPI()
@@ -174,12 +173,12 @@ def test_inspect_requires_an_installation_and_keeps_a_snapshot() -> None:
 
 
 def test_application_and_factory_dependencies_keep_their_origins() -> None:
-    router = CanonRouter()
+    router = ApplicationRouter()
     router.get("/projects", operation_id="projects.list")(lambda: [])
     app = FastAPI(dependencies=[Depends(require_authenticated_user)])
     composition = Composition(
         features=(Feature(name="projects", routers=[router]),),
-        router_factory=lambda: CanonRouter(
+        router_factory=lambda: ApplicationRouter(
             prefix="/api", dependencies=[Depends(require_project)]
         ),
     )
@@ -205,12 +204,12 @@ def test_path_converters_share_openapi_paths_and_inherited_contracts() -> None:
         status=401,
         title="Authentication required",
     )
-    router = CanonRouter()
+    router = ApplicationRouter()
     router.get("/files/{path:path}", operation_id="files.get")(lambda path: path)
     composition = Composition(
         features=(Feature(name="files", routers=[router]),),
         errors=ErrorOptions(type_base="https://example.test/problems"),
-        router_factory=lambda: CanonRouter(raises=[failure]),
+        router_factory=lambda: ApplicationRouter(raises=[failure]),
     )
     app = composition.build(FastAPI())
     operation = inspect_app(app).operation_by_id("files.get")
@@ -222,7 +221,7 @@ def test_path_converters_share_openapi_paths_and_inherited_contracts() -> None:
 def test_mounted_applications_keep_their_own_ownership_boundary() -> None:
     external = FastAPI()
     external.get("/external", operation_id="external.get")(lambda: "external")
-    router = CanonRouter()
+    router = ApplicationRouter()
     router.get("/projects", operation_id="projects.list")(lambda: [])
     router.mount("/mounted", external)
     composition = Composition(features=(Feature(name="projects", routers=[router]),))
@@ -245,7 +244,7 @@ def test_endpoint_lookup_uses_the_registered_symbol_and_keeps_exports_data_only(
     def wrapped_project() -> str:
         return get_project()
 
-    child = CanonRouter(prefix="/projects")
+    child = ApplicationRouter(prefix="/projects")
     child.get("/current", operation_id="projects.get")(wrapped_project)
     parent = APIRouter(prefix="/v1")
     parent.include_router(child)
@@ -271,7 +270,7 @@ def test_endpoint_lookup_reports_every_ambiguous_registration() -> None:
     def get_project() -> str:
         return "project"
 
-    router = CanonRouter()
+    router = ApplicationRouter()
     router.get("/projects", operation_id="projects.get")(get_project)
     router.get("/archive", operation_id="archive.get")(get_project)
     composition = Composition(features=(Feature(name="projects", routers=[router]),))
@@ -283,7 +282,7 @@ def test_endpoint_lookup_reports_every_ambiguous_registration() -> None:
 
 
 def test_endpoint_lookup_keeps_the_declared_symbol_with_dishka_routes() -> None:
-    router = CanonRouter(route_class=DishkaRoute)
+    router = ApplicationRouter(route_class=DishkaRoute)
     provider = Provider()
     provider.provide(ProjectService, scope=Scope.REQUEST)
 

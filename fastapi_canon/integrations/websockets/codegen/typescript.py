@@ -358,12 +358,8 @@ class _Renderer:
                 ]
             )
         if self.nodes:
-            imports.append(
-                _value_import(
-                    [_api_class(node.path) for node in self.nodes],
-                    "./namespaces",
-                )
-            )
+            api_classes = [_api_class(node.path) for node in self.nodes]
+            imports.append(_value_import(api_classes, "./namespaces"))
         body = self._template(
             "client",
             imports=imports,
@@ -889,7 +885,8 @@ def _notification_type(ir: ClientIr) -> TypeExpr | None:
 
 
 def _stream_connections(streams: Iterable[BinaryStreamDecl]) -> list[str]:
-    return sorted({_stream_connection(stream) for stream in streams})
+    connections = {_stream_connection(stream) for stream in streams}
+    return sorted(connections)
 
 
 def _value_import(names: Iterable[str], module: str) -> str:

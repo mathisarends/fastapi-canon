@@ -140,25 +140,28 @@ def _target(root: Path, name: str, value: object) -> TargetConfig:
         or any(keyword.iskeyword(part) for part in package.split("."))
     ):
         raise ValueError(f"Invalid package or client-name for target {name}")
+    output = _path(root, value.get("output"))
+    diagnostics = _path(root, value["diagnostics"]) if "diagnostics" in value else None
+    allow_diagnostics = (
+        _path(root, value["allow-diagnostics"])
+        if "allow-diagnostics" in value
+        else None
+    )
+    include_operations = tuple(include) if include is not None else None
+    generator_options = {key: value[key] for key in value.keys() - _COMMON_KEYS}
     return TargetConfig(
         name=name,
         generator=generator,
         language=language,
-        output=_path(root, value.get("output")),
+        output=output,
         package=package,
         client_name=client,
         http_client=cast(HttpClient, http),
         strict=strict,
-        diagnostics=_path(root, value["diagnostics"])
-        if "diagnostics" in value
-        else None,
-        allow_diagnostics=_path(root, value["allow-diagnostics"])
-        if "allow-diagnostics" in value
-        else None,
-        include_operations=tuple(include) if include is not None else None,
-        options=MappingProxyType(
-            {key: value[key] for key in value.keys() - _COMMON_KEYS}
-        ),
+        diagnostics=diagnostics,
+        allow_diagnostics=allow_diagnostics,
+        include_operations=include_operations,
+        options=MappingProxyType(generator_options),
     )
 
 

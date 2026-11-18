@@ -15,6 +15,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import Message
 
 from fastapi_canon import (
+    APIRouter,
     CanonResponse,
     Composition,
     Error,
@@ -27,7 +28,6 @@ from fastapi_canon.errors import (
     FeatureConfigurationError,
     ResponseConfigurationError,
 )
-from fastapi_canon.routing.http import CanonRouter
 
 
 class Missing(Exception):
@@ -45,7 +45,7 @@ def test_configuration_errors_have_one_public_base() -> None:
 
 
 def test_composition_normalizes_without_domain_registries() -> None:
-    router = CanonRouter(http_statuses=[401])
+    router = APIRouter(http_statuses=[401])
 
     @router.get("/items/{item_id}")
     async def item(item_id: int) -> None:
@@ -77,15 +77,15 @@ def test_composition_normalizes_without_domain_registries() -> None:
 
 def test_nested_routers_and_listed_errors_contribute_together() -> None:
     missing = Error(Missing, status=404, code="item_missing", title="Item missing")
-    child = CanonRouter()
+    child = APIRouter()
 
     @child.get("/items/{item_id}", raises=[missing])
     async def item(item_id: str) -> None:
         raise Missing(item_id)
 
-    parent = CanonRouter(prefix="/api")
+    parent = APIRouter(prefix="/api")
     parent.include_router(child)
-    root = CanonRouter()
+    root = APIRouter()
     root.include_router(parent)
     feature = Feature(name="items", routers=[root], errors=[missing])
     app = Composition(features=[feature]).build(FastAPI())
@@ -101,7 +101,7 @@ def test_nested_routers_and_listed_errors_contribute_together() -> None:
     "method", ["get", "put", "post", "delete", "options", "head", "patch", "trace"]
 )
 def test_http_contracts_compose_on_every_decorator(method: str) -> None:
-    router = CanonRouter(http_statuses=[401])
+    router = APIRouter(http_statuses=[401])
     getattr(router, method)("/protected", http_statuses=[401, 403])(lambda: None)
     app = Composition(features=[Feature(name="private", routers=[router])]).build(
         FastAPI()
@@ -114,13 +114,13 @@ def test_http_contracts_compose_on_every_decorator(method: str) -> None:
 @pytest.mark.parametrize("statuses", [[399], [600], [True], "401"])
 def test_invalid_http_contracts_fail_at_declaration(statuses: Any) -> None:
     with pytest.raises(ConfigurationError, match="http_statuses"):
-        CanonRouter(http_statuses=statuses)
+        APIRouter(http_statuses=statuses)
     with pytest.raises(ConfigurationError, match="http_statuses"):
-        CanonRouter().get("/invalid", http_statuses=statuses)
+        APIRouter().get("/invalid", http_statuses=statuses)
 
 
 def test_http_contracts_respect_normalization_options() -> None:
-    router = CanonRouter(http_statuses=[401])
+    router = APIRouter(http_statuses=[401])
     router.get("/private")(lambda: None)
     composition = Composition(
         features=[Feature(name="private", routers=[router])],
@@ -133,7 +133,7 @@ def test_http_contracts_respect_normalization_options() -> None:
 @pytest.mark.parametrize("status", [422, 500])
 def test_framework_and_domain_errors_share_discriminated_contracts(status: int) -> None:
     missing = Error(Missing, status=status, code="item_missing", title="Item missing")
-    router = CanonRouter()
+    router = APIRouter()
 
     @router.get("/items/{item_id}", raises=[missing])
     async def item(item_id: int) -> None:
@@ -222,7 +222,7 @@ def test_app_router_and_feature_lifespans_run_and_unwind_together() -> None:
 
         return lifespan
 
-    router = CanonRouter(lifespan=lifecycle("router"))
+    router = APIRouter(lifespan=lifecycle("router"))
     router.get("/health")(lambda: "ok")
     composition = Composition(
         features=[
@@ -259,7 +259,7 @@ def test_composition_validates_before_opening_feature_resources() -> None:
         started.append(True)
         yield
 
-    router = CanonRouter()
+    router = APIRouter()
     router.get("/one", operation_id="duplicate")(lambda: None)
     router.get("/two", operation_id="duplicate")(lambda: None)
     composition = Composition(
@@ -279,7 +279,7 @@ def test_domain_errors_respect_websocket_transport(
     accepted: bool, denial: bool
 ) -> None:
     missing = Error(Missing, status=404, code="item_missing", title="Item missing")
-    router = CanonRouter()
+    router = APIRouter()
 
     @router.websocket("/ws")
     async def socket(websocket: WebSocket) -> None:
@@ -328,7 +328,7 @@ def test_domain_errors_respect_websocket_transport(
 
 
 def test_stream_authentication_uses_the_same_http_problem_contract() -> None:
-    router = CanonRouter(http_statuses=[401])
+    router = APIRouter(http_statuses=[401])
 
     @router.get("/events", response=CanonResponse.sse())
     async def events() -> StreamingResponse:
@@ -348,7 +348,7 @@ def test_stream_authentication_uses_the_same_http_problem_contract() -> None:
 
 def test_failure_after_stream_start_does_not_send_a_second_response() -> None:
     missing = Error(Missing, status=404, code="item_missing", title="Item missing")
-    router = CanonRouter()
+    router = APIRouter()
 
     async def chunks() -> AsyncIterator[str]:
         yield "data: ready\n\n"

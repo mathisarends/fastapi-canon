@@ -14,10 +14,9 @@ from starlette.background import BackgroundTask
 from starlette.responses import Response
 from starlette.types import Message, Scope
 
-from fastapi_canon import Composition, Feature
+from fastapi_canon import APIRouter, Composition, Feature
 from fastapi_canon.error import Error, ErrorRegistry
 from fastapi_canon.errors import FeatureConfigurationError
-from fastapi_canon.routing.http import CanonRouter
 
 
 class TaskNotFound(Exception):
@@ -92,7 +91,7 @@ def test_included_router_logs_complete_template_without_telemetry(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     caplog.set_level(logging.INFO, logger="fastapi_canon.access")
-    router = CanonRouter()
+    router = APIRouter()
 
     @router.get("/tasks/{task_id:int}")
     async def task(task_id: int) -> int:
@@ -100,7 +99,7 @@ def test_included_router_logs_complete_template_without_telemetry(
 
     app = Composition(
         features=(Feature(name="tasks", routers=[router]),),
-        router_factory=lambda: CanonRouter(prefix="/api/v1"),
+        router_factory=lambda: APIRouter(prefix="/api/v1"),
         request_logging=True,
     ).build(FastAPI())
     with TestClient(app) as client:

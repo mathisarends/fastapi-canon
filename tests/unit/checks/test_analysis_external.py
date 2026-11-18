@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from fastapi_canon.cli import main
+import fastapi_canon.cli as canon_cli
 
 PRELUDE = """
 from fastapi_canon import APIRouter, Error, Feature
@@ -42,7 +42,7 @@ def analyze(
         (directory / "api.py").write_text(
             dedent(PRELUDE) + dedent(source) + endpoint, encoding="utf-8"
         )
-        main(["check", "errors", str(directory), "--format", "json"])
+        canon_cli.main(["check", "errors", str(directory), "--format", "json"])
         report: dict[str, Any] = json.loads(capsys.readouterr().out)
         operations = {item["function"]: item for item in report["operations"]}
         return operations

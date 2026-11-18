@@ -7,13 +7,11 @@ from fastapi_canon.integrations.websockets import (
     RpcChannel,
 )
 from fastapi_canon.integrations.websockets.codegen import (
-    generate_python_client,
-    generate_typescript_client,
-)
-from fastapi_canon.integrations.websockets.codegen.ir import build_ir
-from fastapi_canon.integrations.websockets.codegen.options import (
     PythonClientOptions,
     TypeScriptClientOptions,
+    build_ir,
+    generate_python_client,
+    generate_typescript_client,
 )
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.schema import render_openrpc

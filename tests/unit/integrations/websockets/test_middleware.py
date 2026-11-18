@@ -11,6 +11,7 @@ import pytest
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.testclient import TestClient
 from fastapi_canon.integrations.websockets import (
+    CanonWebSocketRouter,
     RpcChannel,
     RpcConnectionClose,
     RpcConnectionScope,
@@ -18,9 +19,6 @@ from fastapi_canon.integrations.websockets import (
     RpcRejection,
     RpcRequestScope,
     RpcStreamScope,
-)
-from fastapi_canon.integrations.websockets.adapters.fastapi import (
-    CanonWebSocketRouter,
     serve_websocket,
 )
 from fastapi_canon.integrations.websockets.definition import RpcDefinition

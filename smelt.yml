@@ -31,6 +31,11 @@ project:
   - path: '**/dist/**'
     reason: Build outputs and disposable validation environments.
 architecture:
+  composition_root:
+  - fastapi_canon.__main__
+  - fastapi_canon.checks.__main__
+  - app.main
+  - app.telemetry_demo
   modules:
     scripts: tooling
     examples: showcase
@@ -86,7 +91,6 @@ architecture:
     fastapi_canon.checks.cli: analysis
     fastapi_canon.cli: cli
     fastapi_canon.cli.main: cli
-    fastapi_canon.__main__: cli
     fastapi_canon.integrations.sse.codegen: generation
     fastapi_canon.integrations.websockets.codegen: generation
     fastapi_canon.integrations.webrtc.codegen: generation
@@ -302,26 +306,43 @@ architecture:
         - alembic
         - fastmcp
         - anyio
-  imports:
+  import_graph:
     transitive: true
     type_checking: include
     cycles: [layers, siblings]
-structure:
+  packages:
+    canon:
+      match: fastapi_canon
+      min_importers_to_export: 3
+      required: [error, composition, routing, cli, contracts, diagnostics, openapi, response]
+      # Also cover the documented extension modules and installed CLI entry point.
+      public: [., error, diagnostics, errors, openapi, contracts, integration,
+        integrations.**, codegen.generators, cli]
+    error-models:
+      match: fastapi_canon.error
+      min_importers_to_export: 3
+      required: [error, problem, registry, rendering, handlers, openapi, types]
+    integration-facades:
+      match: fastapi_canon.integrations.*
+      min_importers_to_export: 3
+style:
   file_naming:
     yaml_extension: yml
     compose_basename: compose
   forbidden_names: [utils, helpers, common, misc]
-  contracts:
+  str_enum_values: explicit
+  max_module_imports: 20
+  max_comprehension_loops: 2
+  max_constructor_decisions: 4
+  max_private_definitions: 12
+  overrides:
     canon:
       match: fastapi_canon
-      export_at: 3
-      required: [error, composition, routing, cli, contracts, diagnostics, openapi, response]
-      public: [., error, diagnostics, errors, openapi, contracts, integrations.**]
       imports:
         style: absolute
       module_docstrings: forbid
       rules:
-        package-only-dunder-all: error
+        visibility/misplaced-dunder-all: error
       private_modules: forbid
       future_annotations: when-needed
       max_positional_parameters: 3
@@ -331,14 +352,6 @@ structure:
         min_branches: 3
       ordering:
         constants_exempt: true
-    error-models:
-      match: fastapi_canon.error
-      export_at: 3
-      required: [error, problem, registry, rendering, handlers, openapi, types]
-      module_docstrings: forbid
-    integration-facades:
-      match: fastapi_canon.integrations.*
-      export_at: 3
     reference-application:
       match: app
       dataclass_options: [frozen, slots]
@@ -358,10 +371,10 @@ tests:
   layout: mirror
   mirror: '{path}/test_{module}.py'
   mirror_suffixes: true
-  forbid_mocks_in: [tests/integration/**, tests/contract/**, tests/unit/error/**]
+  forbidden_mock_paths: [tests/integration/**, tests/contract/**, tests/unit/error/**]
   max_patches_per_test: 1
   # Retain focused protocol/scenario suites while core tests mirror their modules.
-  unmirrored: [tests/unit/integrations/**, tests/integration/integrations/**,
+  mirror_exclude: [tests/unit/integrations/**, tests/integration/integrations/**,
     tests/contract/integrations/**, tests/integration/test_opentelemetry.py,
     tests/integration/test_optional_streams.py, tests/integration/codegen/**,
     tests/integration/test_stack.py, tests/unit/test_release.py,
@@ -369,90 +382,95 @@ tests:
     tests/integration/scripts/test_benchmark_tests.py,
     examples/reference-service/tests/**]
 rules:
-  import-cycle: error
-  unclassified-module: error
-  public-definitions-first: error
-  bundled-instance-assignment: error
-  information-hiding: warning
-  internal-public-member: error
-  internal-static-helper: error
-  private-class-constant: error
-  redundant-str-enum-value: error
-  prefer-package-import: error
-  facade-export-gap: warning
-  prefer-str-enum-discriminator: warning
-  implicit-optional-default: warning
-  deep-object-navigation: warning
-  no-base-class-prefix: error
-  no-base-class-suffix: error
-  secret-settings-field: warning
-  redundant-dishka-provider: warning
-  caller-before-callee: warning
-  prefer-callable-instance: warning
-  redundant-module-name: warning
-  unnecessary-future-annotations: warning
-  prefer-match-type-dispatch: warning
-  private-test-access: error
-  string-patch-target: error
-  test-without-outcome-check: error
-  test-only-checks-possibly-empty-data: error
-  unbounded-test-wait: error
-  independent-test-case-loop: warning
-  async-mock-without-await-check: error
-  test-only-public-function: error
-  nondeterministic-test-data: warning
-  deprecated-async-contextmanager-return: warning
-  duplicate-literal-type: warning
-  private-symbol-import: warning
-  await-in-call-argument: warning
-  str-enum-explicit-values: warning
-  redundant-private-delegate: warning
-  redundant-name-alias: warning
-  prefer-deferred-annotations: warning
-  anonymous-tuple-type: warning
+  architecture/import-cycle: error
+  architecture/unclassified-module: error
+  layout/definition-order: error
+  idioms/bundled-instance-assignment: error
+  visibility/internal-public-module-symbol: warning
+  visibility/internal-public-attribute: warning
+  visibility/test-only-public-attribute: warning
+  visibility/internal-public-member: error
+  layout/misplaced-static-helper: error
+  layout/misplaced-private-constant: error
+  modeling/redundant-str-enum-value: error
+  imports/prefer-package-import: error
+  imports/excess-module-imports: warning
+  architecture/missing-facade-export: warning
+  modeling/prefer-str-enum-discriminator: warning
+  typing/implicit-optional-default: warning
+  complexity/excess-attribute-depth: warning
+  modeling/forbidden-base-class-affix: error
+  frameworks/prefer-secret-type: warning
+  frameworks/redundant-dishka-provider: warning
+  layout/callee-before-caller: warning
+  idioms/prefer-callable-instance: warning
+  layout/redundant-module-name: warning
+  typing/redundant-future-annotations: warning
+  idioms/prefer-match-type-dispatch: warning
+  tests/private-access: error
+  tests/string-patch-target: error
+  tests/missing-outcome-check: error
+  tests/vacuous-assertion: error
+  tests/unbounded-wait: error
+  tests/independent-case-loop: warning
+  tests/missing-await-assertion: error
+  visibility/test-only-public-function: error
+  tests/nondeterministic-data: warning
+  typing/deprecated-async-contextmanager-return: warning
+  typing/duplicate-literal-type: warning
+  visibility/foreign-private-access: warning
+  complexity/inline-call-argument: warning
+  # These counts flag code for review. Cohesion and safe extraction need judgment.
+  complexity/excess-comprehension-loops: hint
+  complexity/excess-constructor-decisions: hint
+  visibility/excess-private-definitions: hint
+  modeling/str-enum-value-convention: warning
+  visibility/redundant-private-delegate: warning
+  idioms/redundant-name-alias: warning
+  typing/prefer-deferred-annotations: warning
+  typing/anonymous-tuple-type: warning
   # Contract prose belongs where names and types do not explain the behavior.
-  missing-interface-docstring: off
-  stateful-dataclass: warning
-  missing-broad-except-reason: warning
-  missing-dataclass-option: warning
+  idioms/missing-interface-docstring: off
+  modeling/dataclass-field-mutation: warning
+  idioms/missing-broad-except-reason: warning
+  modeling/missing-dataclass-option: warning
   # Emitters resolve identical helper text against different language semantics.
-  duplicate-function: off
-  prefer-project-base-class: warning
+  complexity/duplicate-function: off
+  modeling/prefer-project-base-class: warning
   # Library validation and protocol failures retain their documented exceptions.
-  prefer-domain-exception: off
+  modeling/prefer-domain-exception: off
   # Module-qualified route types and standalone demo models have distinct owners.
-  duplicate-class-name: off
-  duplicate-narrowing-assert: warning
-  missing-duration-unit: warning
-  prefer-named-duration: warning
-  nested-conditional-expression: warning
-  mutable-field-in-frozen-dataclass: warning
-  parallel-record-fields: warning
-  loop-invariant-collection: warning
-  unused-suppression: error
-  resolved-debt: error
+  modeling/duplicate-class-name: off
+  idioms/duplicate-narrowing-assert: warning
+  modeling/implicit-duration-unit: warning
+  complexity/forbidden-nested-conditional: warning
+  modeling/mutable-field-in-frozen-dataclass: warning
+  modeling/parallel-record-fields: warning
+  idioms/loop-invariant-collection: warning
+  meta/unused-suppression: error
+  meta/resolved-debt: error
 suppressions:
   require_reason: true
 ignore:
-- rule: yaml-file-extension
+- rule: layout/file-name-convention
   paths: [pnpm-lock.yaml, fastapi_canon/skills/build-canon-backend/agents/openai.yaml]
   reason: pnpm and the agent skill format require these exact filenames.
-- rule: import-style
+- rule: imports/forbidden-import-style
   paths: ['**/__init__.py']
   reason: Package facades deliberately use relative imports; ordinary Canon modules use absolute
     imports.
-- rule: unknown-layer
+- rule: architecture/unknown-layer
   modules: [app.**]
   reason: The reference application uses its own feature topology, not the library layer directory
     names; architecture.modules still classifies its complete source inventory.
-- rule: unknown-layer
+- rule: architecture/unknown-layer
   modules: [examples.**]
   reason: Runnable examples use application and transport names, not library layer directories; architecture.modules classifies their checked source.
-- rule: no-private-modules
+- rule: layout/forbidden-private-module
   paths: [fastapi_canon/_version.py]
   reason: The version literal is the documented input to release.toml and the build/release
     tooling, not a hidden implementation module.
-- rule: prefer-package-import
+- rule: imports/prefer-package-import
   paths: [examples/reference-service/src/app/features/tasks/infrastructure/repository.py]
   reason: Concrete repository implementations deliberately import their owned ABC from its
     definition for nominal conformance and IDE navigation.

@@ -514,11 +514,9 @@ def _schema_declarations(
 
 def _enum_declaration(name: str, schema: dict[str, Any]) -> EnumDecl:
     values = schema["enum"]
-    return EnumDecl(
-        name,
-        tuple(EnumMember(_member_name(value), value) for value in values),
-        integral=all(isinstance(value, int) for value in values),
-    )
+    members = tuple(EnumMember(_member_name(value), value) for value in values)
+    integral = all(isinstance(value, int) for value in values)
+    return EnumDecl(name, members, integral=integral)
 
 
 def _model(
@@ -990,16 +988,15 @@ def _validate_server_references(
     servers: tuple[ServerDecl, ...],
 ) -> None:
     declared = {server.name for server in servers}
-    missing = sorted(
-        {
-            item.server
-            for item in chain[RouteDecl | NotificationDecl](routes, notifications)
-            if item.server is not None and item.server not in declared
-        }
-    )
+    missing = {
+        item.server
+        for item in chain[RouteDecl | NotificationDecl](routes, notifications)
+        if item.server is not None and item.server not in declared
+    }
     if missing:
+        missing_names = ", ".join(sorted(missing))
         raise UnsupportedSchemaError(
-            "Routes reference undeclared OpenRPC servers: " + ", ".join(missing)
+            "Routes reference undeclared OpenRPC servers: " + missing_names
         )
 
 

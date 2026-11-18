@@ -19,9 +19,10 @@ def operation_doc(operation: Operation, language: ClientLanguage) -> str:
     )
     if operation.errors:
         name = identifier(operation.operation_id, upper=True) + "ErrorBody"
-        responses = "; ".join(
-            sorted({f"{error.status} {error.media_type}" for error in operation.errors})
-        )
+        response_types = {
+            f"{error.status} {error.media_type}" for error in operation.errors
+        }
+        responses = "; ".join(sorted(response_types))
         paragraphs.append(
             f"Declared HTTP response bodies: {name} ({responses}). "
             "HttpError.details may also contain undeclared JSON, text, or no body; "

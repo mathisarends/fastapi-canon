@@ -290,18 +290,21 @@ class _Emitter:
             values = schema["enum"]
             if not isinstance(values, list) or not values:
                 return "never"
-            return _union([_literal(value) for value in values])
+            literals = [_literal(value) for value in values]
+            return _union(literals)
         for key in ("anyOf", "oneOf"):
             if key in schema:
-                return _union([self.type(item, indent) for item in schema[key]])
+                alternatives = [self.type(item, indent) for item in schema[key]]
+                return _union(alternatives)
         if "allOf" in schema:
             parts = [self.type(item, indent) for item in schema["allOf"]]
             return " & ".join(_wrap(part) for part in parts) if parts else "unknown"
         kind = schema.get("type")
         if isinstance(kind, list):
-            return _union(
-                [self.type({**schema, "type": item}, indent) for item in kind]
-            )
+            alternatives = [
+                self.type({**schema, "type": item}, indent) for item in kind
+            ]
+            return _union(alternatives)
         if kind == "string":
             return "string"
         if kind in ("integer", "number"):

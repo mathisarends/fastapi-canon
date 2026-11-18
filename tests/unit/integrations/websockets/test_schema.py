@@ -1,8 +1,7 @@
 import json
 
-from fastapi_canon.integrations.websockets import RpcChannel
+from fastapi_canon.integrations.websockets import RpcChannel, RpcProtocol
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
-from fastapi_canon.integrations.websockets.protocol import RpcProtocol
 from fastapi_canon.integrations.websockets.schema import render_openrpc
 
 from tests.unit.integrations.websockets.conftest import (

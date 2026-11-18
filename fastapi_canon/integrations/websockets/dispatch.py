@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from pydantic import BaseModel, ValidationError
+from pydantic_core import InitErrorDetails
 
 from fastapi_canon.integrations.websockets.adapter import adapter
 from fastapi_canon.integrations.websockets.dependencies import (
@@ -116,17 +117,15 @@ def _unexpected_params_error(
     method: RpcMethodDefinition,
     names: list[str],
 ) -> ValidationError:
-    return ValidationError.from_exception_data(
-        method.name,
-        [
-            {
-                "type": "extra_forbidden",
-                "loc": (name,),
-                "input": None,
-            }
-            for name in names
-        ],
-    )
+    line_errors: list[InitErrorDetails] = [
+        {
+            "type": "extra_forbidden",
+            "loc": (name,),
+            "input": None,
+        }
+        for name in names
+    ]
+    return ValidationError.from_exception_data(method.name, line_errors)
 
 
 def _assert_executable(protocol: RpcProtocol) -> None:

@@ -313,8 +313,5 @@ def _required(operation: Operation) -> bool:
 
 
 def _error_type(operation: Operation) -> str:
-    return " | ".join(
-        sorted(
-            {_render_type(error.type, prefix="Types.") for error in operation.errors}
-        )
-    )
+    types = {_render_type(error.type, prefix="Types.") for error in operation.errors}
+    return " | ".join(sorted(types))

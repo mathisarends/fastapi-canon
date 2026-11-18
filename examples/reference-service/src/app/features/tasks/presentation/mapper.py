@@ -12,4 +12,5 @@ def to_response(task: Task) -> TaskResponse:
 
 
 def to_list_response(tasks: list[Task]) -> TaskListResponse:
-    return TaskListResponse(items=[to_response(task) for task in tasks])
+    items = [to_response(task) for task in tasks]
+    return TaskListResponse(items=items)

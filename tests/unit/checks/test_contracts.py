@@ -7,8 +7,10 @@ from typing import Any
 
 import pytest
 
-from fastapi_canon.checks.contracts import analyze_error_contracts
-from fastapi_canon.cli import main
+import fastapi_canon.cli as canon_cli
+from fastapi_canon.checks.contracts import (  # smelt: ignore[SMT107] -- Analyzer report.
+    analyze_error_contracts,
+)
 
 PRELUDE = """
 from collections.abc import AsyncIterator
@@ -35,7 +37,7 @@ def analyze(
 ) -> Callable[..., dict[str, Any]]:
     def run(source: str, prelude: str = PRELUDE) -> dict[str, Any]:
         (tmp_path / "api.py").write_text(dedent(prelude + source), encoding="utf-8")
-        main(["check", "errors", str(tmp_path), "--format", "json"])
+        canon_cli.main(["check", "errors", str(tmp_path), "--format", "json"])
         report: dict[str, Any] = json.loads(capsys.readouterr().out)
         return report
 

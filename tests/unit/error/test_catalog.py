@@ -9,6 +9,7 @@ from jsonschema import Draft202012Validator
 from pydantic import BaseModel, ValidationError
 
 from fastapi_canon import (
+    APIRouter,
     Composition,
     Error,
     ErrorOptions,
@@ -21,8 +22,11 @@ from fastapi_canon.error import (
     registry_scope,
     resolved_registry,
 )
-from fastapi_canon.error.catalog import app_registry, problem_for, problem_schema
-from fastapi_canon.routing.http import CanonRouter
+from fastapi_canon.error.catalog import (  # smelt: ignore[SMT107] -- Catalog unit seam.
+    app_registry,
+    problem_for,
+    problem_schema,
+)
 
 
 class Missing(Exception):
@@ -54,7 +58,7 @@ def test_http_and_embedded_problems_share_identity_and_public_data() -> None:
     registry = ErrorRegistry(
         errors=[missing], type_base="https://api.example.test/problems"
     )
-    router = CanonRouter()
+    router = APIRouter()
 
     @router.get("/item", raises=[missing])
     async def item() -> None:
@@ -198,7 +202,7 @@ def test_same_status_problem_union_uses_resolved_type_uris() -> None:
     missing = Error(Missing, status=404, code="item_missing", title="Item missing")
     expired = Error(Expired, status=404, code="item_expired", title="Item expired")
     local = ErrorRegistry(errors=[missing, expired])
-    router = CanonRouter()
+    router = APIRouter()
     router.get("/item", raises=[missing, expired])(lambda: None)
     registry = ErrorRegistry.merge(local, type_base="urn:example:problems")
     app = FastAPI()

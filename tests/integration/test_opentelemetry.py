@@ -19,8 +19,7 @@ from opentelemetry.trace import SpanKind, StatusCode
 from starlette.types import Scope as ASGIScope
 
 import fastapi_canon.integrations.opentelemetry as telemetry_api
-from fastapi_canon import Composition, ErrorOptions, Feature
-from fastapi_canon.error import Error
+from fastapi_canon import APIRouter, Composition, Error, ErrorOptions, Feature
 from fastapi_canon.errors import FeatureConfigurationError
 from fastapi_canon.integrations.opentelemetry import (
     Instrumentation,
@@ -28,7 +27,6 @@ from fastapi_canon.integrations.opentelemetry import (
     instrument,
 )
 from fastapi_canon.integrations.websockets import CanonWebSocketRouter
-from fastapi_canon.routing.http import CanonRouter
 from tests.fixtures.telemetry import SpanCapture
 
 
@@ -83,7 +81,7 @@ def callable_application(options: Telemetry) -> FastAPI:
         repository = provide(MemoryRepository, provides=Repository, scope=Scope.REQUEST)
         service = provide(CallableService, scope=Scope.REQUEST)
 
-    router = CanonRouter()
+    router = APIRouter()
 
     @router.get("/callable/{key}")
     @inject
@@ -121,7 +119,7 @@ def application(options: Telemetry, *, expected: bool = True) -> FastAPI:
 
     closed: list[Repository] = []
     missing = Error(Missing, status=404, code="missing", title="Missing")
-    router = CanonRouter()
+    router = APIRouter()
 
     @router.get("/items/{key}", raises=[missing])
     @inject

@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from fastapi_canon.cli import main
+import fastapi_canon.cli as canon_cli
 
 PRELUDE = """
 from fastapi_canon import APIRouter, Error
@@ -31,7 +31,7 @@ def analyze(
         (tmp_path / "api.py").write_text(
             dedent(PRELUDE) + dedent(source), encoding="utf-8"
         )
-        status = main(
+        status = canon_cli.main(
             [
                 "check",
                 "errors",

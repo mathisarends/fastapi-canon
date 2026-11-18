@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from fastapi_canon.cli import main
+import fastapi_canon.cli as canon_cli
 
 
 @pytest.mark.parametrize(
@@ -57,7 +57,9 @@ async def endpoint() -> {"AsyncIterator[int]" if transport == "sse" else "None"}
         encoding="utf-8",
     )
 
-    status = main(["check", "errors", str(tmp_path), "--strict", "--format", "json"])
+    status = canon_cli.main(
+        ["check", "errors", str(tmp_path), "--strict", "--format", "json"]
+    )
     report = json.loads(capsys.readouterr().out)
 
     (operation,) = report["operations"]
@@ -102,7 +104,9 @@ def test_reexported_helper_named_after_its_module_is_followed(
         encoding="utf-8",
     )
 
-    status = main(["check", "errors", str(tmp_path), "--strict", "--format", "json"])
+    status = canon_cli.main(
+        ["check", "errors", str(tmp_path), "--strict", "--format", "json"]
+    )
     report: dict[str, Any] = json.loads(capsys.readouterr().out)
 
     (operation,) = report["operations"]

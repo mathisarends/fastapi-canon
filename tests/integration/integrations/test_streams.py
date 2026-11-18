@@ -45,7 +45,9 @@ from fastapi_canon import (
 from fastapi_canon.error import ErrorConfigurationError
 from fastapi_canon.integrations.sse.canon import CanonStreamRouter
 from fastapi_canon.integrations.sse.router import StreamRouter
-from fastapi_canon.routing.http import CanonRouter
+from fastapi_canon.routing.http import (  # smelt: ignore[SMT107] -- SSE HTTP base class.
+    CanonRouter,
+)
 
 AUTH = {"Authorization": "Bearer demo"}
 
@@ -180,7 +182,7 @@ def test_sync_generators_and_composition_router_factory(with_errors: bool) -> No
 
     application = Composition(
         features=(Feature(name="sync", routers=[sync]),),
-        router_factory=lambda: CanonRouter(prefix="/api"),
+        router_factory=lambda: APIRouter(prefix="/api"),
     ).build(FastAPI())
     with TestClient(application) as client:
         assert '"run_id":2' in client.get("/api/sync").text
@@ -195,7 +197,7 @@ def test_feature_discovers_stream_and_rest_registries_together() -> None:
     other_missing = Error(
         OtherMissing, status=404, code="other_missing", title="Other missing"
     )
-    rest = CanonRouter()
+    rest = APIRouter()
 
     @rest.get("/rest", raises=[other_missing])
     async def missing() -> None:
@@ -387,7 +389,7 @@ def test_composition_policy_preserves_typed_sse_and_runs_before_streaming() -> N
     )
     application = Composition(
         features=(Feature(name="events", routers=[selected]),),
-        router_factory=lambda: CanonRouter(policy=policy),
+        router_factory=lambda: APIRouter(policy=policy),
     ).build(FastAPI())
     responses = application.openapi()["paths"]["/policy-events"]["get"]["responses"]
     assert responses["200"] == expected

@@ -1,7 +1,7 @@
 # Architecture and test guardrails
 
 [smelt.yml](../smelt.yml) defines dependency boundaries, source conventions and
-test policies. The development lockfile pins `smelt-cli==0.10.0`;
+test policies. The development lockfile pins `smelt-cli==0.13.0`.
 [.smelt.schema.json](../.smelt.schema.json) provides editor completion.
 
 ## Run the policy
@@ -19,15 +19,21 @@ optional defaults, callable operations, discriminators, provider registrations
 and facade ownership. Use `--show-coverage` for the source inventory.
 Changed-file checks still enforce complete coverage.
 
+Keep application factories at the deployment entry point. Put reusable logic
+in modules that can be imported without bootstrapping the app.
+Smelt flags modules with more than 20 direct project imports. Use
+`--show-hints` to review complex comprehensions, constructor branches and
+modules with many private definitions.
+
 Keep library `__all__` lists in package facades (`__init__.py`). Omit module
 docstrings; document classes and functions where their names and types do not
 explain the public contract.
 
-The `information-hiding` group checks implementation functions, constants and
-attributes, including APIs used only by tests. Existing error-level checks remain
-errors. Private literal class constants belong at module scope. Repository-owned
-YAML uses `.yml`, and Compose files use `compose` as their basename; pnpm's
-lockfile and the agent skill's `openai.yaml` retain their required names.
+The visibility rules check implementation functions, constants and attributes,
+including APIs used only by tests. Private literal class constants belong at
+module scope. Repository-owned YAML uses `.yml`, and Compose files use
+`compose` as their basename. pnpm and the agent skill retain their required
+filenames.
 
 Declare `StrEnum` members with explicit string literals. Their wire and public
 values must remain visible and independent of Python member names; do not use
@@ -56,9 +62,9 @@ ordinary classes; return immutable snapshots when reporting completed work.
 
 ## Change the policy
 
-Keep architectural boundaries in Smelt and style rules in Ruff. Do not reproduce
-them as AST-based pytest tests. Read [architecture](architecture.md) before
-changing package roles or test structure.
+Use Smelt for architecture and source conventions. Use Ruff for lint and
+formatting. Read [architecture](architecture.md) before changing package roles
+or test structure.
 
 Fix a finding or document a narrow, concrete exception beside the affected code.
 Do not add debt baselines, broad exclusions or weaker rules to pass checks.
@@ -71,11 +77,14 @@ avoid private production access. Integration and contract tests prohibit mocks;
 unit tests normally allow one object-targeted patch. The configuration records
 the few existing exceptions and their reasons.
 
+Use documented imports in tests. When a test exercises an internal contract
+directly, put a reasoned SMT107 exception on the import.
+
 ## Upgrade Smelt
 
 Regenerate the editor schema as UTF-8 and review the
-[upstream rule catalog](https://github.com/mathisarends/smelt/blob/v0.10.0/docs/rules/README.md)
-and [upgrade guide](https://github.com/mathisarends/smelt/blob/v0.10.0/docs/upgrading.md).
+[upstream rule catalog](https://github.com/mathisarends/smelt/blob/v0.13.0/docs/rules/README.md)
+and [upgrade guide](https://github.com/mathisarends/smelt/blob/v0.13.0/docs/upgrading.md).
 Run the full policy and inspect new findings before adopting rules.
 Keep suppressions and exclusions tied to actual contracts.
 

@@ -196,7 +196,8 @@ def _members(values: set[str]) -> tuple[EnumMember, ...]:
     result = tuple(
         EnumMember(python_identifier(value).upper(), value) for value in sorted(values)
     )
-    if len({member.name for member in result}) != len(result):
+    member_names = {member.name for member in result}
+    if len(member_names) != len(result):
         raise ContractError(f"Enum member names collide: {sorted(values)}")
     return result
 

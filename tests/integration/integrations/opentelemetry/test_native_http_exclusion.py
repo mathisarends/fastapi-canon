@@ -23,9 +23,8 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.types import Scope as ASGIScope
 
-from fastapi_canon import Composition, Feature
+from fastapi_canon import APIRouter, Composition, Feature
 from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
-from fastapi_canon.routing.http import CanonRouter
 from tests.fixtures.telemetry import SpanCapture
 
 
@@ -106,7 +105,7 @@ async def scenario(
             )
             provider.provide(Repository, scope=Scope.REQUEST)
             provider.provide(UseCase, scope=Scope.REQUEST)
-            router = CanonRouter()
+            router = APIRouter()
 
             @router.get("/{name}")
             @inject

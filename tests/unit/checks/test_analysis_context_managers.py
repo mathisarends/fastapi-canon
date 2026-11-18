@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from fastapi_canon.cli import main
+import fastapi_canon.cli as canon_cli
 
 PRELUDE = """
 from collections.abc import AsyncIterator
@@ -142,7 +142,7 @@ def analyze(
         (tmp_path / "api.py").write_text(
             dedent(prelude) + dedent(body), encoding="utf-8"
         )
-        status = main(
+        status = canon_cli.main(
             [
                 "check",
                 "errors",

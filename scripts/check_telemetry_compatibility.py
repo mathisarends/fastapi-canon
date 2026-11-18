@@ -118,8 +118,10 @@ def _verify() -> None:
             assert not exporter.get_finished_spans()
             assert client.get("/included").json() == "pong"
         spans = exporter.get_finished_spans()
-        assert len([span for span in spans if span.name == "GET /{name}"]) == 1
-        assert len([span for span in spans if span.name == "Ping.__call__"]) == 1
+        http_spans = [span for span in spans if span.name == "GET /{name}"]
+        port_spans = [span for span in spans if span.name == "Ping.__call__"]
+        assert len(http_spans) == 1
+        assert len(port_spans) == 1
         data = reader.get_metrics_data()
         assert data is not None
         counts = {

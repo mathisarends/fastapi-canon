@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from fastapi_canon.cli import main
+import fastapi_canon.cli as canon_cli
 
 PRELUDE = """
 from abc import ABC, abstractmethod
@@ -59,7 +59,7 @@ def analyze(
         (tmp_path / "api.py").write_text(
             dedent(PRELUDE + source + endpoint), encoding="utf-8"
         )
-        main(["check", "errors", str(tmp_path), "--format", "json"])
+        canon_cli.main(["check", "errors", str(tmp_path), "--format", "json"])
         report: dict[str, Any] = json.loads(capsys.readouterr().out)
         return report
 
