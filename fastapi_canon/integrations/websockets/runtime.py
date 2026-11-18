@@ -393,7 +393,9 @@ class _RpcSession:
                         RpcConnectionClose.SHUTDOWN,
                     ):
                         await _flush(
-                            self._outgoing, self._writer_task, self.limits.send_timeout
+                            self._outgoing,
+                            self._writer_task,
+                            self.limits.send_timeout_seconds,
                         )
                 finally:
                     for task in (
@@ -447,7 +449,7 @@ class _RpcSession:
             while True:
                 message = await self._outgoing.get()
                 try:
-                    async with asyncio.timeout(self.limits.send_timeout):
+                    async with asyncio.timeout(self.limits.send_timeout_seconds):
                         await self.socket.send(message)
                 finally:
                     self._outgoing.task_done()
@@ -674,7 +676,7 @@ class _RpcSession:
 
     async def _send_outgoing(self, message: str) -> None:
         try:
-            async with asyncio.timeout(self.limits.send_timeout):
+            async with asyncio.timeout(self.limits.send_timeout_seconds):
                 await self._outgoing.put(message)
         except TimeoutError:
             logger.warning("RPC client too slow: outgoing queue blocked")
@@ -1366,12 +1368,12 @@ class _SocketSession:
             self.socket,
             self.connection,
             self.definition.messages,
-            self.definition.protocol,
-            self.definition.message_contract,
-            self.limits,
-            self.activity,
-            self.request_close,
-            self.client_disconnected,
+            protocol=self.definition.protocol,
+            message_contract=self.definition.message_contract,
+            limits=self.limits,
+            activity=self.activity,
+            request_close=self.request_close,
+            disconnected=self.client_disconnected,
         )
         self.values = {**self.values, RpcSocket: self._socket_handle}
 

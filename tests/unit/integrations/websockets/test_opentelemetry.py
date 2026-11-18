@@ -346,7 +346,7 @@ async def test_duplex_counts_empty_messages_and_excludes_input_end(providers):
         await client.end_input()
         await client.closed()
     # Compare both metric directions from the same completed duplex session.
-    for direction in (  # smelt: ignore[SMT427] -- shared scenario
+    for direction in (
         "inbound",
         "outbound",
     ):

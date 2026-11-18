@@ -90,7 +90,7 @@ from fastapi_canon.integrations.websockets.protocol import (
     RpcProtocol,
     RpcSubscriptionDefinition,
 )
-from fastapi_canon.integrations.websockets.routes import RpcRoute
+from fastapi_canon.integrations.websockets.routes import RegisteredRpcRoute
 from fastapi_canon.integrations.websockets.runtime import map_rejection
 from fastapi_canon.integrations.websockets.server import RpcErrorMapper
 from fastapi_canon.integrations.websockets.websocket import (
@@ -623,7 +623,7 @@ class CanonWebSocketRouter(APIRouter):
         setattr(handler_function, ENDPOINT_ATTRIBUTE, endpoint)
         attach_route(
             handler_function,
-            RpcRoute(
+            RegisteredRpcRoute(
                 lambda: self._dependency_roots(endpoint, custom=handler is not None)
             ),
         )

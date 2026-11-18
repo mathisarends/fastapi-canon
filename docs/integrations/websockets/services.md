@@ -179,23 +179,25 @@ enabled; request middleware still receives each rejection.
 
 ## Request deadlines
 
-Set `RpcLimits(request_timeout=30.0)` on a service, endpoint, or standalone
+Set `RpcLimits(request_timeout_seconds=30.0)` on a service, endpoint, or standalone
 server to bound each admitted request. The default is `None`, preserving existing
 long-running methods until the application chooses a budget. Values are finite,
 positive seconds.
 
 ```python
-@tasks.method(timeout=5.0)
+@tasks.method(timeout_seconds=5.0)
 async def quick_lookup() -> str:
     return "ready"
 
 
-@tasks.method(timeout=None)
+@tasks.method(timeout_seconds=None)
 async def long_running() -> None:
     await finish_long_running_work()
 
 
-router.include_channel(tasks, path="/rpc", limits=RpcLimits(request_timeout=30.0))
+router.include_channel(
+    tasks, path="/rpc", limits=RpcLimits(request_timeout_seconds=30.0)
+)
 ```
 
 An omitted method override inherits the serving limit; explicit `None` disables
@@ -204,7 +206,7 @@ clock. Scheduling, middleware entry and exit, semaphore wait, dependency
 resolution, and method execution consume that budget. `RpcServer.handle()` and
 `handle_json()` use the same rules, starting at dispatch. The timer can interrupt
 middleware initialization and teardown; ordinary response queueing and transport
-sending use `send_timeout`.
+sending use `send_timeout_seconds`.
 
 Expiry cancels the invocation, releases its concurrency and pending slots after
 cleanup, and answers calls with `request_timeout` (`-32000`). Notifications have

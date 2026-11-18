@@ -77,7 +77,7 @@ async def test_unregistered_middleware_allocates_no_operation_scopes(monkeypatch
     async with RpcTestClient(rpc, "/rpc") as client:
         assert await client.request("demo.ping") == "pong"
         subscription = await client.request("demo.events.open")
-        _, event = await client.next_notification(timeout=1)
+        _, event = await client.next_notification(timeout_seconds=1)
         assert event == {
             "streamId": subscription["streamId"],
             "payload": "event",
@@ -568,7 +568,7 @@ def test_custom_handlers_report_accepted_connections_and_close_codes(peer_discon
     assert scope.connection.closed
     assert scope.outcome.accepted
     assert scope.outcome.error is None
-    assert scope.outcome.accepted_duration > 0
+    assert scope.outcome.accepted_duration_seconds > 0
     assert scope.outcome.close_code is (
         RpcConnectionClose.SHUTDOWN if peer_disconnect else RpcConnectionClose.OTHER
     )
@@ -615,7 +615,7 @@ def test_custom_handlers_support_activity_callbacks_on_middleware(with_instrumen
         assert closed[0].connection is opened[0]
         assert closed[0].outcome.close_code is RpcConnectionClose.OTHER
         assert closed[0].outcome.raw_close_code == 4001
-        assert closed[0].outcome.duration >= 0
+        assert closed[0].outcome.duration_seconds >= 0
     else:
         assert not opened and not closed
 
@@ -727,4 +727,4 @@ async def test_custom_handlers_report_cancellation_and_failed_acceptance(cancel)
             assert recorder.connections[0].connection.closed
         else:
             assert outcome.error is failure
-            assert outcome.accepted_duration is None
+            assert outcome.accepted_duration_seconds is None

@@ -77,7 +77,7 @@ async def test_drain_delivers_response_rejects_new_work_and_reports_restart():
             client = await factory("ws://test/rpc")
             await client.send(request(1))
             await entered.wait()
-            draining = asyncio.create_task(service.drain.drain(timeout=2))
+            draining = asyncio.create_task(service.drain.drain(timeout_seconds=2))
             await asyncio.sleep(0)
             assert service.drain.draining
             await client.send(request(2))
@@ -99,7 +99,7 @@ async def test_drain_delivers_response_rejects_new_work_and_reports_restart():
             assert client.close_code == 1012
             assert service.drain.connection_count == 0
             await service.drain.drain(
-                timeout=0
+                timeout_seconds=0
             )  # Idempotent, first caller's budget wins.
         assert observed[0].close_code == RpcConnectionClose.SERVICE_RESTART
         accepted = next(scope for scope in scopes if scope.connection is not None)
@@ -134,9 +134,9 @@ async def test_controlled_grace_expiry_cancels_stuck_work_and_cleans_sessions(
             client = await factory("ws://test/rpc")
             await client.send(request(1))
             await entered.wait()
-            first = asyncio.create_task(service.drain.drain(timeout=10))
+            first = asyncio.create_task(service.drain.drain(timeout_seconds=10))
             await timer_started.wait()
-            second = asyncio.create_task(service.drain.drain(timeout=1))
+            second = asyncio.create_task(service.drain.drain(timeout_seconds=1))
             first.cancel("caller stopped waiting")
             with pytest.raises(asyncio.CancelledError, match="caller stopped"):
                 await first
@@ -191,7 +191,7 @@ async def test_drain_stops_event_producer_and_flushes_queued_response():
             await producer_started.wait()
             await client.send(request(1, "work.quick"))
             await send_started.wait()
-            draining = asyncio.create_task(service.drain.drain(timeout=2))
+            draining = asyncio.create_task(service.drain.drain(timeout_seconds=2))
             await stopped.wait()
             assert not draining.done()
             allow_send.set()
@@ -230,7 +230,7 @@ async def test_shutdown_cleans_subscription_while_another_request_is_stuck(drain
         await client.send(request(2))
         await asyncio.wait_for(working.wait(), 1)
         if drain:
-            await service.drain.drain(timeout=0.2)
+            await service.drain.drain(timeout_seconds=0.2)
         else:
             # Verify the in-memory test transport releases its background tasks.
             factory._tasks[0].cancel()  # smelt: ignore[SMT420] -- unit seam
@@ -287,7 +287,7 @@ async def test_blocked_flush_is_cancelled_at_grace_expiry(monkeypatch):
             client = await factory("ws://test/rpc")
             await client.send(request(1, "work.quick"))
             await send_started.wait()
-            draining = asyncio.create_task(service.drain.drain(timeout=2))
+            draining = asyncio.create_task(service.drain.drain(timeout_seconds=2))
             await timer_started.wait()
             expired.set()
             await draining
@@ -311,7 +311,7 @@ async def test_drain_rechecks_handshake_after_authentication_race():
         async with InMemorySocketFactory(service) as factory:
             opening = asyncio.create_task(factory("ws://test/rpc"))
             await entered.wait()
-            draining = asyncio.create_task(service.drain.drain(timeout=2))
+            draining = asyncio.create_task(service.drain.drain(timeout_seconds=2))
             await asyncio.sleep(0)
             release.set()
             with pytest.raises(RpcTestHandshakeRejected) as denied:
@@ -328,7 +328,7 @@ async def test_disconnect_during_drain_preserves_peer_close_cause():
             client = await factory("ws://test/rpc")
             await client.send(request(1))
             await entered.wait()
-            draining = asyncio.create_task(service.drain.drain(timeout=2))
+            draining = asyncio.create_task(service.drain.drain(timeout_seconds=2))
             await asyncio.sleep(0)
             await factory.sockets[0].client_disconnect(1001, "Going away")
             await draining
@@ -386,7 +386,7 @@ async def test_long_lived_streams_close_with_restart_at_grace_expiry(kind, monke
         async with InMemorySocketFactory(service) as factory:
             client = await factory("ws://test/stream")
             await entered.wait()
-            draining = asyncio.create_task(service.drain.drain(timeout=2))
+            draining = asyncio.create_task(service.drain.drain(timeout_seconds=2))
             await timer_started.wait()
             expired.set()
             await draining
@@ -403,7 +403,7 @@ async def test_pre_shutdown_drain_with_real_uvicorn_and_lifespan_cleanup():
         @asynccontextmanager
         async def lifespan(app):
             yield
-            await service.drain.drain(timeout=0)
+            await service.drain.drain(timeout_seconds=0)
             lifespan_finished.set()
 
         app = FastAPI(lifespan=lifespan)
@@ -412,7 +412,7 @@ async def test_pre_shutdown_drain_with_real_uvicorn_and_lifespan_cleanup():
         @app.post("/drain")
         async def drain():
             drain_started.set()
-            await service.drain.drain(timeout=2)
+            await service.drain.drain(timeout_seconds=2)
             return {"drained": True}
 
         class Server(uvicorn.Server):
@@ -462,4 +462,4 @@ async def test_pre_shutdown_drain_with_real_uvicorn_and_lifespan_cleanup():
 @pytest.mark.parametrize("timeout", [-1, float("inf"), float("nan"), True])
 async def test_drain_rejects_invalid_timeout(timeout):
     with pytest.raises(ValueError, match="timeout"):
-        await RpcDrain().drain(timeout=timeout)
+        await RpcDrain().drain(timeout_seconds=timeout)

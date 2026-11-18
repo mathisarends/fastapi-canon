@@ -19,7 +19,6 @@ CLOSE_CODES = MappingProxyType(
     }
 )
 REJECTION_CLOSE_CODES = MappingProxyType(
-    # smelt: ignore[SMT340] -- Freeze the lookup without a mutable module alias.
     {rejection: CLOSE_CODES[close] for rejection, close in REJECTION_CLOSES.items()}
 )
 MAX_CLOSE_REASON_BYTES = 123

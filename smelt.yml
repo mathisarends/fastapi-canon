@@ -332,6 +332,7 @@ style:
   forbidden_names: [utils, helpers, common, misc]
   str_enum_values: explicit
   max_module_imports: 20
+  call_argument_kinds: [await]
   max_comprehension_loops: 2
   max_constructor_decisions: 4
   max_private_definitions: 12
@@ -343,6 +344,7 @@ style:
       module_docstrings: forbid
       rules:
         visibility/misplaced-dunder-all: error
+        complexity/excess-positional-parameters: error
       private_modules: forbid
       future_annotations: when-needed
       max_positional_parameters: 3
@@ -386,67 +388,65 @@ rules:
   architecture/unclassified-module: error
   layout/definition-order: error
   idioms/bundled-instance-assignment: error
-  visibility/internal-public-module-symbol: warning
-  visibility/internal-public-attribute: warning
-  visibility/test-only-public-attribute: warning
+  visibility/internal-public-module-symbol: error
+  visibility/internal-public-attribute: error
+  visibility/test-only-public-attribute: error
   visibility/internal-public-member: error
   layout/misplaced-static-helper: error
   layout/misplaced-private-constant: error
   modeling/redundant-str-enum-value: error
   imports/prefer-package-import: error
-  imports/excess-module-imports: warning
-  architecture/missing-facade-export: warning
-  modeling/prefer-str-enum-discriminator: warning
-  typing/implicit-optional-default: warning
-  complexity/excess-attribute-depth: warning
+  imports/excess-module-imports: hint
+  architecture/missing-facade-export: hint
+  modeling/prefer-str-enum-discriminator: hint
+  typing/implicit-optional-default: error
+  complexity/excess-attribute-depth: hint
   modeling/forbidden-base-class-affix: error
-  frameworks/prefer-secret-type: warning
-  frameworks/redundant-dishka-provider: warning
-  layout/callee-before-caller: warning
-  idioms/prefer-callable-instance: warning
-  layout/redundant-module-name: warning
-  typing/redundant-future-annotations: warning
-  idioms/prefer-match-type-dispatch: warning
+  frameworks/prefer-secret-type: error
+  frameworks/redundant-dishka-provider: hint
+  layout/callee-before-caller: error
+  idioms/prefer-callable-instance: hint
+  layout/redundant-module-name: hint
+  typing/redundant-future-annotations: hint
+  idioms/prefer-match-type-dispatch: hint
   tests/private-access: error
   tests/string-patch-target: error
   tests/missing-outcome-check: error
   tests/vacuous-assertion: error
   tests/unbounded-wait: error
-  tests/independent-case-loop: warning
+  tests/independent-case-loop: hint
   tests/missing-await-assertion: error
   visibility/test-only-public-function: error
-  tests/nondeterministic-data: warning
-  typing/deprecated-async-contextmanager-return: warning
-  typing/duplicate-literal-type: warning
-  visibility/foreign-private-access: warning
-  complexity/inline-call-argument: warning
+  tests/nondeterministic-data: error
+  typing/deprecated-async-contextmanager-return: error
+  typing/duplicate-literal-type: hint
+  visibility/foreign-private-access: error
+  complexity/inline-call-argument: error
   # These counts flag code for review. Cohesion and safe extraction need judgment.
   complexity/excess-comprehension-loops: hint
   complexity/excess-constructor-decisions: hint
   visibility/excess-private-definitions: hint
-  modeling/str-enum-value-convention: warning
-  visibility/redundant-private-delegate: warning
-  idioms/redundant-name-alias: warning
-  typing/prefer-deferred-annotations: warning
-  typing/anonymous-tuple-type: warning
+  modeling/str-enum-value-convention: error
+  visibility/redundant-private-delegate: error
+  idioms/redundant-name-alias: error
+  typing/prefer-deferred-annotations: hint
+  typing/anonymous-tuple-type: hint
   # Contract prose belongs where names and types do not explain the behavior.
-  idioms/missing-interface-docstring: off
-  modeling/dataclass-field-mutation: warning
-  idioms/missing-broad-except-reason: warning
-  modeling/missing-dataclass-option: warning
-  # Emitters resolve identical helper text against different language semantics.
-  complexity/duplicate-function: off
-  modeling/prefer-project-base-class: warning
-  # Library validation and protocol failures retain their documented exceptions.
+  idioms/missing-interface-docstring: hint
+  modeling/dataclass-field-mutation: error
+  idioms/missing-broad-except-reason: error
+  modeling/missing-dataclass-option: error
+  complexity/duplicate-function: error
+  modeling/prefer-project-base-class: error
+  # Configuration errors, protocol failures and programming errors have different bases.
   modeling/prefer-domain-exception: off
-  # Module-qualified route types and standalone demo models have distinct owners.
-  modeling/duplicate-class-name: off
-  idioms/duplicate-narrowing-assert: warning
-  modeling/implicit-duration-unit: warning
-  complexity/forbidden-nested-conditional: warning
-  modeling/mutable-field-in-frozen-dataclass: warning
-  modeling/parallel-record-fields: warning
-  idioms/loop-invariant-collection: warning
+  modeling/duplicate-class-name: error
+  idioms/duplicate-narrowing-assert: error
+  modeling/implicit-duration-unit: error
+  complexity/forbidden-nested-conditional: error
+  modeling/mutable-field-in-frozen-dataclass: error
+  modeling/parallel-record-fields: hint
+  idioms/loop-invariant-collection: error
   meta/unused-suppression: error
   meta/resolved-debt: error
 suppressions:

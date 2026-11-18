@@ -319,7 +319,7 @@ router.include_channel(tasks, path="/rpc", drain=drain)
 @asynccontextmanager
 async def lifespan(web):
     yield
-    await drain.drain(timeout=0)  # Final cleanup if pre-stop already drained.
+    await drain.drain(timeout_seconds=0)  # Final cleanup if pre-stop already drained.
 
 
 web = FastAPI(lifespan=lifespan)
@@ -328,7 +328,7 @@ web.include_router(router)
 
 @web.post("/internal/drain")  # Protect this with your deployment authentication.
 async def prepare_stop():
-    await drain.drain(timeout=30)
+    await drain.drain(timeout_seconds=30)
     return {"drained": True}
 ```
 

@@ -318,7 +318,7 @@ def test_removed_hook_options_are_rejected(client_module, factory):
             client.connect(hooks=[])
     # Check the complete set of removed exports alongside each rejected constructor
     # form.
-    for name in (  # smelt: ignore[SMT427] -- shared scenario
+    for name in (
         "RpcClientHook",
         "RpcMetadataTransport",
         "RpcConnectionClosed",

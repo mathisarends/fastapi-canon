@@ -28,7 +28,7 @@ class Event(RpcModel):
 @pytest.mark.parametrize("timeout", [0, -1, True, float("nan"), float("inf"), "5"])
 def test_method_deadline_requires_positive_finite_seconds(timeout):
     with pytest.raises(ProtocolDefinitionError, match="timeout"):
-        RpcChannel("limits").method(timeout=timeout)
+        RpcChannel("limits").method(timeout_seconds=timeout)
 
 
 def test_method_deadline_keeps_inheritance_distinct_from_explicit_none():
@@ -37,16 +37,16 @@ def test_method_deadline_keeps_inheritance_distinct_from_explicit_none():
     @channel.method()
     async def inherited() -> None: ...
 
-    @channel.method(timeout=None)
+    @channel.method(timeout_seconds=None)
     async def unbounded() -> None: ...
 
-    @channel.method(timeout=5)
+    @channel.method(timeout_seconds=5)
     async def bounded() -> None: ...
 
     first, second, third = channel.freeze().methods
-    assert first.timeout is None and not first.has_timeout
-    assert second.timeout is None and second.has_timeout
-    assert third.timeout == 5 and third.has_timeout
+    assert first.timeout_seconds is None and not first.has_timeout
+    assert second.timeout_seconds is None and second.has_timeout
+    assert third.timeout_seconds == 5 and third.has_timeout
 
 
 def test_control_method_prefix_is_reserved():

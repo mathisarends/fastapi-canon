@@ -16,10 +16,10 @@ def test_contract_exports_cancellation_and_only_explicit_method_deadlines():
     @channel.method()
     async def inherited() -> None: ...
 
-    @channel.method(timeout=None)
+    @channel.method(timeout_seconds=None)
     async def unbounded() -> None: ...
 
-    @channel.method(timeout=5)
+    @channel.method(timeout_seconds=5)
     async def bounded() -> None: ...
 
     app = RpcDefinition()

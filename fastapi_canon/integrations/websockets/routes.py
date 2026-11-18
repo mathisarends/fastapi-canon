@@ -28,7 +28,7 @@ class OpenRpcExporter:
 OPENRPC = OpenRpcExporter()
 
 
-class RpcRoute(IntegrationRoute):
+class RegisteredRpcRoute(IntegrationRoute):
     """A registered RPC endpoint whose methods inject Dishka services."""
 
     __slots__ = ("_roots",)

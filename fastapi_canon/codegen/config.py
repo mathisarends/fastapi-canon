@@ -84,17 +84,21 @@ def _target(root: Path, name: str, value: object) -> TargetConfig:
         raise ValueError(f"Target {name} needs a generator name")
     if generator == "external":
         _keys(
-            value, {"generator", "generate-command", "check-command", "timeout"}, name
+            value,
+            {"generator", "generate-command", "check-command", "timeout-seconds"},
+            name,
         )
-        timeout = value.get("timeout", 120)
-        if type(timeout) is not int or timeout <= 0:
-            raise ValueError(f"Target {name} timeout must be a positive integer")
+        timeout_seconds = value.get("timeout-seconds", 120)
+        if type(timeout_seconds) is not int or timeout_seconds <= 0:
+            raise ValueError(
+                f"Target {name} timeout-seconds must be a positive integer"
+            )
         return TargetConfig(
             name=name,
             generator="external",
             generate_command=_command(value.get("generate-command")),
             check_command=_command(value.get("check-command")),
-            timeout=timeout,
+            timeout_seconds=timeout_seconds,
         )
     settings = load_generator(generator).settings
     if not settings:

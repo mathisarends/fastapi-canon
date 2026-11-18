@@ -185,7 +185,7 @@ def _method(
     if method.idempotent:
         document["x-rpc-idempotent"] = True
     if method.has_timeout:
-        document["x-rpc-request-timeout"] = method.timeout
+        document["x-rpc-request-timeout"] = method.timeout_seconds
     if method.summary is not None:
         document["summary"] = method.summary
     document |= {

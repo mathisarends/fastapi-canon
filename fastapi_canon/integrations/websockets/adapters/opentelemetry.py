@@ -251,7 +251,7 @@ class OpenTelemetry(RpcMiddleware):
                             if outcome.accepted:
                                 self._active_connections.add(-1, attributes)
                                 self._connection_duration.record(
-                                    outcome.accepted_duration or 0.0,
+                                    outcome.accepted_duration_seconds or 0.0,
                                     _close_attributes(result, outcome.close_code),
                                 )
         finally:
@@ -318,7 +318,7 @@ class OpenTelemetry(RpcMiddleware):
                     }
                     if self._metrics:
                         self._requests.add(1, result)
-                        self._request_duration.record(outcome.duration, result)
+                        self._request_duration.record(outcome.duration_seconds, result)
 
     @asynccontextmanager
     async def stream(self, scope: RpcStreamScope) -> AsyncGenerator[None, None]:
@@ -347,7 +347,7 @@ class OpenTelemetry(RpcMiddleware):
                     if self._metrics:
                         result = _close_attributes(attributes, outcome.close_code)
                         self._streams.add(1, result)
-                        self._stream_duration.record(outcome.duration, result)
+                        self._stream_duration.record(outcome.duration_seconds, result)
 
     async def connection_opened(self, connection: RpcConnection) -> None:
         state = current_serving()

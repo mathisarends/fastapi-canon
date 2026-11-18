@@ -157,7 +157,7 @@ class StreamTiming(RpcMiddleware):
                 logger.info(
                     "stream=%s duration=%s close=%s",
                     scope.endpoint.stream.name,
-                    outcome.duration,
+                    outcome.duration_seconds,
                     outcome.close_code,
                 )
 ```

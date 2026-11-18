@@ -337,7 +337,10 @@ def test_offline_webrtc_target_generates_and_checks_specialized_client(
 def _external_config(project: Path, name: str, script: str) -> None:
     with (project / "fastapi-canon.toml").open("a", encoding="utf-8") as file:
         file.write(
-            f'\n[codegen.targets.{name}]\ngenerator = "external"\ngenerate-command = {json.dumps([sys.executable, script, "generate"])}\ncheck-command = {json.dumps([sys.executable, script, "check"])}\n'
+            f'\n[codegen.targets.{name}]\ngenerator = "external"\n'
+            f"generate-command = {json.dumps([sys.executable, script, 'generate'])}\n"
+            f"check-command = {json.dumps([sys.executable, script, 'check'])}\n"
+            "timeout-seconds = 120\n"
         )
 
 

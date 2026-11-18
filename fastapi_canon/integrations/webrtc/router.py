@@ -185,11 +185,11 @@ class SessionRouter(APIRouter):
 
     async def aclose(
         self,
-        timeout: float | None = None,  # smelt: ignore[SMT357] -- Seconds API.
+        timeout_seconds: float | None = None,
     ) -> None:
         """Close every active session with ``shutdown`` and wait for cleanup.
 
-        New sessions are refused afterwards. ``timeout`` defaults to the largest
+        New sessions are refused afterwards. ``timeout_seconds`` defaults to the largest
         configured shutdown deadline plus the minimum budgets of ``on_close`` and
         engine cleanup.
         """
@@ -199,13 +199,13 @@ class SessionRouter(APIRouter):
             runtime.terminate(ErrorCode.SHUTDOWN)
         if not runtimes:
             return
-        if timeout is None:
-            timeout = 2 * MINIMUM_CLEANUP_STEP_SECONDS + max(
+        if timeout_seconds is None:
+            timeout_seconds = 2 * MINIMUM_CLEANUP_STEP_SECONDS + max(
                 runtime.declaration.limits.shutdown_timeout_seconds
                 for runtime in runtimes
             )
         waiters = [asyncio.ensure_future(r.wait_finished()) for r in runtimes]
-        _, pending = await asyncio.wait(waiters, timeout=timeout)
+        _, pending = await asyncio.wait(waiters, timeout=timeout_seconds)
         for waiter in pending:
             waiter.cancel()
         if pending:

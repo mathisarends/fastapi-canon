@@ -20,7 +20,7 @@ from typing import Annotated, Literal
 _ROOT = Path(__file__).resolve().parents[2]
 
 
-class EventType(StrEnum):
+class BenchmarkEventType(StrEnum):
     TOKEN = "token"
     BATCH = "batch"
 
@@ -68,7 +68,7 @@ async def _benchmark(args, directory):
     from pydantic import BaseModel, Field
 
     class Token(BaseModel):
-        type: Literal[EventType.TOKEN]
+        type: Literal[BenchmarkEventType.TOKEN]
         text: str
 
     class Item(BaseModel):
@@ -76,7 +76,7 @@ async def _benchmark(args, directory):
         values: list[float]
 
     class Batch(BaseModel):
-        type: Literal[EventType.BATCH]
+        type: Literal[BenchmarkEventType.BATCH]
         items: list[Item]
 
     event_type = Annotated[Token | Batch, Field(discriminator="type")]
@@ -86,7 +86,7 @@ async def _benchmark(args, directory):
         run_id: Annotated[str, PathParameter(pattern=r"^run_[a-z0-9]+$")],
         limit: Annotated[int, Query(ge=1, le=1000)] = 100,
     ):
-        yield Token(type=EventType.TOKEN, text=run_id[:limit])
+        yield Token(type=BenchmarkEventType.TOKEN, text=run_id[:limit])
 
     events.__annotations__["return"] = AsyncIterator[event_type]
     router.stream("/runs/{run_id}/events", operation_id="events", tags=["bench"])(

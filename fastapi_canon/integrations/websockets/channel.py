@@ -66,13 +66,13 @@ _INHERIT_TIMEOUT = _TimeoutDefault.INHERIT
 
 
 @dataclass(frozen=True, slots=True)
-class RpcRoute:
+class RpcChannelMethod:
     name: str
     function: FunctionType
     summary: str | None
     raises: tuple[type[RpcError], ...]
     resolver_scope: RpcResolverScope
-    timeout: float | None = None  # smelt: ignore[SMT357] -- Seconds API.
+    timeout_seconds: float | None = None
     _has_timeout: bool = False
     idempotent: bool = False
 
@@ -115,7 +115,7 @@ class RpcChannel:
         if not callable(resolver_scope):
             raise ProtocolDefinitionError("RPC resolver scope must be callable")
         self._resolver_scope = resolver_scope
-        self._routes: list[RpcRoute] = []
+        self._routes: list[RpcChannelMethod] = []
         self._events: list[RpcNotificationDefinition] = []
         self._subscriptions: list[RpcSubscriptionDefinition] = []
         self._streams: list[RpcStreamDefinition] = []
@@ -141,7 +141,7 @@ class RpcChannel:
         return self._resolver_scope
 
     @property
-    def routes(self) -> tuple[RpcRoute, ...]:
+    def routes(self) -> tuple[RpcChannelMethod, ...]:
         return tuple(self._routes)
 
     @property
@@ -179,7 +179,7 @@ class RpcChannel:
         *,
         summary: str | None = None,
         raises: Iterable[RpcErrorDeclaration] = (),
-        timeout: float | _TimeoutDefault | None = _INHERIT_TIMEOUT,
+        timeout_seconds: float | _TimeoutDefault | None = _INHERIT_TIMEOUT,
         idempotent: bool = False,
     ) -> Callable[[Handler], Handler]: ...
 
@@ -190,22 +190,22 @@ class RpcChannel:
         *,
         summary: str | None = None,
         raises: Iterable[RpcErrorDeclaration] = (),
-        timeout: float | _TimeoutDefault | None = _INHERIT_TIMEOUT,
+        timeout_seconds: float | _TimeoutDefault | None = _INHERIT_TIMEOUT,
         idempotent: bool = False,
     ) -> Any:
         channel = self
         channel.ensure_mutable()
         if type(idempotent) is not bool:
             raise ProtocolDefinitionError("Method idempotent must be a bool")
-        has_timeout = timeout is not _INHERIT_TIMEOUT
+        has_timeout = timeout_seconds is not _INHERIT_TIMEOUT
         if (
             has_timeout
-            and timeout is not None
+            and timeout_seconds is not None
             and (
-                not isinstance(timeout, (int, float))
-                or isinstance(timeout, bool)
-                or not isfinite(timeout)
-                or timeout <= 0
+                not isinstance(timeout_seconds, (int, float))
+                or isinstance(timeout_seconds, bool)
+                or not isfinite(timeout_seconds)
+                or timeout_seconds <= 0
             )
         ):
             raise ProtocolDefinitionError(
@@ -231,13 +231,15 @@ class RpcChannel:
             )
             channel.reserve_name(wire_name)
             channel._routes.append(
-                RpcRoute(
+                RpcChannelMethod(
                     wire_name,
                     function,
                     summary or _docstring_summary(function),
                     merged_raises,
                     channel.resolver_scope,
-                    timeout if isinstance(timeout, (int, float)) else None,
+                    timeout_seconds
+                    if isinstance(timeout_seconds, (int, float))
+                    else None,
                     has_timeout,
                     idempotent,
                 )
@@ -564,7 +566,7 @@ class RpcChannel:
                     raises=r.raises,
                     server=None,
                     resolver_scope=r.resolver_scope,
-                    timeout=r.timeout,
+                    timeout_seconds=r.timeout_seconds,
                     has_timeout=r.has_timeout,
                     idempotent=r.idempotent,
                 )

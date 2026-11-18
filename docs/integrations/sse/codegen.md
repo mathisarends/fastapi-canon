@@ -19,8 +19,9 @@ uv run fastapi-canon sse generate \
   --schema tests/fixtures/sse/agent_runs.openapi.json --language python --output myapp/generated
 ```
 
-No running server is needed. Export imports the application. The codegen extra
-adds Jinja and JSON Schema validation; importing the server package needs neither.
+Export imports the application without starting it. In prepared 0.24.0, `--app`
+also accepts a synchronous zero-argument factory such as `myapp:create_app`.
+The codegen extra adds Jinja and JSON Schema validation.
 
 The exporter copies native FastAPI output, promotes compatible 3.1 output to
 OpenAPI 3.2.0, updates the declared OAS dialect when necessary, and validates the

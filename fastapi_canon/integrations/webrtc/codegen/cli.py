@@ -1,14 +1,12 @@
 import argparse
 import hashlib
-import importlib
 import json
 import sys
 from pathlib import Path
 from typing import Any, cast
 
-from fastapi import FastAPI
-
 from fastapi_canon import __version__
+from fastapi_canon.cli.application import load_application
 from fastapi_canon.integrations.webrtc.codegen.typescript import (
     DEFAULT_CLIENT_NAME,
     ContractError,
@@ -51,7 +49,14 @@ def main(  # smelt: ignore[SMT429] -- fastapi_canon.commands entry point.
         if args.command == "contract":
             return _contract(args.app, cast(Path, args.output), check=args.check)
         return _generate(args)
-    except (ContractError, OSError, ValueError, ImportError, AttributeError) as exc:
+    except (
+        ContractError,
+        OSError,
+        TypeError,
+        ValueError,
+        ImportError,
+        AttributeError,
+    ) as exc:
         print(f"fastapi-canon webrtc: {exc}", file=sys.stderr)
         return 2
 
@@ -59,7 +64,7 @@ def main(  # smelt: ignore[SMT429] -- fastapi_canon.commands entry point.
 def _contract(app: str, output: Path, *, check: bool) -> int:
     from fastapi_canon.integrations.webrtc.contract import build_contract, dumps
 
-    content = dumps(build_contract(_load_app(app)))
+    content = dumps(build_contract(load_application(app, root=Path.cwd())))
     if check:
         if not output.is_file() or output.read_bytes() != content.encode("utf-8"):
             print(f"Out of date: {output}", file=sys.stderr)
@@ -75,7 +80,7 @@ def _generate(args: argparse.Namespace) -> int:
     if args.app is not None:
         from fastapi_canon.integrations.webrtc.contract import build_contract
 
-        contract = build_contract(_load_app(args.app))
+        contract = build_contract(load_application(args.app, root=Path.cwd()))
     else:
         contract = json.loads(cast(Path, args.contract).read_text(encoding="utf-8"))
     if not isinstance(contract, dict):
@@ -100,18 +105,6 @@ def _generate(args: argparse.Namespace) -> int:
             print(f"Out of date: {path}", file=sys.stderr)
         return 1
     return 0
-
-
-def _load_app(value: str) -> FastAPI:
-    module, separator, attribute = value.partition(":")
-    if not separator or not module or not attribute:
-        raise ContractError("--app must use module:attribute syntax")
-    # Console scripts start with their installation directory on sys.path.
-    sys.path.insert(0, str(Path.cwd()))
-    app = getattr(importlib.import_module(module), attribute)
-    if not isinstance(app, FastAPI):
-        raise ContractError(f"{value} is not a FastAPI application")
-    return app
 
 
 if __name__ == "__main__":

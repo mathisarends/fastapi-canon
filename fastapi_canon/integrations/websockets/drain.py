@@ -37,13 +37,17 @@ class RpcDrain:
     async def drain(
         self,
         *,
-        timeout: float = 30.0,  # smelt: ignore[SMT357] -- Seconds API.
+        timeout_seconds: float = 30.0,
     ) -> None:
         """Reserve the final tenth of the timeout for cooperative cleanup."""
-        if isinstance(timeout, bool) or not isfinite(timeout) or timeout < 0:
+        if (
+            isinstance(timeout_seconds, bool)
+            or not isfinite(timeout_seconds)
+            or timeout_seconds < 0
+        ):
             raise ValueError("Drain timeout must be finite and nonnegative")
         if self._task is None:
-            self._task = asyncio.create_task(self._drain(timeout))
+            self._task = asyncio.create_task(self._drain(timeout_seconds))
             self._task.add_done_callback(_consume)
         await asyncio.shield(self._task)
 

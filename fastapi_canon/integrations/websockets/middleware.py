@@ -60,16 +60,16 @@ class RpcConnectionOutcome:
     rejection: RpcRejection | None
     close_code: RpcConnectionClose | None
     raw_close_code: int | None
-    duration: float  # smelt: ignore[SMT357] -- Seconds API.
+    duration_seconds: float
     error: BaseException | None = None
     cancelled: bool = False
-    accepted_duration: float | None = None  # smelt: ignore[SMT357] -- Seconds API.
+    accepted_duration_seconds: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class RpcRequestOutcome:
     response: object | None
-    duration: float  # smelt: ignore[SMT357] -- Seconds API.
+    duration_seconds: float
     error: BaseException | None = None
     cancelled: bool = False
     error_code: str | None = None
@@ -79,7 +79,7 @@ class RpcRequestOutcome:
 class RpcStreamOutcome:
     close_code: RpcConnectionClose | None
     raw_close_code: int | None
-    duration: float  # smelt: ignore[SMT357] -- Seconds API.
+    duration_seconds: float
     error: BaseException | None = None
     cancelled: bool = False
 
@@ -201,14 +201,16 @@ async def middleware_scope(
     finally:
         if scope.outcome is None:
             cancelled = isinstance(error, asyncio.CancelledError)
-            duration = time.perf_counter() - started
+            duration_seconds = time.perf_counter() - started
             if isinstance(scope, RpcRequestScope):
-                scope.outcome = RpcRequestOutcome(None, duration, error, cancelled)
+                scope.outcome = RpcRequestOutcome(
+                    None, duration_seconds, error, cancelled
+                )
             elif isinstance(scope, RpcStreamScope):
                 scope.outcome = RpcStreamOutcome(
                     scope.connection.close_code,
                     scope.connection.raw_close_code,
-                    duration,
+                    duration_seconds,
                     error,
                     cancelled,
                 )
@@ -218,7 +220,7 @@ async def middleware_scope(
                     None,
                     None,
                     None,
-                    duration,
+                    duration_seconds,
                     error,
                     cancelled,
                 )
@@ -290,10 +292,10 @@ class ServingState:
             rejection=self.rejection,
             close_code=None if connection is None else connection.close_code,
             raw_close_code=None if connection is None else connection.raw_close_code,
-            duration=finished - self._started_at,
+            duration_seconds=finished - self._started_at,
             error=self.error,
             cancelled=self.cancelled,
-            accepted_duration=None
+            accepted_duration_seconds=None
             if self.accepted_at is None
             else finished - self.accepted_at,
         )
@@ -390,7 +392,7 @@ async def stream_scope(
             scope.outcome = RpcStreamOutcome(
                 close_code=scope.connection.close_code,
                 raw_close_code=scope.connection.raw_close_code,
-                duration=time.perf_counter() - started,
+                duration_seconds=time.perf_counter() - started,
                 error=outcome_error,
                 cancelled=state is not None and state.cancelled,
             )

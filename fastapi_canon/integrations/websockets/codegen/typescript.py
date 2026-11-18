@@ -2,7 +2,6 @@ import json
 import posixpath
 import re
 from collections.abc import Iterable, Mapping
-from dataclasses import replace
 from itertools import chain
 
 from fastapi_canon.codegen.problems import problem_runtime
@@ -30,6 +29,7 @@ from fastapi_canon.integrations.websockets.codegen.ir import (
     TypeExpr,
     UnionType,
     UnsupportedSchemaError,
+    connect_variables,
     named_types,
 )
 from fastapi_canon.integrations.websockets.codegen.names import (
@@ -39,6 +39,9 @@ from fastapi_canon.integrations.websockets.codegen.names import (
     camel_case,
     client_view,
     pascal_case,
+    validate_namespace_names,
+    walk_namespaces,
+    walk_namespaces_postorder,
 )
 from fastapi_canon.integrations.websockets.codegen.options import (
     TypeScriptClientOptions,
@@ -58,7 +61,9 @@ def render_files(ir: ClientIr, options: TypeScriptClientOptions) -> dict[str, st
         options=options,
         client_name=client_name,
     )
-    bound = bind_sockets(ir.sockets, options.bindings, "typescript", options.contract)
+    bound = bind_sockets(
+        ir.sockets, options.bindings, "typescript", contract=options.contract
+    )
     renderer = _Renderer(
         ir,
         view.root_operations,
@@ -197,7 +202,7 @@ class _Renderer:
 
     def api(self, root_node: NamespaceViewNode) -> str:
         root = "../"
-        nodes = tuple(_walk((root_node,)))
+        nodes = tuple(walk_namespaces((root_node,)))
         core_types = ["RpcClientCore"]
         if any(event.subscription for node in nodes for event in node.notifications):
             core_types.append("RpcStream")
@@ -258,7 +263,7 @@ class _Renderer:
         body = self._template(
             "api",
             imports=imports,
-            nodes=tuple(_walk_postorder((root_node,))),
+            nodes=tuple(walk_namespaces_postorder((root_node,))),
         )
         return self.module(body)
 
@@ -365,7 +370,7 @@ class _Renderer:
             imports=imports,
             client_name=self.client_name,
             servers=self._ir.servers,
-            variables=_connect_variables(self._ir),
+            variables=connect_variables(self._ir),
             nodes=self.nodes,
             operations=self.root_operations,
             notifications=self.root_events,
@@ -645,24 +650,6 @@ class _Renderer:
         raise TypeError(f"Unsupported type: {type(expression).__name__}")
 
 
-def _connect_variables(ir: ClientIr) -> tuple[ServerVariableDecl, ...]:
-    """The server URL variables `connect` accepts; streams inherit them too."""
-    declared = {variable.name for server in ir.servers for variable in server.variables}
-    merged: dict[str, ServerVariableDecl] = {}
-    for declaration in chain[ServerDecl | BinaryStreamDecl | SocketDecl](
-        ir.servers, ir.binary_streams, ir.sockets
-    ):
-        for variable in declaration.variables:
-            if variable.name not in declared:
-                continue
-            previous = merged.get(variable.name)
-            if previous is None:
-                merged[variable.name] = variable
-            elif previous.enum != variable.enum:
-                merged[variable.name] = replace(previous, enum=())
-    return tuple(merged.values())
-
-
 def _validate(
     ir: ClientIr,
     root_operations: tuple[RouteDecl, ...],
@@ -763,7 +750,7 @@ def _validate(
             *(NameBinding(option, option) for option in _CONNECT_OPTIONS),
             *(
                 NameBinding(variable.name, _identifier(variable.name))
-                for variable in _connect_variables(ir)
+                for variable in connect_variables(ir)
             ),
         ]
         if len(ir.servers) == 1:
@@ -786,13 +773,13 @@ def _validate(
             )
         assert_unique_names("connect options", connect_options)
     assert_unique_names("root client", client_members)
-    _validate_nodes(nodes)
+    validate_namespace_names(nodes, _identifier)
     for node in nodes:
         assert_unique_names(
             f"TypeScript namespace module {_identifier(node.segment)!r}",
             (
                 NameBinding(".".join(item.source_path), _api_class(item.path))
-                for item in _walk((node,))
+                for item in walk_namespaces((node,))
             ),
         )
     assert_unique_names(
@@ -818,30 +805,6 @@ def _validate(
                 for variable in server.variables
             ),
         )
-
-
-def _validate_nodes(nodes: tuple[NamespaceViewNode, ...]) -> None:
-    for node in nodes:
-        values = [
-            NameBinding(child.segment, _identifier(child.segment))
-            for child in node.children
-        ]
-        values.extend(
-            NameBinding(route.rpc_name, _identifier(route.operation_name))
-            for route in node.operations
-        )
-        values.extend(
-            NameBinding(event.rpc_name, _identifier(event.operation_name))
-            for event in node.notifications
-        )
-        values.extend(
-            NameBinding(stream.rpc_name, _identifier(stream.operation_name))
-            for stream in chain[BinaryStreamDecl | SocketDecl](
-                node.streams, node.sockets
-            )
-        )
-        assert_unique_names(f"API path {'.'.join(node.path)}", values)
-        _validate_nodes(node.children)
 
 
 def _client_name(ir: ClientIr, options: TypeScriptClientOptions) -> str:
@@ -1078,20 +1041,6 @@ def _is_null(expression: TypeExpr) -> bool:
 
 def _is_discriminator(name: str, expression: TypeExpr) -> bool:
     return name == "type" and isinstance(expression, LiteralType | EnumLiteralType)
-
-
-def _walk(nodes: tuple[NamespaceViewNode, ...]) -> Iterable[NamespaceViewNode]:
-    for node in nodes:
-        yield node
-        yield from _walk(node.children)
-
-
-def _walk_postorder(
-    nodes: tuple[NamespaceViewNode, ...],
-) -> Iterable[NamespaceViewNode]:
-    for node in nodes:
-        yield from _walk_postorder(node.children)
-        yield node
 
 
 def _named_errors(ir: ClientIr) -> bool:

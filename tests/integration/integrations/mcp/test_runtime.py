@@ -1,8 +1,8 @@
 import asyncio
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
+from itertools import count
 from typing import Any
-from uuid import uuid4
 
 import httpx2
 import pytest
@@ -27,21 +27,23 @@ from fastapi_canon.integrations.mcp import (
 
 
 class Service:
-    def __init__(self) -> None:
-        # Fresh IDs expose scope reuse across concurrent calls and applications.
-        self.identifier = str(uuid4())  # smelt: ignore[SMT431] -- Scope reuse probe.
+    def __init__(self, identifier: str) -> None:
+        self.identifier = identifier
 
 
 class Services(Provider):
-    def __init__(self, events: list[str]) -> None:
+    def __init__(self, events: list[str], *, identifier_prefix: str = "") -> None:
         super().__init__()
         self.events = events
+        self._identifier_prefix = identifier_prefix
+        self._identifiers = count()
 
     @provide(scope=Scope.REQUEST)
     async def service(self) -> AsyncGenerator[Service, BaseException | None]:
         self.events.append("open")
         try:
-            exception = yield Service()
+            identifier = f"{self._identifier_prefix}{next(self._identifiers)}"
+            exception = yield Service(identifier)
             if exception is not None:
                 self.events.append("rollback")
             else:
@@ -84,7 +86,7 @@ async def connected(
 def application(server: FastMCP, events: list[str], path: str = "/mcp") -> FastAPI:
     feature = Feature(
         name="portfolio",
-        providers=[lambda: Services(events)],
+        providers=[lambda: Services(events, identifier_prefix=f"{path}:")],
         integrations=[McpMount(server=server, namespace="portfolio")],
     )
     return Composition(features=[feature], integrations=[Mcp(path=path)]).build(

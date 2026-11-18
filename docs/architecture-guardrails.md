@@ -14,16 +14,16 @@ uv run --frozen smelt explain SMT423
 ```
 
 The full check runs in CI, `scripts/check.py all` and pre-commit.
-Warnings fail, including the enabled source conventions for definition order,
-optional defaults, callable operations, discriminators, provider registrations
-and facade ownership. Use `--show-coverage` for the source inventory.
+The gate fails on warnings and errors. Use `--show-coverage` for the source
+inventory and `--show-hints` for design reviews such as facade ownership,
+discriminators, provider registrations and callable operations.
 Changed-file checks still enforce complete coverage.
 
 Keep application factories at the deployment entry point. Put reusable logic
 in modules that can be imported without bootstrapping the app.
-Smelt flags modules with more than 20 direct project imports. Use
-`--show-hints` to review complex comprehensions, constructor branches and
-modules with many private definitions.
+Review modules with more than 20 direct project imports, complex comprehensions,
+constructor branches or many private definitions. Name awaited values before
+passing them as arguments.
 
 Keep library `__all__` lists in package facades (`__init__.py`). Omit module
 docstrings; document classes and functions where their names and types do not
@@ -43,14 +43,11 @@ Name tuple fields with a `NamedTuple` or frozen dataclass, and make parameters
 after the third keyword-only. Framework callbacks and public signatures keep
 their shape with a reasoned suppression.
 
-Inspect public contracts and falsy inputs before changing
-names, dependency lifetimes or defaults; syntax alone cannot establish that a
-change preserves compatibility. `AcquireTransactionLock`, for example, provides
-a callable operation while retaining its named `acquire` operation.
+Inspect falsy inputs and dependency lifetimes before changing behavior. Record
+breaking API changes with migration steps in the changelog.
 
 Explain broad exception recovery at the handler. Name numeric durations with
-their unit and repeated waits with their purpose; preserve established public
-names with a reasoned exception stating the unit. Review mutable fields in
+their unit and repeated waits with their purpose. Review mutable fields in
 frozen records, parallel sequence fields and repeated immutable lookup sets.
 Use explicit branches for nested conditional expressions. Reference-service
 schemas and database models inherit its configured project bases.
@@ -68,9 +65,7 @@ or test structure.
 
 Fix a finding or document a narrow, concrete exception beside the affected code.
 Do not add debt baselines, broad exclusions or weaker rules to pass checks.
-Unused suppressions fail. Preserve public compatibility while correcting a
-finding. Shared exports must have a consumer contract; retain supported aliases
-when an operation acquires a clearer callable interface.
+Unused suppressions fail. Shared exports must have a consumer contract.
 
 Tests must assert observable outcomes, use bounded waits and subprocesses, and
 avoid private production access. Integration and contract tests prohibit mocks;

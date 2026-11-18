@@ -69,7 +69,9 @@ def application_module(tmp_path: Path) -> Path:
     return tmp_path
 
 
-@pytest.mark.parametrize("kind", ["inspect", "check", "contracts", "generate"])
+@pytest.mark.parametrize(
+    "kind", ["inspect", "check", "contracts", "generate", "sse", "webrtc"]
+)
 @pytest.mark.parametrize("attribute", ["nested.app", "nested.factory"])
 def test_commands_load_instances_or_one_factory_without_runtime_execution(
     application_module: Path, kind: str, attribute: str
@@ -87,8 +89,21 @@ def test_commands_load_instances_or_one_factory_without_runtime_execution(
             (application_module / "contracts/openapi.json").read_text()
         )
         assert document["paths"]["/ping"]["get"]["operationId"] == "demo.ping"
+    elif kind in {"sse", "webrtc"}:
+        document = json.loads((application_module / f"{kind}.json").read_text())
+        assert ("paths" if kind == "sse" else "sessions") in document
     else:
         assert (application_module / "sdk/.fastapi-canon-sse.json").is_file()
+
+
+@pytest.mark.parametrize("kind", ["sse", "webrtc"])
+def test_transport_export_rejects_a_factory_with_required_arguments(
+    application_module: Path, kind: str
+) -> None:
+    result = _run(application_module, kind, "targets:required_factory")
+    assert result.returncode == 2
+    assert "zero-argument" in result.stderr
+    assert not (application_module / f"{kind}.json").exists()
 
 
 @pytest.mark.parametrize("kind", ["inspect", "check", "contracts", "generate"])
@@ -189,6 +204,9 @@ def _run(
             "--output-dir",
             "contracts",
         ]
+    elif kind in {"sse", "webrtc"}:
+        subcommand = "schema" if kind == "sse" else "contract"
+        arguments = [kind, subcommand, "--app", reference, "--output", f"{kind}.json"]
     else:
         (directory / "fastapi-canon.toml").write_text(
             f'[codegen]\nversion = 2\napp = "{reference}"\n'

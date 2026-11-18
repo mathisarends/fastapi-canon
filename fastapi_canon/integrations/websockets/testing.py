@@ -565,12 +565,11 @@ class RpcTestClient:
         )
 
     async def next_notification(
-        # smelt: ignore[SMT357] -- Seconds; keep the existing public keyword or field.
         self,
         *,
-        timeout: float | None = None,
+        timeout_seconds: float | None = None,
     ) -> tuple[str, Any]:
-        async with asyncio.timeout(timeout):
+        async with asyncio.timeout(timeout_seconds):
             item = await self._notifications.get()
         if item is _CLOSED:
             self._notifications.put_nowait(_CLOSED)
