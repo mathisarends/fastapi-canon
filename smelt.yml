@@ -48,36 +48,18 @@ architecture:
     fastapi_canon.error.rendering: values
     fastapi_canon.response: responses
     fastapi_canon.error.contracts: values
-    fastapi_canon.error.openapi: adapters
-    fastapi_canon.error.handlers: adapters
-    fastapi_canon.error.registry: adapters
     fastapi_canon.openapi: adapters
     fastapi_canon.routing: routing
-    fastapi_canon.routing.http: routing
     fastapi_canon.composition: composition
-    fastapi_canon.composition.feature: composition
-    fastapi_canon.composition.checks: composition
-    fastapi_canon.composition.installation: composition
     fastapi_canon.routing.api_router: composition
     fastapi_canon.diagnostics: values
-    fastapi_canon.diagnostics.models: values
-    fastapi_canon.composition.introspection: composition
-    fastapi_canon.cli.composition: cli
     fastapi_canon.cli.application: generation
-    fastapi_canon.cli.explanations: cli
-    fastapi_canon.composition.scopes: composition
-    fastapi_canon.routing.injection: routing
     fastapi_canon.routing.injected_route: composition
     fastapi_canon.integrations.database: persistence
 
-    fastapi_canon.composition.request_logging: composition
     fastapi_canon._version: values
-    fastapi_canon.routing.policy: routing
-    fastapi_canon.error.catalog: adapters
     fastapi_canon.codegen: generation
     fastapi_canon.contracts: contracts
-    fastapi_canon.contracts.export: contracts
-    fastapi_canon.cli.contracts: cli
     fastapi_canon.routing.traversal: adapters
     fastapi_canon.integration: extension
     fastapi_canon.integrations: transport
@@ -88,9 +70,7 @@ architecture:
     fastapi_canon.integrations.opentelemetry: telemetry
     app: application
     fastapi_canon.checks: analysis
-    fastapi_canon.checks.cli: analysis
     fastapi_canon.cli: cli
-    fastapi_canon.cli.main: cli
     fastapi_canon.integrations.sse.codegen: generation
     fastapi_canon.integrations.websockets.codegen: generation
     fastapi_canon.integrations.webrtc.codegen: generation
