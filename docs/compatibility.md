@@ -1,13 +1,19 @@
 # Compatibility
 
-## Canon 0.24.0 (prepared)
+## Canon 0.24.0
 
-Unpublished source; see the [package-layout migration](package-migration.md#upgrade-to-0240).
+Published on 2026-11-21. Follow the
+[migration](package-migration.md#upgrade-to-0240) for package imports, error
+defaults and transport options.
 
-Local Windows validation passed both 20-combination wheel matrices: current
-dependencies on Python 3.14 and minimum dependencies on Python 3.12. Installed
-SSE/WebRTC CLI and generated-client checks passed, together with Python and
-TypeScript tests, architecture, lint and type checks.
+Exact-source CI passed Linux/Python 3.12–3.14 and Windows/Python 3.14, including
+PostgreSQL and Chromium/WebRTC contracts. Both 20-combination wheel matrices
+passed on the publication artifacts, along with the installed SSE/WebRTC CLI
+and generated-client checks.
+
+Public-index installs passed, including CLI regressions on Windows/Python 3.12.
+The tag points to the verified source, and the PyPI and GitHub Release files
+match the release manifest. See the [publication record](releases.md#current-versions).
 
 ## Canon 0.23.0
 

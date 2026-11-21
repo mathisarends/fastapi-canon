@@ -24,9 +24,9 @@ project_missing = Error(
 )
 ```
 
-In prepared version 0.24.0 (unpublished), omitting `title` or passing `None`
-derives it from `code`: underscores become spaces and the first letter is
-capitalized (`project_missing` becomes `Project missing`). Pass
+Since 0.24.0, omitting `title` or passing `None` derives it from `code`.
+Canon replaces underscores with spaces and capitalizes the first letter
+(`project_missing` becomes `Project missing`). Pass
 `title="Project not found"` to override it. Empty titles remain invalid.
 `title` is always a string on the constructed `Error` and in emitted problems.
 

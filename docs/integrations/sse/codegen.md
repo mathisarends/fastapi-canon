@@ -19,7 +19,7 @@ uv run fastapi-canon sse generate \
   --schema tests/fixtures/sse/agent_runs.openapi.json --language python --output myapp/generated
 ```
 
-Export imports the application without starting it. In prepared 0.24.0, `--app`
+Export imports the application without starting it. Since 0.24.0, `--app`
 also accepts a synchronous zero-argument factory such as `myapp:create_app`.
 Schema hooks can import local modules from the working directory, or from the
 configuration directory when using `sse sync`.

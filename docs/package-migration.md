@@ -13,7 +13,7 @@ PyPI project or add further Python import changes.
 
 ## Upgrade to 0.24.0
 
-Version 0.24.0 is prepared source and has not been published.
+Version 0.24.0 was published on 2026-11-21.
 
 `Error` now derives `title` from `code` when omitted or passed as `None`:
 `project_missing` becomes `Project missing`. Keep `title="Project not found"`
