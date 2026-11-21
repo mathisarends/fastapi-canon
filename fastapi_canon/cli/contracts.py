@@ -5,7 +5,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from fastapi_canon.cli.application import load_application
+from fastapi_canon.cli.application import open_application
 from fastapi_canon.codegen.generators import contract_kinds
 from fastapi_canon.contracts import export_contracts
 
@@ -38,9 +38,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     try:
-        app = load_application(args.app, root=Path.cwd())
         kinds = tuple(args.kind) if args.kind else None
-        contracts = export_contracts(app, kinds=kinds, base_url=args.base_url)
+        with open_application(args.app, root=Path.cwd()) as app:
+            contracts = export_contracts(app, kinds=kinds, base_url=args.base_url)
         if contracts.openapi is not None:
             from fastapi_canon.integrations.sse.codegen.openapi import validate_contract
 

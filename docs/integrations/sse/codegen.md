@@ -21,6 +21,8 @@ uv run fastapi-canon sse generate \
 
 Export imports the application without starting it. In prepared 0.24.0, `--app`
 also accepts a synchronous zero-argument factory such as `myapp:create_app`.
+Schema hooks can import local modules from the working directory, or from the
+configuration directory when using `sse sync`.
 The codegen extra adds Jinja and JSON Schema validation.
 
 The exporter copies native FastAPI output, promotes compatible 3.1 output to

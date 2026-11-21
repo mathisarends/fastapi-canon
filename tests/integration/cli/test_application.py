@@ -1,6 +1,7 @@
 """CLI targets share bounded loading, factory and diagnostic behavior."""
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -67,6 +68,123 @@ def application_module(tmp_path: Path) -> Path:
         "VALUE = 'configured'\n", encoding="utf-8"
     )
     return tmp_path
+
+
+@pytest.fixture
+def local_export_app(tmp_path: Path) -> Path:
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "schema_metadata.py").write_text(
+        "DESCRIPTION = 'Local message metadata'\n", encoding="utf-8"
+    )
+    (project / "app.py").write_text(
+        dedent("""
+        from fastapi import FastAPI
+        from pydantic import BaseModel, ConfigDict
+        from fastapi_canon.integrations.webrtc import DataChannelSpec, Session, WebRtcRouter
+
+        def describe(schema):
+            from schema_metadata import DESCRIPTION
+            schema['description'] = DESCRIPTION
+
+        class Message(BaseModel):
+            model_config = ConfigDict(json_schema_extra=describe)
+            text: str
+
+        channel = DataChannelSpec('messages', receive_model=Message)
+        rtc = WebRtcRouter()
+
+        @rtc.session('/rtc', name='demo', data_channels=[channel])
+        def session() -> Session:
+            return Session()
+
+        app = FastAPI()
+        app.include_router(rtc)
+
+        @app.get('/message')
+        def message() -> Message:
+            return Message(text='hello')
+        """),
+        encoding="utf-8",
+    )
+    return project
+
+
+def test_installed_sse_cli_keeps_app_root_during_export(local_export_app: Path) -> None:
+    schema = local_export_app / "schema.json"
+    result = _run_installed_cli(
+        local_export_app, "sse", "schema", "--app", "app:app", "--output", schema.name
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    document = json.loads(schema.read_text(encoding="utf-8"))
+    assert document["components"]["schemas"]["Message"]["description"] == (
+        "Local message metadata"
+    )
+    client = ("--schema", schema.name, "--language", "python", "--output", "sdk")
+    result = _run_installed_cli(local_export_app, "sse", "generate", *client)
+    assert result.returncode == 0, result.stdout + result.stderr
+    result = _run_installed_cli(
+        local_export_app, "sse", "check", "--app", "app:app", *client
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_installed_sse_sync_uses_configuration_root(local_export_app: Path) -> None:
+    config = local_export_app / "pyproject.toml"
+    config.write_text(
+        '[tool.fastapi-canon.sse]\napp = "app:app"\nschema = "schema.json"\n',
+        encoding="utf-8",
+    )
+    working_directory = local_export_app.parent
+    (working_directory / "app.py").write_text(
+        "raise RuntimeError('Wrong application module')\n", encoding="utf-8"
+    )
+    result = _run_installed_cli(
+        working_directory, "sse", "sync", "--config", str(config)
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    document = json.loads(
+        (local_export_app / "schema.json").read_text(encoding="utf-8")
+    )
+    assert document["components"]["schemas"]["Message"]["description"] == (
+        "Local message metadata"
+    )
+
+
+def test_installed_webrtc_cli_keeps_app_root_during_export(
+    local_export_app: Path,
+) -> None:
+    contract = local_export_app / "contract.json"
+    result = _run_installed_cli(
+        local_export_app,
+        "webrtc",
+        "contract",
+        "--app",
+        "app:app",
+        "--output",
+        contract.name,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    document = json.loads(contract.read_text(encoding="utf-8"))
+    assert document["definitions"]["Message"]["description"] == "Local message metadata"
+    result = _run_installed_cli(
+        local_export_app, "webrtc", "generate", "--app", "app:app", "--output", "sdk"
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (local_export_app / "sdk" / "index.ts").is_file()
+
+
+def test_installed_sse_cli_accepts_importable_module_names(tmp_path: Path) -> None:
+    (tmp_path / "my-app.py").write_text(
+        "from fastapi import FastAPI\napp = FastAPI(title='Local app')\n",
+        encoding="utf-8",
+    )
+    result = _run_installed_cli(
+        tmp_path, "sse", "schema", "--app", "my-app:app", "--output", "schema.json"
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    document = json.loads((tmp_path / "schema.json").read_text(encoding="utf-8"))
+    assert document["info"]["title"] == "Local app"
 
 
 @pytest.mark.parametrize(
@@ -174,6 +292,25 @@ def test_generation_keeps_config_root_available_for_factory_imports(
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def _run_installed_cli(
+    directory: Path, *arguments: str
+) -> subprocess.CompletedProcess[str]:
+    cli = Path(sys.executable).with_name(
+        "fastapi-canon.exe" if os.name == "nt" else "fastapi-canon"
+    )
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    return subprocess.run(
+        [str(cli), *arguments],
+        cwd=directory,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
 
 
 def _run(
