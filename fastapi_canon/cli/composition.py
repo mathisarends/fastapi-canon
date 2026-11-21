@@ -2,12 +2,13 @@ import argparse
 import json
 import sys
 from collections.abc import Sequence
+from contextlib import nullcontext
 from dataclasses import asdict
 from pathlib import Path
 
 from fastapi import FastAPI
 
-from fastapi_canon.cli.application import load_application, load_reference
+from fastapi_canon.cli.application import load_reference, open_application
 from fastapi_canon.composition import Composition, inspect_app
 from fastapi_canon.diagnostics import CheckReport, CompositionInfo
 
@@ -68,16 +69,23 @@ def main(arguments: Sequence[str], *, inspect: bool = False) -> int:
             help="Finding threshold for exit 1: error (default), or warning to include warnings",
         )
     args = parser.parse_args(arguments)
+    root = Path.cwd()
+    result: CompositionInfo | CheckReport
     try:
         if inspect:
-            target = load_application(args.target, root=Path.cwd())
-            result: CompositionInfo | CheckReport = inspect_app(target)
+            with open_application(args.target, root=root) as app:
+                result = inspect_app(app)
         else:
-            target = load_reference(args.target, root=Path.cwd())
+            target = load_reference(args.target, root=root)
             if not isinstance(target, Composition):
                 raise ValueError("check target must be a Composition")
-            app = load_application(args.app, root=Path.cwd()) if args.app else FastAPI()
-            result = target.check(app)
+            application = (
+                open_application(args.app, root=root)
+                if args.app
+                else nullcontext(FastAPI())
+            )
+            with application as app:
+                result = target.check(app)
     except (ImportError, AttributeError, ValueError, TypeError) as error:
         if args.format == "json":
             print(json.dumps({"error": str(error)}))

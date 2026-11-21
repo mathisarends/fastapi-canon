@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from fastapi_canon.cli.application import load_application
+from fastapi_canon.cli.application import open_application
 from fastapi_canon.codegen.config import Configuration
 from fastapi_canon.codegen.generators import (
     TargetConfig,
@@ -52,8 +52,11 @@ def generate(
         }
         contracts: dict[Path, str] = {}
     else:
-        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            app = load_application(config.app, root=root)
+        with (
+            redirect_stdout(io.StringIO()),
+            redirect_stderr(io.StringIO()),
+            open_application(config.app, root=root) as app,
+        ):
             documents = dict(export_contracts(app).documents)
         contracts = {
             config.contracts / f"{kind}.json": _json(documents[kind])

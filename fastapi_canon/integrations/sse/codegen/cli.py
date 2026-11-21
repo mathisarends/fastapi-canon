@@ -10,10 +10,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from fastapi import FastAPI
-
 from fastapi_canon import __version__
-from fastapi_canon.cli.application import load_application
+from fastapi_canon.cli.application import open_application
 from fastapi_canon.integrations.sse.codegen.openapi import (
     ContractError,
     Document,
@@ -107,19 +105,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "sync":
             return _sync(args.config, check=args.check, diff=args.diff)
         if args.command == "schema":
-            content = _schema_text(load_application(args.app, root=Path.cwd()))
-            output = cast(Path, args.output)
-            if args.check:
-                if not output.is_file() or output.read_bytes() != content.encode(
-                    "utf-8"
-                ):
-                    print(f"Out of date: {output}", file=sys.stderr)
-                    if args.diff:
-                        _print_diff(output, _read(output), content)
-                    return 1
-            else:
-                output.parent.mkdir(parents=True, exist_ok=True)
-                output.write_text(content, encoding="utf-8", newline="\n")
+            return _export_schema_file(
+                args.app,
+                cast(Path, args.output),
+                root=Path.cwd(),
+                check=args.check,
+                diff=args.diff,
+            )
         else:
             if args.diagnostics:
                 report = args.diagnostics.resolve()
@@ -153,7 +145,7 @@ def main(argv: list[str] | None = None) -> int:
                 document, args.language, args.python_http_client or "httpx"
             )
             if args.command == "check" and args.app:
-                expected = export_schema(load_application(args.app, root=Path.cwd()))
+                expected = _app_schema(args.app, root=Path.cwd())
                 if expected != document:
                     print(
                         f"Out of date: {args.schema} (application contract changed)",
@@ -256,16 +248,21 @@ def _sync(config_path: Path, *, check: bool, diff: bool) -> int:
     """Run schema export and every configured client generation in order."""
     config = _load_config(config_path)
     root = config_path.resolve().parent
-    flags = [*(["--check"] if check else []), *(["--diff"] if diff else [])]
-    schema = str(root / config["schema"])
-    steps: list[list[str]] = []
+    schema = root / config["schema"]
+    status = 0
     if "app" in config:
-        steps.append(["schema", "--app", config["app"], "--output", schema, *flags])
+        status = _export_schema_file(
+            config["app"], schema, root=root, check=check, diff=diff
+        )
+        if status == 1 and not schema.is_file():
+            # A missing schema was already reported; clients cannot be compared.
+            return status
+    flags = [*(["--check"] if check else []), *(["--diff"] if diff else [])]
     for client in config["clients"]:
         step = [
             "generate",
             "--schema",
-            schema,
+            str(schema),
             "--language",
             client["language"],
             "--output",
@@ -280,15 +277,7 @@ def _sync(config_path: Path, *, check: bool, diff: bool) -> int:
         for option in ("allow-diagnostics", "diagnostics"):
             if option in client:
                 step += [f"--{option}", str(root / client[option])]
-        steps.append(step + flags)
-    # Imports resolve against the configuration's directory, like a console script.
-    sys.path.insert(0, str(root))
-    status = 0
-    for step in steps:
-        if status == 1 and step[0] == "generate" and not Path(schema).is_file():
-            # A missing schema was already reported; clients cannot be compared.
-            break
-        status = max(status, main(step))
+        status = max(status, main(step + flags))
         if status == 2:
             break
     return status
@@ -357,8 +346,30 @@ def _load_config(path: Path) -> dict[str, Any]:
     return {**config, "clients": clients}
 
 
-def _schema_text(app: FastAPI) -> str:
-    return _schema_text_of(export_schema(app))
+def _export_schema_file(
+    reference: str,
+    output: Path,
+    *,
+    root: Path,
+    check: bool,
+    diff: bool,
+) -> int:
+    content = _schema_text_of(_app_schema(reference, root=root))
+    if check:
+        if output.is_file() and output.read_bytes() == content.encode("utf-8"):
+            return 0
+        print(f"Out of date: {output}", file=sys.stderr)
+        if diff:
+            _print_diff(output, _read(output), content)
+        return 1
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(content, encoding="utf-8", newline="\n")
+    return 0
+
+
+def _app_schema(reference: str, *, root: Path) -> Document:
+    with open_application(reference, root=root) as app:
+        return export_schema(app)
 
 
 def _schema_text_of(document: Mapping[str, Any]) -> str:

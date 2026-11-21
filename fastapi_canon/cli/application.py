@@ -9,51 +9,55 @@ from typing import Any
 from fastapi import FastAPI
 
 
-def load_application(reference: str, *, root: Path) -> FastAPI:
+@contextmanager
+def open_application(reference: str, *, root: Path) -> Iterator[FastAPI]:
+    """Load an app and keep its project imports available to the caller."""
     with _application_path(root):
-        value = load_reference(reference, root=root)
-        if not isinstance(value, FastAPI) and not callable(value):
+        value = _load_reference(reference)
+        if callable(value) and not isinstance(value, FastAPI):
+            value = _resolve_factory(value, reference)
+        if not isinstance(value, FastAPI):
             raise TypeError(
                 f"{reference} must resolve to a FastAPI application or a zero-argument factory returning one"
             )
-        value = _resolve_factory(value, reference)
-    if not isinstance(value, FastAPI):
-        raise TypeError(
-            f"{reference} must resolve to a FastAPI application or a zero-argument factory returning one"
-        )
-    return value
+        yield value
 
 
 def load_reference(reference: str, *, root: Path) -> Any:
+    with _application_path(root):
+        return _load_reference(reference)
+
+
+def _load_reference(reference: str) -> Any:
     module, separator, attribute = reference.partition(":")
-    if not separator or not all(
-        part.isidentifier() for part in (*module.split("."), *attribute.split("."))
+    attributes = attribute.split(".")
+    if (
+        not separator
+        or "/" in module
+        or "\\" in module
+        or not all(module.split("."))
+        or not all(part.isidentifier() for part in attributes)
     ):
         raise ValueError(
             f"Invalid target {reference!r}; use an explicit module:attribute target with optional dotted attributes"
         )
-    with _application_path(root):
-        try:
-            value: Any = import_module(module)
-        except (Exception, SystemExit) as error:
-            raise ValueError(
-                f"Cannot import {reference!r} ({type(error).__name__}); check the module path and move runtime configuration into lifespan or runtime dependencies"
-            ) from None
-        try:
-            for part in attribute.split("."):
-                value = getattr(value, part)
-        except (Exception, SystemExit) as error:
-            raise ValueError(
-                f"Cannot resolve attribute in {reference!r} ({type(error).__name__}); check each dotted attribute"
-            ) from None
-        return value
+    try:
+        value: Any = import_module(module)
+    except (Exception, SystemExit) as error:
+        raise ValueError(
+            f"Cannot import {reference!r} ({type(error).__name__}); check the module path and move runtime configuration into lifespan or runtime dependencies"
+        ) from None
+    try:
+        for part in attributes:
+            value = getattr(value, part)
+    except (Exception, SystemExit) as error:
+        raise ValueError(
+            f"Cannot resolve attribute in {reference!r} ({type(error).__name__}); check each dotted attribute"
+        ) from None
+    return value
 
 
 def _resolve_factory(value: Any, reference: str) -> Any:
-    if isinstance(value, FastAPI):
-        return value
-    if not callable(value):
-        raise TypeError(f"{reference!r} must be a synchronous zero-argument factory")
     call = inspect.getattr_static(type(value), "__call__", None)
     if inspect.iscoroutinefunction(value) or inspect.iscoroutinefunction(call):
         raise TypeError(f"{reference!r} must use a synchronous app factory")

@@ -128,7 +128,8 @@ fastapi-canon webrtc generate --contract contract.json --output src/rtc --client
 ```
 
 In prepared 0.24.0, `--app` also accepts a synchronous zero-argument factory
-such as `app:create_app`.
+such as `app:create_app`. Contract schema hooks can import local modules from
+the working directory.
 
 ```ts
 import { PracticeRtcClient, isRtcError } from "./rtc/index.js";

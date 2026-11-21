@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from fastapi_canon import __version__
-from fastapi_canon.cli.application import load_application
+from fastapi_canon.cli.application import open_application
 from fastapi_canon.integrations.webrtc.codegen.typescript import (
     DEFAULT_CLIENT_NAME,
     ContractError,
@@ -61,10 +61,10 @@ def main(  # smelt: ignore[SMT429] -- fastapi_canon.commands entry point.
         return 2
 
 
-def _contract(app: str, output: Path, *, check: bool) -> int:
-    from fastapi_canon.integrations.webrtc.contract import build_contract, dumps
+def _contract(reference: str, output: Path, *, check: bool) -> int:
+    from fastapi_canon.integrations.webrtc.contract import dumps
 
-    content = dumps(build_contract(load_application(app, root=Path.cwd())))
+    content = dumps(_app_contract(reference))
     if check:
         if not output.is_file() or output.read_bytes() != content.encode("utf-8"):
             print(f"Out of date: {output}", file=sys.stderr)
@@ -78,9 +78,7 @@ def _contract(app: str, output: Path, *, check: bool) -> int:
 def _generate(args: argparse.Namespace) -> int:
     contract: Any
     if args.app is not None:
-        from fastapi_canon.integrations.webrtc.contract import build_contract
-
-        contract = build_contract(load_application(args.app, root=Path.cwd()))
+        contract = _app_contract(args.app)
     else:
         contract = json.loads(cast(Path, args.contract).read_text(encoding="utf-8"))
     if not isinstance(contract, dict):
@@ -105,6 +103,13 @@ def _generate(args: argparse.Namespace) -> int:
             print(f"Out of date: {path}", file=sys.stderr)
         return 1
     return 0
+
+
+def _app_contract(reference: str) -> dict[str, Any]:
+    from fastapi_canon.integrations.webrtc.contract import build_contract
+
+    with open_application(reference, root=Path.cwd()) as app:
+        return build_contract(app)
 
 
 if __name__ == "__main__":
