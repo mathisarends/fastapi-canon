@@ -4,6 +4,12 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## Unreleased
 
+### Added
+
+- Feature lifespans accept `Inject[T]` parameters, resolved from the application
+  container at startup. Preflight reports a service without an APP-scope binding
+  as `canon.providers.E005`. See [feature lifespans](docs/composition.md#feature-lifespans).
+
 ## 0.24.0 - 2026-11-21
 
 ### Breaking changes
