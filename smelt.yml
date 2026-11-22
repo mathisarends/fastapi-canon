@@ -333,6 +333,7 @@ architecture:
     canon:
       match: fastapi_canon
       min_importers_to_export: 3
+      test_access: mirrored
       required: [error, composition, routing, cli, contracts, diagnostics, openapi, response]
       # Also cover the documented extension modules and installed CLI entry point.
       public: [., error, diagnostics, errors, openapi, contracts, integration, integrations.**, 
@@ -340,6 +341,7 @@ architecture:
     error-models:
       match: fastapi_canon.error
       min_importers_to_export: 3
+      test_access: mirrored
       required: [error, problem, registry, rendering, handlers, openapi, types]
     integration-facades:
       match: fastapi_canon.integrations.*

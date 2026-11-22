@@ -72,8 +72,8 @@ avoid private production access. Integration and contract tests prohibit mocks;
 unit tests normally allow one object-targeted patch. The configuration records
 the few existing exceptions and their reasons.
 
-Use documented imports in tests. When a test exercises an internal contract
-directly, put a reasoned ARC007 exception on the import.
+Tests that mirror a Canon module may import that package's internals. All other
+tests use documented imports.
 
 ## Upgrade Smelt
 

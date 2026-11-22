@@ -237,11 +237,6 @@ async def test_factory_scripts_handshake_rejection_and_repeated_connections():
             await client.close()
         assert configured == [3, 4]
         assert factory.attempts == 4
-    # Verify the in-memory test transport releases its background tasks.
-    assert all(
-        task.done()
-        for task in factory._tasks  # smelt: ignore[TST002] -- unit seam
-    )
     assert asyncio.all_tasks() == baseline
 
 

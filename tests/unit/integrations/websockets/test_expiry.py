@@ -1,7 +1,7 @@
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from types import SimpleNamespace
+from time import time
 
 import fastapi_canon.integrations.websockets.connection as module
 import pytest
@@ -16,7 +16,6 @@ from fastapi_canon.integrations.websockets import (
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.testing import (
     InMemorySocket,
-    InMemorySocketFactory,
 )
 
 
@@ -69,6 +68,18 @@ def expiring_service(timestamp, *, middleware=()):
     return service
 
 
+@asynccontextmanager
+async def served(service, path):
+    socket = InMemorySocket(path)
+    serving = asyncio.create_task(service.serve(socket))
+    try:
+        await asyncio.wait_for(socket.wait_handshake(), 1)
+        yield socket.client, serving
+    finally:
+        await socket.client_disconnect()
+        await asyncio.wait_for(asyncio.gather(serving, return_exceptions=True), 1)
+
+
 @pytest.mark.parametrize("path", ["/rpc", "/binary", "/raw"])
 async def test_expiry_closes_every_endpoint_with_exact_reason(path, expiry_clock):
     before = asyncio.all_tasks()
@@ -86,16 +97,12 @@ async def test_expiry_closes_every_endpoint_with_exact_reason(path, expiry_clock
                 closed.append(scope.connection)
 
     service = expiring_service(1000, middleware=[Instrumentation()])
-    async with InMemorySocketFactory(service) as factory:
-        client = await factory("ws://test" + path)
+    async with served(service, path) as (client, serving):
         connection = await opened.get()
         timer = await expiry_clock.get()
         assert connection.expires_at == timer.timestamp == 1000
         timer.callback()
-        # clock unit seam
-        await factory._tasks[  # smelt: ignore[TST002] -- unit seam
-            0
-        ]
+        await asyncio.wait_for(serving, 1)
         assert client.close_code == 1008
         assert client.close_reason == "credentials_expired"
         assert closed[0].close_code == RpcConnectionClose.POLICY_VIOLATION
@@ -124,8 +131,7 @@ async def test_expiry_can_be_renewed_or_removed_and_disconnect_cancels_timer(
             opened.put_nowait(connection)
 
     service = expiring_service(1000, middleware=[Instrumentation()])
-    async with InMemorySocketFactory(service) as factory:
-        client = await factory("ws://test/rpc")
+    async with served(service, "/rpc") as (client, serving):
         connection = await opened.get()
         first = await expiry_clock.get()
         connection.expire_at(2000)
@@ -136,41 +142,20 @@ async def test_expiry_can_be_renewed_or_removed_and_disconnect_cancels_timer(
         connection.expire_at(3000)
         third = await expiry_clock.get()
         await client.close()
-        # clock unit seam
-        await factory._tasks[  # smelt: ignore[TST002] -- unit seam
-            0
-        ]
+        await asyncio.wait_for(serving, 1)
         assert third.cancelled and connection._expiry_timer is None
         third.callback()  # A stale callback cannot reopen or change the close.
         assert client.close_code == 1000
 
 
-# both clocks
-def test_expiry_clock_conversion(monkeypatch):  # smelt: ignore[TST005] -- two seams
-    captured = []
-    monkeypatch.setattr(module, "time", lambda: 1000)
-    monkeypatch.setattr(
-        module,
-        "asyncio",
-        SimpleNamespace(
-            get_running_loop=lambda: SimpleNamespace(
-                time=lambda: 50, call_at=lambda *args: captured.append(args)
-            ),
-        ),
-    )
-
-    def callback():
-        pass
-
-    # clock unit seam
-    module._schedule_expiry(  # smelt: ignore[TST002] -- unit seam
-        1005, callback
-    )
-    # clock unit seam
-    module._schedule_expiry(  # smelt: ignore[TST002] -- unit seam
-        999, callback
-    )
-    assert captured == [(55, callback), (50, callback)]
+async def test_expiry_waits_for_the_wall_clock_deadline():
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    service = expiring_service(time() + 0.2)
+    async with served(service, "/rpc") as (client, serving):
+        await asyncio.wait_for(serving, 5)
+        assert loop.time() - started >= 0.15
+        assert client.close_code == 1008
 
 
 @pytest.mark.parametrize("timestamp", [True, float("nan"), float("inf"), "token"])

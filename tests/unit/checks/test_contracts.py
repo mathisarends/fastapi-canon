@@ -8,9 +8,7 @@ from typing import Any
 import pytest
 
 import fastapi_canon.cli as canon_cli
-from fastapi_canon.checks.contracts import (  # smelt: ignore[ARC007] -- Analyzer report.
-    analyze_error_contracts,
-)
+from fastapi_canon.checks.contracts import analyze_error_contracts
 
 PRELUDE = """
 from collections.abc import AsyncIterator

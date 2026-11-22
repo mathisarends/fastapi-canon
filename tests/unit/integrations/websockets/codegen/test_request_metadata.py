@@ -41,6 +41,7 @@ class InjectMetadata:
 async def test_python_middleware_injects_active_trace_into_real_no_params_call(
     client_module,
 ):
+    baseline = asyncio.all_tasks()
     provider = TracerProvider()
     exporter = InMemorySpanExporter()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
@@ -74,11 +75,7 @@ async def test_python_middleware_injects_active_trace_into_real_no_params_call(
     )
     assert span.parent.is_remote
     assert span.parent.span_id == caller.get_span_context().span_id
-    # Verify the in-memory test transport releases its background tasks.
-    assert all(
-        task.done()
-        for task in factory._tasks  # smelt: ignore[TST002] -- unit seam
-    )
+    assert not asyncio.all_tasks() - baseline
     provider.shutdown()
 
 

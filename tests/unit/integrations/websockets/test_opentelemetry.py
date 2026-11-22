@@ -168,9 +168,7 @@ async def test_request_metadata_overrides_handshake_and_links_connection(provide
         serving = asyncio.create_task(service.serve(socket))
         try:
             # Synchronize the handshake before checking trace parentage.
-            await (
-                socket._handshake_complete.wait()  # smelt: ignore[TST002] -- unit seam
-            )
+            await socket.wait_handshake()
             for identifier, metadata in [
                 (1, {"traceparent": f"00-{request_id}-{'4' * 16}-01"}),
                 (2, None),
