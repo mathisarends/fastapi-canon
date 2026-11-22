@@ -1,9 +1,18 @@
 from __future__ import annotations
 
+import sys
 from collections.abc import AsyncGenerator, Callable, Mapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
-from inspect import Parameter, isclass, isfunction, ismethod, signature
+from inspect import (
+    Parameter,
+    Signature,
+    isclass,
+    isfunction,
+    ismethod,
+    signature,
+    unwrap,
+)
 from typing import Any, get_type_hints
 
 from fastapi import FastAPI
@@ -69,7 +78,7 @@ def lifespan_injection(
 
     A lifespan without them keeps the plain ``lifespan(app)`` contract.
     """
-    parameters = tuple(signature(lifespan).parameters.values())
+    parameters = tuple(_signature(lifespan).parameters.values())
     required = tuple(
         parameter
         for parameter in parameters
@@ -77,7 +86,7 @@ def lifespan_injection(
         and parameter.kind not in (Parameter.VAR_POSITIONAL, Parameter.VAR_KEYWORD)
     )
     try:
-        hints = get_type_hints(_annotated(lifespan), include_extras=True)
+        hints = _parameter_hints(_annotated(lifespan), parameters)
     except (NameError, TypeError) as error:
         if len(required) <= 1:
             return LifespanInjection((), None)
@@ -116,6 +125,31 @@ def lifespan_injection(
         tuple((parameter.name, dependency) for parameter, dependency in injected),
         others[0] if others else None,
     )
+
+
+def _signature(lifespan: DeclaredLifespan) -> Signature:
+    """Read the signature without evaluating deferred annotations on Python 3.14."""
+    if sys.version_info >= (3, 14):
+        from annotationlib import Format
+
+        return signature(lifespan, annotation_format=Format.FORWARDREF)
+    return signature(lifespan)
+
+
+def _parameter_hints(
+    annotated: Any, parameters: tuple[Parameter, ...]
+) -> dict[str, Any]:
+    """Resolve parameter annotations; a type-only return must not affect them."""
+
+    def holder() -> None: ...
+
+    holder.__annotations__ = {
+        parameter.name: parameter.annotation
+        for parameter in parameters
+        if parameter.annotation is not Parameter.empty
+    }
+    namespace = getattr(unwrap(annotated), "__globals__", {})
+    return get_type_hints(holder, globalns=namespace, include_extras=True)
 
 
 def _annotated(lifespan: DeclaredLifespan) -> Any:
