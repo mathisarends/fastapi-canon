@@ -77,7 +77,7 @@ async def test_python_middleware_injects_active_trace_into_real_no_params_call(
     # Verify the in-memory test transport releases its background tasks.
     assert all(
         task.done()
-        for task in factory._tasks  # smelt: ignore[SMT420] -- unit seam
+        for task in factory._tasks  # smelt: ignore[TST002] -- unit seam
     )
     provider.shutdown()
 

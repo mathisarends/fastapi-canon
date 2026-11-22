@@ -225,7 +225,7 @@ class Telemetry(Integration):
             return None
         try:
             # lazy telemetry adapter factory
-            from fastapi_canon.integrations.opentelemetry.native import (  # smelt: ignore[SMT104] -- factory cycle
+            from fastapi_canon.integrations.opentelemetry.native import (  # smelt: ignore[ARC004] -- factory cycle
                 install,
                 validate_app,
             )

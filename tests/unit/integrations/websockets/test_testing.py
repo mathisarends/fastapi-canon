@@ -240,7 +240,7 @@ async def test_factory_scripts_handshake_rejection_and_repeated_connections():
     # Verify the in-memory test transport releases its background tasks.
     assert all(
         task.done()
-        for task in factory._tasks  # smelt: ignore[SMT420] -- unit seam
+        for task in factory._tasks  # smelt: ignore[TST002] -- unit seam
     )
     assert asyncio.all_tasks() == baseline
 

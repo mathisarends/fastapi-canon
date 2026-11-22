@@ -8,7 +8,7 @@ from starlette.responses import RedirectResponse
 
 from fastapi_canon import CanonResponse
 from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
-from fastapi_canon.error.types import (  # smelt: ignore[SMT107] -- Mutable test inputs.
+from fastapi_canon.error.types import (  # smelt: ignore[ARC007] -- Mutable test inputs.
     JsonValue,
     OpenAPIHeader,
 )

@@ -403,7 +403,7 @@ def named_types(expression: TypeExpr) -> set[str]:
 
 
 # Public IR rendering utility for custom client generators.
-def type_expression(  # smelt: ignore[SMT429] -- external API
+def type_expression(  # smelt: ignore[VIS009] -- external API
     schema: dict[str, Any] | bool,
 ) -> TypeExpr:
     """Lower one JSON Schema node into a type expression."""

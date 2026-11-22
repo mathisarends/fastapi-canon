@@ -6,7 +6,7 @@ import pytest
 from pydantic import BaseModel, ConfigDict
 
 from fastapi_canon.error import Error, ErrorConfigurationError
-from fastapi_canon.error.rendering import (  # smelt: ignore[SMT107] -- Renderer unit.
+from fastapi_canon.error.rendering import (  # smelt: ignore[ARC007] -- Renderer unit.
     render_problem,
 )
 

@@ -169,7 +169,7 @@ async def test_request_metadata_overrides_handshake_and_links_connection(provide
         try:
             # Synchronize the handshake before checking trace parentage.
             await (
-                socket._handshake_complete.wait()  # smelt: ignore[SMT420] -- unit seam
+                socket._handshake_complete.wait()  # smelt: ignore[TST002] -- unit seam
             )
             for identifier, metadata in [
                 (1, {"traceparent": f"00-{request_id}-{'4' * 16}-01"}),

@@ -11,7 +11,7 @@ from urllib.parse import unquote
 from fastapi_canon.codegen.generators import ClientLanguage
 
 # The IR builder lazily invokes diagnostics and enum passes over its own model graph.
-from fastapi_canon.integrations.sse.codegen.ir import (  # smelt: ignore[SMT104] -- factory cycle  # noqa: E501
+from fastapi_canon.integrations.sse.codegen.ir import (  # smelt: ignore[ARC004] -- factory cycle  # noqa: E501
     Contract,
     Operation,
 )

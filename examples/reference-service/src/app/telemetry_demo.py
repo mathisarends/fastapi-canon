@@ -97,7 +97,7 @@ def _notifier_client() -> httpx2.AsyncClient:
 
 
 # Public demo application factory for standalone telemetry services.
-def create_tasks_app() -> FastAPI:  # smelt: ignore[SMT429] -- external API
+def create_tasks_app() -> FastAPI:  # smelt: ignore[VIS009] -- external API
     options, lifecycle = _telemetry("tasks")
     app = FastAPI(title="Canon telemetry: tasks", lifespan=lifecycle)
     app.include_router(health_router)
@@ -112,7 +112,7 @@ def create_tasks_app() -> FastAPI:  # smelt: ignore[SMT429] -- external API
 
 
 # Public demo application factory for standalone telemetry services.
-def create_notifier_app() -> FastAPI:  # smelt: ignore[SMT429] -- external API
+def create_notifier_app() -> FastAPI:  # smelt: ignore[VIS009] -- external API
     options, lifecycle = _telemetry("notifier")
     router = APIRouter()
 

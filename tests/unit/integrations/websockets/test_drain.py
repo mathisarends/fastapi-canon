@@ -233,9 +233,9 @@ async def test_shutdown_cleans_subscription_while_another_request_is_stuck(drain
             await service.drain.drain(timeout_seconds=0.2)
         else:
             # Verify the in-memory test transport releases its background tasks.
-            factory._tasks[0].cancel()  # smelt: ignore[SMT420] -- unit seam
+            factory._tasks[0].cancel()  # smelt: ignore[TST002] -- unit seam
         # Verify the in-memory test transport releases its background tasks.
-        _tasks = factory._tasks  # smelt: ignore[SMT420] -- unit
+        _tasks = factory._tasks  # smelt: ignore[TST002] -- unit
         await asyncio.gather(*_tasks, return_exceptions=True)
         assert stopped.is_set()
         assert service.drain.connection_count == 0

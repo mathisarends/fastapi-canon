@@ -93,7 +93,7 @@ async def test_expiry_closes_every_endpoint_with_exact_reason(path, expiry_clock
         assert connection.expires_at == timer.timestamp == 1000
         timer.callback()
         # clock unit seam
-        await factory._tasks[  # smelt: ignore[SMT420] -- unit seam
+        await factory._tasks[  # smelt: ignore[TST002] -- unit seam
             0
         ]
         assert client.close_code == 1008
@@ -137,7 +137,7 @@ async def test_expiry_can_be_renewed_or_removed_and_disconnect_cancels_timer(
         third = await expiry_clock.get()
         await client.close()
         # clock unit seam
-        await factory._tasks[  # smelt: ignore[SMT420] -- unit seam
+        await factory._tasks[  # smelt: ignore[TST002] -- unit seam
             0
         ]
         assert third.cancelled and connection._expiry_timer is None
@@ -146,7 +146,7 @@ async def test_expiry_can_be_renewed_or_removed_and_disconnect_cancels_timer(
 
 
 # both clocks
-def test_expiry_clock_conversion(monkeypatch):  # smelt: ignore[SMT423] -- two seams
+def test_expiry_clock_conversion(monkeypatch):  # smelt: ignore[TST005] -- two seams
     captured = []
     monkeypatch.setattr(module, "time", lambda: 1000)
     monkeypatch.setattr(
@@ -163,11 +163,11 @@ def test_expiry_clock_conversion(monkeypatch):  # smelt: ignore[SMT423] -- two s
         pass
 
     # clock unit seam
-    module._schedule_expiry(  # smelt: ignore[SMT420] -- unit seam
+    module._schedule_expiry(  # smelt: ignore[TST002] -- unit seam
         1005, callback
     )
     # clock unit seam
-    module._schedule_expiry(  # smelt: ignore[SMT420] -- unit seam
+    module._schedule_expiry(  # smelt: ignore[TST002] -- unit seam
         999, callback
     )
     assert captured == [(55, callback), (50, callback)]

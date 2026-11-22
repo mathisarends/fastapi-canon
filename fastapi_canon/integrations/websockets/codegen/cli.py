@@ -29,7 +29,7 @@ from fastapi_canon.integrations.websockets.schema.export import (
 LANGUAGES = ("python", "typescript")
 
 
-def main(  # smelt: ignore[SMT429] -- fastapi_canon.commands entry point.
+def main(  # smelt: ignore[VIS009] -- fastapi_canon.commands entry point.
     argv: Sequence[str] | None = None,
 ) -> int:
     """Export OpenRPC contracts and generate WebSocket clients."""

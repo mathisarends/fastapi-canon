@@ -45,7 +45,7 @@ from fastapi_canon import (
 from fastapi_canon.error import ErrorConfigurationError
 from fastapi_canon.integrations.sse.canon import CanonStreamRouter
 from fastapi_canon.integrations.sse.router import StreamRouter
-from fastapi_canon.routing.http import (  # smelt: ignore[SMT107] -- SSE HTTP base class.
+from fastapi_canon.routing.http import (  # smelt: ignore[ARC007] -- SSE HTTP base class.
     CanonRouter,
 )
 

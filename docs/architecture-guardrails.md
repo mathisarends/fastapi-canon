@@ -1,7 +1,7 @@
 # Architecture and test guardrails
 
 [smelt.yml](../smelt.yml) defines dependency boundaries, source conventions and
-test policies. The development lockfile pins `smelt-cli==0.13.0`.
+test policies. The development lockfile pins `smelt-cli==0.16.1`.
 [.smelt.schema.json](../.smelt.schema.json) provides editor completion.
 
 ## Run the policy
@@ -10,7 +10,7 @@ test policies. The development lockfile pins `smelt-cli==0.13.0`.
 uv run --frozen smelt context fastapi_canon.error.registry
 uv run --frozen smelt check --config smelt.yml --changed --fail-on warning
 uv run --frozen smelt check --config smelt.yml --fail-on warning
-uv run --frozen smelt explain SMT423
+uv run --frozen smelt explain TST005
 ```
 
 The full check runs in CI, `scripts/check.py all` and pre-commit.
@@ -73,25 +73,24 @@ unit tests normally allow one object-targeted patch. The configuration records
 the few existing exceptions and their reasons.
 
 Use documented imports in tests. When a test exercises an internal contract
-directly, put a reasoned SMT107 exception on the import.
+directly, put a reasoned ARC007 exception on the import.
 
 ## Upgrade Smelt
 
 Regenerate the editor schema as UTF-8 and review the
-[upstream rule catalog](https://github.com/mathisarends/smelt/blob/v0.13.0/docs/rules/README.md)
-and [upgrade guide](https://github.com/mathisarends/smelt/blob/v0.13.0/docs/upgrading.md).
+[upstream rule catalog](https://github.com/mathisarends/smelt/blob/v0.16.1/docs/rules/README.md)
+and [upgrade guide](https://github.com/mathisarends/smelt/blob/v0.16.1/docs/upgrading.md).
 Run the full policy and inspect new findings before adopting rules.
 Keep suppressions and exclusions tied to actual contracts.
 
-For agent-assisted policy work, install the release's official skill and offline
-rule references in the local checkout:
+The official Smelt skill and offline rule references for the pinned release are
+checked in under `.agents/skills/smelt`. Refresh them with every Smelt upgrade:
 
 ```console
-uv run --frozen smelt skill install
+uv run --frozen smelt skill install --force
 ```
 
-After an upgrade, preserve any local skill customizations before refreshing with
-`uv run --frozen smelt skill install --force`. Keep Canon-specific policy in
-`smelt.yml` and repository instructions.
+Do not edit the installed skill; keep Canon-specific policy in `smelt.yml` and
+repository instructions.
 
 See [contributing](contributing.md) for the remaining checks.

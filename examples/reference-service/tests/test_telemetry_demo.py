@@ -21,7 +21,7 @@ import app.telemetry_demo as demo  # noqa: E402
 
 
 # providers and HTTP
-async def test_cross_service_trace(  # smelt: ignore[SMT423] -- two seams
+async def test_cross_service_trace(  # smelt: ignore[TST005] -- two seams
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     url = f"sqlite+aiosqlite:///{tmp_path / 'demo.db'}"

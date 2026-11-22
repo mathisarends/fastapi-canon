@@ -109,7 +109,7 @@ dev = [
     "pytest-cov>=6",
     "pytest>=9.1",
     "ruff>=0.15",
-    "smelt-cli==0.13.0",
+    "smelt-cli==0.16.1",
     "twine>=7,<8",
     "types-jsonschema>=4.26",
     "uvicorn>=0.53",
@@ -127,6 +127,8 @@ target = "examples.database.config:database"
 target-version = "py312"
 line-length = 88
 extend-exclude = [
+    # Vendored by `smelt skill install`; refreshed from the release, not edited.
+    ".agents/skills/smelt",
     "fastapi_canon/integrations/sse",
     "fastapi_canon/integrations/websockets",
     "fastapi_canon/integrations/webrtc",

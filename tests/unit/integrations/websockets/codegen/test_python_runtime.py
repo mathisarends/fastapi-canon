@@ -585,7 +585,7 @@ async def test_late_response_from_a_served_endpoint_keeps_the_client_usable(
         # Verify the in-memory test transport releases its background tasks.
         assert all(
             task.done()
-            for task in factory._tasks  # smelt: ignore[SMT420] -- unit seam
+            for task in factory._tasks  # smelt: ignore[TST002] -- unit seam
         )
 
 

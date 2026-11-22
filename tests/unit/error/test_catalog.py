@@ -22,7 +22,7 @@ from fastapi_canon.error import (
     registry_scope,
     resolved_registry,
 )
-from fastapi_canon.error.catalog import (  # smelt: ignore[SMT107] -- Catalog unit seam.
+from fastapi_canon.error.catalog import (  # smelt: ignore[ARC007] -- Catalog unit seam.
     app_registry,
     problem_for,
     problem_schema,

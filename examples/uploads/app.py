@@ -4,8 +4,7 @@ from urllib.parse import quote
 from uuid import UUID, uuid4
 
 from dishka import Provider, Scope, provide
-from fastapi import FastAPI, Form, UploadFile
-from fastapi.responses import Response
+from fastapi import FastAPI, Form, Response, UploadFile
 from pydantic import BaseModel
 
 from fastapi_canon import APIRouter, CanonResponse, Composition, Error, Feature, Inject

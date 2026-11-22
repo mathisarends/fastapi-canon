@@ -167,7 +167,7 @@ class _EngineInstrumentation:
             event.remove(self._engine, name, callback)
         self._listeners.clear()
 
-    def _before(  # smelt: ignore[SMT345] -- SQLAlchemy event signature
+    def _before(  # smelt: ignore[CPX003] -- SQLAlchemy event signature
         self,
         connection: Any,
         cursor: Any,
@@ -185,7 +185,7 @@ class _EngineInstrumentation:
         with self._lock:
             self._pending[id(context)] = manager
 
-    def _after(  # smelt: ignore[SMT345] -- SQLAlchemy event signature
+    def _after(  # smelt: ignore[CPX003] -- SQLAlchemy event signature
         self,
         connection: Any,
         cursor: Any,

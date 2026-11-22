@@ -12,10 +12,10 @@ import tempfile
 from pathlib import Path
 from time import perf_counter
 
-from fastapi_canon.checks.contracts import (  # smelt: ignore[SMT107] -- Timing phases.
+from fastapi_canon.checks.contracts import (  # smelt: ignore[ARC007] -- Timing phases.
     _Checker,
 )
-from fastapi_canon.checks.source import (  # smelt: ignore[SMT107] -- Timing phases.
+from fastapi_canon.checks.source import (  # smelt: ignore[ARC007] -- Timing phases.
     _Source,
 )
 

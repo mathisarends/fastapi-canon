@@ -278,7 +278,7 @@ def test_release_rejects_inconsistent_metadata(
 
 
 # registry and execution
-def test_public_verify_plan(  # smelt: ignore[SMT423] -- two seams
+def test_public_verify_plan(  # smelt: ignore[TST005] -- two seams
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(release, "publication_state", lambda report: "complete")
@@ -402,7 +402,7 @@ def test_github_release_requires_successful_ci_for_exact_commit(
 
 
 # GitHub and PyPI
-def test_existing_pypi_version(  # smelt: ignore[SMT423] -- two seams
+def test_existing_pypi_version(  # smelt: ignore[TST005] -- two seams
     release_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
