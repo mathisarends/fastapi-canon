@@ -35,6 +35,7 @@ outside the library's intended architecture.
 - [Unified package and migration](package-migration.md)
 - [Quick start](#quick-start)
 - [Feature composition](#feature-composition)
+  - [Feature lifespans](#feature-lifespans)
   - [Integrations](#integrations)
   - [Application router](#application-router)
   - [Router policies](#router-policies)
@@ -118,6 +119,36 @@ declares, such as dependency failures handled globally, with
 problem-type URI prefix once with `Composition(errors=ErrorOptions(type_base=...))`.
 Repeated references to the same definitions are merged by identity at
 the application boundary; collisions between different definitions still fail.
+
+### Feature lifespans
+
+A feature lifespan may declare `Inject[T]` parameters; Canon resolves them from
+the application container at startup:
+
+```python
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
+from fastapi_canon import Feature, Inject
+
+
+@asynccontextmanager
+async def worker_lifespan(worker: Inject[ProjectWorker]) -> AsyncGenerator[None]:
+    worker.start()
+    try:
+        yield
+    finally:
+        await worker.stop()
+
+
+feature = Feature(name="projects", providers=[provider], lifespan=worker_lifespan)
+```
+
+Services must be bound at APP scope; a missing binding fails preflight with
+`canon.providers.E005`. For short database work, inject an APP-scoped
+[`ServiceScope`](database.md#short-scopes-for-workers-and-streams) factory.
+A lifespan may also take the application as one further parameter. Without
+`Inject[T]` parameters it keeps FastAPI's `lifespan(app)` contract.
 
 Mutable sequences passed to `Feature` are copied to tuples. Installing features
 preserves declaration order for routes and startup. Shutdown runs in reverse

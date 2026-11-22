@@ -6,6 +6,9 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Added
 
+- Feature lifespans accept `Inject[T]` parameters, resolved from the application
+  container at startup. Preflight reports a service without an APP-scope binding
+  as `canon.providers.E005`. See [feature lifespans](docs/composition.md#feature-lifespans).
 - WebSocket `rejects=` and socket `closes=` accept a declared `Error`. Its status
   (401, 403, 404 or 503) names the rejection and its title is the reason. See
   [rejections](docs/integrations/websockets/connections-and-events.md#map-failures-to-rejections).

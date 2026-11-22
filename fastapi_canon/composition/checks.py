@@ -31,6 +31,7 @@ from fastapi_canon.composition.introspection import (
     http_routes,
     operation_headers,
 )
+from fastapi_canon.composition.lifespans import lifespan_injection
 from fastapi_canon.diagnostics import (
     CheckContext,
     CheckIssue,
@@ -417,6 +418,48 @@ def nested_injections(dependant: Dependant | None) -> tuple[DependencyKey, ...]:
             keys.append(DependencyKey(service, DEFAULT_COMPONENT))
         pending.extend(current.dependencies)
     return tuple(dict.fromkeys(keys))
+
+
+def check_lifespan_dependencies(
+    app: FastAPI,
+    features: tuple[Feature, ...],
+    *,
+    container: AsyncContainer | None,
+    issues: list[CheckIssue],
+    checks: list[CheckResult],
+) -> None:
+    external = (
+        container is None and getattr(app.state, "dishka_container", None) is not None
+    )
+    for feature in features:
+        if feature.lifespan is None:
+            continue
+        injection = lifespan_injection(feature.lifespan, feature_name=feature.name)
+        if not injection.dependencies:
+            continue
+        name = f"feature.lifespan_dependencies:{feature.name}"
+        if external:
+            checks.append(CheckResult(name, "skipped"))
+            continue
+        missing = [
+            dependency
+            for _, dependency in injection.dependencies
+            if not dependency_available(
+                container, DependencyKey(dependency, DEFAULT_COMPONENT), Scope.APP
+            )
+        ]
+        for dependency in missing:
+            qualified = qualified_name(dependency)
+            issues.append(
+                CheckIssue(
+                    "canon.providers.E005",
+                    f"Feature {feature.name!r} lifespan injects {qualified} without an APP-scope binding",
+                    "Register this service at APP scope, or inject an APP-scoped ServiceScope factory for short REQUEST work.",
+                    feature_names=(feature.name,),
+                    locations=(qualified_name(feature.lifespan), qualified),
+                )
+            )
+        checks.append(CheckResult(name, "failed" if missing else "passed"))
 
 
 def check_installed(
@@ -927,6 +970,11 @@ class _CheckComposition:
                 ("http.description", "providers"),
             ),
             _CheckStep(
+                "feature.lifespan_dependencies",
+                self._lifespan_dependencies,
+                ("providers",),
+            ),
+            _CheckStep(
                 "http.contracts",
                 self._contracts,
                 ("http.description", "http.operation_ids", "http.paths"),
@@ -1085,6 +1133,15 @@ class _CheckComposition:
             self.app,
             self.composition.features,
             self._require_description(),
+            container=self.container,
+            issues=self.issues,
+            checks=self.checks,
+        )
+
+    def _lifespan_dependencies(self) -> None:
+        check_lifespan_dependencies(
+            self.app,
+            self.composition.features,
             container=self.container,
             issues=self.issues,
             checks=self.checks,
