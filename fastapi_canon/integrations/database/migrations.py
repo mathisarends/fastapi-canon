@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 if TYPE_CHECKING:
     from alembic.config import Config
+    from alembic.runtime.environment import IncludeNameFn
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,9 +170,15 @@ def run_alembic_environment() -> None:
     connection = context.config.attributes.get("connection")
     if not isinstance(connection, Connection):
         raise RuntimeError("Run this environment with fastapi-canon db")
+    metadata = context.config.attributes["target_metadata"]
+    include_name = _named_schema_filter(
+        metadata, connection.dialect.default_schema_name
+    )
     context.configure(
         connection=connection,
-        target_metadata=context.config.attributes["target_metadata"],
+        target_metadata=metadata,
+        include_schemas=include_name is not None,
+        include_name=include_name,
         # Generate portable batch directives even when developing on Postgres.
         render_as_batch=True,
         compare_type=True,
@@ -187,6 +194,26 @@ def _require_alembic() -> None:
         raise ImportError(
             "Install fastapi-canon[migrations] for Alembic support"
         ) from error
+
+
+def _named_schema_filter(
+    metadata: MetaData, default_schema: str | None
+) -> IncludeNameFn | None:
+    """Limit reflection to the schemas *metadata* owns, if it names any.
+
+    Other schemas of a shared database must not appear as proposed drops.
+    """
+    schemas = {
+        None if table.schema == default_schema else table.schema
+        for table in metadata.tables.values()
+    }
+    if schemas <= {None}:
+        return None
+
+    def include_name(name: str | None, type_: str, parent_names: object) -> bool:
+        return type_ != "schema" or name in schemas
+
+    return include_name
 
 
 def _run_operation(

@@ -199,3 +199,49 @@ def test_application_target_migrates_the_tables_its_features_contribute(
     without_database = run("--database", "db_app:plain_app", "check")
     assert without_database.returncode == 2
     assert "Composition enables one" in without_database.stderr
+
+
+def test_composed_tables_keep_foreign_keys_of_a_default_schema(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.fastapi-canon.database]\ntarget = "schema_app:create_app"\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "schema_app.py").write_text(
+        "from fastapi import FastAPI\n"
+        "from sqlalchemy import Column, ForeignKey, Integer, MetaData, Table\n"
+        "from fastapi_canon import Composition, Feature\n"
+        "from fastapi_canon.integrations.database import (\n"
+        "    AlembicMigrations, Database, Tables\n"
+        ")\n"
+        'metadata = MetaData(schema="main")\n'
+        'parent = Table("parent", metadata, Column("id", Integer, primary_key=True))\n'
+        'child = Table("child", metadata, Column("id", Integer, primary_key=True),\n'
+        '    Column("parent_id", Integer, ForeignKey("parent.id")))\n'
+        "def create_app():\n"
+        f"    database = Database(url={'sqlite:///' + str(tmp_path / 'fk.db')!r},\n"
+        "        migrations=AlembicMigrations(directory='migrations'))\n"
+        "    feature = Feature(name='family', integrations=[Tables(parent, child)])\n"
+        "    return Composition(features=[feature], integrations=[database])"
+        ".build(FastAPI())\n",
+        encoding="utf-8",
+    )
+    for operation in (
+        ["init"],
+        ["revision", "--autogenerate", "-m", "initial"],
+        ["upgrade", "head"],
+    ):
+        completed = subprocess.run(
+            [sys.executable, "-m", "fastapi_canon", "db", *operation],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert completed.returncode == 0, completed.stderr
+
+    with closing(sqlite3.connect(tmp_path / "fk.db")) as connection:
+        foreign_keys = connection.execute("PRAGMA foreign_key_list(child)").fetchall()
+
+    assert [(row[2], row[3], row[4]) for row in foreign_keys] == [
+        ("parent", "parent_id", "id")
+    ]

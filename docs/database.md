@@ -348,6 +348,10 @@ environments can consume `config.attributes["connection"]` and
 The runner writes no database URL into revision/INI files and disposes its engine
 after each command.
 
+When metadata names PostgreSQL schemas, generated environments compare only those
+schemas, plus the default schema if it also holds owned tables. Create named
+schemas before the first upgrade.
+
 When migrations are configured and startup validation is enabled, startup requires
 DB revisions to match the application's heads and checks that owned tables and
 columns exist. Upgrading to
