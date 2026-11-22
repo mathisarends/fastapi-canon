@@ -157,7 +157,7 @@ def generate_typescript(
 
 
 # Supported generator runtime-resource accessor; callers may be external.
-def runtime_source() -> str:  # smelt: ignore[SMT429] -- external API
+def runtime_source() -> str:  # smelt: ignore[VIS009] -- external API
     """Return the static TypeScript runtime shipped with the package."""
     return (
         resources.files("fastapi_canon.integrations.webrtc.codegen")

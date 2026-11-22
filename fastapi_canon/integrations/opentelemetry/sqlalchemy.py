@@ -141,9 +141,13 @@ class _EngineInstrumentation:
     def install(self) -> None:
         from sqlalchemy import event
 
-        listeners: list[tuple[str, Callable[..., Any]]] = [
+        for name, callback in (
             ("before_cursor_execute", self._before),
             ("after_cursor_execute", self._after),
+        ):
+            event.listen(self._engine, name, callback, named=True)
+            self._listeners.append((name, callback))
+        listeners: list[tuple[str, Callable[..., Any]]] = [
             ("handle_error", self._error),
         ]
         if self._pool_metrics:
@@ -167,15 +171,7 @@ class _EngineInstrumentation:
             event.remove(self._engine, name, callback)
         self._listeners.clear()
 
-    def _before(  # smelt: ignore[SMT345] -- SQLAlchemy event signature
-        self,
-        connection: Any,
-        cursor: Any,
-        statement: str,
-        parameters: Any,
-        context: Any,
-        executemany: bool,
-    ) -> None:
+    def _before(self, *, statement: str, context: Any, **_: Any) -> None:
         from opentelemetry.instrumentation.utils import is_instrumentation_enabled
 
         if not is_instrumentation_enabled():
@@ -185,15 +181,7 @@ class _EngineInstrumentation:
         with self._lock:
             self._pending[id(context)] = manager
 
-    def _after(  # smelt: ignore[SMT345] -- SQLAlchemy event signature
-        self,
-        connection: Any,
-        cursor: Any,
-        statement: str,
-        parameters: Any,
-        context: Any,
-        executemany: bool,
-    ) -> None:
+    def _after(self, *, context: Any, **_: Any) -> None:
         with self._lock:
             manager = self._pending.pop(id(context), None)
         if manager is not None:

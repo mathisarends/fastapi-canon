@@ -21,7 +21,7 @@ import app.telemetry_demo as demo  # noqa: E402
 
 
 # providers and HTTP
-async def test_cross_service_trace(  # smelt: ignore[SMT423] -- two seams
+async def test_cross_service_trace(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     url = f"sqlite+aiosqlite:///{tmp_path / 'demo.db'}"
@@ -43,18 +43,14 @@ async def test_cross_service_trace(  # smelt: ignore[SMT423] -- two seams
                 tracer_provider=capture.provider, logs=False, metrics=False
             ), lifespan
 
-        monkeypatch.setattr(demo, "_telemetry", telemetry)
-        notifier_app = demo.create_notifier_app()
-
-        monkeypatch.setattr(
-            demo,
-            "_notifier_client",
-            lambda: httpx2.AsyncClient(
+        notifier_app = demo.create_notifier_app(telemetry=telemetry)
+        app = demo.create_tasks_app(
+            telemetry=telemetry,
+            notifier_client=lambda: httpx2.AsyncClient(
                 base_url="http://notifier",
                 transport=httpx2.ASGITransport(app=notifier_app),
             ),
         )
-        app = demo.create_tasks_app()
         with TestClient(notifier_app), TestClient(app) as client:
             client.headers["Authorization"] = "Bearer local-development-token"
             secret = "private-sql-parameter-8b73"

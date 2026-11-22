@@ -8,8 +8,7 @@ from fastapi_canon.diagnostics import CheckIssue, CheckResult
 from fastapi_canon.errors import FeatureConfigurationError
 
 if TYPE_CHECKING:
-    from dishka import AsyncContainer, Provider, Scope
-    from dishka.entities.key import DependencyKey
+    from dishka import AsyncContainer, DependencyKey, Provider, Scope
     from fastapi import APIRouter, FastAPI
     from starlette.types import Lifespan
 

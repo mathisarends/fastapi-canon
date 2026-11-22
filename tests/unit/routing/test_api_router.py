@@ -18,9 +18,7 @@ from fastapi_canon import (
 from fastapi_canon.errors import ConfigurationError
 from fastapi_canon.integrations.sse.canon import CanonStreamRouter
 from fastapi_canon.integrations.websockets import CanonWebSocketRouter, WebSocketPolicy
-from fastapi_canon.routing.http import (  # smelt: ignore[SMT107] -- FastAPI option parity.
-    FastAPIRouterOptions,
-)
+from fastapi_canon.routing.http import FastAPIRouterOptions
 
 
 def test_core_router_import_keeps_optional_transports_lazy() -> None:

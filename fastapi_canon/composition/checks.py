@@ -10,11 +10,11 @@ from typing import TYPE_CHECKING, NamedTuple
 from dishka import (
     DEFAULT_COMPONENT,
     AsyncContainer,
+    DependencyKey,
     Provider,
     Scope,
     make_async_container,
 )
-from dishka.entities.key import DependencyKey
 from dishka.exception_base import DishkaError
 from dishka.integrations.base import is_dishka_injected
 from dishka.integrations.fastapi import DishkaRoute

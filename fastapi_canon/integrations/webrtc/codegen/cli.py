@@ -15,7 +15,7 @@ from fastapi_canon.integrations.webrtc.codegen.typescript import (
 from fastapi_canon.integrations.webrtc.codegen.writer import write_files
 
 
-def main(  # smelt: ignore[SMT429] -- fastapi_canon.commands entry point.
+def main(  # smelt: ignore[VIS009] -- fastapi_canon.commands entry point.
     argv: list[str] | None = None,
 ) -> int:
     """Export WebRTC contracts and generate browser clients."""

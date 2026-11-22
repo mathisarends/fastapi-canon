@@ -7,7 +7,7 @@ import pytest
 from fastapi.routing import APIRoute
 
 from fastapi_canon import APIRouter, Inject
-from fastapi_canon.routing.injected_route import (  # smelt: ignore[SMT107] -- Wrapper unit.
+from fastapi_canon.routing.injected_route import (
     InjectedRoute,
     inject_endpoint,
 )

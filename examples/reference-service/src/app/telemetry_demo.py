@@ -3,7 +3,7 @@
 import logging
 import os
 from abc import ABC, abstractmethod
-from collections.abc import AsyncGenerator, AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from contextlib import asynccontextmanager
 
 import httpx2
@@ -26,6 +26,9 @@ from app.presentation.health import router as health_router
 from app.telemetry_logging import export_python_logs
 
 logger = logging.getLogger(__name__)
+
+type TelemetryFactory = Callable[[str], tuple[Telemetry, Lifespan[FastAPI]]]
+type NotifierClientFactory = Callable[[], httpx2.AsyncClient]
 
 
 def _telemetry(name: str) -> tuple[Telemetry, Lifespan[FastAPI]]:
@@ -97,12 +100,16 @@ def _notifier_client() -> httpx2.AsyncClient:
 
 
 # Public demo application factory for standalone telemetry services.
-def create_tasks_app() -> FastAPI:  # smelt: ignore[SMT429] -- external API
-    options, lifecycle = _telemetry("tasks")
+def create_tasks_app(  # smelt: ignore[VIS009] -- external API
+    *,
+    telemetry: TelemetryFactory = _telemetry,
+    notifier_client: NotifierClientFactory = _notifier_client,
+) -> FastAPI:
+    options, lifecycle = telemetry("tasks")
     app = FastAPI(title="Canon telemetry: tasks", lifespan=lifecycle)
     app.include_router(health_router)
     Composition(
-        features=(*FEATURES, _notification_feature()),
+        features=(*FEATURES, _notification_feature(notifier_client)),
         integrations=[options],
         request_logging=True,
         errors=ErrorOptions(type_base="https://api.example.test/problems"),
@@ -112,8 +119,11 @@ def create_tasks_app() -> FastAPI:  # smelt: ignore[SMT429] -- external API
 
 
 # Public demo application factory for standalone telemetry services.
-def create_notifier_app() -> FastAPI:  # smelt: ignore[SMT429] -- external API
-    options, lifecycle = _telemetry("notifier")
+def create_notifier_app(  # smelt: ignore[VIS009] -- external API
+    *,
+    telemetry: TelemetryFactory = _telemetry,
+) -> FastAPI:
+    options, lifecycle = telemetry("notifier")
     router = APIRouter()
 
     @router.post("/notifications")
@@ -128,11 +138,11 @@ def create_notifier_app() -> FastAPI:  # smelt: ignore[SMT429] -- external API
     ).build(FastAPI(title="Canon telemetry: notifier", lifespan=lifecycle))
 
 
-def _notification_feature() -> Feature:
+def _notification_feature(notifier_client: NotifierClientFactory) -> Feature:
     class NotifierProvider(Provider):
         @provide(scope=Scope.APP)
         async def client(self) -> AsyncIterator[httpx2.AsyncClient]:
-            async with _notifier_client() as client:
+            async with notifier_client() as client:
                 yield client
 
         gateway = provide(

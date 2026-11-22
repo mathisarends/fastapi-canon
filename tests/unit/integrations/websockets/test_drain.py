@@ -20,6 +20,7 @@ from fastapi_canon.integrations.websockets import (
 )
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.testing import (
+    InMemorySocket,
     InMemorySocketFactory,
     RpcTestHandshakeRejected,
 )
@@ -222,8 +223,11 @@ async def test_shutdown_cleans_subscription_while_another_request_is_stuck(drain
 
     service = RpcDefinition()
     service.socket("/rpc", channels=[channel])
-    async with InMemorySocketFactory(service) as factory:
-        client = await factory("ws://test/rpc")
+    socket = InMemorySocket("/rpc")
+    serving = asyncio.create_task(service.serve(socket))
+    try:
+        await asyncio.wait_for(socket.wait_handshake(), 1)
+        client = socket.client
         await client.send(request(1, "work.events.open"))
         await asyncio.wait_for(subscribed.wait(), 1)
         await client.recv()
@@ -232,13 +236,14 @@ async def test_shutdown_cleans_subscription_while_another_request_is_stuck(drain
         if drain:
             await service.drain.drain(timeout_seconds=0.2)
         else:
-            # Verify the in-memory test transport releases its background tasks.
-            factory._tasks[0].cancel()  # smelt: ignore[SMT420] -- unit seam
-        # Verify the in-memory test transport releases its background tasks.
-        _tasks = factory._tasks  # smelt: ignore[SMT420] -- unit
-        await asyncio.gather(*_tasks, return_exceptions=True)
+            serving.cancel()
+        await asyncio.wait_for(asyncio.gather(serving, return_exceptions=True), 1)
         assert stopped.is_set()
         assert service.drain.connection_count == 0
+    finally:
+        await socket.client_disconnect()
+        serving.cancel()
+        await asyncio.gather(serving, return_exceptions=True)
     assert not asyncio.all_tasks() - before
 
 

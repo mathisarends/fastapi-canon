@@ -17,7 +17,7 @@ FEATURES: tuple[Feature, ...] = (
 
 
 # Public ASGI application factory used by deployment and tests.
-def create_app(  # smelt: ignore[SMT429] -- external API
+def create_app(  # smelt: ignore[VIS009] -- external API
     *, telemetry: Telemetry | None = None
 ) -> FastAPI:
     app = FastAPI(title="FastAPI Canon reference service")

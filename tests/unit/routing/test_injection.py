@@ -3,7 +3,7 @@ from typing import Annotated, get_args, get_type_hints
 from fastapi_canon import Inject
 from fastapi_canon.integrations.mcp import Inject as McpInject
 from fastapi_canon.integrations.websockets import Inject as RpcInject
-from fastapi_canon.routing.injection import (  # smelt: ignore[SMT107] -- Resolver unit.
+from fastapi_canon.routing.injection import (
     injected_dependency,
     injected_resolver_dependency,
 )

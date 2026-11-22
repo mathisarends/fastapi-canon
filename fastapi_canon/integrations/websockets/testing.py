@@ -70,9 +70,9 @@ class SocketFaults:
         self.delay = delay
         self.sleep = sleep
         self.half_open = half_open
-        self.frames_sent = 0  # smelt: ignore[SMT335] -- Consumer frame counter.
+        self.frames_sent = 0  # smelt: ignore[VIS004] -- Consumer frame counter.
         # Public testing-library state is deliberately inspected by consumer tests.
-        self.blocked = asyncio.Event()  # smelt: ignore[SMT430] -- Public send gate.
+        self.blocked = asyncio.Event()  # smelt: ignore[VIS010] -- Public send gate.
         self.held = asyncio.Event()
         self._send_gate = asyncio.Event()
         self._send_gate.set()
@@ -329,7 +329,7 @@ class InMemorySocketFactory:
         self.context = context
         self.limits = limits
         # Public testing-library state is deliberately inspected by consumer tests.
-        self.attempts = 0  # smelt: ignore[SMT430] -- Consumer retry counter.
+        self.attempts = 0  # smelt: ignore[VIS010] -- Consumer retry counter.
         self.sockets: list[InMemorySocket] = []
         self._tasks: list[asyncio.Task[None]] = []
         self._rejections: deque[RpcTestHandshakeRejected] = deque()

@@ -24,7 +24,7 @@ from fastapi_canon.integrations.webrtc.errors import ErrorCode
 
 if TYPE_CHECKING:
     from fastapi_canon.integrations.webrtc.engine import Engine
-    from fastapi_canon.integrations.webrtc.ice import (  # smelt: ignore[SMT104] -- type
+    from fastapi_canon.integrations.webrtc.ice import (  # smelt: ignore[ARC004] -- type
         # Session declarations and peer/engine ports have mutual forward annotations.
         IceServerSource,
     )

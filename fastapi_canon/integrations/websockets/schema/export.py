@@ -13,7 +13,7 @@ class ProtocolReferenceError(Exception):
 
 
 # Public protocol loader for external contract-export tooling.
-def load_protocol(  # smelt: ignore[SMT429] -- external API
+def load_protocol(  # smelt: ignore[VIS009] -- external API
     reference: str,
 ) -> RpcProtocol:
     """Import a channel or contract and return its internal protocol."""

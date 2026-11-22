@@ -207,12 +207,6 @@ def artifact_hashes(
 
 
 def verify_published(report: dict[str, Any], root: Path = ROOT) -> None:
-    for attempt in range(12):
-        if publication_state(report) == "complete":
-            break
-        if attempt == 11:
-            raise ValueError("PyPI does not yet expose all expected artifact hashes")
-        time.sleep(_INDEX_POLL_INTERVAL_SECONDS)
     combinations = [
         (f"fastapi-canon{extras}=={report['version']}",)
         for extras in (
@@ -367,6 +361,7 @@ def _main() -> None:
                     )
                 _finish(report, args.directory, args.report)
             else:
+                _await_publication(report)
                 verify_published(report)
         print(json.dumps(report, indent=2))
         if (summary := os.environ.get("GITHUB_STEP_SUMMARY")) and args.command in {
@@ -499,6 +494,15 @@ def _check_artifact_metadata(content: bytes, name: str, version: str) -> None:
             for value in metadata.get_all("Requires-Dist", [])
         ):
             raise ValueError("Extensions must not depend on Canon or each other")
+
+
+def _await_publication(report: dict[str, Any]) -> None:
+    for attempt in range(12):
+        if publication_state(report) == "complete":
+            return
+        if attempt < 11:
+            time.sleep(_INDEX_POLL_INTERVAL_SECONDS)
+    raise ValueError("PyPI does not yet expose all expected artifact hashes")
 
 
 def _pypi(name: str, version: str) -> dict[str, Any] | None:

@@ -53,7 +53,7 @@ _REGULAR_CLOSES = (
 
 
 # Public trace-propagation helper for application clients.
-def trace_metadata(  # smelt: ignore[SMT429] -- external API
+def trace_metadata(  # smelt: ignore[VIS009] -- external API
     *, include_baggage: bool = False
 ) -> dict[str, str]:
     """Return the current W3C context as an RPC request metadata carrier."""

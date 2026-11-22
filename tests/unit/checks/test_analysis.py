@@ -4,14 +4,14 @@ from textwrap import dedent
 
 import pytest
 
-from fastapi_canon.checks.cli import (  # smelt: ignore[SMT107] -- Standalone check CLI.
+from fastapi_canon.checks.cli import (
     main as check_errors_main,
 )
-from fastapi_canon.checks.contracts import (  # smelt: ignore[SMT107] -- Analyzer report.
+from fastapi_canon.checks.contracts import (
     ContractReport,
     analyze_error_contracts,
 )
-from fastapi_canon.checks.source import (  # smelt: ignore[SMT107] -- Source lookup unit.
+from fastapi_canon.checks.source import (
     SourceDefinition,
     SourceIndex,
     SymbolEnvironment,

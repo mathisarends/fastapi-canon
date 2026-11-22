@@ -541,6 +541,7 @@ async def test_late_response_from_a_served_endpoint_keeps_the_client_usable(
         from fastapi_canon.integrations.websockets import RpcChannel
         from fastapi_canon.integrations.websockets.testing import InMemorySocketFactory
 
+        baseline = asyncio.all_tasks()
         channel = RpcChannel("resilience")
         entered, release = asyncio.Event(), asyncio.Event()
 
@@ -582,11 +583,7 @@ async def test_late_response_from_a_served_endpoint_keeps_the_client_usable(
             finally:
                 release.set()
                 await transport.close()
-        # Verify the in-memory test transport releases its background tasks.
-        assert all(
-            task.done()
-            for task in factory._tasks  # smelt: ignore[SMT420] -- unit seam
-        )
+        assert not asyncio.all_tasks() - baseline
 
 
 @pytest.mark.parametrize(

@@ -491,21 +491,22 @@ def test_generated_python_error_boundaries_are_smelt_clean(
     assert generate_python_client(document, output, options, check=True) == ()
     (tmp_path / "smelt.yml").write_text(
         textwrap.dedent(f"""\
-            version: 1
+            version: 2
             project:
               root_packages: [{PACKAGE}]
               source_roots: [src]
             architecture:
-              modules:
-                {PACKAGE}: infrastructure
               layers:
                 infrastructure:
                   path: infrastructure
                   may_depend_on: []
                   third_party: allow
+                  modules: [{PACKAGE}]
             rules:
               imports/prefer-package-import: warning
               visibility/internal-public-module-symbol: warning
+              architecture/layer-boundary: error
+              architecture/shared-imports-feature: error
             """),
         encoding="utf-8",
     )
@@ -522,7 +523,7 @@ def test_generated_python_error_boundaries_are_smelt_clean(
             "--config",
             "smelt.yml",
             "--select",
-            "SMT319,SMT320",
+            "IMP004,VIS002",
             "--fail-on",
             "warning",
             *targets,
