@@ -158,8 +158,9 @@ configuration diagnostics.
 
 ### Integrations
 
-Optional integrations, such as MCP and OpenTelemetry, are enabled once per
-application and receive parts from features:
+Optional integrations, such as MCP, OpenTelemetry and the
+[database](database.md), are enabled once per application and receive parts from
+features:
 
 ```python
 from fastapi_canon.integrations.mcp import Mcp, McpMount
@@ -184,7 +185,8 @@ with `canon.integrations.E001`, so an MCP endpoint is never opened by a feature
 alone. Route-only transports such as `WebRtcRouter` are routers, not integrations.
 
 Custom integrations subclass `fastapi_canon.integration.Integration`; parts set
-`integration: ClassVar[type[Integration]]`.
+`integration: ClassVar[type[Integration]]`. `Integration.providers` sees the
+providers of features and of integrations listed earlier.
 
 ### Application router
 

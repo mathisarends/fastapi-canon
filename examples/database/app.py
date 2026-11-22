@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from examples.database.config import database
 from examples.database.schema import ItemRow
 from fastapi_canon import APIRouter, Composition, Feature, Inject
+from fastapi_canon.integrations.database import Tables
 
 
 class Item(BaseModel):
@@ -53,7 +54,12 @@ async def create_item(item: Item, create: Inject[CreateItem]) -> Item:
 
 app = Composition(
     features=[
-        database.feature,
-        Feature(name="items", routers=[router], providers=[ItemProvider]),
+        Feature(
+            name="items",
+            routers=[router],
+            providers=[ItemProvider],
+            integrations=[Tables(ItemRow)],
+        )
     ],
+    integrations=[database],
 ).build(FastAPI())

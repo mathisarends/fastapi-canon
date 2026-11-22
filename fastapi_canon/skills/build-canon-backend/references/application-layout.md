@@ -44,7 +44,7 @@ backend/
           mapper.py               Wire mapping when it warrants a module
           errors.py               Error definitions used by raises
     platform/                    Shared concrete runtime capabilities
-      database/                  Database declaration and metadata assembly
+      database/                  Database declaration and migrations
       http/                      Owned client pools
     shared/                      Small framework-free vocabulary used by features
   tests/

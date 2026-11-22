@@ -121,7 +121,7 @@ fastapi-canon-reference = { path = "examples/reference-service", editable = true
 fastapi-canon = { workspace = true }
 
 [tool.fastapi-canon.database]
-target = "examples.database.config:database"
+target = "examples.database.app:app"
 
 [tool.ruff]
 target-version = "py312"

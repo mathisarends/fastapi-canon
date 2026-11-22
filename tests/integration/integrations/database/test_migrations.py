@@ -135,7 +135,7 @@ async def test_startup_checks_revisions_without_applying_migrations(
     migrations.initialize()
     async with asyncio.timeout(15), database.open_engine() as engine:
         await migrations.revision(engine, message="initial", autogenerate=True)
-    app = Composition(features=[database.feature]).build(FastAPI())
+    app = Composition(integrations=[database]).build(FastAPI())
     async with asyncio.timeout(10):
         with pytest.raises(RuntimeError, match="pending"):
             async with app.router.lifespan_context(app):
@@ -144,7 +144,7 @@ async def test_startup_checks_revisions_without_applying_migrations(
         with pytest.raises(RuntimeError, match="pending"):
             await migrations.require_current(engine)
         await migrations.upgrade(engine)
-    ready = Composition(features=[database.feature]).build(FastAPI())
+    ready = Composition(integrations=[database]).build(FastAPI())
     async with asyncio.timeout(10), ready.router.lifespan_context(ready):
         assert ready.state.dishka_container is not None
 

@@ -202,15 +202,12 @@ def prepare_container(
     materialized = materialize_providers(flatten_provider_sources(composition.features))
     reject_duplicate_materialized_providers(materialized)
     providers = tuple(item.provider for item in materialized)
-    feature_providers = providers
     for integration in composition.integrations:
         providers = (
             *providers,
             *integration.providers(
                 ProviderContext(
-                    integration_parts(composition, integration),
-                    feature_providers,
-                    errors,
+                    integration_parts(composition, integration), providers, errors
                 )
             ),
         )

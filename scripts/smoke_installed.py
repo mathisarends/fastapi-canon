@@ -355,7 +355,7 @@ def _database_check(selected: set[str]) -> None:
 
         options["session_class"] = AsyncSession
     declaration = Database(url="sqlite://", **options)
-    assert declaration.feature.name == "database"
+    assert declaration.migrations is None
     if "--sqlite" not in selected:
         return
 
@@ -382,7 +382,7 @@ def _database_check(selected: set[str]) -> None:
             async with database.open_engine() as engine:
                 await migrations.revision(engine, message="initial", autogenerate=True)
                 await migrations.upgrade(engine)
-            app = Composition(features=[database.feature]).build(FastAPI())
+            app = Composition(integrations=[database]).build(FastAPI())
             async with app.router.lifespan_context(app):
                 async with app.state.dishka_container(scope=Scope.REQUEST) as scope:
                     session = await scope.get(AsyncSession)

@@ -64,7 +64,7 @@ class ProviderContext:
 
     parts: Parts[Any]
     providers: tuple[Provider, ...]
-    """The Dishka providers contributed by features."""
+    """The Dishka providers of features and of integrations enabled earlier."""
     errors: ErrorLookup | None
     """The composition's declared error contracts, if any."""
 

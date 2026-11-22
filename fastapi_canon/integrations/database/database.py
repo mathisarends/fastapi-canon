@@ -1,11 +1,18 @@
-from collections.abc import AsyncGenerator, Callable, Mapping
-from contextlib import AbstractContextManager, asynccontextmanager, nullcontext
-from typing import Any
+from collections.abc import AsyncGenerator, Callable, Mapping, Sequence
+from contextlib import (
+    AbstractAsyncContextManager,
+    AbstractContextManager,
+    asynccontextmanager,
+    nullcontext,
+)
+from dataclasses import dataclass
+from functools import partial
+from typing import Any, ClassVar
 
 from anyio import CancelScope
-from dishka import Provider, Scope, provide
+from dishka import AsyncContainer, Provider, Scope, provide
 from fastapi import FastAPI
-from sqlalchemy import URL, Connection, event, make_url
+from sqlalchemy import URL, Connection, MetaData, Table, event, inspect, make_url
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -13,7 +20,15 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from fastapi_canon.composition import Feature
+from fastapi_canon.errors import FeatureConfigurationError
+from fastapi_canon.integration import (
+    Installer,
+    Integration,
+    IntegrationContext,
+    IntegrationError,
+    Parts,
+    ProviderContext,
+)
 from fastapi_canon.integrations.database.locks import (
     AcquireTransactionLock,
     SqliteLockPolicy,
@@ -21,18 +36,19 @@ from fastapi_canon.integrations.database.locks import (
 from fastapi_canon.integrations.database.migrations import AlembicMigrations
 
 
-class Database:
+class Database(Integration):
     """A reusable database declaration; each app owns its own engine and pool.
 
-    Bare sqlite/postgresql URLs select aiosqlite/asyncpg. Explicit drivers must
-    match those supported async drivers. Settings and credentials stay app-owned.
+    Enable it with ``Composition(integrations=[database])``. Features contribute
+    their tables with ``Tables``. Bare sqlite/postgresql URLs select
+    aiosqlite/asyncpg. Explicit drivers must match those supported async drivers.
+    Settings and credentials stay app-owned.
     """
 
     def __init__(
         self,
         *,
         url: str | URL,
-        name: str = "database",
         session_class: type[AsyncSession] = AsyncSession,
         engine_options: Mapping[str, Any] | None = None,
         migrations: AlembicMigrations | None = None,
@@ -75,22 +91,29 @@ class Database:
         self._engine_context = engine_context
         if sqlite_advisory_locks not in {"error", "ignore"}:
             raise ValueError("sqlite_advisory_locks must be 'error' or 'ignore'")
-        self._feature = Feature(
-            name=name,
-            providers=[
-                lambda: _DatabaseProvider(self, session_class, sqlite_advisory_locks)
-            ],
-            lifespan=self._lifespan,
-        )
-
-    @property
-    def feature(self) -> Feature:
-        """The immutable contribution to pass to Composition."""
-        return self._feature
+        self._session_class = session_class
+        self._sqlite_advisory_locks = sqlite_advisory_locks
 
     @property
     def migrations(self) -> AlembicMigrations | None:
         return self._migrations
+
+    def providers(self, context: ProviderContext) -> Sequence[Provider]:
+        """Provide the engine, sessions and locks; check revisions on first use."""
+        migrations = _composed_migrations(self._migrations, context.parts)
+        return (
+            _DatabaseProvider(
+                self,
+                self._session_class,
+                self._sqlite_advisory_locks,
+                migrations if self._check_migrations_on_startup else None,
+            ),
+        )
+
+    def prepare(self, context: IntegrationContext) -> Installer | None:
+        """Compose the feature tables and return the startup revision check."""
+        migrations = _composed_migrations(self._migrations, context.parts)
+        return Installer(partial(self._install, migrations))
 
     @asynccontextmanager
     async def open_engine(self) -> AsyncGenerator[AsyncEngine]:
@@ -115,12 +138,59 @@ class Database:
             with CancelScope(shield=True):
                 await engine.dispose()
 
-    @asynccontextmanager
-    async def _lifespan(self, app: FastAPI) -> AsyncGenerator[None]:
-        if self._migrations is not None and self._check_migrations_on_startup:
-            engine = await app.state.dishka_container.get(AsyncEngine)
-            await self._migrations.require_current(engine)
-        yield
+    def _install(
+        self,
+        migrations: AlembicMigrations | None,
+        app: FastAPI,
+        container: AsyncContainer | None,
+    ) -> Callable[[FastAPI], AbstractAsyncContextManager[None]] | None:
+        setattr(app.state, _INSTALLED_KEY, InstalledDatabase(self, migrations))
+        if (
+            migrations is None
+            or container is None
+            or not self._check_migrations_on_startup
+        ):
+            return None
+
+        @asynccontextmanager
+        async def check_revisions(app: FastAPI) -> AsyncGenerator[None]:
+            # Resolving the engine runs the provider's revision check at startup.
+            await container.get(AsyncEngine)
+            yield
+
+        return check_revisions
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class Tables:
+    """The mapped classes or tables one feature contributes to the ``Database``.
+
+    Pass it to ``Feature(integrations=[Tables(Model, ...)])``. Migrations then
+    use the tables of every installed feature as their metadata.
+    """
+
+    integration: ClassVar[type[Integration]] = Database
+    tables: tuple[Table, ...]
+
+    def __init__(self, model: object, /, *more_models: object) -> None:
+        tables = tuple(_table(item) for item in (model, *more_models))
+        if len({table.key for table in tables}) != len(tables):
+            raise FeatureConfigurationError("Tables must name each table once")
+        object.__setattr__(self, "tables", tables)
+
+
+@dataclass(frozen=True, slots=True)
+class InstalledDatabase:
+    """A database and the migrations composed for one application."""
+
+    database: Database
+    migrations: AlembicMigrations | None
+
+
+def installed_database(app: FastAPI) -> InstalledDatabase | None:
+    """Return the database a Composition installed into *app*, if any."""
+    installed = getattr(app.state, _INSTALLED_KEY, None)
+    return installed if isinstance(installed, InstalledDatabase) else None
 
 
 class _DatabaseProvider(Provider):
@@ -131,11 +201,13 @@ class _DatabaseProvider(Provider):
         database: Database,
         session_class: type[AsyncSession],
         sqlite_locks: SqliteLockPolicy,
+        startup_migrations: AlembicMigrations | None,
     ) -> None:
         super().__init__()
         self._database = database
         self._session_class = session_class
         self._sqlite_locks = sqlite_locks
+        self._startup_migrations = startup_migrations
         self.provide(self._session, provides=session_class, scope=Scope.REQUEST)
         if session_class is not AsyncSession:
             self.alias(session_class, provides=AsyncSession)
@@ -148,6 +220,8 @@ class _DatabaseProvider(Provider):
     @provide
     async def engine(self) -> AsyncGenerator[AsyncEngine]:
         async with self._database.open_engine() as engine:
+            if self._startup_migrations is not None:
+                await self._startup_migrations.require_current(engine)
             yield engine
 
     @provide
@@ -181,6 +255,60 @@ class _DatabaseProvider(Provider):
         finally:
             with CancelScope(shield=True):
                 await session.close()
+
+
+_INSTALLED_KEY = "_fastapi_canon_database"
+
+
+def _composed_migrations(
+    migrations: AlembicMigrations | None, parts: Parts[Tables]
+) -> AlembicMigrations | None:
+    """Return *migrations* with the metadata that the feature tables form."""
+    if migrations is None or not parts:
+        return migrations
+    if migrations.metadata is not None:
+        raise IntegrationError(
+            "canon.database.E001",
+            "AlembicMigrations declares metadata=, but features "
+            f"{', '.join(repr(feature) for feature, _ in parts)} contribute Tables",
+            "Declare tables in one place: remove metadata= or the feature Tables.",
+        )
+    conventions: list[Mapping[str, Any]] = []
+    for _, part in parts:
+        for table in part.tables:
+            if table.metadata.naming_convention not in conventions:
+                conventions.append(table.metadata.naming_convention)
+    if len(conventions) > 1:
+        raise IntegrationError(
+            "canon.database.E001",
+            "Feature Tables use different SQLAlchemy naming conventions",
+            "Give every contributed model the same MetaData naming_convention.",
+        )
+    metadata = MetaData(naming_convention=conventions[0])
+    owners: dict[str, str] = {}
+    for feature, part in parts:
+        for table in part.tables:
+            if table.key in owners:
+                raise IntegrationError(
+                    "canon.database.E001",
+                    f"Table {table.key!r} is contributed by features "
+                    f"{owners[table.key]!r} and {feature!r}",
+                    "Keep each table in the Tables of exactly one feature.",
+                )
+            owners[table.key] = feature
+            table.to_metadata(metadata)
+    return migrations.with_metadata(metadata)
+
+
+def _table(model: object) -> Table:
+    if isinstance(model, Table):
+        return model
+    table = getattr(inspect(model, raiseerr=False), "local_table", None)
+    if not isinstance(table, Table):
+        raise FeatureConfigurationError(
+            f"Tables expects mapped classes or Table objects, got {model!r}"
+        )
+    return table
 
 
 def _configure_sqlite(connection: Any, record: object) -> None:

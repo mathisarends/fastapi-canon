@@ -320,7 +320,7 @@ async def test_shared_database_transactions_commit_and_rollback() -> None:
         providers=[StoreProvider],
         integrations=[McpMount(server=server, namespace="store")],
     )
-    app = Composition(features=[database.feature, feature], integrations=[Mcp()]).build(
+    app = Composition(features=[feature], integrations=[database, Mcp()]).build(
         FastAPI()
     )
     async with connected(app) as client:

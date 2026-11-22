@@ -15,18 +15,26 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class AlembicMigrations:
-    """Application-owned revisions and explicitly registered model metadata.
+    """Application-owned revisions and the model metadata they describe.
 
-    Relative directories resolve when the declaration is created. Prefer a path
-    based on the configuration module for applications started from another cwd.
+    Omit ``metadata`` when features contribute ``Tables``; the composed
+    ``Database`` then supplies it. Relative directories resolve when the
+    declaration is created. Prefer a path based on the configuration module for
+    applications started from another cwd.
     """
 
     directory: Path
-    metadata: MetaData
+    metadata: MetaData | None
 
-    def __init__(self, *, directory: str | Path, metadata: MetaData) -> None:
+    def __init__(
+        self, *, directory: str | Path, metadata: MetaData | None = None
+    ) -> None:
         object.__setattr__(self, "directory", Path(directory).resolve())
         object.__setattr__(self, "metadata", metadata)
+
+    def with_metadata(self, metadata: MetaData) -> AlembicMigrations:
+        """Return these revisions bound to *metadata*."""
+        return AlembicMigrations(directory=self.directory, metadata=metadata)
 
     def initialize(self) -> None:
         """Create an Alembic script directory, preserving existing files."""
@@ -53,7 +61,9 @@ class AlembicMigrations:
         def apply(config: Config) -> None:
             command.upgrade(config, revision)
             if revision in {"head", "heads"}:
-                _require_schema(config.attributes["connection"], self.metadata)
+                _require_schema(
+                    config.attributes["connection"], self._require_metadata()
+                )
 
         await self._run(engine, apply)
 
@@ -103,7 +113,7 @@ class AlembicMigrations:
                     "Database migrations are pending or incompatible; "
                     "run fastapi-canon db upgrade head before starting the application"
                 )
-            await connection.run_sync(_require_schema, self.metadata)
+            await connection.run_sync(_require_schema, self._require_metadata())
 
     async def _run(
         self, engine: AsyncEngine, operation: Callable[[Config], object]
@@ -136,8 +146,16 @@ class AlembicMigrations:
         config.set_main_option(
             "script_location", str(self.directory).replace("%", "%%")
         )
-        config.attributes["target_metadata"] = self.metadata
+        config.attributes["target_metadata"] = self._require_metadata()
         return config
+
+    def _require_metadata(self) -> MetaData:
+        if self.metadata is None:
+            raise RuntimeError(
+                "These migrations have no metadata; pass metadata= or use the "
+                "application whose features contribute Tables"
+            )
+        return self.metadata
 
 
 def run_alembic_environment() -> None:

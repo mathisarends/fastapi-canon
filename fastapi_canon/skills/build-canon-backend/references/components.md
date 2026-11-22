@@ -20,7 +20,7 @@ uv run python -c "import inspect; from fastapi_canon import Composition, Feature
 | Dishka `Provider` | Bind application services and ports to their implementations | `Feature(providers=[ProviderClass])` |
 | `Feature` | Immutable contributions of one feature: routers, providers, errors, lifespan, checks, instrumentation, MCP mounts | Ordered `Composition(features=(...))` |
 | `Composition` | Install routes, error contracts and one Dishka container; own startup and cleanup | `composition.build(FastAPI())` |
-| `Database`, `AlembicMigrations` | Optional engine, sessions, transactions and migration configuration | `database.feature` before consuming features |
+| `Database`, `Tables`, `AlembicMigrations` | Optional engine, sessions, transactions, feature tables and migration configuration | `Composition(integrations=[database])`, `Feature(integrations=[Tables(...)])` |
 | `ServiceScope[T]` | An independent short dependency graph for a worker/stream operation | APP-scoped provider; `async with scope() as service:` |
 | `Telemetry`, `instrument` | Optional tracing/metrics and observed application ports | `Composition(integrations=[Telemetry(...)])`, `Feature(integrations=[instrument(...)])` |
 | `McpServer`, `McpMount`, `Mcp` | Optional tools/resources/prompts on one app-owned MCP endpoint | `Feature(integrations=[McpMount(...)])`, `Composition(integrations=[Mcp()])` |

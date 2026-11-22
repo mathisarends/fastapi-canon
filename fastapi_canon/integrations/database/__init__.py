@@ -2,7 +2,7 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .database import Database
+    from .database import Database, Tables
     from .locks import AcquireTransactionLock
     from .migrations import AlembicMigrations, run_alembic_environment
 
@@ -10,13 +10,14 @@ __all__ = [
     "AcquireTransactionLock",
     "AlembicMigrations",
     "Database",
+    "Tables",
     "run_alembic_environment",
 ]
 
 
 def __getattr__(name: str) -> Any:
-    if name == "Database":
-        return import_module(f"{__name__}.database").Database
+    if name in {"Database", "Tables"}:
+        return getattr(import_module(f"{__name__}.database"), name)
     if name == "AcquireTransactionLock":
         return import_module(f"{__name__}.locks").AcquireTransactionLock
     if name in {"AlembicMigrations", "run_alembic_environment"}:

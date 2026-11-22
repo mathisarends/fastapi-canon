@@ -80,6 +80,7 @@ application behavior. Independent failures can appear together.
 | `canon.composition.E001` | Installation timing, conflicting installation or integration options. |
 | `canon.integrations.E001` | A feature part requires an integration that the composition has not enabled. |
 | `canon.integrations.E002` | An integration's preparation fails without a more specific diagnostic code. |
+| `canon.database.E001` | Feature `Tables` conflict with each other or with explicit migration metadata. |
 | `canon.routing.E001` | Repeated router contributions or an invalid router factory. |
 | `canon.routing.E002` | Duplicate HTTP operation IDs, including collisions with existing app routes. |
 | `canon.routing.E003` | Ambiguous HTTP method/path contributions, including hidden and existing app routes. |

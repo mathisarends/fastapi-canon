@@ -11,6 +11,24 @@ The [repository migration](repository-migration.md) records the
 source history and publishing setup. The repository move does not rename the
 PyPI project or add further Python import changes.
 
+## Upgrade to 0.25.0
+
+Version 0.25.0 is not published yet.
+
+`Database` is an integration instead of a feature:
+
+```python
+# Before
+Composition(features=[database.feature, orders_feature])
+# After
+Composition(features=[orders_feature], integrations=[database])
+```
+
+List `database` before `Telemetry` to keep its engine instrumented, and drop the
+`Database(name=...)` argument. Existing `AlembicMigrations(metadata=...)`
+declarations and `db` targets keep working. Features can instead contribute
+their models with [`Tables`](database.md#configuration-and-ownership).
+
 ## Upgrade to 0.24.0
 
 Version 0.24.0 was published on 2026-11-21.
