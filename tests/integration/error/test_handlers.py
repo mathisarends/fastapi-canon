@@ -79,6 +79,34 @@ def test_installed_domain_handler_returns_problem_details() -> None:
     }
 
 
+def test_typed_extensions_are_rendered_with_serialization_aliases() -> None:
+    class ItemFields(BaseModel):
+        item_id: int = Field(serialization_alias="itemId")
+
+    missing = Error(
+        KeyError,
+        status=404,
+        code="missing_item",
+        extensions_model=ItemFields,
+        extensions=lambda _: ItemFields(item_id=5),
+    )
+    app = FastAPI()
+
+    @app.get("/items")
+    async def items() -> None:
+        raise KeyError("item")
+
+    ErrorRegistry(errors=[missing], type_base="https://example.test/problems").install(
+        app
+    )
+    with TestClient(app) as client:
+        response = client.get("/items")
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "missing_item"
+    assert response.json()["itemId"] == 5
+
+
 def test_domain_callback_failure_returns_safe_internal_problem() -> None:
     def broken_detail(_exception: Exception) -> str:
         raise RuntimeError("secret mapping failure")

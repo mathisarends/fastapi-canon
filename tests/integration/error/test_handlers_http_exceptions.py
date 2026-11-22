@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.responses import PlainTextResponse
 from fastapi.testclient import TestClient
 
@@ -42,6 +42,23 @@ def test_framework_generated_404_and_405_are_problem_details() -> None:
     assert method_not_allowed.status_code == 405
     assert method_not_allowed.json()["code"] == "http_405"
     assert method_not_allowed.headers["allow"] == "GET"
+
+
+def test_not_modified_exception_keeps_an_empty_body_and_headers() -> None:
+    app = FastAPI()
+
+    @app.get("/cache")
+    async def cached() -> None:
+        raise HTTPException(status_code=304, headers={"ETag": '"v1"'})
+
+    registry().install(app)
+    with TestClient(app) as client:
+        response = client.get("/cache", headers={"If-None-Match": '"v1"'})
+
+    assert response.status_code == 304
+    assert response.content == b""
+    assert response.headers["etag"] == '"v1"'
+    assert "content-type" not in response.headers
 
 
 def test_declared_error_does_not_change_custom_success_response_class() -> None:

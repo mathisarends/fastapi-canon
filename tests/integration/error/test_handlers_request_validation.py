@@ -27,6 +27,10 @@ def make_app() -> FastAPI:
     async def query(limit: Annotated[int, Query()]) -> None:
         del limit
 
+    @app.get("/repeated")
+    async def repeated(ids: Annotated[list[int], Query()]) -> None:
+        del ids
+
     @app.get("/header")
     async def header(request_id: Annotated[str, Header(alias="X-Request-ID")]) -> None:
         del request_id
@@ -59,6 +63,12 @@ def make_app() -> FastAPI:
             "/query",
             {},
             {"parameter": "limit", "in": "query", "code": "missing"},
+        ),
+        (
+            "get",
+            "/repeated?ids=1&ids=private input",
+            {},
+            {"parameter": "ids", "in": "query", "code": "int_parsing"},
         ),
         (
             "get",
