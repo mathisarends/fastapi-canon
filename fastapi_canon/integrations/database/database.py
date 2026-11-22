@@ -12,7 +12,17 @@ from typing import Any, ClassVar
 from anyio import CancelScope
 from dishka import AsyncContainer, Provider, Scope, provide
 from fastapi import FastAPI
-from sqlalchemy import URL, Connection, MetaData, Table, event, inspect, make_url
+from sqlalchemy import (
+    URL,
+    Connection,
+    ForeignKeyConstraint,
+    MetaData,
+    Table,
+    event,
+    inspect,
+    make_url,
+)
+from sqlalchemy.exc import NoReferencedTableError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -296,8 +306,26 @@ def _composed_migrations(
                     "Keep each table in the Tables of exactly one feature.",
                 )
             owners[table.key] = feature
-            table.to_metadata(metadata)
+            table.to_metadata(
+                metadata,
+                referred_schema_fn=lambda _table, _schema, constraint, declared: (
+                    _referred_schema(constraint, declared)
+                ),
+            )
     return migrations.with_metadata(metadata)
+
+
+def _referred_schema(
+    constraint: ForeignKeyConstraint, declared: str | None
+) -> str | None:
+    """Keep the target a reference resolved to in its source ``MetaData``.
+
+    An unqualified reference otherwise loses that metadata's default schema.
+    """
+    try:
+        return constraint.referred_table.schema
+    except NoReferencedTableError:
+        return declared
 
 
 def _table(model: object) -> Table:
