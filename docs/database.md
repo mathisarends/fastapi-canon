@@ -20,7 +20,8 @@ For a SQLModel application using PostgreSQL and Alembic, install
 `uv add "fastapi-canon[postgres,sqlmodel,migrations]"`; add `sqlite` if needed for
 local development or tests.
 
-Database ownership is opt-in through `database.feature`. Applications can keep
+Database ownership is opt-in through `Composition(integrations=[database])`.
+Applications can keep
 their own Dishka providers and Feature lifespans for engines, sessions and
 migrations. `ServiceScope` belongs to core composition and works with those
 providers without requiring the database integration.
@@ -32,23 +33,15 @@ Keep environment loading and credentials in application settings:
 ```python
 from pathlib import Path
 from fastapi_canon.integrations.database import AlembicMigrations, Database
-from app.persistence import metadata
 from app.settings import settings
 
 database = Database(
     url=settings.database_url,
     migrations=AlembicMigrations(
-        directory=Path(__file__).resolve().parent / "migrations",
-        metadata=metadata,
+        directory=Path(__file__).resolve().parent / "migrations"
     ),
 )
 ```
-
-`metadata` is SQLAlchemy `MetaData`. Import every application model explicitly
-in the module that exports it. With SQLModel, use the application's registered
-`SQLModel.metadata`, excluding unrelated test/plugin models when sharing its
-global registry. Commands import the database declaration without starting the
-FastAPI app; keep that module free of application startup side effects.
 
 Bare `sqlite://` and `postgresql://` URLs select aiosqlite and asyncpg. Canon's
 async drivers are `sqlite+aiosqlite` and `postgresql+asyncpg`. SQLAlchemy `URL`
@@ -60,12 +53,27 @@ Common synchronous URL aliases (`sqlite+pysqlite`, `postgresql+psycopg`,
 Application settings may keep their environment prefix and secret types; pass
 the actual URL value and options such as `echo` at the composition boundary.
 
+Enable the database once and let each feature contribute its tables:
+
 ```python
 from fastapi import FastAPI
-from fastapi_canon import Composition
+from fastapi_canon import Composition, Feature
+from fastapi_canon.integrations.database import Tables
 
-app = Composition(features=[database.feature, orders_feature]).build(FastAPI())
+orders_feature = Feature(
+    name="orders",
+    routers=[router],
+    providers=[OrderProvider],
+    integrations=[Tables(OrderRow, OrderLineRow)],
+)
+app = Composition(features=[orders_feature], integrations=[database]).build(FastAPI())
 ```
+
+`Tables` takes mapped classes or `Table` objects. Migrations use the tables of
+every installed feature; a table contributed twice fails with
+`canon.database.E001`. To keep one application-owned `MetaData` instead, pass
+`AlembicMigrations(metadata=...)` and omit `Tables`. List `Database` before
+`Telemetry` so its engine is instrumented.
 
 Each application gets its own lazy engine and pool. Composition closes it after
 feature lifespans finish, including on startup failure. One declaration can be
@@ -289,12 +297,16 @@ snapshot-specific inheritance is required.
 
 ## Alembic workflow
 
-Configure the database declaration in `pyproject.toml`:
+Configure the application in `pyproject.toml`:
 
 ```toml
 [tool.fastapi-canon.database]
-target = "app.database:database"
+target = "app.main:create_app"
 ```
+
+The target is the application or a synchronous zero-argument factory. Commands
+build it to collect the feature tables without starting its lifespan. A
+`Database` object is also accepted when its migrations declare `metadata=`.
 
 ```console
 uv run fastapi-canon db init
@@ -392,7 +404,8 @@ inside repositories so the explicit backend policy is applied consistently.
 
 | Existing responsibility | Canonical integration |
 | --- | --- |
-| Engine/pool provider and disposal | `Database.feature` |
+| Engine/pool provider and disposal | `Database` integration |
+| Shared model metadata module | `Tables` in each feature |
 | Session provider and commit/rollback | Shared request-scoped `AsyncSession` |
 | HTTP dependency-scope wrapper | Composition's central function scope |
 | One short callable use case | APP-scoped `Scoped[UseCase]` wrapper |

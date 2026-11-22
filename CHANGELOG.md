@@ -4,6 +4,22 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## Unreleased
 
+### Breaking changes
+
+See the [upgrade guide](docs/package-migration.md#upgrade-to-0250).
+
+- **`CANON-025-DATABASE-INTEGRATION`** — `Database` is an integration. Replace
+  `database.feature` in `Composition(features=[...])` with
+  `Composition(integrations=[database])`, listed before `Telemetry`. The
+  `Database(name=...)` parameter and `Database.feature` are removed.
+
+### Added
+
+- `Tables(...)` lets each feature contribute its mapped classes or tables to the
+  `Database`. `AlembicMigrations(metadata=...)` is optional, and
+  `fastapi-canon db` accepts an application or application factory as its target.
+- `Integration.providers` receives the providers of integrations listed earlier.
+
 ## 0.24.0 - 2026-11-21
 
 ### Breaking changes

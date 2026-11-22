@@ -6,13 +6,21 @@ import sys
 import tomllib
 from collections.abc import Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from fastapi_canon.integrations.database.database import Database
+    from fastapi_canon.integrations.database.migrations import AlembicMigrations
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Manage database revisions with Alembic."""
     parser = argparse.ArgumentParser(prog="fastapi-canon db")
     parser.add_argument("--config", type=Path, default=Path("pyproject.toml"))
-    parser.add_argument("--database", help="Override the configured module:attribute")
+    parser.add_argument(
+        "--database",
+        help="Override the configured module:attribute of an app or Database",
+    )
     commands = parser.add_subparsers(dest="operation", required=True)
     commands.add_parser("init", help="Create the Alembic revision directory")
     revision = commands.add_parser(
@@ -41,13 +49,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         # App-relative configuration works independently of the invoking cwd.
         os.chdir(config_path.parent)
         sys.path.insert(0, str(config_path.parent))
-        module, attribute = target.split(":")
-        database = getattr(importlib.import_module(module), attribute)
-        from fastapi_canon.integrations.database import Database
-
-        if not isinstance(database, Database) or database.migrations is None:
-            raise ValueError("Target must be a Database with AlembicMigrations")
-        migrations = database.migrations
+        database, migrations = _resolve(target)
         if args.operation == "init":
             migrations.initialize()
         else:
@@ -79,3 +81,31 @@ def main(argv: Sequence[str] | None = None) -> int:
     finally:
         os.chdir(original_cwd)
         sys.path[:] = original_path
+
+
+def _resolve(target: str) -> tuple[Database, AlembicMigrations]:
+    # lazy database runtime
+    from fastapi import FastAPI
+
+    from fastapi_canon.integrations.database.database import (
+        Database,
+        installed_database,
+    )
+
+    module, attribute = target.split(":")
+    value = getattr(importlib.import_module(module), attribute)
+    if isinstance(value, Database):
+        database, migrations = value, value.migrations
+    else:
+        # An application supplies the tables its features contribute.
+        app = value() if callable(value) and not isinstance(value, FastAPI) else value
+        installed = installed_database(app) if isinstance(app, FastAPI) else None
+        if installed is None:
+            raise ValueError(
+                "Target must be a Database, or an application or application "
+                "factory whose Composition enables one"
+            )
+        database, migrations = installed.database, installed.migrations
+    if migrations is None:
+        raise ValueError("Target must declare a Database with AlembicMigrations")
+    return database, migrations

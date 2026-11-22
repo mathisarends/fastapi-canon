@@ -1,5 +1,7 @@
+import sqlite3
 import subprocess
 import sys
+from contextlib import closing
 from pathlib import Path
 
 
@@ -133,3 +135,67 @@ def test_installed_command_creates_and_applies_real_revisions(tmp_path: Path) ->
         "dispose",
     ] * 8
     assert len(list((tmp_path / "migrations/versions").glob("*.py"))) == 1
+
+
+def test_application_target_migrates_the_tables_its_features_contribute(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.fastapi-canon.database]\ntarget = "db_app:create_app"\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "db_app.py").write_text(
+        "from fastapi import FastAPI\n"
+        "from sqlalchemy import Column, MetaData, String, Table\n"
+        "from fastapi_canon import Composition, Feature\n"
+        "from fastapi_canon.integrations.database import (\n"
+        "    AlembicMigrations, Database, Tables)\n"
+        "metadata = MetaData()\n"
+        'items = Table("items", metadata, Column("name", String, primary_key=True))\n'
+        'notes = Table("notes", metadata, Column("text", String, primary_key=True))\n'
+        f"database = Database(url={'sqlite:///' + str(tmp_path / 'app.db')!r}, "
+        "migrations=AlembicMigrations(directory='migrations'))\n"
+        "def create_app():\n"
+        "    return Composition(\n"
+        "        features=[\n"
+        "            Feature(name='items', integrations=[Tables(items)]),\n"
+        "            Feature(name='notes', integrations=[Tables(notes)]),\n"
+        "        ],\n"
+        "        integrations=[database],\n"
+        "    ).build(FastAPI())\n"
+        "def plain_app():\n"
+        "    return FastAPI()\n",
+        encoding="utf-8",
+    )
+
+    def run(*arguments: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, "-m", "fastapi_canon", "db", *arguments],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+    def succeed(*arguments: str) -> None:
+        completed = run(*arguments)
+        assert completed.returncode == 0, completed.stderr
+
+    succeed("init")
+    succeed("revision", "--autogenerate", "-m", "initial")
+    succeed("upgrade", "head")
+    succeed("check")
+    with closing(sqlite3.connect(tmp_path / "app.db")) as connection:
+        tables = {
+            name
+            for (name,) in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+    assert {"items", "notes"} <= tables
+    without_tables = run("--database", "db_app:database", "check")
+    assert without_tables.returncode == 2
+    assert "no metadata" in without_tables.stderr
+    without_database = run("--database", "db_app:plain_app", "check")
+    assert without_database.returncode == 2
+    assert "Composition enables one" in without_database.stderr

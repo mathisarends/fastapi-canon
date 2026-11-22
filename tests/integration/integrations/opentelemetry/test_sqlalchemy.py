@@ -319,11 +319,9 @@ async def test_database_engine_is_instrumented_until_after_feature_cleanup(
         with SpanCapture() as capture:
             database = Database(url="sqlite://")
             app = Composition(
-                features=[
-                    database.feature,
-                    Feature(name="consumer", lifespan=lifespan),
-                ],
+                features=[Feature(name="consumer", lifespan=lifespan)],
                 integrations=[
+                    database,
                     Telemetry(
                         tracer_provider=capture.provider,
                         meter_provider=meter,
@@ -333,7 +331,7 @@ async def test_database_engine_is_instrumented_until_after_feature_cleanup(
                                 pool_name="backend", capture_statement=True
                             )
                         ],
-                    )
+                    ),
                 ],
             ).build(FastAPI())
             async with asyncio.timeout(10):

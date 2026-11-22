@@ -76,6 +76,12 @@ _EXPLANATIONS = {
         "Install the integration's extra and correct the options, routes or services named by the finding before startup.",
         _DOCS + "composition.md#integrations",
     ),
+    "canon.database.E001": _Explanation(
+        "Feature Tables conflict with each other or with explicit migration metadata.",
+        "Two features contribute Tables(OrderRow), or AlembicMigrations(metadata=...) is combined with feature Tables.",
+        "Contribute each table from exactly one feature, share one naming convention and declare tables either as feature Tables or as metadata=.",
+        _DOCS + "database.md#configuration-and-ownership",
+    ),
     "canon.mcp.E001": _Explanation(
         "An application or feature HTTP route shadows the configured MCP endpoint.",
         "An HTTP /mcp route overlaps the endpoint configured by Mcp(path='/mcp').",

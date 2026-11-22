@@ -25,10 +25,11 @@ Keep environment loading and defaults in Pydantic settings. Providers assemble
 those settings without overriding them with hidden literal defaults.
 
 Declare `Database(url=settings.database_url, migrations=AlembicMigrations(...))`
-in an application-owned module. Export its registered SQLAlchemy metadata and
-explicitly import the ORM models that contribute tables. Compose
-`database.feature` before features that need sessions, using
-`Composition(features=(database.feature, projects_feature))`.
+in an application-owned module. Each feature contributes its ORM models with
+`Feature(integrations=[Tables(ProjectRow)])`; enable the database with
+`Composition(features=(projects_feature,), integrations=[database])`, before
+`Telemetry`. Point `[tool.fastapi-canon.database] target` at the application or
+its factory.
 
 - Inject `sqlalchemy.ext.asyncio.AsyncSession` into SQL repositories and expose
   repository interfaces to services. With SQLModel, configure

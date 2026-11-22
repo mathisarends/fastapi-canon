@@ -18,6 +18,7 @@ import fastapi_canon.cli as canon_cli
         "canon.routing.E002",
         "canon.routing.E003",
         "canon.routing.E004",
+        "canon.database.E001",
         "canon.mcp.E001",
         "canon.mcp.E002",
         "canon.handlers.E001",
