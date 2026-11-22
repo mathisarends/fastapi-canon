@@ -28,11 +28,11 @@ if TYPE_CHECKING:
         RpcBeforeAccept,
         RpcChannel,
         RpcDrain,
-        RpcErrorBinding,
         RpcErrorMapper,
         RpcLimits,
         RpcMessageType,
         RpcMiddlewareLike,
+        RpcRejectionDeclaration,
         RpcRejections,
         RpcResolverLike,
         RpcSocketProtocol,
@@ -75,7 +75,7 @@ class ChannelOptions(TypedDict, total=False):
     context: Callable[..., Awaitable[Any]] | None
     resolver: RpcResolverLike | FastApiResolver | None
     hooks: Sequence[Callable[..., Any]]
-    rejects: Sequence[RpcErrorBinding[Any]]
+    rejects: Sequence[RpcRejectionDeclaration]
     rejections: RpcRejections | None
     middleware: Sequence[RpcMiddlewareLike]
     error_mapper: RpcErrorMapper | None
@@ -326,7 +326,7 @@ class APIRouter(CanonRouter):
         *,
         protocol: RpcSocketProtocol | None = None,
         messages: Sequence[RpcMessageType] | None = None,
-        closes: Sequence[RpcErrorBinding[Any]] = (),
+        closes: Sequence[RpcRejectionDeclaration] = (),
         summary: str | None = None,
         name: str | None = None,
         dependencies: Sequence[Depends] = (),

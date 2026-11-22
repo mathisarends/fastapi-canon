@@ -18,6 +18,9 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0250).
 - Feature lifespans accept `Inject[T]` parameters, resolved from the application
   container at startup. Preflight reports a service without an APP-scope binding
   as `canon.providers.E005`. See [feature lifespans](docs/composition.md#feature-lifespans).
+- WebSocket `rejects=` and socket `closes=` accept a declared `Error`. Its status
+  (401, 403, 404 or 503) names the rejection and its title is the reason. See
+  [rejections](docs/integrations/websockets/connections-and-events.md#map-failures-to-rejections).
 - `Tables(...)` lets each feature contribute its mapped classes or tables to the
   `Database`. `AlembicMigrations(metadata=...)` is optional, and
   `fastapi-canon db` accepts an application or application factory as its target.

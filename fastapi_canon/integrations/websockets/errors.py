@@ -362,6 +362,10 @@ class RpcErrorBinding[ExceptionT: Exception]:
 
 type RpcErrorDeclaration = type[RpcError] | RpcErrorBinding[Any] | Error[Any]
 
+type RpcRejectionDeclaration = RpcErrorBinding[Any] | Error[Any]
+"""A ``rejects=`` or ``closes=`` entry: a binding, or an ``Error`` whose status
+names its rejection."""
+
 
 class CanonBinding(RpcErrorBinding[Exception]):
     __slots__ = ("definition", "registry")
@@ -451,13 +455,21 @@ def contract_for(
 def rejecting_contracts(
     rejects: Iterable[object], owner: str
 ) -> tuple[RpcErrorBinding[Any], ...]:
-    """Validate the ``rejects=`` of a connection: bindings with a rejection."""
+    """Validate the ``rejects=`` of a connection: bindings with a rejection.
+
+    An ``Error`` becomes the binding its status names.
+    """
     contracts: list[RpcErrorBinding[Any]] = []
-    for contract in dict.fromkeys(rejects):
+    for declared in dict.fromkeys(rejects):
+        contract = (
+            _rejection_binding(declared, owner)
+            if isinstance(declared, Error)
+            else declared
+        )
         if not isinstance(contract, RpcErrorBinding) or contract.rejection is None:
             raise ProtocolDefinitionError(
-                f"{owner} rejects= takes RpcErrorBinding values with a rejection, "
-                f"got {contract!r}"
+                f"{owner} rejects= takes Error values or RpcErrorBinding values "
+                f"with a rejection, got {contract!r}"
             )
         contracts.append(contract)
     bind_contracts(contracts, owner=owner)
@@ -494,6 +506,31 @@ def bind_contracts(
                 f"{previous.code!r} and {contract.code!r}"
             )
     return bound
+
+
+_STATUS_REJECTIONS = {
+    401: RpcRejection.UNAUTHORIZED,
+    403: RpcRejection.FORBIDDEN,
+    404: RpcRejection.NOT_FOUND,
+    503: RpcRejection.UNAVAILABLE,
+}
+
+
+def _rejection_binding(error: Error[Any], owner: str) -> RpcErrorBinding[Any]:
+    rejection = _STATUS_REJECTIONS.get(error.status)
+    if rejection is None:
+        raise ProtocolDefinitionError(
+            f"{owner}: Error {error.code!r} has status {error.status}, which names "
+            "no RpcRejection; declare RpcErrorBinding(..., rejection=...) instead"
+        )
+    return _status_binding(error, rejection)
+
+
+@cache
+def _status_binding(error: Error[Any], rejection: RpcRejection) -> RpcErrorBinding[Any]:
+    return RpcErrorBinding(
+        error.exception, code=error.code, message=error.title, rejection=rejection
+    )
 
 
 def _check_details_fields(exception: type[Exception], details: type[BaseModel]) -> None:

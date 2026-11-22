@@ -73,7 +73,7 @@ from fastapi_canon.integrations.websockets.dependencies import (
 from fastapi_canon.integrations.websockets.drain import RpcDrain
 from fastapi_canon.integrations.websockets.errors import (
     ProtocolDefinitionError,
-    RpcErrorBinding,
+    RpcRejectionDeclaration,
     contract_rejections,
     rejecting_contracts,
 )
@@ -290,7 +290,7 @@ class CanonWebSocketRouter(APIRouter):
         context: Callable[..., Awaitable[Any]] | None = None,
         resolver: RpcResolverLike | FastApiResolver | None = None,
         hooks: Sequence[Callable[..., Any]] = (),
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        rejects: Sequence[RpcRejectionDeclaration] = (),
         rejections: RpcRejections | None = None,
         middleware: Sequence[RpcMiddlewareLike] = (),
         error_mapper: RpcErrorMapper | None = None,
@@ -412,7 +412,7 @@ class CanonWebSocketRouter(APIRouter):
         path_model: type[BaseModel] | None = None,
         context: type[None] = NoneType,
         close_when_events_complete: bool = False,
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        rejects: Sequence[RpcRejectionDeclaration] = (),
         serve: Callable[..., Awaitable[None]] | None = None,
     ) -> RpcEndpoint[None]: ...
 
@@ -433,7 +433,7 @@ class CanonWebSocketRouter(APIRouter):
         path_model: type[BaseModel] | None = None,
         context: type[ContextT],
         close_when_events_complete: bool = False,
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        rejects: Sequence[RpcRejectionDeclaration] = (),
         serve: Callable[..., Awaitable[None]] | None = None,
     ) -> RpcEndpoint[ContextT]: ...
 
@@ -451,7 +451,7 @@ class CanonWebSocketRouter(APIRouter):
         summary: str | None = None,
         before_accept: RpcBeforeAccept | None = None,
         context: type[None] = NoneType,
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        rejects: Sequence[RpcRejectionDeclaration] = (),
         serve: Callable[..., Awaitable[None]] | None = None,
     ) -> RpcSocketEndpoint[None]: ...
 
@@ -469,7 +469,7 @@ class CanonWebSocketRouter(APIRouter):
         summary: str | None = None,
         before_accept: RpcBeforeAccept | None = None,
         context: type[ContextT],
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        rejects: Sequence[RpcRejectionDeclaration] = (),
         serve: Callable[..., Awaitable[None]] | None = None,
     ) -> RpcSocketEndpoint[ContextT]: ...
 
@@ -524,7 +524,7 @@ class CanonWebSocketRouter(APIRouter):
         before_accept: RpcBeforeAccept | None = None,
         error_mapper: RpcErrorMapper | None = None,
         context: type[None] = NoneType,
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        rejects: Sequence[RpcRejectionDeclaration] = (),
         serve: Callable[..., Awaitable[None]] | None = None,
     ) -> RpcStreamEndpoint[None]: ...
 
@@ -543,7 +543,7 @@ class CanonWebSocketRouter(APIRouter):
         before_accept: RpcBeforeAccept | None = None,
         error_mapper: RpcErrorMapper | None = None,
         context: type[ContextT],
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        rejects: Sequence[RpcRejectionDeclaration] = (),
         serve: Callable[..., Awaitable[None]] | None = None,
     ) -> RpcStreamEndpoint[ContextT]: ...
 
@@ -561,7 +561,7 @@ class CanonWebSocketRouter(APIRouter):
         before_accept: RpcBeforeAccept | None = None,
         error_mapper: RpcErrorMapper | None = None,
         context: type[Any] = NoneType,
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        rejects: Sequence[RpcRejectionDeclaration] = (),
         serve: Callable[..., Awaitable[None]] | None = None,
     ) -> RpcStreamEndpoint[Any]:
         endpoint = self._definition.stream(

@@ -41,6 +41,7 @@ from fastapi_canon.integrations.websockets.errors import (
     ProtocolDefinitionError,
     RpcError,
     RpcErrorBinding,
+    RpcRejectionDeclaration,
     contract_rejections,
     rejecting_contracts,
 )
@@ -270,7 +271,7 @@ class RpcDefinition:
         limits: RpcLimits | None = None,
         strict_errors: bool = False,
         drain: RpcDrain | None = None,
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        rejects: Sequence[RpcRejectionDeclaration] = (),
     ) -> None:
         if not isinstance(version, int) or version < 1:
             raise ProtocolDefinitionError(
@@ -326,7 +327,7 @@ class RpcDefinition:
         path_model: type[BaseModel] | None = None,
         context: type[None] = NoneType,
         close_when_events_complete: bool = False,
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        rejects: Sequence[RpcRejectionDeclaration] = (),
     ) -> RpcEndpoint[None]: ...
 
     @overload
@@ -346,7 +347,7 @@ class RpcDefinition:
         path_model: type[BaseModel] | None = None,
         context: type[ContextT],
         close_when_events_complete: bool = False,
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        rejects: Sequence[RpcRejectionDeclaration] = (),
     ) -> RpcEndpoint[ContextT]: ...
 
     @overload
@@ -363,7 +364,7 @@ class RpcDefinition:
         summary: str | None = None,
         before_accept: RpcBeforeAccept | None = None,
         context: type[None] = NoneType,
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        rejects: Sequence[RpcRejectionDeclaration] = (),
     ) -> RpcSocketEndpoint[None]: ...
 
     @overload
@@ -380,7 +381,7 @@ class RpcDefinition:
         summary: str | None = None,
         before_accept: RpcBeforeAccept | None = None,
         context: type[ContextT],
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        rejects: Sequence[RpcRejectionDeclaration] = (),
     ) -> RpcSocketEndpoint[ContextT]: ...
 
     def socket(
@@ -445,7 +446,7 @@ class RpcDefinition:
         path_model: type[BaseModel] | None = None,
         context: type[None] = NoneType,
         close_when_events_complete: bool = False,
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        rejects: Sequence[RpcRejectionDeclaration] = (),
     ) -> RpcEndpoint[None]: ...
 
     @overload
@@ -465,7 +466,7 @@ class RpcDefinition:
         path_model: type[BaseModel] | None = None,
         context: type[ContextT],
         close_when_events_complete: bool = False,
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        rejects: Sequence[RpcRejectionDeclaration] = (),
     ) -> RpcEndpoint[ContextT]: ...
 
     def _rpc_socket(
@@ -484,7 +485,7 @@ class RpcDefinition:
         path_model: type[BaseModel] | None = None,
         context: type[Any] = NoneType,
         close_when_events_complete: bool = False,
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        rejects: Sequence[RpcRejectionDeclaration] = (),
     ) -> RpcEndpoint[Any]:
         self.ensure_mutable()
         variables = _validate_endpoint(
@@ -553,7 +554,7 @@ class RpcDefinition:
         before_accept: RpcBeforeAccept | None = None,
         error_mapper: RpcErrorMapper | None = None,
         context: type[None] = NoneType,
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        rejects: Sequence[RpcRejectionDeclaration] = (),
     ) -> RpcStreamEndpoint[None]: ...
 
     @overload
@@ -571,7 +572,7 @@ class RpcDefinition:
         before_accept: RpcBeforeAccept | None = None,
         error_mapper: RpcErrorMapper | None = None,
         context: type[ContextT],
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        rejects: Sequence[RpcRejectionDeclaration] = (),
     ) -> RpcStreamEndpoint[ContextT]: ...
 
     def stream(
@@ -588,7 +589,7 @@ class RpcDefinition:
         before_accept: RpcBeforeAccept | None = None,
         error_mapper: RpcErrorMapper | None = None,
         context: type[Any] = NoneType,
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        rejects: Sequence[RpcRejectionDeclaration] = (),
     ) -> RpcStreamEndpoint[Any]:
         self.ensure_mutable()
         variables = _validate_endpoint(
@@ -645,7 +646,7 @@ class RpcDefinition:
         summary: str | None = None,
         before_accept: RpcBeforeAccept | None = None,
         context: type[None] = NoneType,
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        rejects: Sequence[RpcRejectionDeclaration] = (),
     ) -> RpcSocketEndpoint[None]: ...
 
     @overload
@@ -662,7 +663,7 @@ class RpcDefinition:
         summary: str | None = None,
         before_accept: RpcBeforeAccept | None = None,
         context: type[ContextT],
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        rejects: Sequence[RpcRejectionDeclaration] = (),
     ) -> RpcSocketEndpoint[ContextT]: ...
 
     def _handler_socket(
@@ -678,7 +679,7 @@ class RpcDefinition:
         summary: str | None = None,
         before_accept: RpcBeforeAccept | None = None,
         context: type[Any] = NoneType,
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        rejects: Sequence[RpcRejectionDeclaration] = (),
     ) -> RpcSocketEndpoint[Any]:
         self.ensure_mutable()
         marker = getattr(handler, "__rpckit_socket__", None)
