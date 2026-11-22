@@ -8,10 +8,11 @@ from typing import cast
 from dishka import (
     Provider,
 )
-from fastapi import APIRouter, FastAPI
-from starlette.types import ExceptionHandler, Lifespan
+from fastapi import APIRouter
+from starlette.types import ExceptionHandler
 
 from fastapi_canon.composition.errors import collect_router_errors, merge_errors
+from fastapi_canon.composition.lifespans import DeclaredLifespan, lifespan_injection
 from fastapi_canon.diagnostics import (
     FeatureCheck,
 )
@@ -19,8 +20,6 @@ from fastapi_canon.error import AnyError, ErrorRegistry
 from fastapi_canon.errors import ErrorConfigurationError, FeatureConfigurationError
 from fastapi_canon.integration import Integration, IntegrationPart
 from fastapi_canon.routing.policy import normalize_raises
-
-type FeatureLifespan = Lifespan[FastAPI]
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -32,7 +31,7 @@ class Feature:
     providers: tuple[Provider | Callable[[], Provider], ...]
     integrations: tuple[IntegrationPart, ...]
     exception_handlers: Mapping[type[Exception], ExceptionHandler]
-    lifespan: FeatureLifespan | None
+    lifespan: DeclaredLifespan | None
     checks: tuple[FeatureCheck, ...]
     _listed_errors: tuple[AnyError, ...] = field(repr=False)
 
@@ -45,7 +44,7 @@ class Feature:
         integrations: Sequence[IntegrationPart] = (),
         errors: Sequence[AnyError] = (),
         exception_handlers: Mapping[type[Exception], ExceptionHandler] | None = None,
-        lifespan: FeatureLifespan | None = None,
+        lifespan: DeclaredLifespan | None = None,
         checks: Sequence[FeatureCheck] = (),
     ) -> None:
         normalized_checks = tuple(checks)
@@ -82,6 +81,8 @@ class Feature:
         if raw_lifespan is not None and not callable(raw_lifespan):
             msg = f"feature {normalized_name!r} lifespan must be callable or None"
             raise FeatureConfigurationError(msg)
+        if lifespan is not None:
+            lifespan_injection(lifespan, feature_name=normalized_name)
 
         router_errors = collect_router_errors(
             normalized_routers, feature_name=normalized_name
