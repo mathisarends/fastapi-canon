@@ -5,14 +5,15 @@ from typing import Annotated
 
 import pytest
 from fastapi import APIRouter as FastAPIRouter
-from fastapi import FastAPI, Header, WebSocket
+from fastapi import Depends, FastAPI, Header, WebSocket
 from fastapi.testclient import TestClient
 from starlette.routing import WebSocketRoute
 from starlette.testclient import WebSocketDenialResponse
 
-from fastapi_canon import APIRouter, Composition, Feature, Inject
+from fastapi_canon import APIRouter, Composition, Error, Feature, Inject
 from fastapi_canon.errors import ConfigurationError
 from fastapi_canon.integrations.websockets import (
+    ProtocolDefinitionError,
     RpcConnectionScope,
     RpcErrorBinding,
     RpcMiddleware,
@@ -111,6 +112,54 @@ def test_policy_admits_each_connection_before_accepting_it(kind: str) -> None:
             client.websocket_connect("/me/session", headers={"X-User": "bob"}) as bob,
         ):
             assert [_receive(kind, ada), _receive(kind, bob)] == ["ada", "bob"]
+
+
+def test_one_error_declaration_answers_http_and_rejects_the_handshake() -> None:
+    sign_in_required = Error(
+        Unauthorized, status=401, code="sign_in_required", title="Sign in first"
+    )
+    router = APIRouter(
+        prefix="/me",
+        websocket_policy=WebSocketPolicy(
+            context=authenticate, rejects=[sign_in_required]
+        ),
+    )
+
+    @router.get(
+        "/name", dependencies=[Depends(authenticate)], raises=[sign_in_required]
+    )
+    async def name() -> str:
+        return "ada"
+
+    @router.binary_stream("/session")
+    async def frames(user: Inject[User]) -> AsyncIterator[bytes]:
+        yield user.name.encode()
+
+    app = Composition(features=[Feature(name="me", routers=[router])]).build(FastAPI())
+
+    with TestClient(app) as client:
+        problem = client.get("/me/name")
+        with (
+            pytest.raises(WebSocketDenialResponse) as denied,
+            client.websocket_connect("/me/session"),
+        ):
+            pass
+
+    assert (problem.status_code, problem.json()["code"]) == (401, "sign_in_required")
+    assert (denied.value.status_code, denied.value.text) == (401, "Sign in first")
+
+
+def test_error_status_without_a_rejection_is_refused_at_declaration() -> None:
+    conflict = Error(Unknown, status=409, code="user_conflict")
+
+    with pytest.raises(ProtocolDefinitionError, match="status 409"):
+        APIRouter(websocket_policy=WebSocketPolicy(rejects=[conflict])).binary_stream(
+            "/session"
+        )(_frames)
+
+
+async def _frames() -> AsyncIterator[bytes]:
+    yield b""
 
 
 @pytest.mark.parametrize("native_wrapper", [False, True])

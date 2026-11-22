@@ -13,7 +13,7 @@ if TYPE_CHECKING:
         RpcRejections,
     )
     from fastapi_canon.integrations.websockets.dependencies import RpcResolverLike
-    from fastapi_canon.integrations.websockets.errors import RpcErrorBinding
+    from fastapi_canon.integrations.websockets.errors import RpcRejectionDeclaration
     from fastapi_canon.integrations.websockets.middleware import RpcMiddlewareLike
     from fastapi_canon.integrations.websockets.server import RpcErrorMapper
 
@@ -30,7 +30,7 @@ class WebSocketPolicy:
     context: Callable[..., Awaitable[Any]] | None
     hooks: tuple[Callable[..., Any], ...]
     resolver: RpcResolverLike | FastApiResolver | None
-    rejects: tuple[RpcErrorBinding[Any], ...]
+    rejects: tuple[RpcRejectionDeclaration, ...]
     rejections: RpcRejections | None
     middleware: tuple[RpcMiddlewareLike, ...]
     error_mapper: RpcErrorMapper | None
@@ -44,7 +44,7 @@ class WebSocketPolicy:
         context: Callable[..., Awaitable[Any]] | None = None,
         hooks: Sequence[Callable[..., Any]] = (),
         resolver: RpcResolverLike | FastApiResolver | None = None,
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        rejects: Sequence[RpcRejectionDeclaration] = (),
         rejections: RpcRejections | None = None,
         middleware: Sequence[RpcMiddlewareLike] = (),
         error_mapper: RpcErrorMapper | None = None,
@@ -75,7 +75,7 @@ class WebSocketPolicy:
         context: Callable[..., Awaitable[Any]] | None = None,
         hooks: Sequence[Callable[..., Any]] = (),
         resolver: RpcResolverLike | FastApiResolver | None = None,
-        rejects: Sequence[RpcErrorBinding[Any]] = (),
+        rejects: Sequence[RpcRejectionDeclaration] = (),
         rejections: RpcRejections | None = None,
         middleware: Sequence[RpcMiddlewareLike] = (),
         error_mapper: RpcErrorMapper | None = None,
