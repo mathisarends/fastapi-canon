@@ -59,7 +59,8 @@ def create_app() -> FastAPI:
 `build()` runs feature checks once during preparation and validates installed
 OpenAPI. Composition builds the container without resolving resources, starts
 feature lifespans in declaration order and shuts them down in reverse.
-Feature lifespans may borrow dependencies while the container is alive. Keep
+Feature lifespans borrow APP-scoped dependencies through `Inject[T]` parameters,
+for example `async def lifespan(worker: Inject[Worker])`. Keep
 connections and I/O out of imports, declarations and app construction; open owned
 resources in yielding providers or lifespans. Do not add a second `setup_dishka`
 or manually install the same error registry.

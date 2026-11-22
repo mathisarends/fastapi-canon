@@ -16,6 +16,7 @@ from fastapi_canon.composition.checks import (
     prepare_composition,
     raise_check_errors,
 )
+from fastapi_canon.composition.lifespans import ApplicationLifespan, bind_lifespan
 from fastapi_canon.composition.request_logging import install_request_logging
 from fastapi_canon.composition.scopes import install_scopes
 from fastapi_canon.diagnostics import (
@@ -118,8 +119,8 @@ def apply_composition(app: FastAPI, composition: CompositionSource) -> bool:
     if prepared.description is None:
         raise FeatureConfigurationError("Composition description is unavailable")
     handlers = flatten_handlers(composition.features)
-    lifespans = tuple(
-        feature.lifespan
+    lifespans: tuple[ApplicationLifespan, ...] = tuple(
+        bind_lifespan(feature.lifespan, feature_name=feature.name)
         for feature in composition.features
         if feature.lifespan is not None
     )
@@ -239,7 +240,7 @@ def router_lifespans(
 
 def compose_lifespan(
     original: FeatureLifespan,
-    feature_lifespans: tuple[FeatureLifespan, ...],
+    feature_lifespans: tuple[ApplicationLifespan, ...],
     container: AsyncContainer | None,
 ) -> FeatureLifespan:
     @asynccontextmanager

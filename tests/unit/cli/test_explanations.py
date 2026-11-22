@@ -27,6 +27,7 @@ import fastapi_canon.cli as canon_cli
         "canon.providers.E002",
         "canon.providers.E003",
         "canon.providers.E004",
+        "canon.providers.E005",
         "canon.description.E001",
         "canon.contracts.E001",
         "canon.checks.E001",

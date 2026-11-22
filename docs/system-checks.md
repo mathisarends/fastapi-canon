@@ -93,6 +93,7 @@ application behavior. Independent failures can appear together.
 | `canon.providers.E002` | A mounted JSON-RPC method has a missing service root or unreadable dependency declarations. |
 | `canon.providers.E003` | An HTTP/SSE endpoint root is unavailable at its execution scope, or its declarations are unreadable. |
 | `canon.providers.E004` | A WebRTC factory injects a service unavailable through APP/SESSION scope. |
+| `canon.providers.E005` | A feature lifespan injects a service without an APP-scope binding. |
 | `canon.description.E001` | HTTP metadata cannot be described against the composed catalog. |
 | `canon.contracts.E001` | HTTP/OpenAPI response contracts cannot be compiled. |
 | `canon.checks.E001` | A feature check failed to return valid findings. |

@@ -130,6 +130,12 @@ _EXPLANATIONS = {
         "Register factory services at APP or SESSION scope and use explicit child REQUEST scopes for per-message work. Review external-container and nested-dependency limits.",
         _DOCS + "system-checks.md#webrtc-factory-dependency-preflight",
     ),
+    "canon.providers.E005": _Explanation(
+        "A feature lifespan injects a service that the prepared container cannot supply at APP scope.",
+        "A lifespan accepts worker: Inject[Worker], while Worker is unbound or bound only at REQUEST scope.",
+        "Register the service at APP scope, or inject an APP-scoped ServiceScope factory and open short REQUEST scopes inside the lifespan.",
+        _DOCS + "composition.md#feature-lifespans",
+    ),
     "canon.description.E001": _Explanation(
         "HTTP metadata cannot be described against the composed read-only error catalog.",
         "A declared HTTP error cannot be resolved from the catalog supplied to the metadata adapter.",

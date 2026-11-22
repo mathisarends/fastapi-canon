@@ -15,6 +15,9 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0250).
 
 ### Added
 
+- Feature lifespans accept `Inject[T]` parameters, resolved from the application
+  container at startup. Preflight reports a service without an APP-scope binding
+  as `canon.providers.E005`. See [feature lifespans](docs/composition.md#feature-lifespans).
 - `Tables(...)` lets each feature contribute its mapped classes or tables to the
   `Database`. `AlembicMigrations(metadata=...)` is optional, and
   `fastapi-canon db` accepts an application or application factory as its target.
