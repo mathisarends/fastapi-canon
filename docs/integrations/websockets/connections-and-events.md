@@ -73,6 +73,25 @@ answers 404 with `Session not found` rather than the exception text. The same
 binding can also appear in a method's `raises=`, where it answers calls with
 the `session_not_found` error.
 
+`rejects=` and a socket's `closes=` also accept a declared `Error`, so HTTP and
+connection admission share one declaration. Its status names the rejection
+(401, 403, 404 or 503) and its title is the reason:
+
+```python
+from fastapi_canon import Error
+
+session_not_found = Error(SessionNotFound, status=404, code="session_not_found")
+
+router.include_channel(
+    session_events,
+    path="/sessions/{session_id}/events",
+    rejects=[session_not_found],
+)
+```
+
+An `Error` with another status is refused at declaration; bind it with
+`RpcErrorBinding(..., rejection=...)`.
+
 `include_channel`, `serve()`, `serve_websocket()`, and
 `RpcTestClient` accept `rejections=` for call-specific policies: a mapping from
 exception types to `RpcRejection` values, using the exception text as reason,

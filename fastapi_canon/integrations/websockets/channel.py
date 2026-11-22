@@ -21,8 +21,8 @@ from fastapi_canon.integrations.websockets.dependencies import (
 from fastapi_canon.integrations.websockets.errors import (
     ProtocolDefinitionError,
     RpcError,
-    RpcErrorBinding,
     RpcErrorDeclaration,
+    RpcRejectionDeclaration,
     merge_error_declarations,
     rejecting_contracts,
 )
@@ -423,7 +423,7 @@ class RpcChannel:
             RpcMessageType.TEXT,
             RpcMessageType.BINARY,
         ),
-        closes: Iterable[RpcErrorBinding[Any]] = (),
+        closes: Iterable[RpcRejectionDeclaration] = (),
         summary: str | None = None,
     ) -> Callable[[FunctionType], FunctionType]: ...
 
@@ -437,7 +437,7 @@ class RpcChannel:
             RpcMessageType.TEXT,
             RpcMessageType.BINARY,
         ),
-        closes: Iterable[RpcErrorBinding[Any]] = (),
+        closes: Iterable[RpcRejectionDeclaration] = (),
         summary: str | None = None,
     ) -> Any:
         """Declare a WebSocket endpoint with a message or connection handler.

@@ -4,6 +4,12 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## Unreleased
 
+### Added
+
+- WebSocket `rejects=` and socket `closes=` accept a declared `Error`. Its status
+  (401, 403, 404 or 503) names the rejection and its title is the reason. See
+  [rejections](docs/integrations/websockets/connections-and-events.md#map-failures-to-rejections).
+
 ## 0.24.0 - 2026-11-21
 
 ### Breaking changes
