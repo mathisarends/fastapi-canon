@@ -9,9 +9,10 @@ from contextlib import (
 from pathlib import Path
 
 import pytest
+from dishka import Provider, Scope, provide
 from fastapi import FastAPI
 from sqlalchemy import Column, MetaData, String, Table, event, text
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from fastapi_canon import Composition, Feature
 from fastapi_canon.integrations.database import AlembicMigrations, Database
@@ -224,3 +225,73 @@ async def test_disabled_startup_check_preserves_lazy_connections_and_explicit_co
             await migrations.check(engine)
     assert calls == ["enter", "exit"]
     assert filename.is_file()
+
+
+async def test_failed_migration_check_prevents_feature_startup(
+    tmp_path: Path,
+) -> None:
+    metadata = MetaData()
+    Table("items", metadata, Column("name", String, primary_key=True))
+    migrations = AlembicMigrations(directory=tmp_path / "migrations", metadata=metadata)
+    migrations.initialize()
+    started: list[str] = []
+
+    @asynccontextmanager
+    async def worker(app: FastAPI) -> AsyncIterator[None]:
+        started.append("started")
+        yield
+
+    database = Database(
+        url=f"sqlite:///{tmp_path / 'worker.db'}", migrations=migrations
+    )
+    app = Composition(
+        features=[Feature(name="worker", lifespan=worker)], integrations=[database]
+    ).build(FastAPI())
+
+    async with asyncio.timeout(10):
+        with pytest.raises(RuntimeError, match="No migrations found"):
+            async with app.router.lifespan_context(app):
+                pytest.fail("Startup must reject a missing migration history")
+
+    assert started == []
+
+
+async def test_startup_validates_the_overridden_engine_once(tmp_path: Path) -> None:
+    metadata = MetaData()
+    Table("items", metadata, Column("name", String, primary_key=True))
+    migrations = AlembicMigrations(directory=tmp_path / "migrations", metadata=metadata)
+    migrations.initialize()
+    url = f"sqlite:///{tmp_path / 'current.db'}"
+    async with asyncio.timeout(15), Database(url=url).open_engine() as engine:
+        await migrations.revision(engine, message="initial", autogenerate=True)
+        await migrations.upgrade(engine)
+    revision_checks: list[str] = []
+
+    @contextmanager
+    def count_checks(engine: AsyncEngine) -> Iterator[None]:
+        def query(*args: object) -> None:
+            if "FROM alembic_version" in str(args[2]):
+                revision_checks.append("checked")
+
+        event.listen(engine.sync_engine, "before_cursor_execute", query)
+        yield
+
+    class EmptyDatabase(Provider):
+        @provide(scope=Scope.APP)
+        async def engine(self) -> AsyncIterator[AsyncEngine]:
+            empty = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'empty.db'}")
+            yield empty
+            await empty.dispose()
+
+    database = Database(url=url, migrations=migrations, engine_context=count_checks)
+    current = Composition(integrations=[database]).build(FastAPI())
+    async with asyncio.timeout(10), current.router.lifespan_context(current):
+        assert revision_checks == ["checked"]
+
+    overridden = (
+        Composition(integrations=[database]).override(EmptyDatabase).build(FastAPI())
+    )
+    async with asyncio.timeout(10):
+        with pytest.raises(RuntimeError, match="pending"):
+            async with overridden.router.lifespan_context(overridden):
+                pytest.fail("Startup must validate the effective engine")

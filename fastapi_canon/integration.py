@@ -85,10 +85,13 @@ class Installer:
 
     ``before_routes`` installers run before feature routers are included, for
     example to add outer middleware. Others run after routes and error handlers.
+    A ``before_features`` lifespan enters before feature lifespans, so a failed
+    startup check stops the application before its workers start.
     """
 
     install: Callable[[FastAPI, AsyncContainer | None], Lifespan[FastAPI] | None]
     before_routes: bool = False
+    before_features: bool = False
 
 
 class IntegrationError(FeatureConfigurationError):

@@ -130,9 +130,8 @@ def apply_composition(app: FastAPI, composition: CompositionSource) -> bool:
         raise FeatureConfigurationError("Composed error catalog is unavailable")
     container = prepared.container
 
-    lifespans = (
-        *lifespans,
-        *_install(app, container, prepared.installers, before_routes=True),
+    integration_lifespans = _install(
+        app, container, prepared.installers, before_routes=True
     )
     original_lifespan = app.router.lifespan_context
     if container is not None:
@@ -159,15 +158,24 @@ def apply_composition(app: FastAPI, composition: CompositionSource) -> bool:
         include_http_exceptions=composition.errors.include_http_exceptions,
         include_unhandled_error=composition.errors.include_unhandled_error,
     )
-    lifespans = (
-        *lifespans,
+    integration_lifespans = (
+        *integration_lifespans,
         *_install(app, container, prepared.installers, before_routes=False),
     )
     app.router.lifespan_context = compose_lifespan(
         original_lifespan,
-        # include_router merged these into the app context after we captured
-        # original_lifespan. Retain them inside the dependency lifetime.
-        (*lifespans, *router_lifespans(original_lifespan, installed_routers)),
+        (
+            *(item.lifespan for item in integration_lifespans if item.before_features),
+            *lifespans,
+            *(
+                item.lifespan
+                for item in integration_lifespans
+                if not item.before_features
+            ),
+            # include_router merged these into the app context after we captured
+            # original_lifespan. Retain them inside the dependency lifetime.
+            *router_lifespans(original_lifespan, installed_routers),
+        ),
         container,
     )
 
@@ -271,11 +279,18 @@ def _install(
     installers: tuple[Installer, ...],
     *,
     before_routes: bool,
-) -> tuple[FeatureLifespan, ...]:
-    lifespans: list[FeatureLifespan] = []
+) -> tuple[_IntegrationLifespan, ...]:
+    lifespans: list[_IntegrationLifespan] = []
     for installer in installers:
         if installer.before_routes is before_routes:
             lifespan = installer.install(app, container)
             if lifespan is not None:
-                lifespans.append(lifespan)
+                lifespans.append(
+                    _IntegrationLifespan(lifespan, installer.before_features)
+                )
     return tuple(lifespans)
+
+
+class _IntegrationLifespan(NamedTuple):
+    lifespan: FeatureLifespan
+    before_features: bool

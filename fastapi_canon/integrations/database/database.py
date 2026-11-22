@@ -99,21 +99,15 @@ class Database(Integration):
         return self._migrations
 
     def providers(self, context: ProviderContext) -> Sequence[Provider]:
-        """Provide the engine, sessions and locks; check revisions on first use."""
-        migrations = _composed_migrations(self._migrations, context.parts)
+        """Provide the engine, sessions and locks."""
         return (
-            _DatabaseProvider(
-                self,
-                self._session_class,
-                self._sqlite_advisory_locks,
-                migrations if self._check_migrations_on_startup else None,
-            ),
+            _DatabaseProvider(self, self._session_class, self._sqlite_advisory_locks),
         )
 
     def prepare(self, context: IntegrationContext) -> Installer | None:
         """Compose the feature tables and return the startup revision check."""
         migrations = _composed_migrations(self._migrations, context.parts)
-        return Installer(partial(self._install, migrations))
+        return Installer(partial(self._install, migrations), before_features=True)
 
     @asynccontextmanager
     async def open_engine(self) -> AsyncGenerator[AsyncEngine]:
@@ -154,8 +148,9 @@ class Database(Integration):
 
         @asynccontextmanager
         async def check_revisions(app: FastAPI) -> AsyncGenerator[None]:
-            # Resolving the engine runs the provider's revision check at startup.
-            await container.get(AsyncEngine)
+            # Resolve through the container so an overridden engine is validated.
+            engine = await container.get(AsyncEngine)
+            await migrations.require_current(engine)
             yield
 
         return check_revisions
@@ -201,13 +196,11 @@ class _DatabaseProvider(Provider):
         database: Database,
         session_class: type[AsyncSession],
         sqlite_locks: SqliteLockPolicy,
-        startup_migrations: AlembicMigrations | None,
     ) -> None:
         super().__init__()
         self._database = database
         self._session_class = session_class
         self._sqlite_locks = sqlite_locks
-        self._startup_migrations = startup_migrations
         self.provide(self._session, provides=session_class, scope=Scope.REQUEST)
         if session_class is not AsyncSession:
             self.alias(session_class, provides=AsyncSession)
@@ -220,8 +213,6 @@ class _DatabaseProvider(Provider):
     @provide
     async def engine(self) -> AsyncGenerator[AsyncEngine]:
         async with self._database.open_engine() as engine:
-            if self._startup_migrations is not None:
-                await self._startup_migrations.require_current(engine)
             yield engine
 
     @provide
