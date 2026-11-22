@@ -81,10 +81,7 @@ class RpcDispatcher:
                     )
                 arguments[method.params_parameter] = invocation.params
             result = await function(**arguments)
-            validated = adapter(method.result).validate_python(
-                result, from_attributes=True
-            )
-            return result if isinstance(result, BaseModel) else validated
+            return adapter(method.result).validate_python(result, from_attributes=True)
 
 
 def _validated_params(
