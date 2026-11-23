@@ -124,16 +124,27 @@ See the [0.21.0 upgrade guide](package-migration.md#upgrade-to-0210).
 | `problem_details` | `True` | Enrich the native HTTP server span with handled Problem Details outcomes |
 | `exclude` | `None` | ASGI scope predicate; suppress native telemetry and ports, and participating downstream instrumentation for HTTP requests |
 | `resources` | `None` | Use installed resource adapters; an explicit list replaces the defaults, and `[]` disables resource instrumentation |
+| `shutdown` | `None` | Synchronous callable that releases application-owned SDK providers |
 
 Apply composition before startup. Canon forces FastAPI's `auto_configure=False`,
 including when the environment requests automatic exporters. It never creates
-exporters, sets global providers, or flushes/shuts down application providers.
-The application may install global providers in its lifespan before requests
-start; both FastAPI and the port tracer resolve them lazily. Explicit providers
-should be created before composition and shut down by an application lifespan.
+exporters or sets global providers, and it shuts down application providers only
+through `shutdown`. The application may install global providers in its lifespan
+before requests start; both FastAPI and the port tracer resolve them lazily.
+Explicit providers should be created before composition.
 Without an enabled `Telemetry`, FastAPI keeps its own constructor/environment
 configuration; omitting `Telemetry` does not disable an independently configured
 FastAPI pipeline.
+
+```python
+telemetry = Telemetry(tracer_provider=tracer_provider, shutdown=runtime.shutdown)
+app = Composition(features=features, integrations=[telemetry]).build(FastAPI())
+```
+
+`shutdown` runs once, after the Dishka container closes, or before a failing
+`build()` raises. It does not run for `check()` or an app whose lifespan never
+starts, such as a contract export. A `Telemetry` with `shutdown` belongs to one
+application.
 
 ### HTTP exclusion and suppression
 

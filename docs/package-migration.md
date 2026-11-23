@@ -56,6 +56,24 @@ focused = Composition(
 focused = replace(composition, features=selected_features)
 ```
 
+Move SDK shutdown from the application lifespan to `Telemetry`, so telemetry
+emitted while the container closes is still exported:
+
+```python
+# Before
+runtime = TelemetryRuntime(settings)
+try:
+    app = FastAPI(lifespan=runtime.lifespan)  # shuts the SDK down on exit
+    Composition(features=features, integrations=[runtime.options]).build(app)
+except BaseException:
+    runtime.shutdown()
+    raise
+# After
+runtime = TelemetryRuntime(settings)
+telemetry = replace(runtime.options, shutdown=runtime.shutdown)
+app = Composition(features=features, integrations=[telemetry]).build(FastAPI())
+```
+
 ## Upgrade to 0.25.0
 
 Version 0.25.0 was published on 2026-11-23.

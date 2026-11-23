@@ -26,6 +26,7 @@ from fastapi_canon.composition.installation import (
     Installation,
     apply_composition,
     installed_description,
+    pending_finalizers,
     validate_applied_composition,
 )
 from fastapi_canon.diagnostics import (
@@ -103,11 +104,16 @@ class Composition:
 
         Building the same composition again only repeats validation.
         """
-        if not apply_composition(app, self):
-            raise_check_errors(self.check(app))
-        # Regenerate OpenAPI so routes added since an earlier build are included.
-        app.openapi_schema = None
-        validate_openapi_contracts(app)
+        finalizers = pending_finalizers(app, self)
+        try:
+            if not apply_composition(app, self, finalizers):
+                raise_check_errors(self.check(app))
+            # Regenerate OpenAPI so routes added since an earlier build are included.
+            app.openapi_schema = None
+            validate_openapi_contracts(app)
+        except BaseException:
+            finalizers()
+            raise
         return app
 
     def override(self, *providers: Provider | Callable[[], Provider]) -> Composition:

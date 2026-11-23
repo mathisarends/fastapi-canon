@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Callable, Mapping
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, NamedTuple
 
@@ -83,7 +83,42 @@ class Installation:
     contract_routes: tuple[ContractRoute, ...] = field(default=(), compare=False)
 
 
-def apply_composition(app: FastAPI, composition: CompositionSource) -> bool:
+class IntegrationFinalizers:
+    """Run integration finalizers at most once, last integration first."""
+
+    def __init__(self, callbacks: tuple[Callable[[], None], ...]) -> None:
+        self._callbacks = callbacks
+
+    def __call__(self) -> None:
+        callbacks, self._callbacks = self._callbacks, ()
+        with ExitStack() as stack:
+            for callback in callbacks:
+                stack.callback(callback)
+
+
+def pending_finalizers(
+    app: object, composition: CompositionSource
+) -> IntegrationFinalizers:
+    """Return the finalizers a first installation into *app* becomes responsible for."""
+    if (
+        not isinstance(app, FastAPI)
+        or getattr(app.state, INSTALLATION_STATE_KEY, None) is not None
+    ):
+        return IntegrationFinalizers(())
+    return IntegrationFinalizers(
+        tuple(
+            finalizer
+            for integration in composition.integrations
+            if (finalizer := integration.finalizer()) is not None
+        )
+    )
+
+
+def apply_composition(
+    app: FastAPI,
+    composition: CompositionSource,
+    finalizers: IntegrationFinalizers,
+) -> bool:
     raw_app: object = app
     if not isinstance(raw_app, FastAPI):
         msg = "app must be a FastAPI instance"
@@ -169,6 +204,7 @@ def apply_composition(app: FastAPI, composition: CompositionSource) -> bool:
             *router_lifespans(original_lifespan, installed_routers),
         ),
         container,
+        finalizers=finalizers,
     )
 
     if composition.request_logging:
@@ -242,10 +278,13 @@ def compose_lifespan(
     original: FeatureLifespan,
     feature_lifespans: tuple[ApplicationLifespan, ...],
     container: AsyncContainer | None,
+    *,
+    finalizers: IntegrationFinalizers,
 ) -> FeatureLifespan:
     @asynccontextmanager
     async def composed(app: FastAPI) -> AsyncGenerator[Mapping[str, Any], None]:
         async with AsyncExitStack() as stack:
+            stack.callback(finalizers)
             if container is not None:
                 stack.push_async_callback(container.close)
             validate_openapi_contracts(app)
