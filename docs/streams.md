@@ -191,8 +191,8 @@ async def create_events(
 POST only; other enum members are rejected.
 GET is useful for subscribing to events; POST lets the request include a typed
 JSON body, as in [`examples/streams/app.py`](../examples/streams/app.py).
-For generated clients, declare GET and POST separately with different
-`operation_id` values, as the runnable example does.
+Selecting both registers one operation per method and suffixes its ID:
+`operation_id="feed"` publishes `feed_get` and `feed_post`.
 
 Every declared error must be an `Error` instance and is registered automatically.
 Duplicate instances, including errors

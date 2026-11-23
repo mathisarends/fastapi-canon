@@ -11,6 +11,8 @@ from collections.abc import (
 from typing import Any, TypeAliasType, get_args, get_origin, get_type_hints
 
 from fastapi import APIRouter
+from fastapi.datastructures import DefaultPlaceholder
+from fastapi.routing import APIRoute
 from pydantic import TypeAdapter
 
 try:
@@ -39,16 +41,21 @@ class StreamRouter(APIRouter):
     ) -> Callable[[Endpoint], Endpoint]:
         """Register a GET (default) or POST JSON-data SSE generator.
 
-        Other options are forwarded to ``APIRouter.api_route``, including tags,
-        dependencies, responses and operation_id. Serialization must preserve
-        the exported event schema: include must be None, exclude must be empty,
-        by_alias must be True, and exclude_none/unset/defaults must be False.
-        Put HTTP precondition checks in dependencies: a generator's body executes
-        after the response has started, following native FastAPI behavior.
+        Selecting both registers one operation per method, suffixing its ID with
+        ``_get`` and ``_post``. Other options are forwarded to
+        ``APIRouter.api_route``, including tags, dependencies, responses and
+        operation_id. Serialization must preserve the exported event schema:
+        include must be None, exclude must be empty, by_alias must be True, and
+        exclude_none/unset/defaults must be False. Put HTTP precondition checks in
+        dependencies: a generator's body executes after the response has started,
+        following native FastAPI behavior.
         """
-        selected = [
-            method.upper() for method in (methods if methods is not None else ["GET"])
-        ]
+        selected = list(
+            dict.fromkeys(
+                method.upper()
+                for method in (methods if methods is not None else ["GET"])
+            )
+        )
         if not selected or not set(selected) <= {"GET", "POST"}:
             raise ValueError("Streams support GET and POST only")
         if "response_class" in options or "response_model" in options:
@@ -89,15 +96,40 @@ class StreamRouter(APIRouter):
 
         def decorator(endpoint: Endpoint) -> Endpoint:
             validate_endpoint(endpoint)
-            self.api_route(
-                path,
-                methods=selected,
-                response_class=EventSourceResponse,
-                **options,
-            )(endpoint)
+            for method, route_options in self._routes(selected, options).items():
+                self.api_route(
+                    path,
+                    methods=[method],
+                    response_class=EventSourceResponse,
+                    **route_options,
+                )(endpoint)
             return endpoint
 
         return decorator
+
+    def _routes(
+        self, methods: list[str], options: dict[str, Any]
+    ) -> dict[str, dict[str, Any]]:
+        if len(methods) == 1:
+            return {methods[0]: options}
+        return {
+            method: self._suffixed_id(options, method.lower()) for method in methods
+        }
+
+    def _suffixed_id(self, options: dict[str, Any], suffix: str) -> dict[str, Any]:
+        explicit = options.get("operation_id")
+        if explicit is not None:
+            return {**options, "operation_id": f"{explicit}_{suffix}"}
+        generate = options.get(
+            "generate_unique_id_function", self.generate_unique_id_function
+        )
+        if isinstance(generate, DefaultPlaceholder):
+            return options  # FastAPI's default IDs already include the method.
+
+        def suffixed(route: APIRoute) -> str:
+            return f"{generate(route)}_{suffix}"
+
+        return {**options, "generate_unique_id_function": suffixed}
 
 
 def validate_endpoint(endpoint: Callable[..., Any]) -> None:
