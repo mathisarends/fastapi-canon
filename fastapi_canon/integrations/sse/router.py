@@ -12,6 +12,7 @@ from typing import Any, TypeAliasType, get_args, get_origin, get_type_hints
 
 from fastapi import APIRouter
 from fastapi.datastructures import DefaultPlaceholder
+from fastapi.routing import APIRoute
 from pydantic import TypeAdapter
 
 try:
@@ -124,10 +125,11 @@ class StreamRouter(APIRouter):
         )
         if isinstance(generate, DefaultPlaceholder):
             return options  # FastAPI's default IDs already include the method.
-        return {
-            **options,
-            "generate_unique_id_function": lambda route: f"{generate(route)}_{suffix}",
-        }
+
+        def suffixed(route: APIRoute) -> str:
+            return f"{generate(route)}_{suffix}"
+
+        return {**options, "generate_unique_id_function": suffixed}
 
 
 def validate_endpoint(endpoint: Callable[..., Any]) -> None:
