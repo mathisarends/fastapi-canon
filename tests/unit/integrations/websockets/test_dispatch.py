@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import pytest
 from fastapi_canon.integrations.websockets import (
     RpcChannel,
@@ -5,8 +7,10 @@ from fastapi_canon.integrations.websockets import (
     RpcMethodNotFoundError,
     RpcProtocol,
 )
+from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.dispatch import RpcDispatcher
-from pydantic import BaseModel
+from fastapi_canon.integrations.websockets.testing import RpcTestClient
+from pydantic import BaseModel, Field
 
 from tests.unit.integrations.websockets.conftest import (
     GreetingRpcMethod,
@@ -123,3 +127,34 @@ def test_foreign_model_params_keep_declared_class_and_field_names() -> None:
     )
     assert type(invocation.params) is ForeignParams
     assert invocation.params.user_id == 7
+
+
+class PriceRow(BaseModel):
+    unit_price: Decimal
+
+
+class PriceView(BaseModel):
+    unit_price: float = Field(serialization_alias="unitPrice")
+
+
+@pytest.mark.parametrize(
+    "returned",
+    [PriceRow(unit_price=Decimal("12.50")), PriceView(unit_price=12.5)],
+    ids=["persistence-model", "declared-model"],
+)
+async def test_results_are_serialized_as_the_declared_model(
+    returned: BaseModel,
+) -> None:
+    channel = RpcChannel("catalog")
+
+    @channel.method()
+    async def price() -> PriceView:
+        return returned  # type: ignore[return-value]  # Handlers may return rows.
+
+    service = RpcDefinition()
+    service.socket("/catalog", channels=(channel,), name="catalog")
+
+    async with RpcTestClient(service, "/catalog") as client:
+        result = await client.request("catalog.price")
+
+    assert result == {"unitPrice": 12.5}
