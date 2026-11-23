@@ -32,16 +32,13 @@ def generate(
     config: Configuration,
     *,
     targets: tuple[str, ...] = (),
+    native: bool = False,
     offline: bool = False,
     check: bool = False,
     diff: bool = False,
 ) -> tuple[StepResult, ...]:
     check = check or diff
-    selected = tuple(
-        target for target in config.targets if not targets or target.name in targets
-    )
-    if not selected or set(targets) - {target.name for target in selected}:
-        raise ValueError("Unknown generation target")
+    selected = _select_targets(config, targets, native=native)
     root = config.path.parent
     filenames = contract_kinds()
     if offline:
@@ -144,6 +141,26 @@ def generate(
             )
         )
     return tuple(results)
+
+
+def _select_targets(
+    config: Configuration, targets: tuple[str, ...], *, native: bool
+) -> tuple[TargetConfig, ...]:
+    if native and targets:
+        raise ValueError("Select either native targets or named targets, not both")
+    if native:
+        selected = tuple(
+            target for target in config.targets if target.generator != "external"
+        )
+        if not selected:
+            raise ValueError("Configuration has no native generation targets")
+        return selected
+    selected = tuple(
+        target for target in config.targets if not targets or target.name in targets
+    )
+    if not selected or set(targets) - {target.name for target in selected}:
+        raise ValueError("Unknown generation target")
+    return selected
 
 
 def _render(
