@@ -42,20 +42,6 @@ Composition(integrations=[database]).override(EngineOverride)
 `Telemetry` now instruments the override and no longer depends on its position
 in `integrations`. It remains a reserved binding that overrides cannot replace.
 
-Derive a composition variant with `dataclasses.replace()` instead of restating
-it. Overrides are kept:
-
-```python
-# Before
-focused = Composition(
-    features=selected_features,
-    errors=composition.errors,
-    integrations=composition.integrations,
-).override(*composition.overrides)
-# After
-focused = replace(composition, features=selected_features)
-```
-
 Move SDK shutdown from the application lifespan to `Telemetry`, so telemetry
 emitted while the container closes is still exported:
 
@@ -72,6 +58,29 @@ except BaseException:
 runtime = TelemetryRuntime(settings)
 telemetry = replace(runtime.options, shutdown=runtime.shutdown)
 app = Composition(features=features, integrations=[telemetry]).build(FastAPI())
+```
+
+Derive a composition variant with `dataclasses.replace()` instead of restating
+it. Overrides are kept:
+
+```python
+# Before
+focused = Composition(
+    features=selected_features,
+    errors=composition.errors,
+    integrations=composition.integrations,
+).override(*composition.overrides)
+# After
+focused = replace(composition, features=selected_features)
+```
+
+CI jobs without the external toolchains can stop listing native targets:
+
+```console
+# Before
+fastapi-canon generate --target streams --target rpc --target webrtc --check
+# After
+fastapi-canon generate --native --check
 ```
 
 ## Upgrade to 0.25.0

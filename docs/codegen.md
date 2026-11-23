@@ -111,6 +111,7 @@ For example, `package` is a Python RPC setting, not a TypeScript RPC setting.
 fastapi-canon generate
 fastapi-canon generate --check --diff
 fastapi-canon generate --target rpc --check
+fastapi-canon generate --native --check  # every target except external ones
 fastapi-canon generate --offline --check
 fastapi-canon generate --format json
 ```

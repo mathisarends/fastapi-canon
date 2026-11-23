@@ -144,6 +144,50 @@ def test_external_error_does_not_hide_other_target_results(project: Path) -> Non
     assert (project / "rpc/client.py").is_file()
 
 
+def test_native_check_runs_native_targets_without_external_commands(
+    project: Path,
+) -> None:
+    (project / "external.py").write_text(
+        "from pathlib import Path\nPath('external-ran.txt').write_text('ran')\n",
+        encoding="utf-8",
+    )
+    _external_config(project, "http", "external.py")
+
+    assert _run(project, "--native").returncode == 0
+    checked = _run(project, "--native", "--check")
+
+    assert checked.returncode == 0, checked.stdout + checked.stderr
+    steps = json.loads(checked.stdout)["steps"]
+    assert [step["name"] for step in steps] == ["contracts", "streams", "rpc"]
+    assert not (project / "external-ran.txt").exists()
+
+
+def test_native_with_explicit_target_is_a_usage_error(project: Path) -> None:
+    result = _run(project, "--native", "--target", "rpc")
+
+    assert result.returncode == 2
+    report = json.loads(result.stdout)
+    assert report["status"] == "error"
+    assert report["steps"] == []
+    assert not (project / "contracts").exists()
+
+
+def test_native_without_native_targets_is_a_usage_error(project: Path) -> None:
+    (project / "fastapi-canon.toml").write_text(
+        '[codegen]\nversion = 2\napp = "application:create_app"\n'
+        'contracts = "contracts"\n',
+        encoding="utf-8",
+    )
+    _external_config(project, "http", "external.py")
+
+    result = _run(project, "--native")
+
+    assert result.returncode == 2
+    report = json.loads(result.stdout)
+    assert "no native generation targets" in report["error"]
+    assert report["steps"] == []
+
+
 def test_old_configuration_fails_before_writing(project: Path) -> None:
     path = project / "fastapi-canon.toml"
     path.write_text(
