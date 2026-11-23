@@ -139,6 +139,7 @@ class Telemetry(Integration):
     meter_provider: MeterProvider | None = None
     logger_provider: LoggerProvider | None = None
     resources: Sequence[ResourceInstrumentation] | None = None
+    shutdown: Callable[[], None] | None = None
 
     def __post_init__(self) -> None:
         for name in (
@@ -152,8 +153,10 @@ class Telemetry(Integration):
         ):
             if not isinstance(getattr(self, name), bool):
                 raise FeatureConfigurationError(f"{name} must be a bool")
-        if self.exclude is not None and not callable(self.exclude):
-            raise FeatureConfigurationError("exclude must be callable or None")
+        for name in ("exclude", "shutdown"):
+            value = getattr(self, name)
+            if value is not None and not callable(value):
+                raise FeatureConfigurationError(f"{name} must be callable or None")
         if self.resources is not None:
             resources = tuple(self.resources)
             if not all(isinstance(item, ResourceInstrumentation) for item in resources):
@@ -192,6 +195,10 @@ class Telemetry(Integration):
             tracer_provider=self.tracer_provider,
             meter_provider=self.meter_provider,
         )
+
+    def finalizer(self) -> Callable[[], None] | None:
+        """Return the application-owned SDK shutdown callable."""
+        return self.shutdown
 
     def providers(self, context: ProviderContext) -> tuple[Provider, ...]:
         """Decorate the declared ports."""

@@ -43,6 +43,13 @@ class Integration:
         """Check the prepared application without side effects; return its installer."""
         return None
 
+    def finalizer(self) -> Callable[[], None] | None:
+        """Return a callable run once after the container closes or ``build()`` fails.
+
+        It is not called by ``check()`` or for an app whose lifespan never runs.
+        """
+        return None
+
 
 class IntegrationPart(Protocol):
     """A feature-owned contribution to one integration."""

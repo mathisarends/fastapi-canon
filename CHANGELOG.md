@@ -20,6 +20,9 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0260).
 ### Added
 
 - `Integration.final_providers` decorates effective bindings after overrides.
+- `Telemetry(shutdown=...)` releases application-owned SDK providers after the
+  container closes or when `build()` fails, through the new
+  `Integration.finalizer` hook (#208).
 - `fastapi-canon generate --native` selects every target whose generator is not
   `external` (#209).
 
