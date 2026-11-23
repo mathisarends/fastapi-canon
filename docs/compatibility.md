@@ -1,5 +1,21 @@
 # Compatibility
 
+## Canon 0.25.0
+
+Published on 2026-11-23. Follow the
+[migration](package-migration.md#upgrade-to-0250) for database integration and
+multi-method SSE operation changes.
+
+Exact-source CI passed Linux with Python 3.12 through 3.14 and Windows with
+Python 3.14, including PostgreSQL and Chromium/WebRTC contracts. Both
+20-combination wheel matrices passed on the publication artifacts. Installed
+SSE and WebRTC CLIs and generated clients passed their checks.
+
+All 15 public-index installation combinations passed. A fresh Windows/Python
+3.12 install also passed core CLI and runtime checks. The tag points to the
+verified source, and the PyPI and GitHub Release files match the
+[publication record](releases.md#current-versions).
+
 ## Canon 0.24.0
 
 Published on 2026-11-21. Follow the

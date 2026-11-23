@@ -13,7 +13,7 @@ PyPI project or add further Python import changes.
 
 ## Upgrade to 0.25.0
 
-0.25.0 is prepared for release.
+Version 0.25.0 was published on 2026-11-23.
 
 ### Register the database as an integration
 

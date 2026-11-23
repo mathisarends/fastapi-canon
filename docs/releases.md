@@ -6,15 +6,10 @@ version; the reference service is an example. `release.toml` and
 
 ## Current versions
 
-**Published: 0.24.0 (2026-11-21).** Reorganizes core packages and changes public
-error defaults and transport options. See the
-[migration](package-migration.md#upgrade-to-0240) and
-[changelog](../CHANGELOG.md#0240---2026-11-21).
-
-**Prepared: 0.25.0.** Moves database ownership to an integration, adds
-feature lifespan injection and splits multi-method SSE operations. See the
+**Published: 0.25.0 (2026-11-23).** Moves database ownership to an integration,
+adds feature lifespan injection and splits multi-method SSE operations. See the
 [upgrade guide](package-migration.md#upgrade-to-0250) and
-[changelog](../CHANGELOG.md).
+[changelog](../CHANGELOG.md#0250---2026-11-23).
 
 Published artifacts, manifests and run results are linked below. They record
 verified publications; prepared source versions are not publication evidence.
@@ -22,6 +17,7 @@ Historical links retain their original repositories.
 
 | Version | Source | CI | Dry run | Publication | Wheel, sdist and manifest |
 | --- | --- | --- | --- | --- | --- |
+| 0.25.0 (2026-11-23) | [Source](https://github.com/mathisarends/fastapi-canon/commit/4608a73a6cb8e20c1c0e90d91609219694a9b572) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/45134231475) | [Preparatory dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/45132038583) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/45135200374) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.25.0) |
 | 0.24.0 (2026-11-21) | [Source](https://github.com/mathisarends/fastapi-canon/commit/e367a6715f9671d6fb1946c719d5c2bb619cca91) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/44897657004) | [Preparatory dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/44895163700) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/44898304844) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.24.0) |
 | 0.23.0 (2026-11-16) | [Source](https://github.com/mathisarends/fastapi-canon/commit/7c7ca2d9ff3807a8a70f531cfcbc989cdb67e555) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/43852102782) | [Dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/43853467478) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/43854315962) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.23.0) |
 | 0.22.0 (2026-11-15) | [Source](https://github.com/mathisarends/fastapi-canon/commit/b5b43e7860b59591b6d8c6ac28b32f7b36b1f698) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/43708460509) | [Preparatory dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/43705432313) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/43709163883) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.22.0) |
@@ -38,8 +34,8 @@ Historical links retain their original repositories.
 | 0.11.0 (2026-11-01) | [Source](https://github.com/mathisarends/fastapi_canon/commit/2773b56498fad05ac9e1f1163ee33241b6d70eff) | [CI](https://github.com/mathisarends/fastapi_canon/actions/runs/41346976457) | [Dry run](https://github.com/mathisarends/fastapi_canon/actions/runs/41347623801) | [Publish](https://github.com/mathisarends/fastapi_canon/actions/runs/41348067349) | [Assets](https://github.com/mathisarends/fastapi_canon/releases/tag/fastapi-canon-v0.11.0) |
 | 0.10.0 (2026-11-01) | [Source](https://github.com/mathisarends/fastapi_canon/commit/4d9ce1842b350a9bf867d512cc89aafc4b44d53b) | [CI](https://github.com/mathisarends/fastapi_canon/actions/runs/41311732023) | [Dry run](https://github.com/mathisarends/fastapi_canon/actions/runs/41312304534) | [Publish](https://github.com/mathisarends/fastapi_canon/actions/runs/41312590718) | [Assets](https://github.com/mathisarends/fastapi_canon/releases/tag/fastapi-canon-v0.10.0) |
 
-The preparatory dry runs for 0.24.0, 0.22.0, 0.19.0 and 0.17.0 predate changelog
-finalization. Each publication revalidated the final dated source and verified
+The preparatory dry runs for 0.25.0, 0.24.0, 0.22.0, 0.19.0 and 0.17.0 predate
+changelog finalization. Each publication revalidated the final dated source and verified
 its public installs and attached artifacts.
 
 Recovery notes: 0.23.0 resumed public-index verification on the original run
