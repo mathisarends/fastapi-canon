@@ -2,7 +2,7 @@ import math
 from collections.abc import Mapping
 from typing import Any, cast
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from fastapi_canon.error.error import Error, freeze_headers
 from fastapi_canon.error.problem import Problem
@@ -82,13 +82,17 @@ def _render_extensions(error: AnyError, exception: Exception) -> dict[str, JsonV
     rendered: object = renderer(exception) if callable(renderer) else renderer
     if rendered is None:
         return {}
+    model = error.extensions_model
+    if model is not None and isinstance(rendered, model):
+        # Already validated: serialize it, because output aliases are not input.
+        wire = TypeAdapter(model).dump_python(rendered, mode="json", by_alias=True)
+        return cast(dict[str, JsonValue], wire)
     if isinstance(rendered, BaseModel):
         rendered = rendered.model_dump(mode="python", by_alias=True)
     if not isinstance(rendered, Mapping):
         msg = "extensions callback must return a mapping or BaseModel"
         raise ErrorConfigurationError(msg)
 
-    model = error.extensions_model
     if model is not None:
         try:
             rendered_model = model.model_validate(dict(rendered))

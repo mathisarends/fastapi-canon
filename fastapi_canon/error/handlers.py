@@ -11,6 +11,7 @@ from fastapi.exception_handlers import (
 )
 from fastapi.exceptions import RequestValidationError, ResponseValidationError
 from fastapi.responses import JSONResponse
+from fastapi.utils import is_body_allowed_for_status_code
 from starlette.exceptions import HTTPException
 from starlette.responses import Response
 from starlette.types import ExceptionHandler, Scope
@@ -203,6 +204,12 @@ async def _http_exception_handler(
     if not isinstance(exception, HTTPException):
         raise exception
     status = exception.status_code
+    if not is_body_allowed_for_status_code(status):
+        return await _connection_response(
+            request,
+            Response(status_code=status, headers=exception.headers),
+            code=f"http_{status}",
+        )
     title = http_problem_title(status)
     detail = exception.detail if isinstance(exception.detail, str) else None
     payload: dict[str, JsonValue] = {
@@ -273,7 +280,7 @@ def _validation_error(error: dict[str, object]) -> JsonValue:
         pointer = "#/" + "/".join(_escape_pointer(part) for part in parts[1:])
         result["pointer"] = pointer.rstrip("/") or "#"
     elif source in {"path", "query", "header", "cookie"} and len(parts) > 1:
-        result["parameter"] = str(parts[-1])
+        result["parameter"] = str(parts[1])
         result["in"] = cast(str, source)
     return result
 
