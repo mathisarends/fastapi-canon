@@ -103,6 +103,27 @@ fastapi-canon generate --target streams --target rpc --target webrtc --check
 fastapi-canon generate --native --check
 ```
 
+Move `app.add_middleware()` calls into the composition. The list reads outermost
+first, the reverse of consecutive `add_middleware()` calls:
+
+```python
+# Before
+app = composition.build(FastAPI())
+app.add_middleware(OwnerRoutingMiddleware, application=app)
+app.add_middleware(CORSMiddleware, allow_origins=origins)
+app.add_middleware(LogContextMiddleware)
+# After
+composition = Composition(
+    features=features,
+    middleware=[
+        Middleware(LogContextMiddleware),
+        Middleware(CORSMiddleware, allow_origins=origins),
+        Middleware(OwnerRoutingMiddleware),  # takes routes: Inject[OwnerRoutes]
+    ],
+)
+app = composition.build(FastAPI())
+```
+
 ## Upgrade to 0.25.0
 
 Version 0.25.0 was published on 2026-11-23.

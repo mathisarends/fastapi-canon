@@ -21,6 +21,7 @@ from dishka.integrations.fastapi import DishkaRoute
 from fastapi import APIRouter, FastAPI
 from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute
+from starlette.middleware import Middleware
 from starlette.routing import Route, WebSocketRoute, compile_path
 from starlette.types import ExceptionHandler
 
@@ -32,6 +33,7 @@ from fastapi_canon.composition.introspection import (
     operation_headers,
 )
 from fastapi_canon.composition.lifespans import lifespan_injection
+from fastapi_canon.composition.middleware import middleware_dependencies
 from fastapi_canon.diagnostics import (
     CheckContext,
     CheckIssue,
@@ -479,6 +481,46 @@ def check_lifespan_dependencies(
                     "Register this service at APP scope, or inject an APP-scoped ServiceScope factory for short REQUEST work.",
                     feature_names=(feature.name,),
                     locations=(qualified_name(feature.lifespan), qualified),
+                )
+            )
+        checks.append(CheckResult(name, "failed" if missing else "passed"))
+
+
+def check_middleware_dependencies(
+    app: FastAPI,
+    middleware: tuple[Middleware, ...],
+    *,
+    container: AsyncContainer | None,
+    issues: list[CheckIssue],
+    checks: list[CheckResult],
+) -> None:
+    external = (
+        container is None and getattr(app.state, "dishka_container", None) is not None
+    )
+    for declared in middleware:
+        dependencies = middleware_dependencies(declared)
+        if not dependencies:
+            continue
+        owner = qualified_name(declared.cls)
+        name = f"middleware.dependencies:{owner}"
+        if external:
+            checks.append(CheckResult(name, "skipped"))
+            continue
+        missing = [
+            dependency
+            for _, dependency in dependencies
+            if not dependency_available(
+                container, DependencyKey(dependency, DEFAULT_COMPONENT), Scope.APP
+            )
+        ]
+        for dependency in missing:
+            qualified = qualified_name(dependency)
+            issues.append(
+                CheckIssue(
+                    "canon.providers.E007",
+                    f"Middleware {owner} injects {qualified} without an APP-scope binding",
+                    "Register this service at APP scope, or inject an APP-scoped ServiceScope factory for short REQUEST work.",
+                    locations=(owner, qualified),
                 )
             )
         checks.append(CheckResult(name, "failed" if missing else "passed"))
@@ -987,6 +1029,13 @@ class _CheckComposition:
                 ("providers",),
             ),
             _CheckStep(
+                "middleware.dependencies",
+                self._middleware_dependencies,
+                ("providers",),
+                code="canon.providers.E007",
+                hint="Pass each constructor argument once and bind injected services at APP scope.",
+            ),
+            _CheckStep(
                 "http.contracts",
                 self._contracts,
                 ("http.description", "http.operation_ids", "http.paths"),
@@ -1202,6 +1251,15 @@ class _CheckComposition:
         check_lifespan_dependencies(
             self.app,
             self.composition.features,
+            container=self.container,
+            issues=self.issues,
+            checks=self.checks,
+        )
+
+    def _middleware_dependencies(self) -> None:
+        check_middleware_dependencies(
+            self.app,
+            self.composition.middleware,
             container=self.container,
             issues=self.issues,
             checks=self.checks,

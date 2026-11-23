@@ -31,8 +31,8 @@ type ApplicationLifespan = Callable[
 
 
 @dataclass(frozen=True, slots=True)
-class LifespanInjection:
-    """The services one feature lifespan injects from the APP container."""
+class ParameterInjection:
+    """The services one callable injects from the APP container."""
 
     dependencies: tuple[tuple[str, Any], ...]
     app_parameter: Parameter | None
@@ -73,26 +73,39 @@ def bind_lifespan(
 
 def lifespan_injection(
     lifespan: DeclaredLifespan, *, feature_name: str
-) -> LifespanInjection:
+) -> ParameterInjection:
     """Describe the ``Inject[T]`` parameters of *lifespan*.
 
     A lifespan without them keeps the plain ``lifespan(app)`` contract.
     """
-    parameters = tuple(_signature(lifespan).parameters.values())
+    return callable_injection(lifespan, owner=f"feature {feature_name!r} lifespan")
+
+
+def callable_injection(
+    target: Callable[..., Any],
+    *,
+    owner: str,
+    supplied: frozenset[str] = frozenset(),
+) -> ParameterInjection:
+    """Describe the ``Inject[T]`` parameters of *target*.
+
+    Parameters named in *supplied* receive explicit arguments, so they do not count
+    as required. *owner* names the callable in configuration errors.
+    """
+    parameters = tuple(read_signature(target).parameters.values())
     required = tuple(
         parameter
         for parameter in parameters
         if parameter.default is Parameter.empty
+        and parameter.name not in supplied
         and parameter.kind not in (Parameter.VAR_POSITIONAL, Parameter.VAR_KEYWORD)
     )
     try:
-        hints = _parameter_hints(_annotated(lifespan), parameters)
+        hints = _parameter_hints(_annotated(target), parameters)
     except (NameError, TypeError) as error:
         if len(required) <= 1:
-            return LifespanInjection((), None)
-        msg = (
-            f"feature {feature_name!r} lifespan annotations cannot be resolved: {error}"
-        )
+            return ParameterInjection((), None)
+        msg = f"{owner} annotations cannot be resolved: {error}"
         raise FeatureConfigurationError(msg) from error
     injected = tuple(
         (parameter, dependency)
@@ -100,7 +113,7 @@ def lifespan_injection(
         if (dependency := injected_dependency(hints.get(parameter.name))) is not None
     )
     if not injected:
-        return LifespanInjection((), None)
+        return ParameterInjection((), None)
     unsupported = tuple(
         parameter.name
         for parameter, _ in injected
@@ -108,32 +121,29 @@ def lifespan_injection(
         not in (Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY)
     )
     if unsupported:
-        msg = (
-            f"feature {feature_name!r} lifespan must accept "
-            f"{', '.join(unsupported)} by keyword to inject it"
-        )
+        msg = f"{owner} must accept {', '.join(unsupported)} by keyword to inject it"
         raise FeatureConfigurationError(msg)
     names = {parameter.name for parameter, _ in injected}
     others = tuple(parameter for parameter in required if parameter.name not in names)
     if len(others) > 1:
         msg = (
-            f"feature {feature_name!r} lifespan takes the application and "
+            f"{owner} takes the application and "
             f"Inject[...] services; {', '.join(p.name for p in others)} are neither"
         )
         raise FeatureConfigurationError(msg)
-    return LifespanInjection(
+    return ParameterInjection(
         tuple((parameter.name, dependency) for parameter, dependency in injected),
         others[0] if others else None,
     )
 
 
-def _signature(lifespan: DeclaredLifespan) -> Signature:
+def read_signature(target: Callable[..., Any]) -> Signature:
     """Read the signature without evaluating deferred annotations on Python 3.14."""
     if sys.version_info >= (3, 14):
         from inspect import Format  # annotationlib only exists on Python 3.14.
 
-        return signature(lifespan, annotation_format=Format.FORWARDREF)
-    return signature(lifespan)
+        return signature(target, annotation_format=Format.FORWARDREF)
+    return signature(target)
 
 
 def _parameter_hints(
@@ -152,9 +162,9 @@ def _parameter_hints(
     return get_type_hints(holder, globalns=namespace, include_extras=True)
 
 
-def _annotated(lifespan: DeclaredLifespan) -> Any:
-    if isfunction(lifespan) or ismethod(lifespan):
-        return lifespan
-    if isclass(lifespan):
-        return lifespan.__init__
-    return type(lifespan).__call__
+def _annotated(target: Callable[..., Any]) -> Any:
+    if isfunction(target) or ismethod(target):
+        return target
+    if isclass(target):
+        return target.__init__
+    return type(target).__call__

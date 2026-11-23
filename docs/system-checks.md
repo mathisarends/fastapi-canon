@@ -95,6 +95,7 @@ application behavior. Independent failures can appear together.
 | `canon.providers.E004` | A WebRTC factory injects a service unavailable through APP/SESSION scope. |
 | `canon.providers.E005` | A feature lifespan injects a service without an APP-scope binding. |
 | `canon.providers.E006` | A feature or integration binds a service that another integration also binds. |
+| `canon.providers.E007` | A composition middleware injects a service without an APP-scope binding, or also receives it explicitly. |
 | `canon.description.E001` | HTTP metadata cannot be described against the composed catalog. |
 | `canon.contracts.E001` | HTTP/OpenAPI response contracts cannot be compiled. |
 | `canon.checks.E001` | A feature check failed to return valid findings. |
