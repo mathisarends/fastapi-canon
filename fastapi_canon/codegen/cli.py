@@ -29,6 +29,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Select a target; repeat for several targets (default: all targets)",
     )
     parser.add_argument(
+        "--native",
+        action="store_true",
+        help="Select every target whose generator is not external",
+    )
+    parser.add_argument(
         "--offline",
         action="store_true",
         help="Read saved contracts without importing application code",
@@ -62,6 +67,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             results = generate(
                 config,
                 targets=tuple(args.target),
+                native=args.native,
                 offline=args.offline,
                 check=args.check,
                 diff=args.diff,
