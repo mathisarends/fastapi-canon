@@ -1,6 +1,7 @@
 import asyncio
 import os
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import uuid4
 
@@ -18,24 +19,14 @@ async def database(
     if request.param == "sqlite":
         yield Database(url=URL.create("sqlite", database=str(tmp_path / "test.db")))
         return
-    url = os.environ.get("CANON_TEST_POSTGRES_URL")
-    if url is None:
-        pytest.skip("Set CANON_TEST_POSTGRES_URL to run real PostgreSQL contracts")
-    schema = "canon_" + uuid4().hex  # smelt: ignore[TST011] -- Parallel DB isolation.
-    engine = create_async_engine(url)
-    async with asyncio.timeout(15), engine.begin() as connection:
-        await connection.execute(text(f'CREATE SCHEMA "{schema}"'))
-    try:
-        yield Database(
-            url=url,
-            engine_options={
-                "connect_args": {"server_settings": {"search_path": schema}}
-            },
-        )
-    finally:
-        async with asyncio.timeout(15), engine.begin() as connection:
-            await connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
-        await engine.dispose()
+    async with _postgres_database() as postgres:
+        yield postgres
+
+
+@pytest.fixture
+async def postgres_database() -> AsyncIterator[Database]:
+    async with _postgres_database() as postgres:
+        yield postgres
 
 
 @pytest.fixture
@@ -58,3 +49,25 @@ async def items(database: Database, metadata: MetaData) -> Table:
     ):
         await connection.run_sync(metadata.create_all)
     return metadata.tables["items"]
+
+
+@asynccontextmanager
+async def _postgres_database() -> AsyncIterator[Database]:
+    url = os.environ.get("CANON_TEST_POSTGRES_URL")
+    if url is None:
+        pytest.skip("Set CANON_TEST_POSTGRES_URL to run real PostgreSQL contracts")
+    schema = "canon_" + uuid4().hex  # smelt: ignore[TST011] -- Parallel DB isolation.
+    engine = create_async_engine(url)
+    async with asyncio.timeout(15), engine.begin() as connection:
+        await connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+    try:
+        yield Database(
+            url=url,
+            engine_options={
+                "connect_args": {"server_settings": {"search_path": schema}}
+            },
+        )
+    finally:
+        async with asyncio.timeout(15), engine.begin() as connection:
+            await connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        await engine.dispose()

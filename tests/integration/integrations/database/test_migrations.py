@@ -160,11 +160,10 @@ async def test_startup_checks_revisions_without_applying_migrations(
         assert ready.state.dishka_container is not None
 
 
-@pytest.mark.parametrize("database", ["postgres"], indirect=True)
 async def test_named_schema_drift_check_ignores_unrelated_schemas(
-    database: Database, tmp_path: Path
+    postgres_database: Database, tmp_path: Path
 ) -> None:
-    async with asyncio.timeout(30), database.open_engine() as engine:
+    async with asyncio.timeout(30), postgres_database.open_engine() as engine:
         async with engine.begin() as connection:
             default_schema = await connection.scalar(text("SELECT current_schema()"))
             sales, unrelated = f"{default_schema}_sales", f"{default_schema}_other"
