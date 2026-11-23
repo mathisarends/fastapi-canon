@@ -24,6 +24,8 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0260).
 ### Fixed
 
 - `dataclasses.replace()` works on `Feature` and keeps its explicit errors (#205).
+- `dataclasses.replace()` works on `Composition` and keeps its overrides, which
+  `Composition(overrides=[...])` now also accepts (#211).
 - Telemetry resource adapters instrument `Composition.override()` replacements
   and no longer depend on integration order (#204).
 
