@@ -572,6 +572,19 @@ def test_replace_keeps_explicit_errors_and_follows_replaced_routers() -> None:
     assert tuple(without_routers.error_registry or ()) == (listed,)
 
 
+def test_replace_changes_composition_field_and_keeps_overrides() -> None:
+    feature = Feature(name="items")
+    override = Provider()
+    composition = Composition(features=[feature]).override(override)
+
+    changed = replace(composition, request_logging=True)
+
+    assert changed.request_logging is True
+    assert changed.features == (feature,)
+    assert changed.overrides == (override,)
+    assert composition.request_logging is False
+
+
 def test_shared_error_definition_is_registered_once_across_features() -> None:
     error = Error(
         NotFoundError,

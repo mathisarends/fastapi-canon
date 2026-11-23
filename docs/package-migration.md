@@ -42,6 +42,20 @@ Composition(integrations=[database]).override(EngineOverride)
 `Telemetry` now instruments the override and no longer depends on its position
 in `integrations`. It remains a reserved binding that overrides cannot replace.
 
+Derive a composition variant with `dataclasses.replace()` instead of restating
+it. Overrides are kept:
+
+```python
+# Before
+focused = Composition(
+    features=selected_features,
+    errors=composition.errors,
+    integrations=composition.integrations,
+).override(*composition.overrides)
+# After
+focused = replace(composition, features=selected_features)
+```
+
 ## Upgrade to 0.25.0
 
 Version 0.25.0 was published on 2026-11-23.

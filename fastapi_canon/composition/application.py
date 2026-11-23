@@ -60,6 +60,7 @@ class Composition:
         router_factory: Callable[[], APIRouter] | None = None,
         integrations: Sequence[Integration] = (),
         request_logging: bool = False,
+        overrides: Sequence[Provider | Callable[[], Provider]] = (),
     ) -> None:
         normalized_integrations = unique_instances(
             integrations, Integration, "integrations"
@@ -91,7 +92,11 @@ class Composition:
             self, "errors", errors if errors is not None else ErrorOptions()
         )
         object.__setattr__(self, "router_factory", router_factory)
-        object.__setattr__(self, "overrides", ())
+        object.__setattr__(
+            self,
+            "overrides",
+            unique_provider_sources(overrides, owner="Composition overrides"),
+        )
 
     def build(self, app: FastAPI) -> FastAPI:
         """Install this composition into *app*, validate it and return the app.
