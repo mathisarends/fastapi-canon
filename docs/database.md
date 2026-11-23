@@ -354,7 +354,8 @@ schemas before the first upgrade.
 
 When migrations are configured and startup validation is enabled, startup requires
 DB revisions to match the application's heads and checks that owned tables and
-columns exist. Upgrading to
+columns exist. The check runs on the effective `AsyncEngine`, including a
+`Composition.override()`, before feature lifespans start. Upgrading to
 head repeats this check even when the revision was already current. Startup
 never applies revisions or calls `create_all`.
 Run upgrades once in a deployment migration job before starting workers.
