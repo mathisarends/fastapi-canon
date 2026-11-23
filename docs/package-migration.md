@@ -13,7 +13,9 @@ PyPI project or add further Python import changes.
 
 ## Upgrade to 0.26.0
 
-0.26.0 is unreleased.
+0.26.0 is prepared for a release dry run. See the [changelog](../CHANGELOG.md).
+
+### Read merged feature errors from the registry
 
 `Feature.errors` now holds only `Feature(errors=[...])`. Read the catalog merged
 with router declarations from `error_registry`:
@@ -26,8 +28,11 @@ registry = feature.error_registry
 errors = registry.errors if registry is not None else ()
 ```
 
-A binding that a feature and an integration both provide now fails with
-`canon.providers.E006`. Replace integration bindings with an override:
+### Resolve duplicate provider bindings
+
+If a feature or another integration provides the same Dishka binding as an
+integration, preflight can report `canon.providers.E006`. Remove the duplicate
+contribution and apply a replacement with `Composition.override()`:
 
 ```python
 # Before
@@ -39,90 +44,80 @@ Composition(
 Composition(integrations=[database]).override(EngineOverride)
 ```
 
-`Telemetry` now instruments the override and no longer depends on its position
-in `integrations`. It remains a reserved binding that overrides cannot replace.
+Telemetry resource instrumentation now follows the effective binding regardless
+of integration order. If you previously overrode the reserved `Telemetry`
+binding, pass those settings to `Telemetry(...)` in `integrations`.
+Custom integrations that decorate bindings can use
+[`Integration.final_providers`](composition.md#integrations) to see overrides.
 
-Move SDK shutdown from the application lifespan to `Telemetry`, so telemetry
-emitted while the container closes is still exported:
+### Move SDK shutdown after container cleanup
+
+If your application owns its telemetry SDK providers, pass their existing
+synchronous shutdown callback to `Telemetry` and remove the old shutdown call
+from the application lifespan or build error handler. Keep unrelated lifespan
+work in place.
 
 ```python
-# Before
-runtime = TelemetryRuntime(settings)
-try:
-    app = FastAPI(lifespan=runtime.lifespan)  # shuts the SDK down on exit
-    Composition(features=features, integrations=[runtime.options]).build(app)
-except BaseException:
-    runtime.shutdown()
-    raise
-# After
-runtime = TelemetryRuntime(settings)
-telemetry = replace(runtime.options, shutdown=runtime.shutdown)
+from fastapi_canon.integrations.opentelemetry import Telemetry
+
+telemetry = Telemetry(tracer_provider=tracer_provider, shutdown=shutdown_sdk)
 app = Composition(features=features, integrations=[telemetry]).build(FastAPI())
 ```
 
-Derive a composition variant with `dataclasses.replace()` instead of restating
-it. Overrides are kept:
+See [telemetry ownership](telemetry.md#configuration-and-ownership) for when
+Canon calls the callback.
+
+### Simplify composition variants and standalone commands
+
+Use `dataclasses.replace(composition, features=selected_features)` to keep the
+composition's settings and overrides. The selected features and integrations
+still need to supply the bindings being overridden.
+
+For commands and test fixtures, `Composition.container()` includes integration
+bindings and overrides. Keep setup that normally runs in an application
+lifespan, such as database startup checks, explicit in the command.
 
 ```python
-# Before
-focused = Composition(
-    features=selected_features,
-    errors=composition.errors,
-    integrations=composition.integrations,
-).override(*composition.overrides)
-# After
-focused = replace(composition, features=selected_features)
-```
-
-Replace hand-assembled containers in commands and test fixtures. The composed
-container includes integration bindings and overrides:
-
-```python
-# Before
-providers = [
-    source if isinstance(source, Provider) else source()
-    for feature in FEATURES
-    for source in feature.providers
-]
-container = make_async_container(Telemetry.disabled().provider(), *providers)
-try:
-    await run(container)
-finally:
-    await container.close()
-# After
 async with composition.container() as container:
     await run(container)
 ```
 
-CI jobs without the external toolchains can stop listing native targets:
+### Check native code generation in CI
+
+Use `--native` to check all configured Canon generators while skipping external
+toolchains. Use `--target` by itself to select specific targets.
 
 ```console
-# Before
-fastapi-canon generate --target streams --target rpc --target webrtc --check
-# After
 fastapi-canon generate --native --check
 ```
 
-Move `app.add_middleware()` calls into the composition. The list reads outermost
-first, the reverse of consecutive `add_middleware()` calls:
+### Declare middleware in stack order
+
+To move existing `app.add_middleware()` calls onto the composition, reverse
+their order so the list starts with the outermost middleware.
 
 ```python
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
+
 # Before
-app = composition.build(FastAPI())
-app.add_middleware(OwnerRoutingMiddleware, application=app)
-app.add_middleware(CORSMiddleware, allow_origins=origins)
+app = Composition(features=features).build(FastAPI())
 app.add_middleware(LogContextMiddleware)
+app.add_middleware(CORSMiddleware, allow_origins=origins)
 # After
 composition = Composition(
     features=features,
     middleware=[
-        Middleware(LogContextMiddleware),
         Middleware(CORSMiddleware, allow_origins=origins),
-        Middleware(OwnerRoutingMiddleware),  # takes routes: Inject[OwnerRoutes]
+        Middleware(LogContextMiddleware),
     ],
 )
 app = composition.build(FastAPI())
 ```
+
+With `request_logging=True`, keep middleware that must wrap request logging
+in `app.add_middleware()` after `build()`. See
+[middleware](composition.md#middleware) for APP-scoped constructor injection.
 
 ## Upgrade to 0.25.0
 

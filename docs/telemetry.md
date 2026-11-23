@@ -180,7 +180,7 @@ leave resources untouched without importing their optional runtimes. This does
 not disable an independently configured FastAPI pipeline. Without contributed
 providers Composition still avoids creating an otherwise unused DI container.
 
-Standalone containers explicitly supply the configuration:
+When building containers directly with Dishka, supply the configuration:
 
 ```python
 container = make_async_container(Infrastructure(), options.provider())
