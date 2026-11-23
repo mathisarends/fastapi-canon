@@ -115,7 +115,8 @@ Features automatically collect `Error` definitions from `raises=` declarations
 on their routers, policies and channels, including nested routers and channels.
 `raises=` is the only declaration: list additional errors that no operation
 declares, such as dependency failures handled globally, with
-`Feature(errors=[...])`. `Feature.errors` is the resulting tuple. Set the common
+`Feature(errors=[...])`. `Feature.errors` holds that list, and
+`Feature.error_registry` merges it with the router declarations. Set the common
 problem-type URI prefix once with `Composition(errors=ErrorOptions(type_base=...))`.
 Repeated references to the same definitions are merged by identity at
 the application boundary; collisions between different definitions still fail.
@@ -186,7 +187,10 @@ alone. Route-only transports such as `WebRtcRouter` are routers, not integration
 
 Custom integrations subclass `fastapi_canon.integration.Integration`; parts set
 `integration: ClassVar[type[Integration]]`. `Integration.providers` sees the
-providers of features and of integrations listed earlier.
+providers of features and of integrations listed earlier. Use
+`Integration.final_providers` to decorate the effective bindings, including
+overrides. A binding that a feature and an integration both provide fails with
+`canon.providers.E006`.
 Return `Installer(..., before_features=True)` from `Integration.prepare()`
 to run its lifespan before feature startup and close it after feature shutdown.
 
@@ -346,8 +350,8 @@ composition-owned and not close it independently.
 ### Overriding providers in tests
 
 `composition.override(*providers)` returns a copy of the composition whose
-providers are added after every feature provider, so their bindings replace the
-feature bindings. The original composition is unchanged:
+providers replace feature and integration bindings, such as the `Database`
+engine. The original composition is unchanged:
 
 ```python
 from dishka import Provider, Scope, provide
@@ -372,8 +376,8 @@ def test_lists_projects() -> None:
 ```
 
 Overrides accept the same provider instances, classes and factories as
-`Feature(providers=...)`. An override may only replace bindings that a feature
-already provides; a binding for any other type fails with
+`Feature(providers=...)`. An override may only replace existing bindings; a
+binding for any other type fails with
 `canon.providers.E001`, which catches typos and stale fakes.
 
 ## Error contracts

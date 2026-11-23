@@ -1,6 +1,8 @@
 import asyncio
-from collections.abc import AsyncIterator, Sequence
-from dataclasses import dataclass
+from collections.abc import AsyncIterator, Iterator, Sequence
+from contextlib import contextmanager
+from dataclasses import dataclass, field
+from typing import Any
 
 import httpx2
 import pytest
@@ -17,6 +19,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from fastapi_canon import APIRouter, Composition, Feature
+from fastapi_canon.integrations.database import Database
 from fastapi_canon.integrations.opentelemetry import (
     ResourceInstrumentation,
     Telemetry,
@@ -55,6 +58,59 @@ def _client() -> httpx2.AsyncClient:
         transport=httpx2.ASGITransport(app=Starlette(routes=[Route("/", _downstream)])),
         base_url="http://downstream.test",
     )
+
+
+@dataclass
+class RecordedEngines:
+    instrumented: list[str | None] = field(default_factory=list)
+
+    def accepts(self, provided: type[Any]) -> bool:
+        return provided is AsyncEngine
+
+    @contextmanager
+    def instrument(self, resource: Any, telemetry: Telemetry) -> Iterator[None]:
+        self.instrumented.append(resource.url.database)
+        yield
+
+
+class OverrideEngine(Provider):
+    @provide(scope=Scope.APP)
+    async def engine(self) -> AsyncIterator[AsyncEngine]:
+        engine = create_async_engine("sqlite+aiosqlite:///override.db")
+        yield engine
+        await engine.dispose()
+
+
+@pytest.mark.parametrize(
+    ("telemetry_first", "override", "expected"),
+    [(False, True, "override.db"), (True, False, "default.db")],
+    ids=["composition-override", "telemetry-listed-first"],
+)
+async def test_resource_instrumentation_applies_to_the_effective_engine(
+    telemetry_first: bool, override: bool, expected: str
+) -> None:
+    recorded = RecordedEngines()
+    database = Database(url="sqlite+aiosqlite:///default.db")
+    with SpanCapture() as capture:
+        telemetry = Telemetry(
+            resources=[recorded],
+            tracer_provider=capture.provider,
+            metrics=False,
+            logs=False,
+        )
+        composition = Composition(
+            integrations=[telemetry, database]
+            if telemetry_first
+            else [database, telemetry]
+        )
+        if override:
+            composition = composition.override(OverrideEngine)
+        app = composition.build(FastAPI())
+        async with asyncio.timeout(5), app.router.lifespan_context(app):
+            engine = await app.state.dishka_container.get(AsyncEngine)
+
+    assert engine.url.database == expected
+    assert recorded.instrumented == [expected]
 
 
 async def test_http_request_shares_configuration_exclusions_and_resource_lifetimes() -> (

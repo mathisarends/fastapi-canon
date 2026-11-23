@@ -1,7 +1,7 @@
 import asyncio
 from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import asynccontextmanager
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 from typing import cast
 
 import pytest
@@ -546,11 +546,30 @@ def test_feature_collects_declared_errors_from_canon_router() -> None:
         errors=ErrorOptions(type_base="https://example.test/problems"),
     ).build(FastAPI())
 
-    assert feature.errors == (error,)
+    assert tuple(feature.error_registry or ()) == (error,)
     with TestClient(app, raise_server_exceptions=False) as client:
         response = client.get("/items/missing")
     assert response.status_code == 404
     assert response.json()["code"] == "item_not_found"
+
+
+def test_replace_keeps_explicit_errors_and_follows_replaced_routers() -> None:
+    class RouterDeclaredError(Exception):
+        pass
+
+    listed = Error(NotFoundError, status=404, code="item_not_found")
+    declared = Error(RouterDeclaredError, status=409, code="item_conflict")
+    router = CanonAPIRouter()
+    router.get("/items", operation_id="items.list", raises=[declared])(lambda: None)
+    feature = Feature(name="items", routers=[router], errors=[listed])
+
+    without_providers = replace(feature, providers=())
+    without_routers = replace(feature, routers=())
+
+    assert without_providers == feature
+    assert set(without_providers.error_registry or ()) == {listed, declared}
+    assert without_routers.errors == (listed,)
+    assert tuple(without_routers.error_registry or ()) == (listed,)
 
 
 def test_shared_error_definition_is_registered_once_across_features() -> None:

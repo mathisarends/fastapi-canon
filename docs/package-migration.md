@@ -11,6 +11,37 @@ The [repository migration](repository-migration.md) records the
 source history and publishing setup. The repository move does not rename the
 PyPI project or add further Python import changes.
 
+## Upgrade to 0.26.0
+
+0.26.0 is unreleased.
+
+`Feature.errors` now holds only `Feature(errors=[...])`. Read the catalog merged
+with router declarations from `error_registry`:
+
+```python
+# Before
+errors = feature.errors
+# After
+registry = feature.error_registry
+errors = registry.errors if registry is not None else ()
+```
+
+A binding that a feature and an integration both provide now fails with
+`canon.providers.E006`. Replace integration bindings with an override:
+
+```python
+# Before
+Composition(
+    features=[Feature(name="test-db", providers=[EngineOverride])],
+    integrations=[database],
+)
+# After
+Composition(integrations=[database]).override(EngineOverride)
+```
+
+`Telemetry` now instruments the override and no longer depends on its position
+in `integrations`. It remains a reserved binding that overrides cannot replace.
+
 ## Upgrade to 0.25.0
 
 Version 0.25.0 was published on 2026-11-23.

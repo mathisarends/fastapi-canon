@@ -45,8 +45,8 @@ incorrect values such as `status_code="200"` are now type errors. Existing
 supported keyword names keep their runtime behavior; update incorrectly typed
 wrapper dictionaries to the matching option type when migrating.
 
-`Feature.errors` reads explicit contributions and the current router declarations.
-Composition collects that catalog at build time, so routes may be registered
+`Feature.error_registry` reads explicit contributions and the current router
+declarations. Composition collects that catalog at build time, so routes may be registered
 before or after constructing the feature. Finish route registration before
 building the application, just as with FastAPI's router inclusion.
 

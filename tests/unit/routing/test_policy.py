@@ -135,7 +135,7 @@ def test_router_policy_combines_contracts_dependencies_and_dishka_injection() ->
     }
     assert router.policy is PROTECTED
     assert router.raises == (AUTHENTICATION_REQUIRED, FORBIDDEN)
-    assert MISSING in feature.errors
+    assert MISSING in tuple(feature.error_registry or ())
 
 
 def test_router_factory_policy_extends_nested_feature_routers() -> None:

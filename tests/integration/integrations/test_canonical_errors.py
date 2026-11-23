@@ -165,7 +165,7 @@ def test_nested_plain_router_keeps_declarations_isolated_between_applications() 
         assert client.get("/nested/projects/0").json()["type"] == (
             "urn:second:problem/project_missing"
         )
-    assert feature.errors == (project_missing,)
+    assert tuple(feature.error_registry or ()) == (project_missing,)
     contracts = export_contracts(first)
     assert contracts.openrpc is not None
     assert contracts.openrpc["methods"][0]["errors"][0]["x-canon-problem-type"] == (

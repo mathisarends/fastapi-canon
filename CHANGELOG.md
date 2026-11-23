@@ -2,6 +2,31 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
+## 0.26.0 - Unreleased
+
+### Breaking changes
+
+See the [upgrade guide](docs/package-migration.md#upgrade-to-0260).
+
+- **`CANON-026-FEATURE-ERRORS`** — `Feature.errors` holds only the explicit
+  `errors=` list. Read `Feature.error_registry` for the catalog merged with
+  router declarations.
+- **`CANON-026-SHADOWED-BINDINGS`** — A binding that a feature and an
+  integration both provide fails with `canon.providers.E006`. Use
+  `Composition.override()` to replace an integration binding.
+- **`CANON-026-TELEMETRY-BINDING`** — `Composition.override()` can no longer
+  replace the reserved `Telemetry` binding. Configure `Telemetry(...)` instead.
+
+### Added
+
+- `Integration.final_providers` decorates effective bindings after overrides.
+
+### Fixed
+
+- `dataclasses.replace()` works on `Feature` and keeps its explicit errors (#205).
+- Telemetry resource adapters instrument `Composition.override()` replacements
+  and no longer depend on integration order (#204).
+
 ## 0.25.0 - 2026-11-23
 
 ### Breaking changes

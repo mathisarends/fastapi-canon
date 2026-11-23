@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from inspect import iscoroutinefunction
 from typing import cast
 
@@ -30,10 +30,10 @@ class Feature:
     routers: tuple[APIRouter, ...]
     providers: tuple[Provider | Callable[[], Provider], ...]
     integrations: tuple[IntegrationPart, ...]
+    errors: tuple[AnyError, ...]
     exception_handlers: Mapping[type[Exception], ExceptionHandler]
     lifespan: DeclaredLifespan | None
     checks: tuple[FeatureCheck, ...]
-    _listed_errors: tuple[AnyError, ...] = field(repr=False)
 
     def __init__(
         self,
@@ -104,26 +104,19 @@ class Feature:
         object.__setattr__(self, "routers", normalized_routers)
         object.__setattr__(self, "providers", normalized_providers)
         object.__setattr__(self, "integrations", normalized_parts)
-        object.__setattr__(self, "_listed_errors", listed)
+        object.__setattr__(self, "errors", listed)
         object.__setattr__(self, "exception_handlers", normalized_handlers)
         object.__setattr__(self, "lifespan", lifespan)
 
     @property
-    def errors(self) -> tuple[AnyError, ...]:
-        """Explicit contributions plus errors declared on the current routers."""
-        registry = self.error_registry
-        return registry.errors if registry is not None else ()
-
-    @property
     def error_registry(self) -> ErrorRegistry | None:
+        """Explicit ``errors`` plus errors declared on the current routers."""
         router_errors = collect_router_errors(self.routers, feature_name=self.name)
         return merge_errors(
             tuple(
                 (self.name, registry)
                 for registry in (
-                    ErrorRegistry(errors=self._listed_errors)
-                    if self._listed_errors
-                    else None,
+                    ErrorRegistry(errors=self.errors) if self.errors else None,
                     router_errors,
                 )
                 if registry is not None

@@ -136,6 +136,12 @@ _EXPLANATIONS = {
         "Register the service at APP scope, or inject an APP-scoped ServiceScope factory and open short REQUEST scopes inside the lifespan.",
         _DOCS + "composition.md#feature-lifespans",
     ),
+    "canon.providers.E006": _Explanation(
+        "A feature or integration binds a service that another integration also binds, so one binding would be silently ignored.",
+        "Feature(providers=[EngineProvider]) binds AsyncEngine while Composition(integrations=[database]) binds it too.",
+        "Remove one binding. To replace an integration binding, for example in tests, use Composition.override(...).",
+        _DOCS + "composition.md#overriding-providers-in-tests",
+    ),
     "canon.description.E001": _Explanation(
         "HTTP metadata cannot be described against the composed read-only error catalog.",
         "A declared HTTP error cannot be resolved from the catalog supplied to the metadata adapter.",
