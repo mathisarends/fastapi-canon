@@ -12,6 +12,13 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0250).
   `database.feature` in `Composition(features=[...])` with
   `Composition(integrations=[database])`, listed before `Telemetry`. The
   `Database(name=...)` parameter and `Database.feature` are removed.
+- **`CANON-025-DATABASE-STARTUP-CHECK`** — The startup migration check now runs
+  in the application lifespan, before feature lifespans, on the effective
+  `AsyncEngine`. Upgrade a database supplied through `Composition.override()`,
+  or set `check_migrations_on_startup=False` for it.
+- **`CANON-025-SSE-MULTI-METHOD-IDS`** — A stream with `methods=["GET", "POST"]`
+  publishes one operation per method, named `<id>_get` and `<id>_post`.
+  Regenerate its clients and update references to the shared ID.
 
 ### Added
 
@@ -25,6 +32,21 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0250).
   `Database`. `AlembicMigrations(metadata=...)` is optional, and
   `fastapi-canon db` accepts an application or application factory as its target.
 - `Integration.providers` receives the providers of integrations listed earlier.
+- `Installer(before_features=True)` enters an integration lifespan before
+  feature lifespans.
+
+### Fixed
+
+- `db check` compares the named schemas the metadata owns and ignores unrelated
+  schemas.
+- Composed `Tables` keep foreign keys that resolve through a `MetaData` schema.
+- Feature lifespans receive `Inject[T]` services with a type-only return annotation.
+- Typed problem extensions render with Pydantic serialization aliases.
+- WebSocket RPC results serialize as the declared response model.
+- Generated Python SSE clients accept parameters named `query`, `headers`,
+  `content` and `adapter`.
+- Validation errors for repeated query parameters report the parameter name.
+- `HTTPException` responses such as 304 stay bodyless.
 
 ## 0.24.0 - 2026-11-21
 

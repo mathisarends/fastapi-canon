@@ -29,6 +29,13 @@ List `database` before `Telemetry` to keep its engine instrumented, and drop the
 declarations and `db` targets keep working. Features can instead contribute
 their models with [`Tables`](database.md#configuration-and-ownership).
 
+The startup migration check now also covers an `AsyncEngine` replaced with
+`Composition.override()`. Upgrade that database, or pass
+`check_migrations_on_startup=False`.
+
+A stream with `methods=["GET", "POST"]` now publishes `<id>_get` and `<id>_post`.
+Regenerate its clients.
+
 ## Upgrade to 0.24.0
 
 Version 0.24.0 was published on 2026-11-21.
