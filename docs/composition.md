@@ -190,8 +190,8 @@ Custom integrations subclass `fastapi_canon.integration.Integration`; parts set
 `integration: ClassVar[type[Integration]]`. `Integration.providers` sees the
 providers of features and of integrations listed earlier. Use
 `Integration.final_providers` to decorate the effective bindings, including
-overrides. A binding that a feature and an integration both provide fails with
-`canon.providers.E006`.
+overrides. If a feature or another integration contributes the same binding,
+preflight can report `canon.providers.E006`.
 Return `Installer(..., before_features=True)` from `Integration.prepare()`
 to run its lifespan before feature startup and close it after feature shutdown.
 
@@ -200,17 +200,12 @@ to run its lifespan before feature startup and close it after feature shutdown.
 List ASGI middleware on the composition, outermost first:
 
 ```python
+from typing import Any, cast
+
+from fastapi_canon import Composition, Inject
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
-
-composition = Composition(
-    features=[projects],
-    middleware=[
-        Middleware(LogContextMiddleware),
-        Middleware(CORSMiddleware, allow_origins=origins),
-        Middleware(OwnerRoutingMiddleware),
-    ],
-)
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 
 class OwnerRoutingMiddleware:
@@ -220,11 +215,22 @@ class OwnerRoutingMiddleware:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         await self._app(scope, receive, send)
+
+
+composition = Composition(
+    features=[projects],
+    middleware=[
+        Middleware(LogContextMiddleware),
+        Middleware(CORSMiddleware, allow_origins=origins),
+        Middleware(cast(Any, OwnerRoutingMiddleware)),
+    ],
+)
 ```
 
-The list wraps everything `build()` installs and middleware added before it.
-`request_logging=True` stays outermost, and `app.add_middleware()` after `build()`
-lands outside the list.
+The list wraps middleware installed by integrations, Dishka, and the error
+registry, plus middleware added before `build()`. Canon's request logging
+wraps the list when enabled. Calls to `app.add_middleware()` after `build()`
+wrap both.
 
 `Inject[T]` constructor parameters resolve from the APP container. Such a
 middleware is created once, on its first ASGI call. Preflight reports a missing
@@ -395,9 +401,10 @@ async with composition.container() as container:
         await seed_admin(email, password)
 ```
 
-Each call opens an independent container and closes it on exit. Feature and
-integration lifespans are not entered, so workers and the `Database` startup
-migration check do not run.
+Each call opens an independent container and closes it on exit. Run any setup
+normally handled by feature or integration lifespans explicitly, including the
+`Database` startup migration check. Call application-owned SDK shutdown yourself
+when using a standalone container.
 
 ### Overriding providers in tests
 

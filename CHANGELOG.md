@@ -11,24 +11,27 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0260).
 - **`CANON-026-FEATURE-ERRORS`** — `Feature.errors` holds only the explicit
   `errors=` list. Read `Feature.error_registry` for the catalog merged with
   router declarations.
-- **`CANON-026-SHADOWED-BINDINGS`** — A binding that a feature and an
-  integration both provide fails with `canon.providers.E006`. Use
-  `Composition.override()` to replace an integration binding.
-- **`CANON-026-TELEMETRY-BINDING`** — `Composition.override()` can no longer
-  replace the reserved `Telemetry` binding. Configure `Telemetry(...)` instead.
+- **`CANON-026-SHADOWED-BINDINGS`** — A Dishka binding provided by both a
+  feature and an integration, or by two integrations, can fail preflight with
+  `canon.providers.E006`. Keep one binding and use `Composition.override()`
+  when you need to replace it.
+- **`CANON-026-TELEMETRY-BINDING`** — Configure the `Telemetry(...)`
+  integration directly if you previously used `Composition.override()` to
+  replace its reserved Dishka binding.
 
 ### Added
 
-- `Integration.final_providers` decorates effective bindings after overrides.
-- `Telemetry(shutdown=...)` releases application-owned SDK providers after the
-  container closes or when `build()` fails, through the new
-  `Integration.finalizer` hook (#208).
-- `fastapi-canon generate --native` selects every target whose generator is not
-  `external` (#209).
+- `Integration.final_providers` lets integrations decorate effective bindings
+  after overrides.
+- `Integration.finalizer` runs cleanup after application shutdown closes the
+  container or when the initial `build()` fails. Pass `Telemetry(shutdown=...)`
+  to release application-owned SDK providers at that point (#208).
+- `fastapi-canon generate --native` selects all configured Canon generators and
+  skips `external` targets (#209).
 - `Composition.container()` opens the composed Dishka container without a
-  FastAPI application (#206).
+  FastAPI application or application lifespans (#206).
 - `Composition(middleware=[...])` declares ASGI middleware outermost first, with
-  `Inject[T]` constructor parameters checked as `canon.providers.E007`. See
+  support for APP-scoped `Inject[T]` constructor parameters. See
   [middleware](docs/composition.md#middleware) (#207).
 
 ### Fixed

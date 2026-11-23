@@ -11,6 +11,9 @@ adds feature lifespan injection and splits multi-method SSE operations. See the
 [upgrade guide](package-migration.md#upgrade-to-0250) and
 [changelog](../CHANGELOG.md#0250---2026-11-23).
 
+**Prepared: 0.26.0.** See the [upgrade guide](package-migration.md#upgrade-to-0260)
+and [changelog](../CHANGELOG.md).
+
 Published artifacts, manifests and run results are linked below. They record
 verified publications; prepared source versions are not publication evidence.
 Historical links retain their original repositories.
