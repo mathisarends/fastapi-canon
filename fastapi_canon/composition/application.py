@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import AsyncGenerator, Callable, Sequence
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 from dishka import (
+    AsyncContainer,
     Provider,
 )
 from fastapi import APIRouter, FastAPI
@@ -11,6 +13,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi_canon.composition.checks import (
     check_installed,
     prepare_composition,
+    prepare_standalone_container,
     raise_check_errors,
 )
 from fastapi_canon.composition.feature import (
@@ -126,6 +129,19 @@ class Composition:
             object.__setattr__(copy, name, getattr(self, name))
         object.__setattr__(copy, "overrides", overrides)
         return copy
+
+    @asynccontextmanager
+    async def container(self) -> AsyncGenerator[AsyncContainer, None]:
+        """Open the composed APP-scope container without a FastAPI application.
+
+        It holds the providers ``build()`` installs, validated the same way, and
+        closes on exit. Feature and integration lifespans are not entered.
+        """
+        container = prepare_standalone_container(self)
+        try:
+            yield container
+        finally:
+            await container.close()
 
     def check(self, app: FastAPI) -> CheckReport:
         """Check configuration without starting lifespans or resolving services."""

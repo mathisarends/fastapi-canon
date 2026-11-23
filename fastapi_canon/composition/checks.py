@@ -95,6 +95,16 @@ def prepare_composition(app: FastAPI, composition: CompositionSource) -> Prepara
     return _CheckComposition(app, composition)()
 
 
+def prepare_standalone_container(composition: CompositionSource) -> AsyncContainer:
+    """Validate the composed provider graph and build it without an application."""
+    check = _CheckComposition(FastAPI(), composition)
+    prepared = check.provider_graph()
+    if prepared.missing_dependency is not None:
+        raise prepared.missing_dependency
+    raise_check_errors(prepared.report)
+    return prepared.container or make_async_container()
+
+
 def validate_runtime_options(app: FastAPI, composition: CompositionSource) -> None:
     if app.middleware_stack is not None:
         raise FeatureConfigurationError("install features before the app starts")
@@ -938,36 +948,7 @@ class _CheckComposition:
 
     def __call__(self) -> Preparation:
         steps = (
-            _CheckStep(
-                "installation",
-                self._runtime_options,
-                code="canon.composition.E001",
-                hint="Install before startup and OpenAPI generation; check integration options.",
-            ),
-            _CheckStep(
-                "http.routers",
-                self._prepare_routers,
-                code="canon.routing.E001",
-                hint="Contribute each router once and return a fresh empty application router.",
-            ),
-            _CheckStep(
-                "handlers",
-                self._handlers,
-                code="canon.handlers.E001",
-                hint="Keep one handler per exception across the application and its features.",
-            ),
-            _CheckStep(
-                "errors",
-                self._prepare_errors,
-                code="canon.errors.E001",
-                hint="Use compatible error definitions and one explicit application type base.",
-            ),
-            _CheckStep(
-                "providers",
-                self._providers,
-                code="canon.providers.E001",
-                hint="Check the named provider sources and supply the missing Dishka bindings.",
-            ),
+            *self._provider_graph_steps(),
             _CheckStep(
                 "integration.routes",
                 self._integration_routes,
@@ -1013,6 +994,57 @@ class _CheckComposition:
                 hint="Match route response contracts to the composed error catalog.",
             ),
         )
+        self._run_steps(steps)
+        if self.description is not None:
+            run_feature_checks(
+                self.composition.features,
+                self.description,
+                self.issues,
+                checks=self.checks,
+            )
+        elif any(feature.checks for feature in self.composition.features):
+            self.checks.append(CheckResult("feature.checks", "skipped"))
+        return self._preparation()
+
+    def provider_graph(self) -> Preparation:
+        self._run_steps(self._provider_graph_steps())
+        return self._preparation()
+
+    def _provider_graph_steps(self) -> tuple[_CheckStep, ...]:
+        return (
+            _CheckStep(
+                "installation",
+                self._runtime_options,
+                code="canon.composition.E001",
+                hint="Install before startup and OpenAPI generation; check integration options.",
+            ),
+            _CheckStep(
+                "http.routers",
+                self._prepare_routers,
+                code="canon.routing.E001",
+                hint="Contribute each router once and return a fresh empty application router.",
+            ),
+            _CheckStep(
+                "handlers",
+                self._handlers,
+                code="canon.handlers.E001",
+                hint="Keep one handler per exception across the application and its features.",
+            ),
+            _CheckStep(
+                "errors",
+                self._prepare_errors,
+                code="canon.errors.E001",
+                hint="Use compatible error definitions and one explicit application type base.",
+            ),
+            _CheckStep(
+                "providers",
+                self._providers,
+                code="canon.providers.E001",
+                hint="Check the named provider sources and supply the missing Dishka bindings.",
+            ),
+        )
+
+    def _run_steps(self, steps: tuple[_CheckStep, ...]) -> None:
         passed: set[str] = set()
         for step in steps:
             if not step.enabled():
@@ -1031,15 +1063,8 @@ class _CheckComposition:
                     self.checks.append(CheckResult(step.name, "passed"))
                 if all(result.status == "passed" for result in results):
                     passed.add(step.name)
-        if self.description is not None:
-            run_feature_checks(
-                self.composition.features,
-                self.description,
-                self.issues,
-                checks=self.checks,
-            )
-        elif any(feature.checks for feature in self.composition.features):
-            self.checks.append(CheckResult("feature.checks", "skipped"))
+
+    def _preparation(self) -> Preparation:
         return Preparation(
             CheckReport(tuple(self.issues), tuple(self.checks)),
             self.routers or (),

@@ -20,6 +20,8 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0260).
 ### Added
 
 - `Integration.final_providers` decorates effective bindings after overrides.
+- `Composition.container()` opens the composed Dishka container without a
+  FastAPI application (#206).
 
 ### Fixed
 
