@@ -168,6 +168,10 @@ separate runtime identities.
 | Error during SSE processing | terminal `event: canon.problem` | Omitted |
 | Declared RPC domain failure | JSON-RPC `error.data.problem` | Omitted |
 
+An `HTTPException` with a bodyless status such as 304 keeps its status and
+headers. Validation problems for repeated query parameters report the parameter
+name. Typed extension models use their Pydantic serialization aliases.
+
 The JSON-RPC numeric error code and message remain in the normal envelope.
 Canonical application errors use numeric server code `-32000`; the problem's
 `type` distinguishes the application problem. Its extensions stay at the problem

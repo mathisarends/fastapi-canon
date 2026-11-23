@@ -2,7 +2,7 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
-## Unreleased
+## 0.25.0 - Unreleased
 
 ### Breaking changes
 
@@ -12,13 +12,21 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0250).
   `database.feature` in `Composition(features=[...])` with
   `Composition(integrations=[database])`, listed before `Telemetry`. The
   `Database(name=...)` parameter and `Database.feature` are removed.
-- **`CANON-025-DATABASE-STARTUP-CHECK`** — The startup migration check now runs
-  in the application lifespan, before feature lifespans, on the effective
-  `AsyncEngine`. Upgrade a database supplied through `Composition.override()`,
-  or set `check_migrations_on_startup=False` for it.
+- **`CANON-025-DATABASE-STARTUP-CHECK`** — The startup migration check runs
+  before feature lifespans on the effective `AsyncEngine`. Run the upgrade
+  before application startup, including for an engine supplied through
+  `Composition.override()`. Set `check_migrations_on_startup=False` on
+  `Database` when the application owns startup validation.
+- **`CANON-025-MIGRATION-METADATA`** — `AlembicMigrations.metadata` can be
+  `None`. Pass `metadata=` for standalone migration operations, or use an app
+  target with feature `Tables` to let Canon compose it.
 - **`CANON-025-SSE-MULTI-METHOD-IDS`** — A stream with `methods=["GET", "POST"]`
-  publishes one operation per method, named `<id>_get` and `<id>_post`.
-  Regenerate its clients and update references to the shared ID.
+  publishes one operation per method. An explicit ID or custom-generated ID
+  gains a `_get` or `_post` suffix. Regenerate its clients and update references
+  to the shared ID.
+- **`CANON-025-INTEGRATION-PROVIDERS`** — `ProviderContext.providers` includes
+  providers contributed by earlier integrations. Audit integrations that
+  inspect or wrap providers and order their dependencies before them.
 
 ### Added
 
@@ -31,22 +39,24 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0250).
 - `Tables(...)` lets each feature contribute its mapped classes or tables to the
   `Database`. `AlembicMigrations(metadata=...)` is optional, and
   `fastapi-canon db` accepts an application or application factory as its target.
-- `Integration.providers` receives the providers of integrations listed earlier.
 - `Installer(before_features=True)` enters an integration lifespan before
   feature lifespans.
 
 ### Fixed
 
-- `db check` compares the named schemas the metadata owns and ignores unrelated
-  schemas.
+- `db revision --autogenerate` and `db check` compare the named schemas the
+  metadata owns and ignore unrelated schemas.
 - Composed `Tables` keep foreign keys that resolve through a `MetaData` schema.
 - Feature lifespans receive `Inject[T]` services with a type-only return annotation.
-- Typed problem extensions render with Pydantic serialization aliases.
-- WebSocket RPC results serialize as the declared response model.
+- Typed problem extensions returned as model instances render with Pydantic
+  serialization aliases.
+- WebSocket RPC results serialize as the declared response model, including
+  when a handler returns a different Pydantic model.
 - Generated Python SSE clients accept parameters named `query`, `headers`,
   `content` and `adapter`.
 - Validation errors for repeated query parameters report the parameter name.
-- `HTTPException` responses such as 304 stay bodyless.
+- Statuses that disallow a body, such as 304, retain their status and headers
+  when raised as `HTTPException`.
 
 ## 0.24.0 - 2026-11-21
 

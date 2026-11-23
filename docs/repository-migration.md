@@ -19,8 +19,7 @@ releases. The distribution remains `fastapi-canon`; public Python imports remain
 `fastapi_canon`, including `fastapi_canon.integrations.*`.
 
 This migration prepares source and release configuration. It does not publish
-0.9.0, change existing PyPI artifacts, modify account-level publisher settings,
-or implement the [codegen discussion](unified-canon-concept.md).
+0.9.0, change existing PyPI artifacts or modify account-level publisher settings.
 
 ## Source and history
 

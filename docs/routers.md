@@ -333,9 +333,8 @@ points to these decorators.
 
 ## Share WebSocket connection policy
 
-**Unreleased (0.22.0).** Pass a `WebSocketPolicy` to the router instead of
-repeating connection options on every `channel()`, `include_channel()`,
-`socket()` and `binary_stream()` declaration:
+Pass a `WebSocketPolicy` to the router to share connection options across its
+`channel()`, `include_channel()`, `socket()` and `binary_stream()` declarations.
 
 ```python
 from fastapi_canon.integrations.websockets import WebSocketPolicy

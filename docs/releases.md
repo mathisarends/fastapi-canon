@@ -11,6 +11,11 @@ error defaults and transport options. See the
 [migration](package-migration.md#upgrade-to-0240) and
 [changelog](../CHANGELOG.md#0240---2026-11-21).
 
+**Prepared: 0.25.0.** Moves database ownership to an integration, adds
+feature lifespan injection and splits multi-method SSE operations. See the
+[upgrade guide](package-migration.md#upgrade-to-0250) and
+[changelog](../CHANGELOG.md).
+
 Published artifacts, manifests and run results are linked below. They record
 verified publications; prepared source versions are not publication evidence.
 Historical links retain their original repositories.
