@@ -187,8 +187,8 @@ SQLAlchemy engine whose Dishka-provided type is accepted by a resource adapter.
 Bindings typed only as `object` or an unrelated port are not selected by runtime
 instance type. Install
 `fastapi-canon[otel-httpx]` or `fastapi-canon[otel-sqlalchemy]`; providers stay
-plain. Resources provided by another integration, such as `Database`, are
-instrumented when that integration is listed before `Telemetry`:
+plain. Resources from another integration, such as `Database`, and their
+`Composition.override()` replacements are instrumented in any integration order:
 
 ```python
 class Infrastructure(Provider):

@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Protocol
 
 import pytest
@@ -8,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from fastapi_canon import APIRouter, Composition, Feature
 from fastapi_canon.errors import FeatureConfigurationError
+from fastapi_canon.integration import Integration, ProviderContext
 
 
 class Greeter(Protocol):
@@ -46,6 +48,11 @@ class UnrelatedProvider(Provider):
     @provide
     def limit(self) -> int:
         return 1
+
+
+class GreeterIntegration(Integration):
+    def providers(self, context: ProviderContext) -> Sequence[Provider]:
+        return (GreeterProvider(),)
 
 
 def _composition() -> Composition:
@@ -91,6 +98,17 @@ def test_override_rejects_bindings_no_feature_provides() -> None:
 
     with pytest.raises(FeatureConfigurationError, match="no feature provides"):
         composition.build(FastAPI())
+
+
+def test_feature_binding_shadowed_by_an_integration_fails_preflight() -> None:
+    composition = Composition(
+        features=[Feature(name="greetings", providers=[FakeGreeterProvider])],
+        integrations=[GreeterIntegration()],
+    )
+
+    report = composition.check(FastAPI())
+
+    assert [issue.code for issue in report.issues] == ["canon.providers.E006"]
 
 
 def test_override_requires_a_provider() -> None:

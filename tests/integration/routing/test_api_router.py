@@ -79,7 +79,7 @@ def test_feature_collects_errors_from_routes_declared_after_it(
 
     if feature is None:
         feature = Feature(name="projects", routers=[router])
-    assert feature.errors == (missing,)
+    assert tuple(feature.error_registry or ()) == (missing,)
     composition = Composition(features=[feature])
     app = composition.build(FastAPI())
     with TestClient(app, raise_server_exceptions=False) as client:

@@ -92,7 +92,7 @@ def test_shared_local_contracts_use_composed_registry_and_effective_path() -> No
         return Session()
 
     feature = Feature(name="browser", routers=[router])
-    assert feature.errors == ERRORS
+    assert tuple(feature.error_registry or ()) == ERRORS
     parent = APIRouter(prefix="/api")
     parent.include_router(router, prefix="/browser")
     nested = FastAPI()

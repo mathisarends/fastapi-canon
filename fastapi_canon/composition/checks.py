@@ -202,15 +202,21 @@ def prepare_container(
     materialized = materialize_providers(flatten_provider_sources(composition.features))
     reject_duplicate_materialized_providers(materialized)
     providers = tuple(item.provider for item in materialized)
+    owners = {
+        key: f"feature {item.feature_name!r}"
+        for item in materialized
+        for key in provided_keys(item.provider)
+    }
     for integration in composition.integrations:
-        providers = (
-            *providers,
-            *integration.providers(
+        contributed = tuple(
+            integration.providers(
                 ProviderContext(
                     integration_parts(composition, integration), providers, errors
                 )
-            ),
+            )
         )
+        reject_shadowed_bindings(integration, contributed, owners)
+        providers = (*providers, *contributed)
     if composition.overrides:
         materialized_overrides = materialize_providers(
             tuple(("overrides", source) for source in composition.overrides)
@@ -221,6 +227,15 @@ def prepare_container(
         overrides = tuple(item.provider for item in materialized_overrides)
         reject_unmatched_overrides(providers, overrides)
         providers = (*providers, *overrides)
+    for integration in composition.integrations:
+        providers = (
+            *providers,
+            *integration.final_providers(
+                ProviderContext(
+                    integration_parts(composition, integration), providers, errors
+                )
+            ),
+        )
     container = make_container(providers)
     if container is not None and app.middleware_stack is not None:
         raise FeatureConfigurationError(
@@ -740,6 +755,25 @@ def reject_duplicate_materialized_providers(
         seen[id(contribution.provider)] = contribution.feature_name
 
 
+def reject_shadowed_bindings(
+    integration: Integration,
+    contributed: tuple[Provider, ...],
+    owners: dict[DependencyKey, str],
+) -> None:
+    claimant = f"integration {type(integration).__name__}"
+    for provider in contributed:
+        for key in provided_keys(provider):
+            owner = owners.setdefault(key, claimant)
+            if owner != claimant:
+                raise IntegrationError(
+                    "canon.providers.E006",
+                    f"{owner} binds {qualified_name(key.type_hint)}, which "
+                    f"{claimant} also binds",
+                    "Remove one binding; use Composition.override(...) to replace "
+                    "an integration binding.",
+                )
+
+
 def reject_unmatched_overrides(
     providers: tuple[Provider, ...], overrides: tuple[Provider, ...]
 ) -> None:
@@ -1033,7 +1067,11 @@ class _CheckComposition:
             "http.routers": tuple(
                 f.name for f in self.composition.features if f.routers
             ),
-            "errors": tuple(f.name for f in self.composition.features if f.errors),
+            "errors": tuple(
+                f.name
+                for f in self.composition.features
+                if (registry := f.error_registry) is not None and registry.errors
+            ),
         }
         issue = (
             error.issue

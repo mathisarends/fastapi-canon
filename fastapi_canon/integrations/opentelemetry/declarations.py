@@ -194,24 +194,22 @@ class Telemetry(Integration):
         )
 
     def providers(self, context: ProviderContext) -> tuple[Provider, ...]:
-        """Bind this configuration per component; decorate ports and resources.
+        """Decorate the declared ports."""
+        return instrumentation_providers(context.parts, self, context.errors)
+
+    def final_providers(self, context: ProviderContext) -> tuple[Provider, ...]:
+        """Bind this configuration per component; decorate effective resources.
 
         ``resources=None`` uses every installed ``fastapi_canon.telemetry_resources``
         entry point; ``resources=[]`` instruments no resource.
         """
-        providers = context.providers
-        _reject_reserved_binding(providers)
-        instrumentation = (
-            *instrumentation_providers(context.parts, self, context.errors),
-            *self._resource_providers(providers),
-        )
-        if not providers and not instrumentation:
-            return ()
+        _reject_reserved_binding(context.providers)
+        resources = self._resource_providers(context.providers)
         components = dict.fromkeys(
-            provider.component for provider in (*providers, *instrumentation)
+            provider.component for provider in (*context.providers, *resources)
         )
         return (
-            *instrumentation,
+            *resources,
             *(self.provider(component=component) for component in components),
         )
 

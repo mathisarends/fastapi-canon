@@ -59,7 +59,10 @@ def test_router_combines_native_bases_and_feature_discovers_registry() -> None:
     assert isinstance(CanonStreamRouter(), CanonRouter)
     assert isinstance(CanonStreamRouter(), StreamRouter)
     assert isinstance(router, APIRouter)
-    assert feature.errors == (authentication_required, run_not_found)
+    assert tuple(feature.error_registry or ()) == (
+        authentication_required,
+        run_not_found,
+    )
 
 
 def test_shared_and_local_raises_are_deduplicated_with_shared_status() -> None:
@@ -202,7 +205,11 @@ def test_feature_discovers_stream_and_rest_registries_together() -> None:
         raise OtherMissing
 
     mixed = Feature(name="mixed", routers=[router, rest], providers=[RunProvider])
-    assert mixed.errors == (authentication_required, run_not_found, other_missing)
+    assert tuple(mixed.error_registry or ()) == (
+        authentication_required,
+        run_not_found,
+        other_missing,
+    )
     application = Composition(features=(mixed,)).build(FastAPI())
     with TestClient(application) as client:
         assert client.get("/rest").json()["code"] == "other_missing"

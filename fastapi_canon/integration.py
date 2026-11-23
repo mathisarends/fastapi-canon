@@ -31,6 +31,14 @@ class Integration:
         """Return Dishka providers added after the feature providers."""
         return ()
 
+    def final_providers(self, context: ProviderContext) -> Sequence[Provider]:
+        """Return providers added after every binding and override.
+
+        Use this phase to decorate the effective bindings, independent of the
+        order in which integrations are listed.
+        """
+        return ()
+
     def prepare(self, context: IntegrationContext) -> Installer | None:
         """Check the prepared application without side effects; return its installer."""
         return None
@@ -60,11 +68,11 @@ class ErrorLookup(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class ProviderContext:
-    """The composition's providers, available to ``Integration.providers``."""
+    """The composition's providers, available to the integration provider phases."""
 
     parts: Parts[Any]
     providers: tuple[Provider, ...]
-    """The Dishka providers of features and of integrations enabled earlier."""
+    """Providers of features and earlier integrations; final phases also see overrides."""
     errors: ErrorLookup | None
     """The composition's declared error contracts, if any."""
 

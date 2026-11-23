@@ -108,8 +108,8 @@ class Composition:
     def override(self, *providers: Provider | Callable[[], Provider]) -> Composition:
         """Return a copy whose *providers* replace existing Dishka bindings.
 
-        Overrides are added after every feature provider, so their bindings win.
-        Each override may only provide types that a feature already provides.
+        Overrides are added after feature and integration bindings, so they win.
+        Each override may only provide types that one of those already provides.
         """
         if not providers:
             raise FeatureConfigurationError("override expects at least one provider")
