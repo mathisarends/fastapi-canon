@@ -348,8 +348,10 @@ environments can consume `config.attributes["connection"]` and
 The runner writes no database URL into revision/INI files and disposes its engine
 after each command.
 
-When metadata names PostgreSQL schemas, generated environments compare only those
-schemas, plus the default schema if it also holds owned tables. Create named
+When metadata names PostgreSQL schemas, `db revision --autogenerate` and
+`db check` compare those schemas, plus the default schema if it also holds
+owned tables. This applies to environments that call
+`fastapi_canon.integrations.database.run_alembic_environment()`. Create named
 schemas before the first upgrade.
 
 When migrations are configured and startup validation is enabled, startup requires

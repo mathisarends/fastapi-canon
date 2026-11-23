@@ -40,7 +40,7 @@ scope.
 | Typed SSE | `APIRouter.sse()` | [SSE contracts](streams.md) |
 | WebSocket JSON-RPC | `APIRouter.channel()`; `APIRouter.include_channel()` with `fastapi_canon.integrations.websockets.RpcChannel` for shared channels | [WebSockets](integrations/websockets/README.md) |
 | Typed or raw WebSocket messages and binary streams | `@APIRouter.socket()`, `@APIRouter.binary_stream()`; `RpcSocket` | [Sockets](integrations/websockets/sockets.md), [binary streams](integrations/websockets/streams.md) |
-| Shared WebSocket connection options (unreleased) | `APIRouter(websocket_policy=...)` with `fastapi_canon.integrations.websockets.WebSocketPolicy` | [Connection policy](routers.md#share-websocket-connection-policy) |
+| Shared WebSocket connection options | `APIRouter(websocket_policy=...)` with `fastapi_canon.integrations.websockets.WebSocketPolicy` | [Connection policy](routers.md#share-websocket-connection-policy) |
 | WebRTC with Canon admission errors | `fastapi_canon.integrations.webrtc.WebRtcRouter` and `@rtc.session()`, `Session`, `SessionCapacity`; engine adapters in `.webrtc.engines` | [WebRTC admission](webrtc.md) |
 | Contract export | `fastapi_canon.export_contracts`; `fastapi_canon.contracts.Contracts`, `ContractSelection`; `fastapi-canon contracts export` | [Application export](contracts.md) |
 | OpenAPI contracts without `Composition` | `fastapi_canon.openapi.install_openapi_contracts`, `validate_openapi_contracts` | [Composition](composition.md) |

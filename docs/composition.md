@@ -187,6 +187,8 @@ alone. Route-only transports such as `WebRtcRouter` are routers, not integration
 Custom integrations subclass `fastapi_canon.integration.Integration`; parts set
 `integration: ClassVar[type[Integration]]`. `Integration.providers` sees the
 providers of features and of integrations listed earlier.
+Return `Installer(..., before_features=True)` from `Integration.prepare()`
+to run its lifespan before feature startup and close it after feature shutdown.
 
 ### Application router
 
