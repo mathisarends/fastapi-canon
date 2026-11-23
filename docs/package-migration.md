@@ -13,7 +13,8 @@ PyPI project or add further Python import changes.
 
 ## Upgrade to 0.26.0
 
-0.26.0 is prepared for a release dry run. See the [changelog](../CHANGELOG.md).
+Version 0.26.0 was published on 2026-11-23. See the
+[changelog](../CHANGELOG.md#0260---2026-11-23).
 
 ### Read merged feature errors from the registry
 

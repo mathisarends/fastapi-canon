@@ -1,5 +1,21 @@
 # Compatibility
 
+## Canon 0.26.0
+
+Published on 2026-11-23. Follow the
+[migration](package-migration.md#upgrade-to-0260) for feature error catalogs and
+Dishka binding changes.
+
+Exact-source CI passed Linux with Python 3.12 through 3.14 and Windows with
+Python 3.14, including PostgreSQL and Chromium/WebRTC contracts. Both
+20-combination wheel matrices passed on the publication artifacts, along with
+the installed SSE and WebRTC CLI checks.
+
+All 15 public-index installation combinations passed. A fresh Windows/Python
+3.12 public-index install also passed the CLI version check. The tag points to
+the verified source, and the PyPI and GitHub Release files match the
+[publication record](releases.md#current-versions).
+
 ## Canon 0.25.0
 
 Published on 2026-11-23. Follow the

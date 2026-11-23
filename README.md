@@ -13,9 +13,9 @@ uv add fastapi-canon
 Python 3.12–3.14 is supported. Add extras for the features you use, for example
 `fastapi-canon[sse,websockets]` or `fastapi-canon[codegen]`.
 
-**Published: 0.25.0 (2026-11-23).**
-Follow the [migration guide](docs/package-migration.md#upgrade-to-0250) when upgrading.
-See the [release and verified artifacts](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.25.0).
+**Published: 0.26.0 (2026-11-23).**
+Follow the [migration guide](docs/package-migration.md#upgrade-to-0260) when upgrading.
+See the [release and verified artifacts](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.26.0).
 
 ## Shared error handling
 
