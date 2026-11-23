@@ -130,7 +130,7 @@ def lifespan_injection(
 def _signature(lifespan: DeclaredLifespan) -> Signature:
     """Read the signature without evaluating deferred annotations on Python 3.14."""
     if sys.version_info >= (3, 14):
-        from annotationlib import Format
+        from inspect import Format  # annotationlib only exists on Python 3.14.
 
         return signature(lifespan, annotation_format=Format.FORWARDREF)
     return signature(lifespan)
