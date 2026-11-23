@@ -25,6 +25,8 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0260).
   `Integration.finalizer` hook (#208).
 - `fastapi-canon generate --native` selects every target whose generator is not
   `external` (#209).
+- `Composition.container()` opens the composed Dishka container without a
+  FastAPI application (#206).
 
 ### Fixed
 

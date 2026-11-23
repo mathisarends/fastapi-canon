@@ -347,6 +347,20 @@ it during application shutdown. Existing application lifespans are composed
 automatically. Applications should treat the exposed container as
 composition-owned and not close it independently.
 
+Command-line entry points, workers and tests can open the same provider graph
+without an application:
+
+```python
+async with composition.container() as container:
+    async with container(scope=Scope.REQUEST) as scoped:
+        seed_admin = await scoped.get(SeedAdmin)
+        await seed_admin(email, password)
+```
+
+Each call opens an independent container and closes it on exit. Feature and
+integration lifespans are not entered, so workers and the `Database` startup
+migration check do not run.
+
 ### Overriding providers in tests
 
 `composition.override(*providers)` returns a copy of the composition whose

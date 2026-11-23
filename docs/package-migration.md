@@ -74,6 +74,26 @@ focused = Composition(
 focused = replace(composition, features=selected_features)
 ```
 
+Replace hand-assembled containers in commands and test fixtures. The composed
+container includes integration bindings and overrides:
+
+```python
+# Before
+providers = [
+    source if isinstance(source, Provider) else source()
+    for feature in FEATURES
+    for source in feature.providers
+]
+container = make_async_container(Telemetry.disabled().provider(), *providers)
+try:
+    await run(container)
+finally:
+    await container.close()
+# After
+async with composition.container() as container:
+    await run(container)
+```
+
 CI jobs without the external toolchains can stop listing native targets:
 
 ```console
