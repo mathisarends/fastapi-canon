@@ -253,6 +253,39 @@ def test_http_method_enum_supports_multiple_native_stream_methods() -> None:
         assert client.put("/events").status_code == 405
 
 
+@pytest.mark.parametrize(
+    ("operation_id", "expected"),
+    [
+        (None, {"get": "events_get", "post": "events_post"}),
+        ("feed", {"get": "feed_get", "post": "feed_post"}),
+    ],
+    ids=["generated", "explicit"],
+)
+def test_multi_method_stream_builds_with_one_operation_per_method(
+    operation_id: str | None, expected: dict[str, str]
+) -> None:
+    selected = APIRouter()
+
+    @selected.sse(
+        "/events",
+        methods=[HTTPMethod.GET, HTTPMethod.POST],
+        operation_id=operation_id,
+    )
+    async def events() -> AsyncIterator[RunEvent]:
+        yield RunCompleted(run_id=1)
+
+    application = Composition(
+        features=[Feature(name="events", routers=[selected])]
+    ).build(FastAPI())
+
+    with TestClient(application) as client:
+        statuses = [client.request(verb, "/events").status_code for verb in expected]
+        operations = client.get("/openapi.json").json()["paths"]["/events"]
+
+    assert statuses == [200, 200]
+    assert {verb: operations[verb]["operationId"] for verb in expected} == expected
+
+
 @pytest.mark.parametrize("method", [HTTPMethod.GET, HTTPMethod.POST])
 def test_stream_service_uses_independent_scope_after_http_cleanup(
     method: HTTPMethod,

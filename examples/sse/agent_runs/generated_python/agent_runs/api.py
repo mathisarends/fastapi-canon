@@ -56,10 +56,10 @@ class AgentRunsApi:
         StreamParseError exposes operation_id, category (invalid_json or invalid_event_schema), and validation_errors without input values. Its data and chained cause may contain sensitive content; the SDK does not log them automatically.
         """
         run_id = _validate_parameter(self._stream_prompt_run_id_adapter, run_id)
-        query: list[tuple[str, str]] = []
-        headers: dict[str, str] = {}
-        adapter = self._stream_prompt_body_adapter
-        content = adapter.dump_json(adapter.validate_python(body), by_alias=True, exclude_unset=True)
+        _query: list[tuple[str, str]] = []
+        _headers: dict[str, str] = {}
+        _adapter = self._stream_prompt_body_adapter
+        _content = _adapter.dump_json(_adapter.validate_python(body), by_alias=True, exclude_unset=True)
         return self._transport.stream(
             '/v1/runs/' + encode_path(run_id) + '/events',
             'POST',
@@ -67,9 +67,9 @@ class AgentRunsApi:
             operation_id='stream_prompt',
             canon_stream=True,
             problem_adapters=self._stream_prompt_problem_adapters,
-            query=query,
-            headers=headers,
-            body=content,
+            query=_query,
+            headers=_headers,
+            body=_content,
             options=options,
         )
 
@@ -106,9 +106,9 @@ class AgentRunsApi:
         run_id = _validate_parameter(self._stream_run_events_run_id_adapter, run_id)
         if delay is not None:
             delay = _validate_parameter(self._stream_run_events_delay_adapter, delay)
-        query: list[tuple[str, str]] = []
-        headers: dict[str, str] = {}
-        append_query(query, 'delay', delay, explode=True)
+        _query: list[tuple[str, str]] = []
+        _headers: dict[str, str] = {}
+        append_query(_query, 'delay', delay, explode=True)
         return self._transport.stream(
             '/v1/runs/' + encode_path(run_id) + '/events',
             'GET',
@@ -116,7 +116,7 @@ class AgentRunsApi:
             operation_id='stream_run_events',
             canon_stream=True,
             problem_adapters=self._stream_run_events_problem_adapters,
-            query=query,
-            headers=headers,
+            query=_query,
+            headers=_headers,
             options=options,
         )

@@ -61,7 +61,7 @@ def generate_python(
     grouped: dict[tuple[str, ...], list[Operation]] = {}
     for operation in contract.operations:
         name = identifier(operation.operation_id, upper=True)
-        seen = {"self", "options", "query", "headers", "content", "adapter"}
+        seen = {"self", "options", "_query", "_headers", "_content", "_adapter"}
         parameters: list[Parameter] = []
         for parameter in operation.parameters:
             argument = python_identifier(parameter.name)

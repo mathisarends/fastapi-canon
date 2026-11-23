@@ -57,10 +57,10 @@ class FixturesApi:
         item_id = _validate_parameter(self._nested_events_item_id_adapter, item_id)
         if labels is not None:
             labels = _validate_parameter(self._nested_events_labels_adapter, labels)
-        query: list[tuple[str, str]] = []
-        headers: dict[str, str] = {}
-        set_header(headers, 'x-trace', x_trace)
-        append_query(query, 'labels', labels, explode=True)
+        _query: list[tuple[str, str]] = []
+        _headers: dict[str, str] = {}
+        set_header(_headers, 'x-trace', x_trace)
+        append_query(_query, 'labels', labels, explode=True)
         return self._transport.stream(
             '/nested/' + encode_path(item_id) + '',
             'GET',
@@ -68,7 +68,7 @@ class FixturesApi:
             operation_id='nested_events',
             canon_stream=False,
             problem_adapters=self._nested_events_problem_adapters,
-            query=query,
-            headers=headers,
+            query=_query,
+            headers=_headers,
             options=options,
         )

@@ -1,6 +1,7 @@
 import asyncio
 import importlib.util
 import sys
+from collections.abc import AsyncIterator
 from enum import StrEnum
 
 import httpx
@@ -15,6 +16,8 @@ from examples.sse.agent_runs.generated_python import (
 )
 from examples.sse.agent_runs.generated_python.models import RunEvent, RunRequest
 from examples.sse.agent_runs.generated_python.runtime import iter_sse
+from fastapi import FastAPI
+from fastapi_canon import APIRouter, Composition, Feature
 from fastapi_canon.integrations.sse.codegen.cli import main
 from fastapi_canon.integrations.sse.codegen.ir import build_ir
 from fastapi_canon.integrations.sse.codegen.openapi import export_schema
@@ -216,6 +219,52 @@ def test_optional_literal_defaults_produce_valid_discriminator_models(tmp_path):
         assert parsed.type is module.RunEventType.RUN_STARTED
     finally:
         sys.modules.pop(spec.name)
+
+
+async def test_python_client_keeps_parameters_named_like_its_locals(tmp_path):
+    received = []
+    router = APIRouter()
+
+    @router.sse("/search", operation_id="events.search")
+    async def search(
+        query: str, headers: str, content: str, adapter: str
+    ) -> AsyncIterator[str]:
+        received.append((query, headers, content, adapter))
+        yield query
+
+    app = Composition(features=[Feature(name="events", routers=[router])]).build(
+        FastAPI()
+    )
+    package = tmp_path / "search_sdk"
+    for name, source in generate_python(build_ir(export_schema(app))).items():
+        target = package / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(source, encoding="utf-8")
+    spec = importlib.util.spec_from_file_location(
+        package.name,
+        package / "__init__.py",
+        submodule_search_locations=[str(package)],
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[package.name] = module
+    try:
+        spec.loader.exec_module(module)
+        transport = httpx.ASGITransport(app=app)
+        async with (
+            httpx.AsyncClient(transport=transport) as http,
+            module.Client("http://example.test", http_client=http) as client,
+        ):
+            stream = client.events.search(
+                query="needle", headers="h", content="c", adapter="a"
+            )
+            events = [event async for event in stream]
+    finally:
+        for name in tuple(sys.modules):
+            if name.partition(".")[0] == package.name:
+                del sys.modules[name]
+
+    assert events == ["needle"]
+    assert received == [("needle", "h", "c", "a")]
 
 
 async def test_python_parser_all_boundaries_and_multiline_eof():
