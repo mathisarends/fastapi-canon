@@ -142,6 +142,12 @@ _EXPLANATIONS = {
         "Remove one binding. To replace an integration binding, for example in tests, use Composition.override(...).",
         _DOCS + "composition.md#overriding-providers-in-tests",
     ),
+    "canon.providers.E007": _Explanation(
+        "A composition middleware injects a service that the prepared container cannot supply at APP scope, or also receives that argument explicitly.",
+        "A middleware accepts routes: Inject[OwnerRoutes], while OwnerRoutes is unbound or bound only at REQUEST scope.",
+        "Register the service at APP scope, or inject an APP-scoped ServiceScope factory. Do not pass an injected parameter to Middleware(...).",
+        _DOCS + "composition.md#middleware",
+    ),
     "canon.description.E001": _Explanation(
         "HTTP metadata cannot be described against the composed read-only error catalog.",
         "A declared HTTP error cannot be resolved from the catalog supplied to the metadata adapter.",

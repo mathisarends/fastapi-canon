@@ -37,6 +37,7 @@ outside the library's intended architecture.
 - [Feature composition](#feature-composition)
   - [Feature lifespans](#feature-lifespans)
   - [Integrations](#integrations)
+  - [Middleware](#middleware)
   - [Application router](#application-router)
   - [Router policies](#router-policies)
   - [Dishka](#dishka)
@@ -193,6 +194,43 @@ overrides. A binding that a feature and an integration both provide fails with
 `canon.providers.E006`.
 Return `Installer(..., before_features=True)` from `Integration.prepare()`
 to run its lifespan before feature startup and close it after feature shutdown.
+
+### Middleware
+
+List ASGI middleware on the composition, outermost first:
+
+```python
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
+
+composition = Composition(
+    features=[projects],
+    middleware=[
+        Middleware(LogContextMiddleware),
+        Middleware(CORSMiddleware, allow_origins=origins),
+        Middleware(OwnerRoutingMiddleware),
+    ],
+)
+
+
+class OwnerRoutingMiddleware:
+    def __init__(self, app: ASGIApp, routes: Inject[OwnerRoutes]) -> None:
+        self._app = app
+        self._routes = routes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        await self._app(scope, receive, send)
+```
+
+The list wraps everything `build()` installs and middleware added before it.
+`request_logging=True` stays outermost, and `app.add_middleware()` after `build()`
+lands outside the list.
+
+`Inject[T]` constructor parameters resolve from the APP container. Such a
+middleware is created once, on its first ASGI call. Preflight reports a missing
+binding as `canon.providers.E007`.
+Starlette's `Middleware` type does not know about injection, so strict type
+checkers report the injected parameter as missing. Cast the class to `Any` there.
 
 ### Application router
 

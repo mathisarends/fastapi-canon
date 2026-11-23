@@ -3,6 +3,7 @@ from typing import Protocol
 
 from dishka import Provider
 from fastapi import APIRouter
+from starlette.middleware import Middleware
 
 from fastapi_canon.composition.feature import ErrorOptions, Feature
 from fastapi_canon.integration import Integration
@@ -28,3 +29,6 @@ class CompositionSource(Protocol):
 
     @property
     def overrides(self) -> tuple[Provider | Callable[[], Provider], ...]: ...
+
+    @property
+    def middleware(self) -> tuple[Middleware, ...]: ...

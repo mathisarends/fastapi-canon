@@ -9,6 +9,7 @@ from dishka import (
     Provider,
 )
 from fastapi import APIRouter, FastAPI
+from starlette.middleware import Middleware
 
 from fastapi_canon.composition.checks import (
     check_installed,
@@ -55,6 +56,7 @@ class Composition:
     integrations: tuple[Integration, ...]
     request_logging: bool
     overrides: tuple[Provider | Callable[[], Provider], ...]
+    middleware: tuple[Middleware, ...]
 
     def __init__(
         self,
@@ -65,6 +67,7 @@ class Composition:
         integrations: Sequence[Integration] = (),
         request_logging: bool = False,
         overrides: Sequence[Provider | Callable[[], Provider]] = (),
+        middleware: Sequence[Middleware] = (),
     ) -> None:
         normalized_integrations = unique_instances(
             integrations, Integration, "integrations"
@@ -100,6 +103,9 @@ class Composition:
             self,
             "overrides",
             unique_provider_sources(overrides, owner="Composition overrides"),
+        )
+        object.__setattr__(
+            self, "middleware", unique_instances(middleware, Middleware, "middleware")
         )
 
     def build(self, app: FastAPI) -> FastAPI:

@@ -27,6 +27,9 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0260).
   `external` (#209).
 - `Composition.container()` opens the composed Dishka container without a
   FastAPI application (#206).
+- `Composition(middleware=[...])` declares ASGI middleware outermost first, with
+  `Inject[T]` constructor parameters checked as `canon.providers.E007`. See
+  [middleware](docs/composition.md#middleware) (#207).
 
 ### Fixed
 

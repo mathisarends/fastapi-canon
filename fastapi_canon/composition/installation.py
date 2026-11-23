@@ -17,6 +17,7 @@ from fastapi_canon.composition.checks import (
     raise_check_errors,
 )
 from fastapi_canon.composition.lifespans import ApplicationLifespan, bind_lifespan
+from fastapi_canon.composition.middleware import install_middleware
 from fastapi_canon.composition.request_logging import install_request_logging
 from fastapi_canon.composition.scopes import install_scopes
 from fastapi_canon.diagnostics import (
@@ -78,6 +79,7 @@ class Installation:
     integration_ids: tuple[int, ...]
     request_logging: bool
     override_ids: tuple[int, ...]
+    middleware_ids: tuple[int, ...]
     container: AsyncContainer | None = field(compare=False)
     description: CompositionInfo | None = field(default=None, compare=False)
     contract_routes: tuple[ContractRoute, ...] = field(default=(), compare=False)
@@ -138,6 +140,7 @@ def apply_composition(
             else None
         ),
         override_ids=tuple(id(source) for source in composition.overrides),
+        middleware_ids=tuple(id(entry) for entry in composition.middleware),
         container=None,
     )
     installed = getattr(app.state, INSTALLATION_STATE_KEY, None)
@@ -193,9 +196,11 @@ def apply_composition(
         include_unhandled_error=composition.errors.include_unhandled_error,
     )
     integrations.install(app, container, prepared.installers, before_routes=False)
+    middleware_startup = install_middleware(app, composition.middleware)
     app.router.lifespan_context = compose_lifespan(
         original_lifespan,
         (
+            *middleware_startup,
             *integrations.before_features,
             *lifespans,
             *integrations.after_features,
@@ -248,6 +253,8 @@ def validate_applied_composition(app: object, composition: CompositionSource) ->
         or installed.request_logging != composition.request_logging
         or installed.override_ids
         != tuple(id(source) for source in composition.overrides)
+        or installed.middleware_ids
+        != tuple(id(entry) for entry in composition.middleware)
         or installed.router_factory_id != expected_router_factory_id
     ):
         msg = "composition must be applied to the application before validation"
