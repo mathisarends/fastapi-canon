@@ -76,6 +76,15 @@ async with composition.container() as container:
     await run(container)
 ```
 
+CI jobs without the external toolchains can stop listing native targets:
+
+```console
+# Before
+fastapi-canon generate --target streams --target rpc --target webrtc --check
+# After
+fastapi-canon generate --native --check
+```
+
 ## Upgrade to 0.25.0
 
 Version 0.25.0 was published on 2026-11-23.
