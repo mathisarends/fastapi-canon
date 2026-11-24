@@ -43,12 +43,21 @@ def test_async_credentials_refresh_rejection_budget_and_close(compiled_typescrip
         async function main() {
           for (const policy of ["refresh", "denied", "generic", "opaque"]) {
             let providers = 0, attempts = 0;
+            let renewals = 0, renewed = false;
             const sockets = [], received = [], states = [];
             const client = await GreetingClient.connect({
               lazy: true, reconnect: true, requestTimeoutMs: null,
               heartbeatIntervalMs: null, reconnectRandom: () => 0,
               onStateChange: (_, state, error) => states.push({state, error}),
+              onCredentialsExpired: async ({endpoint, signal}) => {
+                assert(endpoint.url); assert(endpoint.server);
+                assert(signal instanceof AbortSignal);
+                renewals++;
+                await Promise.resolve();
+                renewed = true;
+              },
               credentials: async (endpoint, signal) => {
+                if (providers > 0) assert(renewed);
                 providers++; assert(signal instanceof AbortSignal);
                 const url = new URL(endpoint.url);
                 url.searchParams.set("ticket", `credential-${providers}`);
@@ -92,7 +101,54 @@ def test_async_credentials_refresh_rejection_budget_and_close(compiled_typescrip
                 assert(!error.message.includes("credential"));
               }
             }
+            assert.equal(renewals, policy === "generic" ? 0 : 1);
             await client.close(); assert.equal(timers.size, 0);
+          }
+
+          const scenarios = ["cancel", "reject", "network", "disabled", "initial"];
+          for (const scenario of scenarios) {
+            const sockets = [];
+            const failure = new Error("renewal rejected");
+            let finish, renewalSignal;
+            const connecting = GreetingClient.connect({
+              reconnect: scenario !== "disabled", heartbeatIntervalMs: null,
+              onCredentialsExpired: ({signal}) => {
+                renewalSignal = signal;
+                if (scenario === "reject") return Promise.reject(failure);
+                return new Promise(resolve => { finish = resolve; });
+              },
+              socketFactory: () => {
+                if (scenario === "initial") throw new Error("handshake failed");
+                const socket = new Socket(); sockets.push(socket); return socket;
+              },
+            });
+            if (scenario === "initial") {
+              await assert.rejects(connecting);
+              assert.equal(renewalSignal, undefined);
+              continue;
+            }
+            const client = await connecting;
+            if (scenario === "network") {
+              sockets[0].listeners.get("close")({code: 1006, reason: ""});
+              await until(() => sockets.length === 2);
+            } else {
+              sockets[0].expire();
+            }
+            if (scenario === "cancel") {
+              await until(() => finish);
+              await client.close();
+              assert(renewalSignal.aborted);
+              finish();
+              await Promise.resolve();
+            } else if (scenario === "reject") {
+              assert.equal(await client.closed, failure);
+              await assert.rejects(client.greeting.say({name: "after"}),
+                e => e === failure);
+            } else {
+              assert.equal(renewalSignal, undefined);
+            }
+            assert.equal(sockets.length, scenario === "network" ? 2 : 1);
+            await client.close();
           }
 
           let entered = false, release, signal, factories = 0;
