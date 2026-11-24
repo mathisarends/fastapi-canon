@@ -2,6 +2,34 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
+## 0.27.0 - Unreleased
+
+### Breaking changes
+
+See the [upgrade guide](docs/package-migration.md#upgrade-to-0270).
+
+- **`CANON-027-PREFLIGHT-CLEANUP`** — `check composition --app module:factory`
+  now closes the factory's Canon container and runs integration finalizers.
+  Use a factory that returns a fresh app, or pass a module-level app by name.
+- **`CANON-027-ROUTER-CONTRACTS`** — `check errors` follows statically resolved
+  router includes. Rerun strict checks and declare or handle errors newly
+  reported from handlers and inherited dependencies.
+
+### Added
+
+- `check_app(app)` and `check composition --app module:app` check the installed
+  composition without entering lifespan (#223).
+- Generated TypeScript WebSocket clients can await `onCredentialsExpired`
+  before reconnecting (#222).
+
+### Fixed
+
+- Inherited router contracts no longer make unrelated operations incomplete
+  when the child can be resolved. Parent router dependencies are checked for
+  the operations that inherit them (#219).
+- Composition preflight reports factory cleanup failures in the selected output
+  format and exits with code 2.
+
 ## 0.26.0 - 2026-11-23
 
 ### Breaking changes

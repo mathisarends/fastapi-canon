@@ -6,6 +6,8 @@ version; the reference service is an example. `release.toml` and
 
 ## Current versions
 
+**Prepared: 0.27.0.** See the [upgrade guide](package-migration.md#upgrade-to-0270).
+
 **Published: 0.26.0 (2026-11-23).** Changes feature error catalogs and provider
 binding validation, and adds standalone containers and composition middleware.
 See the [upgrade guide](package-migration.md#upgrade-to-0260) and

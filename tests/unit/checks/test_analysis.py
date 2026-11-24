@@ -861,6 +861,31 @@ def dreams():
     } == {"api.orders": ["CAN001"], "child.dreams": []}
 
 
+def test_included_router_checks_dependencies_declared_on_parent(tmp_path: Path) -> None:
+    report = analyze(
+        tmp_path,
+        PRELUDE
+        + """
+from fastapi import Depends
+
+def authenticate(): raise Missing()
+
+child = CanonRouter()
+@child.get('/child')
+def included(): pass
+
+@router.get('/independent')
+def independent(): pass
+
+parent = CanonRouter(dependencies=[Depends(authenticate)])
+parent.include_router(child)
+""",
+    )
+    assert {
+        op.function: [item.code for item in op.diagnostics] for op in report.operations
+    } == {"api.included": ["CAN001"], "api.independent": []}
+
+
 @pytest.mark.parametrize(
     "mount",
     [

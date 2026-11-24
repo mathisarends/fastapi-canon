@@ -379,8 +379,7 @@ class SourceIndex:
     def _extends_included_routes(
         self, node: ast.expr, module: str, seen: set[int]
     ) -> bool:
-        # A Canon router's raises, http_statuses and policy extend the
-        # operations it includes.
+        # These Canon router options also affect included operations.
         module, node = self.value(node, module)
         if id(node) in seen:
             return False
@@ -400,7 +399,7 @@ class SourceIndex:
             return any(
                 item.arg is None
                 or (
-                    item.arg in {"raises", "http_statuses", "policy"}
+                    item.arg in {"raises", "http_statuses", "policy", "dependencies"}
                     and not (
                         isinstance(item.value, ast.Constant)
                         and item.value.value is None

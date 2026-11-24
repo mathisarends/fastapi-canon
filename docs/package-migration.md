@@ -11,6 +11,20 @@ The [repository migration](repository-migration.md) records the
 source history and publishing setup. The repository move does not rename the
 PyPI project or add further Python import changes.
 
+## Upgrade to 0.27.0
+
+See the [changelog](../CHANGELOG.md) for the release status.
+
+- Pass a fresh app factory to `fastapi-canon check composition --app`. The CLI
+  releases its Canon resources even if checks fail. For a shared app, pass
+  `--app module:app` or call `check_app(app)` in Python.
+- Rerun `fastapi-canon check errors src --strict --require-complete`. Handle
+  newly reported exceptions or declare them with `raises=` on the affected
+  route or router, including errors from inherited dependencies.
+- Regenerate TypeScript WebSocket clients to opt into
+  [credential renewal](integrations/websockets/clients.md#lazy-connections-and-multiple-servers)
+  with `onCredentialsExpired`.
+
 ## Upgrade to 0.26.0
 
 Version 0.26.0 was published on 2026-11-23. See the

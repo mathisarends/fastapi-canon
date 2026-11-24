@@ -31,7 +31,13 @@ def open_application(
             yield value
         finally:
             if factory and close_factory is not None:
-                asyncio.run(close_factory(value))
+                try:
+                    asyncio.run(close_factory(value))
+                except (Exception, SystemExit) as error:
+                    # User-defined teardown can raise arbitrary application errors.
+                    raise ValueError(
+                        f"Cannot close app from factory {reference!r} ({type(error).__name__})"
+                    ) from None
 
 
 def load_reference(reference: str, *, root: Path) -> Any:
