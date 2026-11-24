@@ -1,7 +1,8 @@
-from collections.abc import Mapping
-from contextlib import nullcontext
+from collections.abc import AsyncGenerator, Mapping
+from contextlib import asynccontextmanager, nullcontext
 from typing import Any, override
 
+from dishka import AsyncContainer
 from fastapi import FastAPI
 from opentelemetry import trace
 from opentelemetry.instrumentation.utils import (
@@ -10,7 +11,7 @@ from opentelemetry.instrumentation.utils import (
     suppress_instrumentation,
 )
 from opentelemetry.trace import Span, SpanContext, SpanKind, Status, StatusCode
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.types import ASGIApp, Lifespan, Receive, Scope, Send
 
 from fastapi_canon.error.handlers import install_problem_observer
 from fastapi_canon.errors import FeatureConfigurationError
@@ -45,21 +46,52 @@ def validate_app(app: FastAPI) -> None:
         raise FeatureConfigurationError("install telemetry before the app starts")
 
 
-def install(app: FastAPI, options: Telemetry) -> None:
+def install(
+    app: FastAPI, options: Telemetry, container: AsyncContainer | None
+) -> Lifespan[FastAPI] | None:
+    """Configure native telemetry; with ``sdk``, return the lifespan that starts it.
+
+    Until that lifespan resolves the container's SDK providers, native telemetry
+    is off rather than falling back to global providers.
+    """
     # FastAPI currently exposes telemetry only in its constructor. Updating the
     # existing dictionary keeps its NativeTelemetry/lifespan configuration shared.
     config = app._telemetry
     config.update(
         {
             "auto_configure": False,
-            "tracing": options.tracing,
-            "metrics": options.metrics,
-            "logs": options.logs,
             "operation_spans": options.operation_spans,
             "exclude": lambda scope: (
                 _skip(scope, options)
                 or (scope["type"] == "http" and not is_http_instrumentation_enabled())
             ),
+        }
+    )
+    app.add_middleware(_RequestContext, options=options)
+    if options.problem_details:
+        install_problem_observer(app, _problem)
+    if options.sdk is None:
+        _use_providers(app, options)
+        return None
+    if container is None:
+        raise FeatureConfigurationError("Telemetry(sdk=...) requires a container")
+    config.update({"tracing": False, "metrics": False, "logs": False})
+
+    @asynccontextmanager
+    async def start(_app: FastAPI) -> AsyncGenerator[None, None]:
+        owned = await container.get(Telemetry)
+        _use_providers(app, owned)
+        yield
+
+    return start
+
+
+def _use_providers(app: FastAPI, options: Telemetry) -> None:
+    app._telemetry.update(
+        {
+            "tracing": options.tracing,
+            "metrics": options.metrics,
+            "logs": options.logs,
             "tracer_provider": (
                 _ProblemProvider(options.tracer_provider)
                 if options.problem_details
@@ -69,9 +101,6 @@ def install(app: FastAPI, options: Telemetry) -> None:
             "logger_provider": options.logger_provider,
         }
     )
-    app.add_middleware(_RequestContext, options=options)
-    if options.problem_details:
-        install_problem_observer(app, _problem)
 
 
 def _problem(scope: Scope, code: str, status: int) -> None:

@@ -8,13 +8,13 @@ from typing import TYPE_CHECKING, Any
 from weakref import WeakKeyDictionary
 
 from fastapi_canon.errors import FeatureConfigurationError
+from fastapi_canon.integrations.opentelemetry.declarations import Telemetry
 
 if TYPE_CHECKING:
     from dishka import Provider
 
     from fastapi_canon.integrations.opentelemetry.declarations import (
         ResourceInstrumentation,
-        Telemetry,
     )
 
 RESOURCE_GROUP = "fastapi_canon.telemetry_resources"
@@ -57,9 +57,11 @@ def default_resources() -> tuple[ResourceInstrumentation, ...]:
 def resource_providers(
     providers: tuple[Provider, ...],
     adapters: Sequence[ResourceInstrumentation],
-    telemetry: Telemetry,
 ) -> tuple[Provider, ...]:
-    """Decorate each provided class that an adapter accepts, per component."""
+    """Decorate each provided class that an adapter accepts, per component.
+
+    Each decorator receives the container's ``Telemetry`` binding.
+    """
     from dishka import Provider
 
     targets: dict[tuple[str, type[Any]], ResourceInstrumentation] = {}
@@ -74,17 +76,19 @@ def resource_providers(
     decorators = []
     for (component, provided), adapter in targets.items():
         decorator = Provider(component=component)
-        decorator.decorate(_decorator(provided, adapter, telemetry), provides=provided)
+        decorator.decorate(_decorator(provided, adapter), provides=provided)
         decorators.append(decorator)
     return tuple(decorators)
 
 
-def _decorator(
-    provided: type[Any], adapter: ResourceInstrumentation, telemetry: Telemetry
-) -> Any:
-    def instrument(resource: Any) -> Iterator[Any]:
+def _decorator(provided: type[Any], adapter: ResourceInstrumentation) -> Any:
+    def instrument(resource: Any, telemetry: Telemetry) -> Iterator[Any]:
         with adapter.instrument(resource, telemetry):
             yield resource
 
-    instrument.__annotations__ = {"resource": provided, "return": Iterator[provided]}  # type: ignore[valid-type]
+    instrument.__annotations__ = {
+        "resource": provided,
+        "telemetry": Telemetry,
+        "return": Iterator[provided],  # type: ignore[valid-type]
+    }
     return instrument
