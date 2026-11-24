@@ -76,9 +76,37 @@ body and headers. See the [binary response example](../composition.md#binary-and
 The runnable application uses `application/octet-stream` for its general download
 operation and returns an encoded `Content-Disposition` filename.
 
-Raw uploads use `Annotated[bytes, Body(media_type="application/octet-stream")]`
-with `Body` imported from FastAPI. Buffering, upload progress and cancellation
-on the client depend on the chosen HTTP tooling.
+`fastapi-canon check composition` warns when a raw GET success response has no
+documented content (unreleased). Use a concrete media type, a range like
+`image/*` for dynamic images, or `CanonResponse.empty(status=200)` for an
+intentionally bodyless success.
+
+Use FastAPI's `Annotated[bytes, Body(media_type="application/octet-stream")]`
+for buffered raw uploads. To consume the body as it arrives, declare
+`BinaryBody` on an async Canon `APIRouter` handler (unreleased).
+
+```python
+from collections.abc import AsyncIterator
+from typing import Annotated
+
+from fastapi_canon import APIRouter, BinaryBody
+
+router = APIRouter()
+
+
+@router.put("/files")
+async def upload(
+    chunks: Annotated[AsyncIterator[bytes], BinaryBody("application/octet-stream")],
+) -> int:
+    size = 0
+    async for chunk in chunks:
+        size += len(chunk)
+    return size
+```
+
+Consume the iterator once, during the request. The media type declares a
+required raw binary body in OpenAPI. Verify content type and enforce limits in
+application code. Use one body consumer per operation, including dependencies.
 
 ## Run the example
 

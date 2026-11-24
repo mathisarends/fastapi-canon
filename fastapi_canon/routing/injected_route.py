@@ -2,17 +2,34 @@ from __future__ import annotations
 
 import functools
 import inspect
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable, Coroutine
 from contextlib import aclosing
+from copy import copy
 from inspect import Parameter
-from typing import Annotated, Any, NamedTuple, cast, get_type_hints
+from typing import (
+    Annotated,
+    Any,
+    NamedTuple,
+    cast,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 from dishka import DEFAULT_COMPONENT, AsyncContainer, DependencyKey
 from dishka.integrations.base import default_parse_dependency, wrap_injection
 from fastapi import Depends, Request
-from fastapi.routing import APIRoute
+from fastapi.params import Body, Param
+from fastapi.params import Depends as DependsParam
+from fastapi.routing import (
+    APIRoute,
+    _effective_route_context_var,  # noqa: PLC2701 -- FastAPI exposes the effective dependency graph to route hooks through this context.
+)
+from starlette.responses import Response
 from starlette.routing import get_name
 
+from fastapi_canon.errors import ConfigurationError
+from fastapi_canon.routing.binary_body import BinaryBody
 from fastapi_canon.routing.injection import injected_dependency
 
 
@@ -27,12 +44,63 @@ class InjectedRoute(APIRoute):
     """
 
     def __init__(self, path: str, endpoint: Callable[..., Any], **kwargs: Any) -> None:
-        super().__init__(path, inject_endpoint(endpoint), **kwargs)
+        declared = _endpoint_signature(endpoint)
+        body = _binary_body_parameter(declared)
+        self._streams_request_body = body is not None
+        if body is not None:
+            endpoint = _adapt_binary_endpoint(endpoint, declared, body)
+            declared = _endpoint_signature(endpoint)
+            kwargs["openapi_extra"] = _binary_body_openapi(
+                path, kwargs.get("openapi_extra"), body.marker.media_type
+            )
+        super().__init__(path, _inject_endpoint(endpoint, declared), **kwargs)
+
+    def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
+        if self._streams_request_body:
+            # FastAPI rebuilds the dependency graph for lazy inclusions and
+            # exposes it to this hook through the same context its base uses.
+            effective = _effective_route_context_var.get()
+            route = (
+                effective
+                if effective is not None and effective.original_route is self
+                else self
+            )
+            if route.body_field is not None:
+                raise ConfigurationError(
+                    f"Route {route.path!r}: BinaryBody cannot be combined with other request body parameters or dependencies"
+                )
+        return super().get_route_handler()
 
 
 def inject_endpoint[EndpointT: Callable[..., Any]](endpoint: EndpointT) -> EndpointT:
     """Return *endpoint* with injected parameters resolved from Dishka."""
-    signature, hints, source = _endpoint_signature(endpoint)
+    return _inject_endpoint(endpoint, _endpoint_signature(endpoint))
+
+
+def endpoint_dependencies(endpoint: Callable[..., Any]) -> tuple[DependencyKey, ...]:
+    retained = getattr(endpoint, "__canon_http_dependency_roots__", None)
+    if retained is not None:
+        return cast("tuple[DependencyKey, ...]", retained)
+    source = getattr(endpoint, "__dishka_orig_func__", endpoint)
+    signature, hints, _ = _endpoint_signature(source)
+    return tuple(
+        dict.fromkeys(
+            dependency
+            for name, parameter in signature.parameters.items()
+            if (
+                dependency := _parse_dependency(
+                    parameter, hints.get(name, parameter.annotation)
+                )
+            )
+            is not None
+        )
+    )
+
+
+def _inject_endpoint[EndpointT: Callable[..., Any]](
+    endpoint: EndpointT, declared: _EndpointSignature
+) -> EndpointT:
+    signature, hints, source = declared
     parameters = signature.parameters
     if not inspect.isfunction(endpoint) and not inspect.isclass(endpoint):
         endpoint = cast(
@@ -55,26 +123,6 @@ def inject_endpoint[EndpointT: Callable[..., Any]](endpoint: EndpointT) -> Endpo
         endpoint, "__canon_declared_endpoint__", endpoint
     )
     return wrapped
-
-
-def endpoint_dependencies(endpoint: Callable[..., Any]) -> tuple[DependencyKey, ...]:
-    retained = getattr(endpoint, "__canon_http_dependency_roots__", None)
-    if retained is not None:
-        return cast("tuple[DependencyKey, ...]", retained)
-    source = getattr(endpoint, "__dishka_orig_func__", endpoint)
-    signature, hints, _ = _endpoint_signature(source)
-    return tuple(
-        dict.fromkeys(
-            dependency
-            for name, parameter in signature.parameters.items()
-            if (
-                dependency := _parse_dependency(
-                    parameter, hints.get(name, parameter.annotation)
-                )
-            )
-            is not None
-        )
-    )
 
 
 def _endpoint_signature(
@@ -107,6 +155,20 @@ def _endpoint_signature(
             f"Cannot inspect endpoint {get_name(endpoint)!r}; use a typed function, bound method, callable instance or functools.partial"
         ) from None
     return _EndpointSignature(signature, hints, source)
+
+
+def _adapt_binary_endpoint(
+    endpoint: Callable[..., Any],
+    declared: _EndpointSignature,
+    body: _BinaryBodyParameter,
+) -> Callable[..., Any]:
+    if not inspect.iscoroutinefunction(declared.source):
+        raise ConfigurationError("BinaryBody requires an async handler")
+    hints = {
+        **declared.hints,
+        body.name: Annotated[AsyncIterator[bytes], Depends(_request_chunks)],
+    }
+    return _adapt_endpoint(endpoint, declared.signature, hints, source=declared.source)
 
 
 def _adapt_endpoint(
@@ -239,11 +301,64 @@ def _inject_sync[EndpointT: Callable[..., Any]](
     return cast(EndpointT, wrapper)
 
 
+def _binary_body_parameter(declared: _EndpointSignature) -> _BinaryBodyParameter | None:
+    body = None
+    for name, parameter in declared.signature.parameters.items():
+        hint = declared.hints.get(name, parameter.annotation)
+        if isinstance(parameter.default, BinaryBody):
+            raise ConfigurationError(
+                "Use BinaryBody in Annotated[AsyncIterator[bytes], ...]"
+            )
+        if get_origin(hint) is not Annotated:
+            continue
+        annotation, *metadata = get_args(hint)
+        markers = [value for value in metadata if isinstance(value, BinaryBody)]
+        if not markers:
+            continue
+        if body is not None or len(markers) > 1:
+            raise ConfigurationError("An operation can declare only one BinaryBody")
+        if get_origin(annotation) is not AsyncIterator or get_args(annotation) != (
+            bytes,
+        ):
+            raise ConfigurationError(
+                "BinaryBody requires an AsyncIterator[bytes] annotation"
+            )
+        if (
+            parameter.default is not Parameter.empty
+            or any(isinstance(value, Body | DependsParam | Param) for value in metadata)
+            or _parse_dependency(parameter, hint) is not None
+        ):
+            raise ConfigurationError(
+                "BinaryBody cannot be combined with another parameter declaration or a default"
+            )
+        body = _BinaryBodyParameter(name, markers[0])
+    return body
+
+
 def _parse_dependency(parameter: Parameter, hint: Any) -> DependencyKey | None:
     dependency = injected_dependency(hint)
     if dependency is not None:
         return DependencyKey(dependency, DEFAULT_COMPONENT)
     return default_parse_dependency(parameter, hint)
+
+
+def _binary_body_openapi(
+    path: str, extra: dict[str, Any] | None, media_type: str
+) -> dict[str, Any]:
+    result = {} if extra is None else copy(extra)
+    if "requestBody" in result:
+        raise ConfigurationError(
+            f"Route {path!r}: BinaryBody conflicts with openapi_extra['requestBody']"
+        )
+    result["requestBody"] = {
+        "required": True,
+        "content": {media_type: {"schema": {"type": "string", "format": "binary"}}},
+    }
+    return result
+
+
+async def _request_chunks(request: Request) -> AsyncIterator[bytes]:
+    return request.stream()
 
 
 def _resolver(dependency: DependencyKey) -> Callable[[Request], Any]:
@@ -270,3 +385,8 @@ class _EndpointSignature(NamedTuple):
     signature: inspect.Signature
     hints: dict[str, Any]
     source: Callable[..., Any]
+
+
+class _BinaryBodyParameter(NamedTuple):
+    name: str
+    marker: BinaryBody

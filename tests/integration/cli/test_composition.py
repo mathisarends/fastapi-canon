@@ -159,6 +159,76 @@ def test_cli_check_reports_a_conflict_before_application_installation(
 
 
 @pytest.mark.parametrize(
+    "target",
+    [["downloads:composition"], ["--app", "downloads:app"]],
+    ids=["preflight", "installed"],
+)
+def test_cli_warns_about_a_raw_get_with_no_documented_content(
+    tmp_path: Path, target: list[str]
+) -> None:
+    (tmp_path / "downloads.py").write_text(
+        dedent("""
+        from fastapi import APIRouter as FastAPIRouter, FastAPI, Response
+        from fastapi_canon import APIRouter, CanonResponse, Composition, Feature
+
+        def download() -> Response:
+            raise AssertionError("the check must not run the handler")
+
+        native = FastAPIRouter()
+        native.get("/ambiguous", operation_id="files.raw")(download)
+        native.get("/documented", operation_id="files.native", responses={
+            200: {"content": {"application/pdf": {"schema": {"type": "string", "format": "binary"}}}}
+        })(download)
+        native.get("/extra", operation_id="files.extra", openapi_extra={"responses": {
+            "200": {"content": {"image/png": {}}}
+        }})(download)
+        native.get("/no-content", operation_id="files.no_content", status_code=205)(download)
+        native.head("/head", operation_id="files.head")(download)
+        native.get("/hidden", operation_id="files.hidden", include_in_schema=False)(download)
+
+        router = APIRouter()
+        router.include_router(native, prefix="/files", default_response_class=Response)
+        router.get("/empty", operation_id="files.empty", response=CanonResponse.empty(status=200))(download)
+        router.get("/binary", operation_id="files.binary", response=CanonResponse.binary("application/pdf"))(download)
+        composition = Composition(features=[Feature(name="files", routers=[router])])
+        app = composition.build(FastAPI())
+        """),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "fastapi_canon",
+            "check",
+            "composition",
+            *target,
+            "--fail-on",
+            "warning",
+            "--format",
+            "json",
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 1, result.stdout + result.stderr
+    report = json.loads(result.stdout)
+    assert report["complete"] is True
+    assert report["has_errors"] is False
+    (issue,) = report["issues"]
+    assert issue["code"] == "canon.contracts.W001"
+    assert issue["severity"] == "warning"
+    assert issue["locations"] == ["GET /files/ambiguous"]
+    assert "files.raw" in issue["message"]
+    assert "200" in issue["message"]
+    assert "content" in issue["message"]
+    assert 'CanonResponse.binary("*/*", status=200)' in issue["hint"]
+
+
+@pytest.mark.parametrize(
     ("target", "status", "events"),
     [
         ("create_app", 0, ["released", "finalized"]),

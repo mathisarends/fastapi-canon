@@ -98,6 +98,7 @@ application behavior. Independent failures can appear together.
 | `canon.providers.E007` | A composition middleware injects a service without an APP-scope binding, or also receives it explicitly. |
 | `canon.description.E001` | HTTP metadata cannot be described against the composed catalog. |
 | `canon.contracts.E001` | HTTP/OpenAPI response contracts cannot be compiled. |
+| `canon.contracts.W001` | A raw GET success response has no documented content (unreleased). |
 | `canon.checks.E001` | A feature check failed to return valid findings. |
 
 Use `fastapi-canon explain canon.routing.E002` for a built-in code's meaning,
