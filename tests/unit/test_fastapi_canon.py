@@ -24,6 +24,7 @@ APPLICATION_NAMES = {
     "ServiceScope",
     "StreamOptions",
     "__version__",
+    "check_app",
     "export_contracts",
     "inspect_app",
 }
