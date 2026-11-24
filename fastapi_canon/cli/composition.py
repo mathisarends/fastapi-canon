@@ -9,7 +9,8 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from fastapi_canon.cli.application import load_reference, open_application
-from fastapi_canon.composition import Composition, inspect_app
+from fastapi_canon.composition import Composition, check_app, inspect_app
+from fastapi_canon.composition.installation import close_installed_app
 from fastapi_canon.diagnostics import CheckReport, CompositionInfo
 
 
@@ -20,7 +21,7 @@ def main(arguments: Sequence[str], *, inspect: bool = False) -> int:
         description=(
             "Describe an installed HTTP composition from an application or synchronous app factory."
             if inspect
-            else "Preflight a Composition against a fresh or configured FastAPI application without installing it."
+            else "Preflight a Composition or check the composition installed on --app."
         ),
         epilog=(
             "Imports and synchronous app factories execute application code; lifespan is never entered. "
@@ -34,6 +35,7 @@ def main(arguments: Sequence[str], *, inspect: bool = False) -> int:
     )
     parser.add_argument(
         "target",
+        nargs=None if inspect else "?",
         help=(
             "module:app or module:factory; dotted attributes are supported"
             if inspect
@@ -75,17 +77,21 @@ def main(arguments: Sequence[str], *, inspect: bool = False) -> int:
         if inspect:
             with open_application(args.target, root=root) as app:
                 result = inspect_app(app)
-        else:
-            target = load_reference(args.target, root=root)
-            if not isinstance(target, Composition):
-                raise ValueError("check target must be a Composition")
+        elif args.target is not None or args.app:
+            target = None
+            if args.target is not None:
+                target = load_reference(args.target, root=root)
+                if not isinstance(target, Composition):
+                    raise ValueError("check target must be a Composition")
             application = (
-                open_application(args.app, root=root)
+                open_application(args.app, root=root, close_factory=close_installed_app)
                 if args.app
                 else nullcontext(FastAPI())
             )
             with application as app:
-                result = target.check(app)
+                result = check_app(app) if target is None else target.check(app)
+        else:
+            raise ValueError("Supply a composition target or --app module:app")
     except (ImportError, AttributeError, ValueError, TypeError) as error:
         if args.format == "json":
             print(json.dumps({"error": str(error)}))

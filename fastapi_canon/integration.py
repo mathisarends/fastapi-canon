@@ -46,7 +46,7 @@ class Integration:
     def finalizer(self) -> Callable[[], None] | None:
         """Return a callable run once after the container closes or ``build()`` fails.
 
-        It is not called by ``check()`` or for an app whose lifespan never runs.
+        CLI preflight also finalizes disposable apps created by its factory target.
         """
         return None
 

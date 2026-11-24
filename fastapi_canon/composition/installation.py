@@ -81,6 +81,7 @@ class Installation:
     override_ids: tuple[int, ...]
     middleware_ids: tuple[int, ...]
     container: AsyncContainer | None = field(compare=False)
+    finalizers: IntegrationFinalizers = field(compare=False)
     description: CompositionInfo | None = field(default=None, compare=False)
     contract_routes: tuple[ContractRoute, ...] = field(default=(), compare=False)
 
@@ -96,6 +97,13 @@ class IntegrationFinalizers:
         with ExitStack() as stack:
             for callback in callbacks:
                 stack.callback(callback)
+
+    async def close(self, container: AsyncContainer | None) -> None:
+        try:
+            if container is not None:
+                await container.close()
+        finally:
+            self()
 
 
 def pending_finalizers(
@@ -142,6 +150,7 @@ def apply_composition(
         override_ids=tuple(id(source) for source in composition.overrides),
         middleware_ids=tuple(id(entry) for entry in composition.middleware),
         container=None,
+        finalizers=finalizers,
     )
     installed = getattr(app.state, INSTALLATION_STATE_KEY, None)
     if installed is not None:
@@ -234,6 +243,13 @@ def installed_description(app: FastAPI) -> CompositionInfo:
     return installed.description
 
 
+async def close_installed_app(app: FastAPI) -> None:
+    """Release the installation of a disposable app whose lifespan never ran."""
+    installed = getattr(app.state, INSTALLATION_STATE_KEY, None)
+    if isinstance(installed, Installation):
+        await installed.finalizers.close(installed.container)
+
+
 def validate_applied_composition(app: object, composition: CompositionSource) -> None:
     if not isinstance(app, FastAPI):
         msg = "app must be a FastAPI instance"
@@ -291,9 +307,7 @@ def compose_lifespan(
     @asynccontextmanager
     async def composed(app: FastAPI) -> AsyncGenerator[Mapping[str, Any], None]:
         async with AsyncExitStack() as stack:
-            stack.callback(finalizers)
-            if container is not None:
-                stack.push_async_callback(container.close)
+            stack.push_async_callback(finalizers.close, container)
             validate_openapi_contracts(app)
             states: list[Mapping[str, object]] = []
             original_state = await stack.enter_async_context(original(app))
