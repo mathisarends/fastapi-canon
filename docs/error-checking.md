@@ -576,8 +576,8 @@ contract validation and test the application's intended error paths.
 
 The checker follows unconditional module-level `parent.include_router(child)`
 calls between named Canon routers, including nested includes. A parent's
-`raises` and `RouterPolicy` apply to its descendants. Conditional or multiple
-mounts with inherited contracts leave the affected operations incomplete.
+`raises`, dependencies and `RouterPolicy` apply to its descendants. Conditional
+or multiple mounts with inherited contracts leave affected operations incomplete.
 When the child cannot be identified, or a composition router factory adds
 contracts, the checker can still mark the whole scan incomplete.
 

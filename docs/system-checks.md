@@ -326,10 +326,9 @@ installed one. Both application targets also accept synchronous zero-argument
 factories automatically; `inspect --factory` remains a compatibility flag.
 With `--app` alone, the check uses the composition installed by
 `Composition.build(app)`. A factory gives the CLI ownership of its disposable
-app. After checking, the CLI closes its Canon container and runs integration
-finalizers. A module-level app stays usable. In Python, call
-`from fastapi_canon import check_app` and use `report = check_app(app)` to
-check an app you own. Neither command enters lifespan.
+app. The CLI closes its Canon container and runs integration finalizers after
+checking. Cleanup failures exit with code 2. For an app you own, pass a module-level
+target or call `check_app(app)` from `fastapi_canon`. Neither command enters lifespan.
 See the shared [target loading rules](contracts.md#application-target-rules).
 Imports and
 user factories execute application code; this is not an import-free mode.

@@ -163,6 +163,7 @@ def test_cli_check_reports_a_conflict_before_application_installation(
     [
         ("create_app", 0, ["released", "finalized"]),
         ("conflicting_app", 2, ["released", "finalized"]),
+        ("failing_app", 2, ["released", "finalized"]),
         ("app", 0, []),
         ("bare", 2, []),
     ],
@@ -193,16 +194,24 @@ def test_cli_checks_installed_apps_and_releases_only_factory_resources(
 
         class Cleanup(Integration):
             def finalizer(self):
-                return lambda: record("finalized")
+                return self.close
+
+            def close(self):
+                record("finalized")
+
+        class FailingCleanup(Cleanup):
+            def close(self):
+                super().close()
+                raise RuntimeError("cleanup failed")
 
         @asynccontextmanager
         async def lifespan(app):
             record("started")
             yield
 
-        def create_app():
+        def create_app(cleanup=Cleanup):
             feature = Feature(name="test", providers=[Resources()])
-            app = Composition(features=[feature], integrations=[Cleanup()]).build(
+            app = Composition(features=[feature], integrations=[cleanup()]).build(
                 FastAPI(lifespan=lifespan)
             )
             assert asyncio.run(app.state.dishka_container.get(str)) == "available"
@@ -213,6 +222,9 @@ def test_cli_checks_installed_apps_and_releases_only_factory_resources(
             app.get("/first", operation_id="duplicate")(lambda: 1)
             app.get("/second", operation_id="duplicate")(lambda: 2)
             return app
+
+        def failing_app():
+            return create_app(FailingCleanup)
 
         bare = FastAPI()
         app = create_app()
@@ -245,6 +257,11 @@ def test_cli_checks_installed_apps_and_releases_only_factory_resources(
     report = json.loads(result.stdout)
     if target == "bare":
         assert "Build a Composition" in report["error"]
+    elif target == "failing_app":
+        assert report == {
+            "error": "Cannot close app from factory 'owned:failing_app' (RuntimeError)"
+        }
+        assert result.stderr == ""
     else:
         assert report["schema_version"] == 1
         assert report["complete"] == (status == 0)
