@@ -13,7 +13,8 @@ PyPI project or add further Python import changes.
 
 ## Upgrade to 0.27.0
 
-See the [changelog](../CHANGELOG.md) for the release status.
+Version 0.27.0 was published on 2026-11-24. See the
+[changelog](../CHANGELOG.md#0270---2026-11-24).
 
 - Pass a fresh app factory to `fastapi-canon check composition --app`. The CLI
   releases its Canon resources even if checks fail. For a shared app, pass

@@ -1,5 +1,19 @@
 # Compatibility
 
+## Canon 0.27.0
+
+Published on 2026-11-24. See the [migration](package-migration.md#upgrade-to-0270)
+for preflight cleanup and inherited router diagnostics.
+
+Exact-source CI passed on Linux with Python 3.12–3.14 and Windows with Python
+3.14, including PostgreSQL and Chromium/WebRTC. Both 20-combination wheel
+matrices and the installed SSE and WebRTC CLI checks passed on the release artifacts.
+
+All 15 public-index installation combinations passed. A fresh Windows/Python
+3.12 install passed the CLI version check. The tag points to the verified source,
+and the wheel and sdist hashes match across PyPI, GitHub and the manifest.
+See the [publication record](releases.md#current-versions).
+
 ## Canon 0.26.0
 
 Published on 2026-11-23. Follow the
