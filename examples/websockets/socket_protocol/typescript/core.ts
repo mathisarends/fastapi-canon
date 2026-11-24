@@ -238,6 +238,19 @@ type PoolEndpoint = {
   readonly subprotocols?: readonly string[] | undefined;
 };
 
+type RpcCredentialRenewal = (context: {
+  readonly endpoint: PoolEndpoint;
+  readonly signal: AbortSignal;
+}) => void | Promise<void>;
+
+function credentialsExpired(error: unknown): boolean {
+  return (
+    error instanceof RpcConnectionLostError &&
+    error.code === 1008 &&
+    error.reason === "credentials_expired"
+  );
+}
+
 /**
  * One transport per server, opened on first use.
  *
@@ -255,6 +268,8 @@ export class RpcTransportPool implements RpcTransportSource {
   readonly #controllers = new Map<string, AbortController>();
   readonly #failed = new WeakSet<RpcTransport>();
   readonly #everConnected = new Set<string>();
+  readonly #pendingRenewals = new Set<string>();
+  readonly #onCredentialsExpired?: RpcCredentialRenewal | undefined;
   readonly #states = new Map<string, RpcConnectionState>();
   readonly #failures = new Map<string, unknown>();
   readonly reconnect: boolean;
@@ -292,6 +307,7 @@ export class RpcTransportPool implements RpcTransportSource {
       signal: AbortSignal,
     ) => Promise<RpcTransport>;
     readonly reconnect?: boolean | undefined;
+    readonly onCredentialsExpired?: RpcCredentialRenewal | undefined;
     readonly reconnectInitialDelayMs?: number | undefined;
     readonly reconnectMaxDelayMs?: number | undefined;
     readonly reconnectMaxAttempts?: number | null | undefined;
@@ -307,6 +323,7 @@ export class RpcTransportPool implements RpcTransportSource {
     );
     this.#open = options.open;
     this.reconnect = options.reconnect ?? false;
+    this.#onCredentialsExpired = options.onCredentialsExpired;
     this.requestTimeoutMs =
       options.requestTimeoutMs === null
         ? undefined
@@ -386,7 +403,7 @@ export class RpcTransportPool implements RpcTransportSource {
     if (error instanceof RpcConnectError) return !error.permanent;
     if (error instanceof RpcConnectionLostError)
       return (
-        (error.code === 1008 && error.reason === "credentials_expired") ||
+        credentialsExpired(error) ||
         ![1002, 1003, 1007, 1008, 1009].includes(error.code ?? 0)
       );
     return false;
@@ -412,8 +429,10 @@ export class RpcTransportPool implements RpcTransportSource {
       this.#terminal(name, error);
       return;
     }
+    if (this.#onCredentialsExpired && credentialsExpired(error))
+      this.#pendingRenewals.add(name);
     this.#transition(name, "reconnecting", error);
-    this.#start(name);
+    if (!this.#closed) this.#start(name);
   }
 
   #start(name: string): Promise<RpcTransport> {
@@ -463,6 +482,15 @@ export class RpcTransportPool implements RpcTransportSource {
     let delay = this.#initialDelayMs;
     let attempts = 0;
     try {
+      if (this.#pendingRenewals.delete(name) && this.#onCredentialsExpired) {
+        const renew = this.#onCredentialsExpired;
+        const signal = closing.signal;
+        const renewal = Promise.resolve().then(() => {
+          signal.throwIfAborted();
+          return renew({ endpoint, signal });
+        });
+        await withTimeout(renewal, undefined, name, signal);
+      }
       while (!this.#closed) {
         attempts++;
         const attempt = new AbortController();

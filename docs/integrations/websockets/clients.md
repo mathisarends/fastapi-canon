@@ -390,6 +390,20 @@ Invalid refreshed credentials that visibly reject with 401/403 stop recovery.
 Browsers can expose only an opaque handshake error, so configure a finite attempt
 limit when that prevents reliable permanence classification.
 
+TypeScript cookie-based clients can renew their session before reconnecting:
+
+```ts
+const client = await TasksClient.connect({
+  reconnect: true,
+  onCredentialsExpired: ({ signal }) => renewSession(signal),
+});
+```
+
+Canon awaits the hook once per accepted expiry close, before reading credentials
+for the next handshake. The callback receives the affected `endpoint` and an
+`AbortSignal` that fires on client close. A rejected renewal ends recovery and
+resolves `client.closed` with the failure.
+
 Override classification with `reconnect_should_retry(error)` /
 `reconnectShouldRetry(error)` for an application-specific policy. A classifier
 failure stops retrying and preserves the connection error. Automatic reconnect

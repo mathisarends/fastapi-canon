@@ -116,6 +116,9 @@ export class AutomationClient {
       readonly onOverflow?: RpcNotificationOverflowHandler | undefined;
       readonly socketFactory?: WebSocketFactory | undefined;
       readonly credentials?: WebSocketCredentialsProvider | undefined;
+      readonly onCredentialsExpired?: ConstructorParameters<
+        typeof RpcTransportPool
+      >[0]["onCredentialsExpired"];
       readonly reconnect?: boolean | undefined;
       readonly reconnectInitialDelayMs?: number | undefined;
       readonly reconnectMaxDelayMs?: number | undefined;
@@ -147,6 +150,7 @@ export class AutomationClient {
     const pool = new RpcTransportPool({
       endpoints: [...resolveEndpoints(variables, options.servers)],
       reconnect: options.reconnect,
+      onCredentialsExpired: options.onCredentialsExpired,
       reconnectInitialDelayMs: options.reconnectInitialDelayMs,
       reconnectMaxDelayMs: options.reconnectMaxDelayMs,
       reconnectMaxAttempts:
