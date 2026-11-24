@@ -239,7 +239,7 @@ HTTP problem responses, stream body failures terminal `canon.problem` events.
 For RPC, the checker reads `RpcChannel(raises=[...])` and `Error`
 declarations. `RpcError` subclasses and `RpcErrorBinding` declarations are
 reported as unresolved contracts (`CAN003`). Contracts of channels included into
-other channels do not propagate, like router contracts.
+other channels do not propagate in this analysis.
 `.method` decorators on other objects are ignored.
 
 ### RPC channel subclasses
@@ -309,10 +309,9 @@ application catalog is every `Error` referenced in a `raises=` or `errors=`
 keyword in the scanned source, such as `Feature(errors=[...])`: a mapped
 exception that an operation does not declare is a contract gap (`CAN001`), an
 exception outside that catalog is unmapped (`CAN002`). A direct, statically
-resolved `RouterPolicy` supplies its dependencies and shared errors. Policy, router and operation `raises`
-combine; supported
-sequences include named lists/tuples, unpacking and concatenation. Router contracts
-do not propagate to separately included child routers.
+resolved `RouterPolicy` supplies its dependencies and shared errors. Policy,
+router and operation `raises` combine. Supported sequences include named
+lists/tuples, unpacking and concatenation.
 
 Analysis follows imports, aliases and explicit re-exports within the supplied
 roots; typed service methods, including `Inject[Service]` and
@@ -575,11 +574,12 @@ routers are actually mounted, follow `dependency_overrides`, or validate compose
 registries from other features. Pass all relevant source roots, retain runtime
 contract validation and test the application's intended error paths.
 
-When the scanned source includes routers into a Canon router that declares
-`raises`, `http_statuses` or `policy` (directly or through
-`Composition(router_factory=...)`), the checker marks operations incomplete and
-suppresses guessed contract gaps: determining which operations inherit those
-contracts requires analyzing application mounting.
+The checker follows unconditional module-level `parent.include_router(child)`
+calls between named Canon routers, including nested includes. A parent's
+`raises` and `RouterPolicy` apply to its descendants. Conditional or multiple
+mounts with inherited contracts leave the affected operations incomplete.
+When the child cannot be identified, or a composition router factory adds
+contracts, the checker can still mark the whole scan incomplete.
 
 Plain FastAPI routers are skipped. Supported Canon HTTP, SSE, RPC and WebRTC
 declarations are described above. Analysis follows supported explicit generator

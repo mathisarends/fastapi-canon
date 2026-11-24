@@ -790,6 +790,8 @@ def endpoint(): raise Missing()
         "def make(): return CanonRouter(policy=RouterPolicy(raises=[missing]))\n"
         "composition = Composition(router_factory=make)",
         "parent = CanonRouter(raises=[missing])\nparent.include_router(router)",
+        "parent = CanonRouter(raises=[missing])\nother = CanonRouter()\n"
+        "def mount(other): parent.include_router(other)\nmount(router)",
     ],
 )
 def test_inherited_router_contracts_are_incomplete_instead_of_guessing(
@@ -823,6 +825,73 @@ def endpoint(): raise Missing()
 """,
     )
     assert codes(report) == ["CAN001"]
+
+
+def test_included_router_contract_is_scoped_to_its_descendants(tmp_path: Path) -> None:
+    report = analyze(
+        tmp_path,
+        """
+from fastapi_canon import APIRouter, RouterPolicy
+from child import Missing, dreaming, missing
+
+memory = APIRouter(policy=RouterPolicy(raises=[missing]))
+group = APIRouter()
+group.include_router(router=dreaming)
+memory.include_router(group)
+
+trading = APIRouter()
+@trading.get('/orders')
+def orders():
+    raise Missing()
+""",
+        **{
+            "child.py": """
+from fastapi_canon import APIRouter, Error
+class Missing(Exception): pass
+missing = Error(Missing, status=404, code="missing")
+dreaming = APIRouter()
+@dreaming.get('/dreams')
+def dreams():
+    raise Missing()
+"""
+        },
+    )
+    assert {
+        op.function: [item.code for item in op.diagnostics] for op in report.operations
+    } == {"api.orders": ["CAN001"], "child.dreams": []}
+
+
+@pytest.mark.parametrize(
+    "mount",
+    [
+        "if enabled: parent.include_router(child)",
+        "parent.include_router(child)\nother.include_router(child)",
+    ],
+)
+def test_uncertain_mount_only_marks_its_child(tmp_path: Path, mount: str) -> None:
+    report = analyze(
+        tmp_path,
+        PRELUDE
+        + """
+child = CanonRouter()
+@child.get('/child')
+def included(): raise Missing()
+@router.get('/independent')
+def independent(): raise Missing()
+""",
+        **{
+            "assembly.py": f"""
+from api import child, missing
+from fastapi_canon import APIRouter
+parent = APIRouter(raises=[missing])
+other = APIRouter()
+{mount}
+"""
+        },
+    )
+    assert {
+        op.function: [item.code for item in op.diagnostics] for op in report.operations
+    } == {"api.included": ["CAN003"], "api.independent": ["CAN001"]}
 
 
 def test_shared_helpers_are_analyzed_once_per_run(

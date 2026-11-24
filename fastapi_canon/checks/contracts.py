@@ -235,12 +235,14 @@ class _CheckContracts:
         declaration_modules: frozenset[str] = frozenset(),
     ) -> None:
         self.source.reset_usage({function.module, module, *declaration_modules})
-        layers = [(module, router)]
-        policy_node = (
-            _keyword(router, "policy") if operation.transport != "rpc" else None
-        )
-        if policy_node is not None:
-            scope, policy = self.source.value(policy_node, module)
+        ancestors, unresolved = self.source.router_ancestors(router)
+        layers = []
+        for owner, declaration in [*ancestors, (module, router)]:
+            policy_node = _keyword(declaration, "policy")
+            if policy_node is None or operation.transport == "rpc":
+                layers.append((owner, declaration))
+                continue
+            scope, policy = self.source.value(policy_node, owner)
             if not (isinstance(policy, ast.Constant) and policy.value is None):
                 if isinstance(policy, ast.Call) and self.source.resolve(
                     policy.func, scope
@@ -248,10 +250,11 @@ class _CheckContracts:
                     "fastapi_canon.RouterPolicy",
                     "fastapi_canon.routing.policy.RouterPolicy",
                 }:
-                    layers.insert(0, (scope, policy))
+                    layers.append((scope, policy))
                 else:
                     self._unknown(operation, "unresolved RouterPolicy declaration")
-        for scope, line in self.source.inherited_contracts:
+            layers.append((owner, declaration))
+        for scope, line in unresolved:
             operation.report(
                 _Diagnostic(
                     "CAN003",

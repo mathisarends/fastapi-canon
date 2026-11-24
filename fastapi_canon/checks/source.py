@@ -2,6 +2,7 @@ import ast
 import builtins
 import importlib.util
 import sys
+from collections import deque
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -150,6 +151,16 @@ class SymbolValue:
     receiver: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _RouterInclude:
+    module: str
+    line: int
+    parent_module: str
+    parent: ast.expr
+    extends_contract: bool
+    unconditional: bool
+
+
 class SourceIndex:
     """Own source discovery, dependency tracking and memoized symbol resolution."""
 
@@ -160,7 +171,9 @@ class SourceIndex:
         self._uncertain: dict[str, list[str]] = {}
         self._nested: list[SourceDefinition] = []
         self._touched: set[str] = set()
-        self._inherited_contracts: list[tuple[str, int]] = []
+        self._unresolved_mounts: list[tuple[str, int]] = []
+        self._router_parents: dict[ast.expr, list[_RouterInclude]] = {}
+        self._feature_routers: set[ast.expr] = set()
         self._error_declarations: list[tuple[str, ast.expr]] = []
         self._roots: list[Path] = []
         self._externals: dict[str, bool] = {}
@@ -181,9 +194,33 @@ class SourceIndex:
     def nested(self) -> tuple[SourceDefinition, ...]:
         return tuple(self._nested)
 
-    @property
-    def inherited_contracts(self) -> tuple[tuple[str, int], ...]:
-        return tuple(self._inherited_contracts)
+    def router_ancestors(
+        self, router: ast.Call
+    ) -> tuple[list[tuple[str, ast.Call]], list[tuple[str, int]]]:
+        layers: list[tuple[str, ast.Call]] = []
+        unresolved = list(self._unresolved_mounts)
+        pending: list[tuple[ast.expr, bool]] = [(router, True)]
+        visited: set[tuple[ast.expr, bool]] = set()
+        while pending:
+            child, certain = pending.pop()
+            if (child, certain) in visited:
+                continue
+            visited.add((child, certain))
+            parents = self._router_parents.get(child, [])
+            unique = (
+                certain and len(parents) == 1 and child not in self._feature_routers
+            )
+            for mount in parents:
+                known = unique and mount.unconditional
+                pending.append((mount.parent, known))
+                if mount.extends_contract:
+                    if known and isinstance(mount.parent, ast.Call):
+                        self._touched.add(mount.parent_module)
+                        layers.append((mount.parent_module, mount.parent))
+                    else:
+                        unresolved.append((mount.module, mount.line))
+        layers.reverse()
+        return layers, unresolved
 
     @property
     def error_declarations(self) -> tuple[tuple[str, ast.expr], ...]:
@@ -221,7 +258,7 @@ class SourceIndex:
     @classmethod
     def read(cls, roots: list[Path]) -> Self:
         source = cls()
-        calls: list[tuple[str, ast.Call]] = []
+        calls: list[tuple[str, ast.Call, bool | None]] = []
         for root in roots:
             root = root.resolve()
             if not root.is_dir():
@@ -250,7 +287,10 @@ class SourceIndex:
                     names: set[str] = set()
                     source._index(module, tree.body, package=package, names=names)
                     indexed = {id(source._definitions[name].node) for name in names}
-                    for node in ast.walk(tree):
+                    unconditional = {
+                        stmt.value for stmt in tree.body if isinstance(stmt, ast.Expr)
+                    }
+                    for node, module_scope in _walk_scopes(tree):
                         if isinstance(node, ast.Call):
                             source._error_declarations.extend(
                                 (module, item.value)
@@ -263,10 +303,12 @@ class SourceIndex:
                                 and node.func.attr == "include_router"
                             )
                             or any(
-                                item.arg == "router_factory" for item in node.keywords
+                                item.arg in {"router_factory", "routers"}
+                                for item in node.keywords
                             )
                         ):
-                            calls.append((module, node))
+                            direct = node in unconditional if module_scope else None
+                            calls.append((module, node, direct))
                         elif (
                             isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
                             and id(node) not in indexed
@@ -278,22 +320,61 @@ class SourceIndex:
                                     node,
                                 )
                             )
-        for module, call in calls:
-            if isinstance(call.func, ast.Attribute):
-                parent: ast.expr | None = call.func.value
-            elif source.resolve(call.func, module) in {
+        for module, call, direct in calls:
+            source._index_mount(call, module, unconditional=direct)
+        source._index_route_factories()
+        return source
+
+    def _index_mount(
+        self, call: ast.Call, module: str, *, unconditional: bool | None
+    ) -> None:
+        if isinstance(call.func, ast.Attribute) and call.func.attr == "include_router":
+            scope, parent = self.value(call.func.value, module)
+            extends = self._extends_included_routes(parent, scope, set())
+            child = call.args[0] if call.args else _keyword(call, "router")
+            # Local parameters or assignments can shadow a module-level router.
+            if child is not None and unconditional is not None:
+                child_scope, declaration = self.value(child, module)
+                if (
+                    isinstance(declaration, ast.Call)
+                    and self.resolve(declaration.func, child_scope)
+                    in _ROUTER_DECLARATIONS
+                ):
+                    known = (
+                        unconditional
+                        and isinstance(parent, ast.Call)
+                        and self.resolve(parent.func, scope) in _ROUTER_DECLARATIONS
+                    )
+                    self._router_parents.setdefault(declaration, []).append(
+                        _RouterInclude(
+                            module, call.lineno, scope, parent, extends, known
+                        )
+                    )
+                    return
+            if extends:
+                self._unresolved_mounts.append((module, call.lineno))
+        else:
+            target = self.resolve(call.func, module)
+            if target in {
                 "fastapi_canon.Composition",
                 "fastapi_canon.composition.application.Composition",
             }:
-                parent = _keyword(call, "router_factory")
-            else:
-                parent = None
-            if parent is not None and source._extends_included_routes(
-                parent, module, set()
-            ):
-                source._inherited_contracts.append((module, call.lineno))
-        source._index_route_factories()
-        return source
+                factory = _keyword(call, "router_factory")
+                if factory is not None and self._extends_included_routes(
+                    factory, module, set()
+                ):
+                    self._unresolved_mounts.append((module, call.lineno))
+            elif target in {
+                "fastapi_canon.Feature",
+                "fastapi_canon.composition.feature.Feature",
+            }:
+                routers = _keyword(call, "routers")
+                if routers is not None:
+                    scope, sequence = self.value(routers, module)
+                    if isinstance(sequence, ast.Tuple | ast.List):
+                        self._feature_routers.update(
+                            self.value(item, scope)[1] for item in sequence.elts
+                        )
 
     def _extends_included_routes(
         self, node: ast.expr, module: str, seen: set[int]
@@ -1394,3 +1475,22 @@ class SourceIndex:
 
 def _keyword(node: ast.Call, name: str) -> ast.expr | None:
     return next((item.value for item in node.keywords if item.arg == name), None)
+
+
+def _walk_scopes(tree: ast.Module) -> Iterator[tuple[ast.AST, bool]]:
+    pending: deque[tuple[ast.AST, bool]] = deque([(tree, True)])
+    while pending:
+        node, module_scope = pending.popleft()
+        yield node, module_scope
+        child_scope = module_scope and not isinstance(
+            node,
+            ast.FunctionDef
+            | ast.AsyncFunctionDef
+            | ast.ClassDef
+            | ast.Lambda
+            | ast.ListComp
+            | ast.SetComp
+            | ast.DictComp
+            | ast.GeneratorExp,
+        )
+        pending.extend((child, child_scope) for child in ast.iter_child_nodes(node))
