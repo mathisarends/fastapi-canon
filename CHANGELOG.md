@@ -2,6 +2,18 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
+## 0.28.0 - Unreleased
+
+### Added
+
+- `BinaryBody(media_type)` streams raw uploads into an async handler's
+  `AsyncIterator[bytes]` parameter and declares a required binary request body
+  in OpenAPI ([#226](https://github.com/mathisarends/fastapi-canon/issues/226)).
+- `fastapi-canon check composition` reports `canon.contracts.W001` when a raw
+  GET success response has no documented content. Declare the download with
+  `CanonResponse.binary(...)` or mark an intentionally bodyless response with
+  `CanonResponse.empty(status=200)` ([#227](https://github.com/mathisarends/fastapi-canon/issues/227)).
+
 ## 0.27.0 - 2026-11-24
 
 ### Breaking changes
