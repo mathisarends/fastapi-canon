@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import inspect
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -119,12 +119,29 @@ def instrument(
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class SdkProviders:
+    """The providers a ``Telemetry(sdk=...)`` factory yields.
+
+    A provider left as ``None`` keeps using the current global provider.
+    """
+
+    tracer_provider: TracerProvider | None = None
+    meter_provider: MeterProvider | None = None
+    logger_provider: LoggerProvider | None = None
+
+
+type SdkFactory = Callable[[], AbstractContextManager[SdkProviders]]
+"""Create one container's SDK providers on entry; release them on exit."""
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Telemetry(Integration):
-    """Use application-owned providers, with FastAPI automatic exporters disabled.
+    """Configure telemetry, with FastAPI automatic exporters disabled.
 
     Enable it once with ``Composition(integrations=[Telemetry(...)])``. Every
     Dishka component of the composition then binds this configuration, and
-    features instrument ports with ``instrument``.
+    features instrument ports with ``instrument``. Pass ``sdk`` to let each
+    application own its SDK providers, or explicit providers to borrow them.
     """
 
     exclude: Callable[[ASGIScope], bool] | None = None
@@ -140,6 +157,7 @@ class Telemetry(Integration):
     logger_provider: LoggerProvider | None = None
     resources: Sequence[ResourceInstrumentation] | None = None
     shutdown: Callable[[], None] | None = None
+    sdk: SdkFactory | None = None
 
     def __post_init__(self) -> None:
         for name in (
@@ -153,10 +171,11 @@ class Telemetry(Integration):
         ):
             if not isinstance(getattr(self, name), bool):
                 raise FeatureConfigurationError(f"{name} must be a bool")
-        for name in ("exclude", "shutdown"):
+        for name in ("exclude", "shutdown", "sdk"):
             value = getattr(self, name)
             if value is not None and not callable(value):
                 raise FeatureConfigurationError(f"{name} must be callable or None")
+        _reject_borrowed_with_sdk(self)
         if self.resources is not None:
             resources = tuple(self.resources)
             if not all(isinstance(item, ResourceInstrumentation) for item in resources):
@@ -171,11 +190,23 @@ class Telemetry(Integration):
         return cls(tracing=False, metrics=False, logs=False, port_spans=False)
 
     def provider(self, *, component: str = "") -> Provider:
-        """Bind this borrowed configuration in a standalone Dishka container."""
+        """Bind this configuration in a standalone Dishka container.
+
+        With ``sdk``, the default component's provider enters the factory once
+        per container, on first use, and exits it when the container closes.
+        Other components share those SDK providers.
+        """
         from dishka import Provider, Scope
 
         provider = Provider(component=component)
-        provider.provide(lambda: self, provides=Telemetry, scope=Scope.APP)
+        if self.sdk is None:
+            provider.provide(lambda: self, provides=Telemetry, scope=Scope.APP)
+            return provider
+        if component == "":
+            provider.provide(
+                _sdk_resource(self.sdk), provides=SdkProviders, scope=Scope.APP
+            )
+        provider.provide(_owned(self), provides=Telemetry, scope=Scope.APP)
         return provider
 
     def websocket_middleware(self) -> OpenTelemetry:
@@ -184,7 +215,13 @@ class Telemetry(Integration):
         Install ``fastapi-canon[websockets,otel]`` and pass this to
         ``CanonWebSocketRouter``. Calls without message context start independent
         traces. No connection span is added, and remote baggage remains disabled.
+        Providers owned through ``sdk`` do not exist yet, so ``sdk`` is rejected.
         """
+        if self.sdk is not None:
+            raise FeatureConfigurationError(
+                "websocket_middleware() needs explicit providers; "
+                "Telemetry(sdk=...) creates them only when the app starts"
+            )
         from fastapi_canon.integrations.websockets.adapters.opentelemetry import (
             OpenTelemetry,
         )
@@ -213,7 +250,10 @@ class Telemetry(Integration):
         _reject_reserved_binding(context.providers)
         resources = self._resource_providers(context.providers)
         components = dict.fromkeys(
-            provider.component for provider in (*context.providers, *resources)
+            (
+                *([""] if self.sdk is not None else []),
+                *(provider.component for provider in (*context.providers, *resources)),
+            )
         )
         return (
             *resources,
@@ -243,7 +283,11 @@ class Telemetry(Integration):
             ) from exc
 
         validate_app(context.app)
-        return Installer(lambda app, container: install(app, self), before_routes=True)
+        return Installer(
+            lambda app, container: install(app, self, container),
+            before_routes=True,
+            before_features=True,
+        )
 
     def _resource_providers(
         self, providers: tuple[Provider, ...]
@@ -256,7 +300,7 @@ class Telemetry(Integration):
         )
 
         adapters = default_resources() if self.resources is None else self.resources
-        return resource_providers(providers, adapters, self)
+        return resource_providers(providers, adapters)
 
 
 Instrumentation.integration = Telemetry
@@ -308,6 +352,52 @@ def instrumented_methods(
         for name, method in inspect.getmembers(port, inspect.iscoroutinefunction)
         if name == "__call__" or not name.startswith("_")
     )
+
+
+def _reject_borrowed_with_sdk(options: Telemetry) -> None:
+    borrowed = (
+        options.tracer_provider,
+        options.meter_provider,
+        options.logger_provider,
+        options.shutdown,
+    )
+    if options.sdk is not None and any(item is not None for item in borrowed):
+        raise FeatureConfigurationError(
+            "sdk owns the providers; remove tracer_provider, meter_provider, "
+            "logger_provider and shutdown"
+        )
+
+
+def _sdk_resource(sdk: SdkFactory) -> Callable[[], Iterator[SdkProviders]]:
+    def enter() -> Iterator[SdkProviders]:
+        with sdk() as providers:
+            if not isinstance(providers, SdkProviders):
+                raise FeatureConfigurationError("Telemetry sdk must yield SdkProviders")
+            yield providers
+
+    enter.__annotations__ = {"return": Iterator[SdkProviders]}
+    return enter
+
+
+def _owned(options: Telemetry) -> Callable[[SdkProviders], Telemetry]:
+    from typing import Annotated
+
+    from dishka import FromComponent
+
+    def owned(providers: SdkProviders) -> Telemetry:
+        return replace(
+            options,
+            sdk=None,
+            tracer_provider=providers.tracer_provider,
+            meter_provider=providers.meter_provider,
+            logger_provider=providers.logger_provider,
+        )
+
+    owned.__annotations__ = {
+        "providers": Annotated[SdkProviders, FromComponent("")],
+        "return": Telemetry,
+    }
+    return owned
 
 
 def _reject_reserved_binding(providers: tuple[Provider, ...]) -> None:

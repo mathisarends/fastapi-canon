@@ -8,6 +8,43 @@ instrumentation helpers; the SDK and exporters remain application dependencies.
 Canon core, with or without telemetry, requires FastAPI >=0.143.1.
 Recent FastAPI versions themselves depend on the OpenTelemetry API.
 
+## Application-owned SDK
+
+Pass an SDK factory and Canon starts it per application:
+
+```python
+from fastapi_canon.integrations.opentelemetry import Telemetry, console
+
+app = Composition(
+    features=[orders],
+    integrations=[Telemetry(sdk=console(service_name="orders"))],
+).build(FastAPI())
+```
+
+`console(...)` prints each span as JSON to standard output; install
+`opentelemetry-sdk` to use it. For other exporters, write the factory as a
+context manager that yields `SdkProviders` and releases them on exit:
+
+```python
+@contextmanager
+def otlp() -> Iterator[SdkProviders]:
+    provider = TracerProvider(resource=Resource.create({"service.name": "orders"}))
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+    try:
+        yield SdkProviders(tracer_provider=provider)
+    finally:
+        provider.shutdown()
+
+
+Telemetry(sdk=otlp)
+```
+
+Each Canon container enters the factory once, when the app starts, and exits it
+after feature lifespans and the dependencies that use telemetry have closed.
+Building, checking and exporting contracts enter nothing. A provider left as
+`None` uses the global one. Explicit providers and `websocket_middleware()` cannot
+be combined with `sdk`.
+
 ## Developer-facing API
 
 Declare instrumentation on the feature that owns the application boundary:
@@ -124,12 +161,13 @@ See the [0.21.0 upgrade guide](package-migration.md#upgrade-to-0210).
 | `problem_details` | `True` | Enrich the native HTTP server span with handled Problem Details outcomes |
 | `exclude` | `None` | ASGI scope predicate; suppress native telemetry and ports, and participating downstream instrumentation for HTTP requests |
 | `resources` | `None` | Use installed resource adapters; an explicit list replaces the defaults, and `[]` disables resource instrumentation |
-| `shutdown` | `None` | Synchronous callable that releases application-owned SDK providers |
+| `sdk` | `None` | Factory for SDK providers that each application owns; see [above](#application-owned-sdk) |
+| `shutdown` | `None` | Synchronous callable that releases borrowed providers; prefer `sdk` |
 
 Apply composition before startup. Canon forces FastAPI's `auto_configure=False`,
-including when the environment requests automatic exporters. It never creates
-exporters or sets global providers, and it shuts down application providers only
-through `shutdown`. The application may install global providers in its lifespan
+including when the environment requests automatic exporters. It never sets
+global providers. It creates providers only through `sdk` and otherwise shuts
+them down only through `shutdown`. The application may install global providers in its lifespan
 before requests start; both FastAPI and the port tracer resolve them lazily.
 Explicit providers should be created before composition.
 Without an enabled `Telemetry`, FastAPI keeps its own constructor/environment
@@ -273,16 +311,6 @@ Canon bridges that boundary by updating the existing `_telemetry` dictionary,
 guarded by a FastAPI >=0.143 check and integration tests. When problem enrichment
 is enabled, a local, non-owning tracer-provider adapter preserves problem codes
 when FastAPI finalizes a 5xx span. It does not replace the global provider.
-
-### Planned follow-up: managed Console SDK preset
-
-An explicitly selected `Telemetry.console(...)` preset is planned, but is not
-implemented in this API. It should own application-local SDK providers, exporters
-and cleanup, including partial initialization and startup failures. SDK shutdown
-must follow feature and DI cleanup. Disabled presets must allocate no SDK
-resources; externally supplied providers remain borrowed. Configuration must be
-reusable across applications, with separate owned resources per application and
-no changes to global providers. Custom SDK configuration remains supported.
 
 ## Span and error contracts
 

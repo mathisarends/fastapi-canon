@@ -46,7 +46,7 @@ scope.
 | Contract export | `fastapi_canon.export_contracts`; `fastapi_canon.contracts.Contracts`, `ContractSelection`; `fastapi-canon contracts export` | [Application export](contracts.md) |
 | OpenAPI contracts without `Composition` | `fastapi_canon.openapi.install_openapi_contracts`, `validate_openapi_contracts` | [Composition](composition.md) |
 | Startup configuration errors | `fastapi_canon.errors.ConfigurationError` and its subclasses | [Problems](problems.md) |
-| Telemetry declarations | `fastapi_canon.integrations.opentelemetry.Telemetry`, `instrument`, `ResourceInstrumentation` | [Telemetry](telemetry.md) |
+| Telemetry declarations | `fastapi_canon.integrations.opentelemetry.Telemetry`, `instrument`, `ResourceInstrumentation`, `SdkProviders`, `SdkFactory`, `console` | [Telemetry](telemetry.md) |
 | HTTP client and engine instrumentation | `HttpxClients`, `instrument_httpx` in `.opentelemetry.httpx`; `SqlAlchemyEngines`, `instrument_sqlalchemy` in `.opentelemetry.sqlalchemy` | [Resources](telemetry.md#http-clients-and-database-engines) |
 | MCP features | `fastapi_canon.integrations.mcp.McpServer`, `McpMount`, `McpScope`, `Mcp`, `Inject` | [MCP](integrations/mcp/README.md) |
 | Custom integrations | `fastapi_canon.integration.Integration`, `IntegrationPart`, `IntegrationContext`, `Installer`, `IntegrationError`, `IntegrationRoute`, `RouteContext`, `ContractExporter`, `attach_route` | [Integrations](composition.md#integrations) |

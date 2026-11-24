@@ -5,7 +5,7 @@ from functools import wraps
 from time import perf_counter
 from typing import Any, cast
 
-from dishka import Provider
+from dishka import Provider, Scope
 
 try:
     from opentelemetry import metrics, trace
@@ -30,9 +30,26 @@ type Registrations = tuple[PortRegistration, ...]
 excluded: ContextVar[bool] = ContextVar("canon.telemetry.excluded", default=False)
 
 
+class PortTelemetry:
+    """The port tracer and duration histogram of one container's ``Telemetry``."""
+
+    def __init__(self, telemetry: Telemetry) -> None:
+        self.tracer = trace.get_tracer(
+            "fastapi_canon", tracer_provider=telemetry.tracer_provider
+        )
+        self.histogram = (
+            metrics.get_meter(
+                "fastapi_canon", meter_provider=telemetry.meter_provider
+            ).create_histogram("canon.port.duration", unit="s")
+            if telemetry.port_metrics
+            else None
+        )
+
+
 class _InstrumentedProxy:
-    def __init__(self, instance: Any) -> None:
+    def __init__(self, instance: Any, runtime: PortTelemetry) -> None:
         self._instance = instance
+        self._runtime = runtime
 
     @property  # type: ignore[misc]  # Proxy type reporting is intentionally read-only.
     def __class__(self) -> type[Any]:
@@ -49,6 +66,9 @@ class _InstrumentedProxy:
     def adapter_name(self) -> str:
         return type(self._instance).__name__
 
+    def runtime(self) -> PortTelemetry:
+        return self._runtime
+
 
 class _InstrumentPort:
     def __init__(
@@ -58,17 +78,8 @@ class _InstrumentPort:
         errors: ErrorLookup | None,
     ) -> None:
         self._errors = errors
-        self.tracer = trace.get_tracer(
-            "fastapi_canon", tracer_provider=options.tracer_provider
-        )
-        self._histogram = (
-            metrics.get_meter(
-                "fastapi_canon", meter_provider=options.meter_provider
-            ).create_histogram("canon.port.duration", unit="s")
-            if options.port_metrics
-            else None
-        )
         self.spans = options.tracing and options.port_spans
+        self.port_metrics = options.port_metrics
         self._proxies = {
             (spec, port): type(
                 f"Instrumented{port.__name__}",
@@ -81,10 +92,16 @@ class _InstrumentPort:
             for feature, port, spec in registrations
         }
 
-    def __call__(self, spec: Instrumentation, port: type[Any], instance: Any) -> Any:
-        if not self.spans and self._histogram is None:
+    def __call__(
+        self,
+        spec: Instrumentation,
+        port: type[Any],
+        instance: Any,
+        runtime: PortTelemetry,
+    ) -> Any:
+        if not self.spans and not self.port_metrics:
             return instance
-        return self._proxies[(spec, port)](instance)
+        return self._proxies[(spec, port)](instance, runtime)
 
     def _wrapper(
         self,
@@ -105,6 +122,7 @@ class _InstrumentPort:
         async def call(proxy: _InstrumentedProxy, *args: Any, **kwargs: Any) -> Any:
             # Port methods can have the same names as proxy operations.
             target = _InstrumentedProxy.target_method(proxy, name)
+            runtime = _InstrumentedProxy.runtime(proxy)
             if excluded.get() or not is_instrumentation_enabled():
                 return await target(*args, **kwargs)
             attributes = {
@@ -114,7 +132,7 @@ class _InstrumentPort:
             started = perf_counter()
             outcome = dict(registered)
             with (
-                self.tracer.start_as_current_span(
+                runtime.tracer.start_as_current_span(
                     registered["code.function.name"],
                     kind=SpanKind.INTERNAL,
                     attributes=attributes,
@@ -144,8 +162,8 @@ class _InstrumentPort:
                             span.set_status(StatusCode.ERROR)
                     raise
                 finally:
-                    if self._histogram is not None:
-                        self._histogram.record(perf_counter() - started, outcome)
+                    if runtime.histogram is not None:
+                        runtime.histogram.record(perf_counter() - started, outcome)
 
         return call
 
@@ -166,16 +184,29 @@ def create_instrumentation_providers(
     expected, in addition to each declaration's ``expected`` types.
     """
     observer = _InstrumentPort(registrations, options, errors)
-    return tuple(_provider(spec, port, observer) for _, port, spec in registrations)
+    runtimes = tuple(
+        _runtime_provider(component)
+        for component in dict.fromkeys(spec.component for _, _, spec in registrations)
+    )
+    return (
+        *runtimes,
+        *(_provider(spec, port, observer) for _, port, spec in registrations),
+    )
+
+
+def _runtime_provider(component: str) -> Provider:
+    provider = Provider(component=component)
+    provider.provide(PortTelemetry, scope=Scope.APP)
+    return provider
 
 
 def _provider(
     spec: Instrumentation, port: type[Any], observer: _InstrumentPort
 ) -> Provider:
-    def wrap(instance: Any) -> Any:
-        return observer(spec, port, instance)
+    def wrap(instance: Any, runtime: PortTelemetry) -> Any:
+        return observer(spec, port, instance, runtime)
 
-    wrap.__annotations__ = {"instance": port, "return": port}
+    wrap.__annotations__ = {"instance": port, "runtime": PortTelemetry, "return": port}
     provider = Provider(component=spec.component)
     provider.decorate(wrap, provides=port)
     return provider

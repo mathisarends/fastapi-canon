@@ -13,6 +13,10 @@ All notable changes to `fastapi-canon` are documented in this file.
   GET success response has no documented content. Declare the download with
   `CanonResponse.binary(...)` or mark an intentionally bodyless response with
   `CanonResponse.empty(status=200)` ([#227](https://github.com/mathisarends/fastapi-canon/issues/227)).
+- `Telemetry(sdk=...)` lets each application own its OpenTelemetry SDK
+  providers from startup to shutdown; `console(service_name=...)` prints spans
+  to standard output. See [application-owned SDK](docs/telemetry.md#application-owned-sdk)
+  ([#225](https://github.com/mathisarends/fastapi-canon/issues/225)).
 
 ## 0.27.0 - 2026-11-24
 
