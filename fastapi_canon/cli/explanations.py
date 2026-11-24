@@ -160,6 +160,12 @@ _EXPLANATIONS = {
         "Align response status, media type and schema with the declared Error and composed catalog; use the finding's HTTP contract hint.",
         _CHECKS,
     ),
+    "canon.contracts.W001": _Explanation(
+        "A raw GET success response has no OpenAPI content declaration, so HTTP clients may treat it as bodyless.",
+        "@router.get('/files/report', response_class=Response) returns PDF bytes without documenting its media type.",
+        "Declare response=CanonResponse.binary('application/pdf') or use CanonResponse.empty(status=200) for an intentionally bodyless response.",
+        _DOCS + "integrations/uploads.md#binary-responses-and-raw-uploads",
+    ),
     "canon.checks.E001": _Explanation(
         "A synchronous feature check raised an exception or returned invalid findings, leaving its result incomplete.",
         "def check(context):\n    return None  # A list/tuple of CheckIssue values is required.",

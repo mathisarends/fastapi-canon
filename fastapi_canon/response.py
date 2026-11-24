@@ -44,7 +44,7 @@ class CanonResponse:
         headers: ResponseHeaders = (),
     ) -> None:
         normalized_status = _validate_status(status)
-        normalized_media_type = _validate_media_type(media_type)
+        normalized_media_type = normalize_media_type(media_type)
         normalized_description = _validate_description(description)
         normalized_schema = _normalize_schema(schema)
         normalized_headers = _normalize_headers(headers)
@@ -168,20 +168,20 @@ class CanonResponse:
         return {self.status: response}
 
 
-def _validate_status(value: object) -> int:
-    if not isinstance(value, int) or isinstance(value, bool) or not 200 <= value <= 399:
-        msg = "response status must be between 200 and 399"
-        raise ErrorConfigurationError(msg)
-    return value
-
-
-def _validate_media_type(value: object) -> str | None:
+def normalize_media_type(value: object) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str) or _MEDIA_TYPE_PATTERN.fullmatch(value) is None:
         msg = "media_type must be a valid type/subtype string or None"
         raise ErrorConfigurationError(msg)
     return value.lower()
+
+
+def _validate_status(value: object) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or not 200 <= value <= 399:
+        msg = "response status must be between 200 and 399"
+        raise ErrorConfigurationError(msg)
+    return value
 
 
 def _validate_description(value: object) -> str:

@@ -12,6 +12,7 @@ from .contracts import export_contracts
 from .error import Error
 from .response import CanonResponse, ResponseHeaders
 from .routing.api_router import APIRouter, ChannelOptions, StreamOptions
+from .routing.binary_body import BinaryBody
 from .routing.http import (
     APIRouteOptions,
     IncludeRouterOptions,
@@ -24,6 +25,7 @@ from .routing.policy import RouterPolicy
 __all__ = [
     "APIRouteOptions",
     "APIRouter",
+    "BinaryBody",
     "CanonResponse",
     "ChannelOptions",
     "Composition",

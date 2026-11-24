@@ -3,10 +3,14 @@ import asyncio
 from httpx import ASGITransport, AsyncClient
 
 from examples.uploads.app import create_app
+from fastapi_canon.openapi import export_openapi
 
 
 async def test_single_and_repeated_uploads_preserve_fields_and_download_bytes() -> None:
     app = create_app()
+    download_contract = export_openapi(app)["paths"][
+        "/projects/{project_id}/files/{file_id}/content"
+    ]["get"]["responses"]["200"]["content"]
     async with (
         asyncio.timeout(5),
         app.router.lifespan_context(app),
@@ -31,6 +35,10 @@ async def test_single_and_repeated_uploads_preserve_fields_and_download_bytes() 
         assert downloaded.status_code == 200
         assert downloaded.content == b"\x00\xffCanon"
         assert downloaded.headers["content-type"] == "application/octet-stream"
+        assert download_contract[downloaded.headers["content-type"]]["schema"] == {
+            "type": "string",
+            "format": "binary",
+        }
         assert downloaded.headers["content-disposition"] == (
             "attachment; filename*=UTF-8''r%C3%A9sum%C3%A9%2522.bin"
         )

@@ -99,6 +99,7 @@ class RouteProvenance:
     error_origins: Mapping[str, str]
     endpoint: Callable[..., object]
     error_registry: ErrorRegistry | None
+    empty_response_status: int | None
 
 
 def route_provenance(value: object) -> RouteProvenance | None:
@@ -259,6 +260,11 @@ class CanonRouter(APIRouter):
                     error_origins,
                     endpoint,
                     self.error_registry,
+                    empty_response_status=(
+                        response.status
+                        if response is not None and response.media_type is None
+                        else None
+                    ),
                 ),
             }
             return super(CanonRouter, self).api_route(path, **configured)(endpoint)
@@ -496,6 +502,8 @@ class _RouteMetadata(dict[str, Any]):
         errors: dict[str, str],
         endpoint: Callable[..., object],
         registry: ErrorRegistry | None,
+        *,
+        empty_response_status: int | None,
     ) -> None:
         super().__init__(values)
         dependency_ids = {int(key): value for key, value in dependencies.items()}
@@ -504,6 +512,7 @@ class _RouteMetadata(dict[str, Any]):
             MappingProxyType(dict(errors)),
             getattr(endpoint, "__canon_declared_endpoint__", endpoint),
             registry,
+            empty_response_status,
         )
 
 

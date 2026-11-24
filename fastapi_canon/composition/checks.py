@@ -4,8 +4,8 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from functools import partial
-from inspect import iscoroutine
-from typing import TYPE_CHECKING, NamedTuple
+from inspect import iscoroutine, signature
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from dishka import (
     DEFAULT_COMPONENT,
@@ -19,8 +19,10 @@ from dishka.exception_base import DishkaError
 from dishka.integrations.base import is_dishka_injected
 from dishka.integrations.fastapi import DishkaRoute
 from fastapi import APIRouter, FastAPI
+from fastapi.datastructures import DefaultPlaceholder
 from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute
+from fastapi.utils import is_body_allowed_for_status_code
 from starlette.middleware import Middleware
 from starlette.routing import Route, WebSocketRoute, compile_path
 from starlette.types import ExceptionHandler
@@ -44,6 +46,7 @@ from fastapi_canon.diagnostics import (
     qualified_name,
 )
 from fastapi_canon.error import ErrorCatalog, ErrorRegistry, installed_catalog
+from fastapi_canon.error.contracts import SUCCESS_EXTENSION
 from fastapi_canon.errors import ErrorConfigurationError, FeatureConfigurationError
 from fastapi_canon.integration import (
     Installer,
@@ -54,10 +57,7 @@ from fastapi_canon.integration import (
     RouteContext,
     attached_route,
 )
-from fastapi_canon.openapi import (
-    install_openapi_contracts,
-    validate_openapi_contracts,
-)
+from fastapi_canon.openapi import install_openapi_contracts
 from fastapi_canon.routing.http import CanonRouter, route_provenance
 from fastapi_canon.routing.injected_route import InjectedRoute, endpoint_dependencies
 from fastapi_canon.routing.injection import injected_resolver_dependency
@@ -547,7 +547,7 @@ def check_installed(
     else:
         cached = app.openapi_schema
         try:
-            validate_openapi_contracts(app)
+            document = app.openapi()
         except ErrorConfigurationError as error:
             issues.append(
                 CheckIssue(
@@ -558,6 +558,7 @@ def check_installed(
             )
             checks.append(CheckResult("http.contracts", "failed"))
         else:
+            issues.extend(_raw_get_response_issues(app, document))
             checks.append(CheckResult("http.contracts", "passed"))
         finally:
             app.openapi_schema = cached
@@ -919,13 +920,16 @@ def validate_error_installation(
     include_validation_error: bool,
     include_http_exceptions: bool,
     include_unhandled_error: bool,
-) -> None:
+) -> tuple[CheckIssue, ...]:
     if app.openapi_schema is not None:
         msg = "install features before generating or caching OpenAPI"
         raise FeatureConfigurationError(msg)
     validation_app = FastAPI(
         dependencies=list(app.router.dependencies),
         generate_unique_id_function=app.router.generate_unique_id_function,
+        default_response_class=app.router.default_response_class,
+        responses=app.router.responses,
+        include_in_schema=app.router.include_in_schema,
     )
     validation_app.router.routes = list(app.router.routes)
     installed_registry = installed_catalog(app)
@@ -960,9 +964,68 @@ def validate_error_installation(
             )
         else:
             install_openapi_contracts(validation_app)
-        validation_app.openapi()
+        document = validation_app.openapi()
     except ErrorConfigurationError as error:
         raise FeatureConfigurationError(str(error)) from error
+    return _raw_get_response_issues(validation_app, document)
+
+
+def _raw_get_response_issues(
+    app: FastAPI, document: dict[str, Any]
+) -> tuple[CheckIssue, ...]:
+    issues: list[CheckIssue] = []
+    paths = document.get("paths", {})
+    for path, route in iter_contract_routes(app.router.routes, include_mounts=False):
+        if not isinstance(getattr(route, "original_route", route), APIRoute):
+            continue
+        if not route.include_in_schema or "GET" not in route.methods:
+            continue
+        status = _raw_success_status(route)
+        if status is None:
+            continue
+        operation = paths.get(path, {}).get("get", {})
+        response = operation.get("responses", {}).get(str(status))
+        if not isinstance(response, dict) or "$ref" in response:
+            continue
+        if isinstance(response.get("content"), dict):
+            continue
+        provenance = route_provenance(route.openapi_extra)
+        if provenance is not None and provenance.empty_response_status == status:
+            continue
+        declared = route.responses.get(status, route.responses.get(str(status), {}))
+        if declared.get(SUCCESS_EXTENSION) == "":
+            continue
+        operation_id = operation.get("operationId", route.unique_id)
+        issues.append(
+            CheckIssue(
+                "canon.contracts.W001",
+                f"GET {path} ({operation_id}) has no documented content for its raw {status} response",
+                f'Declare response=CanonResponse.binary("*/*", status={status}) with the actual media type or range, '
+                f"or use CanonResponse.empty(status={status}) for an intentionally bodyless response.",
+                severity="warning",
+                locations=(f"GET {path}",),
+            )
+        )
+    return tuple(issues)
+
+
+def _raw_success_status(route: Any) -> int | None:
+    response_class = route.response_class
+    if isinstance(response_class, DefaultPlaceholder):
+        response_class = response_class.value
+    if response_class.media_type is not None:
+        return None
+    status = route.status_code
+    if status is None:
+        parameter = signature(response_class.__init__).parameters.get("status_code")
+        status = parameter.default if parameter is not None else None
+    if (
+        not isinstance(status, int)
+        or not 200 <= status < 300
+        or not is_body_allowed_for_status_code(status)
+    ):
+        return None
+    return status
 
 
 @dataclass(frozen=True, slots=True)
@@ -1267,7 +1330,7 @@ class _CheckComposition:
 
     def _contracts(self) -> None:
         options = self.composition.errors
-        validate_error_installation(
+        findings = validate_error_installation(
             self.app,
             self._require_routers(),
             flatten_handlers(self.composition.features),
@@ -1276,6 +1339,7 @@ class _CheckComposition:
             include_http_exceptions=options.include_http_exceptions,
             include_unhandled_error=options.include_unhandled_error,
         )
+        self.issues.extend(findings)
 
     def _require_routers(self) -> tuple[APIRouter, ...]:
         if self.routers is None:
