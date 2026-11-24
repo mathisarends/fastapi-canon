@@ -1,6 +1,7 @@
+import asyncio
 import inspect
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Coroutine, Iterator
 from contextlib import contextmanager
 from importlib import import_module
 from pathlib import Path
@@ -10,17 +11,27 @@ from fastapi import FastAPI
 
 
 @contextmanager
-def open_application(reference: str, *, root: Path) -> Iterator[FastAPI]:
+def open_application(
+    reference: str,
+    *,
+    root: Path,
+    close_factory: Callable[[FastAPI], Coroutine[Any, Any, None]] | None = None,
+) -> Iterator[FastAPI]:
     """Load an app and keep its project imports available to the caller."""
     with _application_path(root):
         value = _load_reference(reference)
-        if callable(value) and not isinstance(value, FastAPI):
+        factory = callable(value) and not isinstance(value, FastAPI)
+        if factory:
             value = _resolve_factory(value, reference)
         if not isinstance(value, FastAPI):
             raise TypeError(
                 f"{reference} must resolve to a FastAPI application or a zero-argument factory returning one"
             )
-        yield value
+        try:
+            yield value
+        finally:
+            if factory and close_factory is not None:
+                asyncio.run(close_factory(value))
 
 
 def load_reference(reference: str, *, root: Path) -> Any:

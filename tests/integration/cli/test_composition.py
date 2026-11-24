@@ -158,6 +158,100 @@ def test_cli_check_reports_a_conflict_before_application_installation(
     assert report["issues"][0]["locations"] == ["GET /first", "GET /second"]
 
 
+@pytest.mark.parametrize(
+    ("target", "status", "events"),
+    [
+        ("create_app", 0, ["released", "finalized"]),
+        ("conflicting_app", 2, ["released", "finalized"]),
+        ("app", 0, []),
+        ("bare", 2, []),
+    ],
+)
+def test_cli_checks_installed_apps_and_releases_only_factory_resources(
+    tmp_path: Path, target: str, status: int, events: list[str]
+) -> None:
+    (tmp_path / "owned.py").write_text(
+        dedent("""
+        import asyncio
+        from collections.abc import Iterator
+        from contextlib import asynccontextmanager
+        from pathlib import Path
+        from dishka import Provider, Scope, provide
+        from fastapi import FastAPI
+        from fastapi_canon import Composition, Feature, check_app
+        from fastapi_canon.integration import Integration
+
+        def record(event):
+            with Path("events").open("a") as out:
+                print(event, file=out)
+
+        class Resources(Provider):
+            @provide(scope=Scope.APP)
+            def resource(self) -> Iterator[str]:
+                yield "available"
+                record("released")
+
+        class Cleanup(Integration):
+            def finalizer(self):
+                return lambda: record("finalized")
+
+        @asynccontextmanager
+        async def lifespan(app):
+            record("started")
+            yield
+
+        def create_app():
+            feature = Feature(name="test", providers=[Resources()])
+            app = Composition(features=[feature], integrations=[Cleanup()]).build(
+                FastAPI(lifespan=lifespan)
+            )
+            assert asyncio.run(app.state.dishka_container.get(str)) == "available"
+            return app
+
+        def conflicting_app():
+            app = create_app()
+            app.get("/first", operation_id="duplicate")(lambda: 1)
+            app.get("/second", operation_id="duplicate")(lambda: 2)
+            return app
+
+        bare = FastAPI()
+        app = create_app()
+        assert check_app(app).complete
+        assert asyncio.run(app.state.dishka_container.get(str)) == "available"
+        """),
+        encoding="utf-8",
+    )
+    log = tmp_path / "events"
+    log.touch()
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "fastapi_canon",
+            "check",
+            "composition",
+            "--app",
+            f"owned:{target}",
+            "--require-complete",
+            "--format",
+            "json",
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == status, result.stdout + result.stderr
+    report = json.loads(result.stdout)
+    if target == "bare":
+        assert "Build a Composition" in report["error"]
+    else:
+        assert report["schema_version"] == 1
+        assert report["complete"] == (status == 0)
+        assert report["has_errors"] == (status != 0)
+    assert log.read_text().splitlines() == events
+
+
 def test_cli_rejects_targets_without_an_installed_composition(
     application_module: Path,
 ) -> None:

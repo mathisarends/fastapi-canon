@@ -5,6 +5,7 @@ from .composition import (
     Feature,
     Scoped,
     ServiceScope,
+    check_app,
     inspect_app,
 )
 from .contracts import export_contracts
@@ -39,6 +40,7 @@ __all__ = [
     "ServiceScope",
     "StreamOptions",
     "__version__",
+    "check_app",
     "export_contracts",
     "inspect_app",
 ]

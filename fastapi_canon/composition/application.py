@@ -174,9 +174,21 @@ class Composition:
                     ),
                     (CheckResult("installation", "failed"),),
                 )
-            assert isinstance(installed, Installation)
-            return check_installed(app, installed.description, self.features)
+            return check_app(app)
         return prepare_composition(app, self).report
+
+
+def check_app(app: FastAPI) -> CheckReport:
+    """Check the installed composition without entering lifespan or taking ownership."""
+    raw_app: object = app
+    if not isinstance(raw_app, FastAPI):
+        raise FeatureConfigurationError("app must be a FastAPI instance")
+    installed = getattr(app.state, INSTALLATION_STATE_KEY, None)
+    if not isinstance(installed, Installation):
+        raise FeatureConfigurationError(
+            "Build a Composition into the app before checking it"
+        )
+    return check_installed(app, installed.description, installed.features)
 
 
 def inspect_app(app: FastAPI) -> CompositionInfo:
