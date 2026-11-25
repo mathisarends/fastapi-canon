@@ -239,6 +239,36 @@ def test_export_reads_custom_handlers_and_mounted_subapplications() -> None:
     assert document["servers"][0]["url"] == "{baseUrl}/backend/v1/rpc"
 
 
+def test_export_disambiguates_default_rpc_names_using_mount_prefixes() -> None:
+    app = FastAPI()
+
+    for namespace, explicit_name in (
+        ("tasks", None),
+        ("users", None),
+        ("health", "probe"),
+    ):
+        channel = RpcChannel(namespace=namespace)
+
+        @channel.method()
+        async def ping() -> str:
+            return "pong"
+
+        router = CanonRouter()
+        router.include_channel(channel, path="/ws", name=explicit_name)
+        app.include_router(router, prefix=f"/{namespace}")
+
+    document = export_contracts(app, kinds=["openrpc"]).openrpc
+    assert document is not None
+    assert {
+        method["name"]: (method["servers"][0]["name"], method["servers"][0]["url"])
+        for method in document["methods"]
+    } == {
+        "tasks.ping": ("rpc_tasks_ws", "{baseUrl}/tasks/ws"),
+        "users.ping": ("rpc_users_ws", "{baseUrl}/users/ws"),
+        "health.ping": ("probe", "{baseUrl}/health/ws"),
+    }
+
+
 def test_export_rejects_ambiguous_multiple_mounts_with_both_paths() -> None:
     channel = RpcChannel(namespace="jobs")
 

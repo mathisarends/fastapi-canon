@@ -73,7 +73,10 @@ from fastapi_canon.integrations.websockets.middleware import (
     serving_scope,
     stream_scope,
 )
-from fastapi_canon.integrations.websockets.protocol import RpcNotificationDefinition
+from fastapi_canon.integrations.websockets.protocol import (
+    ChannelPathParams,
+    RpcNotificationDefinition,
+)
 from fastapi_canon.integrations.websockets.server import (
     CLIENT_CANCEL,
     RpcErrorMapper,
@@ -958,9 +961,14 @@ async def _prepare(
         return None
     path_values: dict[str, Any] = {}
     if path_model is not None:
-        try:
-            parsed = path_model.model_validate(dict(path_params))
-        except ValidationError:
+        parsed = None
+        if (
+            not issubclass(path_model, ChannelPathParams)
+            or path_model.model_fields.keys() <= path_params.keys()
+        ):
+            with suppress(ValidationError):
+                parsed = path_model.model_validate(dict(path_params))
+        if parsed is None:
             record_rejection(RpcRejection.NOT_FOUND)
             await socket.reject(RpcRejection.NOT_FOUND, "Invalid path variable")
             return None

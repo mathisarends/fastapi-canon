@@ -236,6 +236,55 @@ async def find() -> int:
     ]
 
 
+def test_rpc_child_methods_use_inherited_and_local_raises(
+    analyze: Callable[..., dict[str, Any]],
+) -> None:
+    report = analyze(
+        """
+from fastapi_canon.integrations.websockets import RpcError
+
+class ChildError(RpcError):
+    code = "child_error"
+
+projects = RpcChannel(namespace="projects", raises=[missing])
+tasks = projects.child("tasks", raises=[ChildError])
+reviews = tasks.child("reviews")
+
+@projects.method()
+async def ping() -> int:
+    return 1
+
+@reviews.method()
+async def inherited() -> int:
+    raise Missing()
+
+@reviews.method()
+async def local() -> int:
+    raise ChildError()
+
+@reviews.method()
+async def unmapped() -> int:
+    raise Unmapped()
+
+router.include_channel(projects, path="/ws")
+""",
+    )
+
+    operations = {
+        operation["function"]: operation for operation in report["operations"]
+    }
+    assert {
+        name: [item["code"] for item in operation["diagnostics"]]
+        for name, operation in operations.items()
+    } == {
+        "api.ping": [],
+        "api.inherited": [],
+        "api.local": [],
+        "api.unmapped": ["CAN002"],
+    }
+    assert all(operation["complete"] for operation in operations.values())
+
+
 def test_method_decorators_of_other_objects_are_ignored(
     analyze: Callable[..., dict[str, Any]],
 ) -> None:

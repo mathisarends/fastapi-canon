@@ -113,9 +113,9 @@ router.include_channel(
 )
 ```
 
-Read path variables with `Path()`. Canon validates them before accepting the
-connection. Use the mounted path's variable names and give shared variables
-the same type, constraints and input alias across operations.
+Read path variables with `Path()`, including variables in router inclusion
+prefixes. Canon validates them before accepting the connection. Use the same
+type, constraints and input alias for shared variables across operations.
 
 ```python
 from typing import Annotated
@@ -127,8 +127,8 @@ from fastapi import Path
 async def archive(task_id: int, project_id: Annotated[int, Path()]) -> None: ...
 ```
 
-Endpoint names identify servers in OpenRPC and generated clients; when omitted,
-the name is derived from the full path, such as `rpc_ws` for `/ws`.
+Default endpoint names use the router path, such as `rpc_ws` for `/ws`.
+OpenRPC uses the full mounted paths to distinguish colliding defaults.
 OpenRPC disambiguates generated params schema names when they collide across
 operations.
 
@@ -369,9 +369,9 @@ often qualify; writes require careful service-level design.
 
 ## Pydantic models
 
-Parameter and result models are plain Pydantic models. Their field names,
-aliases, validators and extra-field policy define the wire shape; RPC adds no
-alias generator. `project_id: int` stays `project_id` on the wire unless the
+Parameter and result models are plain Pydantic models. OpenRPC uses validation
+aliases for inputs and serialization aliases for outputs. RPC adds no alias
+generator. `project_id: int` stays `project_id` on the wire unless the
 model declares an alias. For camelCase wire names, give your models a shared
 base with `alias_generator=to_camel` and regenerate clients. See
 [shared DTOs](../../06-codegen.md).

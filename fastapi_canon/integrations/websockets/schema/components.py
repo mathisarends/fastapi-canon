@@ -5,7 +5,7 @@ from enum import Enum
 from hashlib import sha256
 from itertools import chain
 from types import UnionType
-from typing import Any, NamedTuple, TypeAliasType, get_args, get_origin
+from typing import Any, Literal, NamedTuple, TypeAliasType, get_args, get_origin
 
 from pydantic import BaseModel, TypeAdapter, create_model
 from pydantic.json_schema import JsonSchemaMode
@@ -25,22 +25,42 @@ EMPTY_PARAMS_SCHEMA: dict[str, Any] = {
 """What a method without params accepts: an omitted or empty ``params`` member."""
 
 
+type SchemaKey = str | tuple[Literal["method", "stream"], str]
+
+
 class SchemaComponents(NamedTuple):
     schemas: dict[str, Any]
     params: dict[str, str]
+    outputs: dict[SchemaKey, dict[str, Any]]
 
 
 def components(protocol: RpcProtocol) -> SchemaComponents:
     """Build the JSON Schema components referenced by the OpenRPC document."""
-    annotations = _annotations(protocol)
-    params_models = _params_models(protocol, reserved_names=set(annotations))
-    for model in params_models.values():
-        _add(annotations, model)
-    _assert_unique_wire_names(annotations.values())
+    annotations = _output_annotations(protocol)
     adapters: list[_SchemaInput] = [
         _SchemaInput(name, "serialization", TypeAdapter(annotation))
         for name, annotation in annotations.items()
     ]
+    params_models = _params_models(protocol, reserved_names=set(annotations))
+    for model in params_models.values():
+        _add(annotations, model)
+    _assert_unique_wire_names(annotations.values())
+    adapters.extend(
+        _SchemaInput(type_name(model), "validation", TypeAdapter(model))
+        for model in dict.fromkeys(params_models.values())
+    )
+    adapters.extend(
+        _SchemaInput(
+            ("method", method.name), "serialization", TypeAdapter(method.result)
+        )
+        for method in protocol.methods
+    )
+    adapters.extend(
+        _SchemaInput(
+            ("stream", stream.name), "serialization", TypeAdapter(stream.payload)
+        )
+        for stream in protocol.subscriptions
+    )
     for socket in protocol.sockets:
         if socket.message_contract is not None:
             adapters.extend(
@@ -60,7 +80,7 @@ def components(protocol: RpcProtocol) -> SchemaComponents:
     roots, root = TypeAdapter.json_schemas(adapters, by_alias=True)
     definitions: dict[str, Any] = root.get("$defs", {})
     params_names = {
-        operation: roots[(type_name(model), "serialization")]["$ref"].removeprefix(
+        operation: roots[(type_name(model), "validation")]["$ref"].removeprefix(
             "#/$defs/"
         )
         for operation, model in params_models.items()
@@ -69,9 +89,14 @@ def components(protocol: RpcProtocol) -> SchemaComponents:
         definitions[method.request_name] = _request_schema(
             method, params_names.get(method.name), definitions
         )
+    outputs = {
+        key: schema for (key, mode), schema in roots.items() if mode == "serialization"
+    }
     for notification in protocol.notifications:
         name = notification_schema_name(notification.name)
-        definitions[name] = _notification_schema(notification, name)
+        definitions[name] = _notification_schema(
+            notification, name, outputs[type_name(notification.payload)]
+        )
     for socket in protocol.sockets:
         if socket.message_contract is not None:
             directions: tuple[tuple[str, JsonSchemaMode], ...] = (
@@ -85,7 +110,7 @@ def components(protocol: RpcProtocol) -> SchemaComponents:
                         f"Duplicate socket schema name: {name}"
                     )
                 definitions[name] = roots[(name, mode)]
-    return SchemaComponents(definitions, params_names)
+    return SchemaComponents(definitions, params_names, outputs)
 
 
 def socket_message_schema_name(name: str, direction: str) -> str:
@@ -114,7 +139,7 @@ def notification_schema_name(name: str) -> str:
     return "".join(part.capitalize() for part in parts) + "Notification"
 
 
-def _annotations(protocol: RpcProtocol) -> dict[str, Any]:
+def _output_annotations(protocol: RpcProtocol) -> dict[str, Any]:
     annotations: dict[str, Any] = {}
     for method in protocol.methods:
         _add_result_types(annotations, method.result)
@@ -127,12 +152,6 @@ def _annotations(protocol: RpcProtocol) -> dict[str, Any]:
     for operation in chain[
         RpcMethodDefinition | RpcNotificationDefinition | RpcSubscriptionDefinition
     ](protocol.methods, protocol.notifications, protocol.subscriptions):
-        if (
-            isinstance(operation, (RpcMethodDefinition, RpcSubscriptionDefinition))
-            and operation.params is not None
-            and not operation.params_fields
-        ):
-            _add(annotations, operation.params)
         for error in operation.raises:
             if error.details_type is not None:
                 _add(annotations, error.details_type)
@@ -152,6 +171,8 @@ def _params_models(
         params[operation.name] = operation.params
         if operation.params_fields:
             generated[operation.name] = operation.params
+        else:
+            reserved_names.add(type_name(operation.params))
 
     counts = Counter(type_name(model) for model in generated.values())
     used = reserved_names.union(counts)
@@ -234,6 +255,7 @@ def _request_schema(
 def _notification_schema(
     notification: RpcNotificationDefinition,
     schema_name: str,
+    payload: dict[str, Any],
 ) -> dict[str, Any]:
     schema: dict[str, Any] = {
         "additionalProperties": False,
@@ -242,7 +264,7 @@ def _notification_schema(
         "properties": {
             "jsonrpc": {"const": "2.0", "type": "string"},
             "method": {"const": notification.name, "type": "string"},
-            "params": _ref(type_name(notification.payload)),
+            "params": payload,
         },
         "required": ["jsonrpc", "method", "params"],
     }
@@ -288,6 +310,6 @@ def _assert_unique_wire_names(annotations: Iterable[Any]) -> None:
 
 
 class _SchemaInput(NamedTuple):
-    name: str
+    key: SchemaKey
     mode: JsonSchemaMode
     adapter: TypeAdapter[Any]

@@ -67,8 +67,8 @@ Version 0.29.0 is not released yet. See the
   the same `Path()` constraints.
 - Replace `RpcModel` with `BaseModel`. To keep camel-case wire names, use your
   own base model with `alias_generator=to_camel` and `populate_by_name=True`.
-- Params models may be replaced with named parameters. Regenerate clients:
-  params models are named after the operation, such as `TasksRenameParams`.
+- Params models may be replaced with named parameters. Regenerate clients to
+  pick up operation-based params names and validation aliases on requests.
 - Import `Inject` from `fastapi_canon`, and `CanonWebSocketRouter`,
   `FastApiSocket` and `serve_websocket` from
   `fastapi_canon.integrations.websockets.adapters.fastapi`.

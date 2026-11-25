@@ -13,6 +13,7 @@ from typing import Literal, Self
 type _FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 type SymbolEnvironment = dict[str, SymbolValue]
 type _FactoryEnvironment = dict[str, tuple[str | None, ...]]
+type _RpcChannelStatus = Literal["supported", "incomplete"]
 
 _PROPERTIES = frozenset({"builtins.property", "functools.cached_property"})
 # Builtins that dispatch by computed names or code rather than protocol methods.
@@ -694,7 +695,7 @@ class SourceIndex:
                 module, value = self.value(item, scope)
                 if not isinstance(value, ast.Call) or (
                     self.resolve(value.func, module) not in _ROUTER_DECLARATIONS
-                    and self.rpc_channel(self.resolve(value.func, module)) is None
+                    and self.rpc_channel_contract(value, module) is None
                 ):
                     valid_values = False
             if not valid_values:
@@ -741,7 +742,7 @@ class SourceIndex:
             constructor = self.resolve(node.func, module)
             declaration = (
                 constructor in _FACTORY_DECLARATIONS
-                or self.rpc_channel(constructor) is not None
+                or self.rpc_channel_contract(node, module) is not None
             )
             return declaration and all(
                 self._route_factory_value(value, module, seen)
@@ -889,9 +890,30 @@ class SourceIndex:
                 return self._canonical(f"{resolved}.{member}", seen | {name})
         return _FRAMEWORK_ALIASES.get(name, name)
 
-    def rpc_channel(
-        self, name: str | None
-    ) -> Literal["supported", "incomplete"] | None:
+    def rpc_channel_contract(
+        self, node: ast.expr, module: str
+    ) -> tuple[_RpcChannelStatus, list[tuple[str, ast.Call]]] | None:
+        """Resolve a channel declaration and its child calls in inheritance order."""
+        scope, declaration = self.value(node, module)
+        layers: list[tuple[str, ast.Call]] = []
+        visited: set[ast.Call] = set()
+        while isinstance(declaration, ast.Call) and declaration not in visited:
+            visited.add(declaration)
+            layers.append((scope, declaration))
+            constructor = declaration.func
+            status = self._rpc_channel(self.resolve(constructor, scope))
+            if status is not None:
+                layers.reverse()
+                return status, layers
+            if (
+                not isinstance(constructor, ast.Attribute)
+                or constructor.attr != "child"
+            ):
+                break
+            scope, declaration = self.value(constructor.value, scope)
+        return None
+
+    def _rpc_channel(self, name: str | None) -> _RpcChannelStatus | None:
         """Recognize RPC ancestry without executing class or constructor code."""
         pending = [name]
         seen: set[str] = set()
