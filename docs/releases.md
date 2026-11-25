@@ -157,5 +157,6 @@ are verified. Prereleases receive prerelease GitHub Releases.
   workflow change may require an already authorized CLI login with workflow-write
   permission; use the original manifest, source, notes and artifacts. See
   [GitHub's permission note](https://docs.github.com/en/rest/releases/releases#create-a-release).
-- After verification, update the README's published version and compatibility
-  records. Keep detailed logs, hashes and manifests in Actions and GitHub Releases.
+- After verification, update the published version here and the compatibility
+  records; the README's PyPI badge updates itself. Keep detailed logs, hashes
+  and manifests in Actions and GitHub Releases.

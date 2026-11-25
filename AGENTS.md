@@ -156,8 +156,8 @@ finalize the changelog date and pass CI for the final source. Only dispatch with
 `dry_run=false` when explicitly authorized to publish. Verify public-index installs and release/tag results.
 On failure, follow the documented resume procedure with the original run's
 verified artifacts; do not replace published contents or move existing tags.
-After verified publication, update the README's current-release table and the
-release/compatibility records. All Canon releases belong in this
+After verified publication, update the release/compatibility records; the
+README's PyPI badge shows the current version. All Canon releases belong in this
 repository's central GitHub Releases list, under the `fastapi-canon-v` tag prefix.
 Always create the matching GitHub Release for every package publication, including
 changelog notes, the verified wheel/sdist and the release manifest. A publication
