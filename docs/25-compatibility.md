@@ -1,5 +1,19 @@
 # 25. Compatibility
 
+## Canon 0.29.0
+
+Published on 2026-11-25. Follow the [upgrade guide](24-upgrading.md#upgrade-to-0290)
+for FastAPI 0.165, SSE declarations and WebSocket RPC migrations.
+
+CI passed on Linux with Python 3.12 through 3.14 and on Windows with Python
+3.14, including PostgreSQL and Chromium/WebRTC. The two 20-combination wheel
+matrices and the installed SSE and WebRTC CLI checks passed on the released artifacts.
+
+All 15 public-index installation combinations passed. A fresh Windows/Python
+3.12 installation reported 0.29.0. The tag points to the verified source, and
+the wheel and sdist hashes match across PyPI, GitHub and the manifest. See the
+[publication record](93-releases.md#current-versions).
+
 ## Canon 0.28.0
 
 Published on 2026-11-25. Follow the [migration](24-upgrading.md#upgrade-to-0280)

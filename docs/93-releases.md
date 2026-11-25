@@ -6,12 +6,9 @@ version; the reference service is an example. `release.toml` and
 
 ## Current versions
 
-**Published: 0.28.0 (2026-11-25).** Adds streamed HTTP uploads and application-owned
-OpenTelemetry SDKs. See the [upgrade guide](24-upgrading.md#upgrade-to-0280)
-and [changelog](../CHANGELOG.md#0280---2026-11-25).
-
-**Prepared: 0.29.0 (unreleased).** See the
-[migration guide](24-upgrading.md#upgrade-to-0290) for FastAPI, SSE and RPC changes.
+**Published: 0.29.0 (2026-11-25).** See the
+[upgrade guide](24-upgrading.md#upgrade-to-0290) for FastAPI, SSE and RPC changes
+and the [changelog](../CHANGELOG.md#0290---2026-11-25).
 
 Published artifacts, manifests and run results are linked below. They record
 verified publications; prepared source versions are not publication evidence.
@@ -19,6 +16,7 @@ Historical links retain their original repositories.
 
 | Version | Source | CI | Dry run | Publication | Wheel, sdist and manifest |
 | --- | --- | --- | --- | --- | --- |
+| 0.29.0 (2026-11-25) | [Source](https://github.com/mathisarends/fastapi-canon/commit/284dec9573f78175f43d7ceb50daef89a71299f8) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/45705569886) | [Preparatory dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/45704131062) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/45707116988) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.29.0) |
 | 0.28.0 (2026-11-25) | [Source](https://github.com/mathisarends/fastapi-canon/commit/1b452b1da7201d860046c61e0cbf848c8f8a0aa1) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/45566390022) | [Preparatory dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/45566144897) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/45567684082) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.28.0) |
 | 0.27.0 (2026-11-24) | [Source](https://github.com/mathisarends/fastapi-canon/commit/5519b968695e53eaaeb75638a082029f3bb3cb39) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/45445072754) | [Preparatory dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/45445011200) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/45448423992) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.27.0) |
 | 0.26.0 (2026-11-23) | [Source](https://github.com/mathisarends/fastapi-canon/commit/95c5f7c82c94f2297cb3e08b1b9fe394790ed961) | [CI](https://github.com/mathisarends/fastapi-canon/actions/runs/45163893584) | [Preparatory dry run](https://github.com/mathisarends/fastapi-canon/actions/runs/45162389199) | [Publish](https://github.com/mathisarends/fastapi-canon/actions/runs/45165904235) | [Assets](https://github.com/mathisarends/fastapi-canon/releases/tag/fastapi-canon-v0.26.0) |
@@ -39,7 +37,7 @@ Historical links retain their original repositories.
 | 0.11.0 (2026-11-01) | [Source](https://github.com/mathisarends/fastapi_canon/commit/2773b56498fad05ac9e1f1163ee33241b6d70eff) | [CI](https://github.com/mathisarends/fastapi_canon/actions/runs/41346976457) | [Dry run](https://github.com/mathisarends/fastapi_canon/actions/runs/41347623801) | [Publish](https://github.com/mathisarends/fastapi_canon/actions/runs/41348067349) | [Assets](https://github.com/mathisarends/fastapi_canon/releases/tag/fastapi-canon-v0.11.0) |
 | 0.10.0 (2026-11-01) | [Source](https://github.com/mathisarends/fastapi_canon/commit/4d9ce1842b350a9bf867d512cc89aafc4b44d53b) | [CI](https://github.com/mathisarends/fastapi_canon/actions/runs/41311732023) | [Dry run](https://github.com/mathisarends/fastapi_canon/actions/runs/41312304534) | [Publish](https://github.com/mathisarends/fastapi_canon/actions/runs/41312590718) | [Assets](https://github.com/mathisarends/fastapi_canon/releases/tag/fastapi-canon-v0.10.0) |
 
-The preparatory dry runs for 0.28.0, 0.27.0, 0.26.0, 0.25.0, 0.24.0, 0.22.0,
+The preparatory dry runs for 0.29.0, 0.28.0, 0.27.0, 0.26.0, 0.25.0, 0.24.0, 0.22.0,
 0.19.0 and 0.17.0 predate changelog finalization. Each publication revalidated
 the final dated source and verified its public installs and attached artifacts.
 
