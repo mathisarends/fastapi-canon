@@ -17,7 +17,7 @@ classifiers = [
 ]
 dependencies = [
     "dishka>=1.10,<1.11",
-    "fastapi>=0.143.1,<1",
+    "fastapi>=0.165,<1",
     "pydantic>=2.9,<3",
 ]
 
@@ -37,7 +37,7 @@ otel-httpx = [
     "opentelemetry-instrumentation-httpx>=0.65b0,<1",
 ]
 otel-sqlalchemy = ["fastapi-canon[otel]==0.28.0", "sqlalchemy[asyncio]>=2.0,<3"]
-sse = ["fastapi>=0.143.3,<1", "pydantic>=2.11.2,<3"]
+sse = ["pydantic>=2.11.2,<3"]
 websockets = [
     "pydantic>=2.11,<3",
     "pydantic-core>=2.33",

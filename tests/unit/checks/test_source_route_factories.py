@@ -9,6 +9,7 @@ import pytest
 import fastapi_canon.cli as canon_cli
 
 PRELUDE = """
+from fastapi.sse import EventSourceResponse
 from fastapi_canon import APIRouter, Error, Feature
 from fastapi_canon.integrations.websockets import RpcChannel
 from fastapi_canon.routing.http import CanonRouter
@@ -142,30 +143,30 @@ def unused_factory():
 
 
 @pytest.mark.parametrize(
-    "method,body,transport",
+    "decorator,body,transport",
     [
-        ("get", "return 1", "http"),
-        ("sse", "yield 1; fail()", "sse"),
+        ("get('/')", "return 1", "http"),
+        ("get('/', response_class=EventSourceResponse)", "yield 1; fail()", "sse"),
     ],
 )
 def test_transport_and_deferred_execution_are_preserved(
     analyze: Callable[[str], tuple[int, dict[str, Any]]],
-    method: str,
+    decorator: str,
     body: str,
     transport: str,
 ) -> None:
     status, report = analyze(f"""
 def factory():
     router = APIRouter()
-    @router.{method}('/')
+    @router.{decorator}
     async def endpoint(): {body}
     return router
 """)
     (operation,) = report["operations"]
     assert operation["transport"] == transport and operation["complete"]
-    assert status == (1 if method == "sse" else 0)
+    assert status == (1 if transport == "sse" else 0)
     assert [d["code"] for d in operation["diagnostics"]] == (
-        ["CAN002"] if method == "sse" else []
+        ["CAN002"] if transport == "sse" else []
     )
 
 

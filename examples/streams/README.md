@@ -17,7 +17,7 @@ stream starts.
 
 - `APIRouter(prefix="/runs", raises=[...])` shares
   authentication and error contracts between both stream operations.
-- `@router.sse(..., methods=[HTTPMethod.POST])` accepts a typed JSON body.
+- `@router.post(..., response_class=EventSourceResponse)` accepts a typed JSON body.
 - Resource checks run in dependencies, so they fail as HTTP problems before
   the response starts. Generator code always runs after the response starts.
 - The generator opens a short `ServiceScope` to materialize its events instead

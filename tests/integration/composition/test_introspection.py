@@ -8,6 +8,7 @@ import pytest
 from dishka import FromDishka, Provider, Scope, provide
 from dishka.integrations.fastapi import DishkaRoute
 from fastapi import APIRouter, Depends, FastAPI
+from fastapi.sse import EventSourceResponse
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 
@@ -321,25 +322,33 @@ def test_sse_lookup_keeps_declarations_across_inclusion_and_injection(
     match synchronous, injected:
         case False, False:
 
-            @child.sse("/events", operation_id=operation_id)
+            @child.get(
+                "/events", response_class=EventSourceResponse, operation_id=operation_id
+            )
             async def events() -> AsyncIterator[str]:
                 calls.append("generator")
                 yield "project"
         case False, True:
 
-            @child.sse("/events", operation_id=operation_id)
+            @child.get(
+                "/events", response_class=EventSourceResponse, operation_id=operation_id
+            )
             async def events(service: Inject[ProjectService]) -> AsyncIterator[str]:
                 calls.append("generator")
                 yield service.name
         case True, False:
 
-            @child.sse("/events", operation_id=operation_id)
+            @child.get(
+                "/events", response_class=EventSourceResponse, operation_id=operation_id
+            )
             def events() -> Iterator[str]:
                 calls.append("generator")
                 yield "project"
         case True, True:
 
-            @child.sse("/events", operation_id=operation_id)
+            @child.get(
+                "/events", response_class=EventSourceResponse, operation_id=operation_id
+            )
             def events(service: Inject[ProjectService]) -> Iterator[str]:
                 calls.append("generator")
                 yield service.name
@@ -367,7 +376,7 @@ def test_sse_lookup_keeps_declarations_across_inclusion_and_injection(
         schema["paths"][operation.path]["get"]["operationId"] == operation.operation_id
     )
 
-    @child.sse("/later")
+    @child.get("/later", response_class=EventSourceResponse)
     async def later() -> AsyncIterator[str]:
         yield "later"
 
@@ -407,7 +416,9 @@ def test_sse_lookup_keeps_an_explicit_user_decorator() -> None:
 
     attributes = dict(vars(decorated))
     router = ApplicationRouter()
-    router.sse("/events", operation_id="events")(decorated)
+    router.get("/events", response_class=EventSourceResponse, operation_id="events")(
+        decorated
+    )
     composition = Composition(features=[Feature(name="streams", routers=[router])])
     description = inspect_app(composition.build(FastAPI()))
 
@@ -426,8 +437,12 @@ def test_sse_lookup_rejects_ambiguous_declarations() -> None:
         yield "project"
 
     router = ApplicationRouter()
-    router.sse("/first", operation_id="first.events")(events)
-    router.sse("/second", operation_id="second.events")(events)
+    router.get(
+        "/first", response_class=EventSourceResponse, operation_id="first.events"
+    )(events)
+    router.get(
+        "/second", response_class=EventSourceResponse, operation_id="second.events"
+    )(events)
     composition = Composition(features=[Feature(name="streams", routers=[router])])
     description = inspect_app(composition.build(FastAPI()))
 

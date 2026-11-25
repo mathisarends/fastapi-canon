@@ -12,7 +12,12 @@ import fastapi_canon.cli as canon_cli
     ("transport", "declaration", "decorator", "body"),
     [
         ("http", "APIRouter", "get('/')", "raise Missing()"),
-        ("sse", "APIRouter", "sse('/')", "yield 1\n    raise Missing()"),
+        (
+            "sse",
+            "APIRouter",
+            "get('/', response_class=EventSourceResponse)",
+            "yield 1\n    raise Missing()",
+        ),
         ("webrtc", "WebRtcRouter", "session('/')", "raise Missing()"),
         ("rpc", "RpcChannel", "method()", "raise Missing()"),
     ],
@@ -39,6 +44,7 @@ def test_reexported_router_keeps_its_error_contract(
     (package / "router.py").write_text(
         dedent(f"""
 from collections.abc import AsyncIterator
+from fastapi.sse import EventSourceResponse
 from fastapi_canon import APIRouter, Error, Feature
 from fastapi_canon.integrations.webrtc import WebRtcRouter
 from fastapi_canon.integrations.websockets import RpcChannel

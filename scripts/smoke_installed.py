@@ -18,6 +18,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter as FastAPIRouter
 from fastapi import Depends, FastAPI, Form, Header, Response, UploadFile, WebSocket
+from fastapi.sse import EventSourceResponse
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, ConfigDict
 from starlette.websockets import WebSocketDisconnect
@@ -104,7 +105,9 @@ def _main() -> None:
 
         streams = APIRouter()
 
-        @streams.sse("/events", operation_id="events")
+        @streams.get(
+            "/events", response_class=EventSourceResponse, operation_id="events"
+        )
         async def events() -> AsyncIterator[Event]:
             yield Event()
 

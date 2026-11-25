@@ -6,10 +6,11 @@ Select the SSE dependencies:
 pip install "fastapi-canon[sse]"
 ```
 
-Declare typed streams with `@router.sse(...)` on the feature's
-`fastapi_canon.APIRouter`. The `sse` extra selects FastAPI >=0.143.3 and
-Pydantic >=2.11.2; base composition keeps its lower bounds, and core imports do
-not load the SSE runtime.
+Declare typed streams with FastAPI's `response_class=EventSourceResponse` on the
+feature's `fastapi_canon.APIRouter`. The generator must yield a concrete event
+model, not `ServerSentEvent`; yield `ServerSentEvent(data=event, event=..., id=...)`
+to set SSE fields. The `sse` extra selects Pydantic >=2.11.2; base
+composition keeps its lower bound, and core imports do not load the SSE runtime.
 
 ## Complete integration example
 
@@ -21,6 +22,7 @@ from typing import Annotated
 
 from dishka import AsyncContainer, Provider, Scope, provide
 from fastapi import Depends, FastAPI, Header
+from fastapi.sse import EventSourceResponse
 from pydantic import BaseModel
 
 from fastapi_canon import (
@@ -96,8 +98,9 @@ router = APIRouter(
 )
 
 
-@router.sse(
+@router.get(
     "/{run_id}/events",
+    response_class=EventSourceResponse,
     raises=[run_not_found],
     dependencies=[Depends(require_existing_run)],
     operation_id="run_events",
@@ -155,25 +158,17 @@ for Dishka's own markers and dependency injection details.
 | API | Behavior |
 | --- | --- |
 | `APIRouter(raises=[...], http_statuses=[...], **options)` | Router-level `raises` automatically registers shared errors and applies to every HTTP and SSE operation declared on this router. Standard FastAPI router options pass through. |
-| `router.sse(path, raises=[...], methods=None, **options)` | Local errors extend shared errors for both admission and terminal stream failures. Defaults to GET; use `methods=[HTTPMethod.POST]` for a body-driven stream. FastAPI dependencies, tags and operation IDs pass through. |
+| `router.get/post(path, response_class=EventSourceResponse, raises=[...], **options)` | A typed stream. Local errors extend shared errors for both admission and terminal stream failures. FastAPI dependencies, tags and operation IDs pass through. |
 | `router.get(...)`, `router.post(...)`, `router.api_route(...)` | Ordinary HTTP declarations on the same router. |
 
 ### HTTP methods
 
-Import `HTTPMethod` from Python's standard `http` module. It is a string enum
-with `GET`, `POST`, `PUT`, `PATCH`, `DELETE`,
-`HEAD`, `OPTIONS`, `TRACE`, and `CONNECT`. It works in normal FastAPI/canon
-`methods=` lists too; strings remain supported.
-
 For a separate POST operation, add this before constructing the feature/app:
 
 ```python
-from http import HTTPMethod
-
-
-@router.sse(
+@router.post(
     "/{run_id}/events",
-    methods=[HTTPMethod.POST],
+    response_class=EventSourceResponse,
     raises=[run_not_found],
     dependencies=[Depends(require_existing_run)],
     operation_id="create_run_events",
@@ -185,10 +180,8 @@ async def create_events(
         yield event
 ```
 
-`methods=[HTTPMethod.POST]` selects **only POST**, following FastAPI's
-`api_route()` convention. It can also select both
-`[HTTPMethod.GET, HTTPMethod.POST]` for the same handler. SSE accepts GET and
-POST only; other enum members are rejected.
+Streams support GET and POST only; `router.api_route(..., methods=["GET", "POST"])`
+registers both for the same handler.
 GET is useful for subscribing to events; POST lets the request include a typed
 JSON body, as in [`examples/streams/app.py`](../examples/streams/app.py).
 Selecting both registers one operation per method and suffixes its ID:

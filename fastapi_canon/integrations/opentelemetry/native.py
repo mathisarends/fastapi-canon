@@ -36,7 +36,7 @@ _CONFIGURATION_FIELDS = frozenset(
 def validate_app(app: FastAPI) -> None:
     if not isinstance(getattr(app, "_telemetry", None), dict):
         raise FeatureConfigurationError(
-            "Canon telemetry requires the native telemetry configuration of FastAPI >=0.143.1"
+            "Canon telemetry requires the native telemetry configuration of FastAPI >=0.165"
         )
     if not _CONFIGURATION_FIELDS.issubset(app._telemetry):
         raise FeatureConfigurationError(

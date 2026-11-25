@@ -123,7 +123,7 @@ Pydantic; TypeScript provides static types and JSON decoding, with no runtime
 schema validator. Cancellation propagates normally; application error events
 remain ordinary members of the user-defined union.
 
-Clients generated from `APIRouter.sse()` contracts also export `ProblemError`.
+Clients generated from Canon stream contracts also export `ProblemError`.
 `application/problem+json` responses and `canon.problem` terminal frames raise
 it with the parsed problem in `.problem`; a stream that ends without
 `canon.complete` raises `TransportError`. `HttpError` remains for responses that

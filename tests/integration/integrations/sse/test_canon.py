@@ -4,6 +4,7 @@ from collections.abc import AsyncIterator, Iterator
 import pytest
 from examples.canonical_errors.app import ProjectMissing, project_missing
 from fastapi import FastAPI
+from fastapi.sse import EventSourceResponse
 from fastapi.testclient import TestClient
 from fastapi_canon import (
     APIRouter,
@@ -32,9 +33,12 @@ def test_inherited_stream_errors_match_terminal_contract(
         yield 1
         raise ProjectMissing("private failure")
 
-    child.sse("/events", raises=[local_error], operation_id="projects.events")(
-        synchronous_events if synchronous else asynchronous_events
-    )
+    child.get(
+        "/events",
+        response_class=EventSourceResponse,
+        raises=[local_error],
+        operation_id="projects.events",
+    )(synchronous_events if synchronous else asynchronous_events)
     policy = RouterPolicy(raises=[project_missing])
     parent = (
         APIRouter(raises=[project_missing])
@@ -79,7 +83,7 @@ def test_inherited_stream_errors_match_terminal_contract(
 def test_inherited_stream_errors_stay_local_to_each_inclusion() -> None:
     child = APIRouter()
 
-    @child.sse("/events")
+    @child.get("/events", response_class=EventSourceResponse)
     async def events() -> AsyncIterator[int]:
         yield 1
         raise ProjectMissing("private failure")

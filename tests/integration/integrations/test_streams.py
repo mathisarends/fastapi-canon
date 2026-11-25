@@ -21,6 +21,8 @@ pytest.importorskip("fastapi_canon.integrations.sse")
 
 from http import HTTPMethod
 
+from fastapi.sse import EventSourceResponse
+
 from examples.streams.app import (
     RunCompleted,
     RunEvent,
@@ -273,8 +275,9 @@ def test_multi_method_stream_builds_with_one_operation_per_method(
 ) -> None:
     selected = APIRouter()
 
-    @selected.sse(
+    @selected.api_route(
         "/events",
+        response_class=EventSourceResponse,
         methods=[HTTPMethod.GET, HTTPMethod.POST],
         operation_id=operation_id,
     )

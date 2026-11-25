@@ -7,7 +7,7 @@ can contribute HTTP calls, typed SSE and JSON-RPC channels:
 | Declaration | Endpoint behavior |
 | --- | --- |
 | `@router.get(...)`, `post(...)`, etc. | HTTP with Canon error/success contracts |
-| `@router.sse(...)` | Typed HTTP event stream, terminal problems and completion |
+| `@router.get(..., response_class=EventSourceResponse)` | Typed HTTP event stream, terminal problems and completion |
 | `router.include_channel(channel, path=...)` | JSON-RPC methods and message streams over one WebSocket |
 | `session = router.channel(path)` | A JSON-RPC WebSocket; register methods, events and message streams on `session` |
 | `@router.binary_stream(path)` | A binary stream on its own WebSocket; the signature sets the direction |
@@ -119,6 +119,8 @@ Declare a stable namespace once per router. Canon derives an omitted
 ```python
 from collections.abc import AsyncIterator
 
+from fastapi.sse import EventSourceResponse
+
 from fastapi_canon import APIRouter
 
 
@@ -130,7 +132,7 @@ async def get(project_id: int) -> int:
     return project_id
 
 
-@router.sse("/{project_id}/events")
+@router.get("/{project_id}/events", response_class=EventSourceResponse)
 async def events(project_id: int) -> AsyncIterator[int]:
     yield project_id
 ```
@@ -149,12 +151,11 @@ The same rule applies to WebSocket channels declared on the router.
   Native FastAPI routes with the default naming policy inherit the Canon parent's
   generator according to FastAPI's inclusion rules.
 - A custom FastAPI `generate_unique_id_function=` replaces Canon's default rule.
-  `APIRouter.sse()` uses the same generator as the owning router.
+  Streams use the same generator as the owning router.
 
-`APIRouter.sse()` accepts the route options typed as `StreamOptions`: `methods`,
-`operation_id`, `summary`, `description`, `tags`, `dependencies`, `raises`,
-`status_code` and the other documentation options of `get()`. Response model and
-response class options are absent, because a stream infers its event model.
+A route with `response_class=EventSourceResponse` (or a subclass) is a typed
+stream. It infers its event model, so `response_model=` and `response=` are
+rejected.
 
 `Feature.name` identifies a feature in diagnostics and lifecycle only; it is not a
 public API name. Public names come from the declaration that owns them: the
@@ -381,11 +382,17 @@ With the relevant extras installed, extend the router above and add a
 `WebRtcRouter` for media sessions:
 
 ```python
+from fastapi.sse import EventSourceResponse
+
 from fastapi_canon.integrations.webrtc import Session, WebRtcRouter
 from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine
 
 
-@router.sse("/{project_id}/events", operation_id="project_events")
+@router.get(
+    "/{project_id}/events",
+    response_class=EventSourceResponse,
+    operation_id="project_events",
+)
 async def project_events(project_id: str) -> AsyncIterator[str]:
     yield f"Updated {project_id}"
 

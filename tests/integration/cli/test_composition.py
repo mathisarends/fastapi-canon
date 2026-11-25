@@ -370,6 +370,7 @@ def test_cli_reports_automatic_http_sse_id_collisions(
     (tmp_path / "collision.py").write_text(
         dedent(f"""
         from collections.abc import AsyncIterator
+        from fastapi.sse import EventSourceResponse
         from fastapi_canon import APIRouter, Composition, Feature
 
         first = APIRouter(namespace={namespace!r}, prefix="/projects")
@@ -377,7 +378,7 @@ def test_cli_reports_automatic_http_sse_id_collisions(
         @first.get("/current")
         def events() -> str:
             return "current"
-        @second.sse("/events")
+        @second.get("/events", response_class=EventSourceResponse)
         async def events() -> AsyncIterator[str]:
             yield "updated"
         parent = APIRouter(namespace="ignored", prefix="/v1")

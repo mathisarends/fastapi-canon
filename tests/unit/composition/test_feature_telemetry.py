@@ -11,7 +11,7 @@ def test_telemetry_requires_native_fastapi_support(
 ) -> None:
     app = FastAPI()
     monkeypatch.delattr(app, "_telemetry")
-    with pytest.raises(FeatureConfigurationError, match=r"FastAPI >=0\.143"):
+    with pytest.raises(FeatureConfigurationError, match=r"FastAPI >=0\.165"):
         Composition(integrations=[Telemetry()]).build(app)
 
 

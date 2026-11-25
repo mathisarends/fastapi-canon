@@ -646,14 +646,12 @@ application, before anything is installed; a mismatch is reported as
 After installation, `build` repeats the checks on the installed application,
 including OpenAPI compilation.
 
-For explicit method lists, import the string enum `HTTPMethod` from
-`fastapi_canon`, for example `methods=[HTTPMethod.POST]`. Canon re-exports
-Python's standard `http.HTTPMethod`; ordinary string method names also work.
+Explicit `methods=` lists accept strings or Python's `http.HTTPMethod`.
 
 ### Typed server-sent events
 
 Install `fastapi-canon[sse]` and declare a typed async generator with
-`@router.sse(...)`. The stream shares the router's registry, `raises=` and
+`response_class=EventSourceResponse`. The stream shares the router's registry, `raises=` and
 `http_statuses=`, and `Feature` discovers its errors like any other operation.
 The OpenAPI document keeps the native SSE `itemSchema`/`contentSchema`, so
 generated clients receive typed events:
@@ -662,10 +660,12 @@ generated clients receive typed events:
 from collections.abc import AsyncIterator
 
 from fastapi import Depends
+from fastapi.sse import EventSourceResponse
 
 
-@router.sse(
+@router.get(
     "/{session_id}/events",
+    response_class=EventSourceResponse,
     raises=[session_not_found, session_closed],
     dependencies=[Depends(require_existing_session)],
     operation_id="sessions.events",
@@ -729,8 +729,8 @@ The available constructors are:
 | `CanonResponse.stream(media_type)` | String stream with status 200 |
 | `CanonResponse.binary(media_type)` | Binary string stream with status 200 |
 
-Typed event streams use `@router.sse(...)` instead of a hand-written
-`text/event-stream` response.
+Typed event streams use `response_class=EventSourceResponse` with a typed
+generator instead of `response=CanonResponse.sse()`.
 
 Success-only routers do not need an empty `ErrorRegistry`:
 
@@ -884,7 +884,7 @@ Configuration failures raise `FeatureConfigurationError`.
 ## Requirements
 
 - CPython 3.12, 3.13, or 3.14
-- FastAPI 0.143.1 or newer, below 1.0
+- FastAPI 0.165 or newer, below 1.0
 - Dishka 1.10 or newer, below 2.0
 - Pydantic 2.9 or newer, below 3.0
 

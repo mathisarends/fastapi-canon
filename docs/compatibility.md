@@ -219,7 +219,7 @@ code moves to a documented API.
 | --- | --- | --- | --- |
 | FastAPI | `app._telemetry` configuration dictionary | `otel` native bridge | Field check before installation; telemetry bridge check |
 | FastAPI | `APIRoute.dependant` / `Dependant` fields and `ModelField` attributes | Composition inspection, WebRTC contracts | Introspection and contract tests |
-| FastAPI | `iter_route_contexts` and `RouteContext` | Effective route paths, contract export and selection | Core minimum 0.143.1, the first version with WebSocket paths for included routers; route and contract tests |
+| FastAPI | `iter_route_contexts` and `RouteContext` | Effective route paths, contract export and selection | Core minimum 0.165.0; 0.143.1 is the first version with WebSocket paths for included routers; route and contract tests |
 | FastAPI | Mutating `router.routes` before `include_router` | Request-scope installation | Scope tests for direct and included routes |
 | FastAPI | `openapi_extra` passed by identity to included routes | Declaration origins and endpoint lookup | Introspection tests through nested includes |
 | Dishka | Container registry, provider factories and `__dishka_orig_func__` | Composition checks, injected routes | Range `<1.11` |
@@ -274,7 +274,7 @@ published-version evidence below remains unchanged.
 ## Native telemetry bridge
 
 The native bridge is exercised from built wheels on Python 3.12 against
-FastAPI 0.143.1 and the locked 0.162.0 version, with actual SDK span exporters and
+FastAPI 0.165.0, the minimum and locked version, with actual SDK span exporters and
 metric readers. The check covers the shared private configuration dictionary,
 disabled auto-configuration, provider identity, repeated composition, exclusion,
 HTTP and port spans/metrics, and borrowed provider ownership. CI runs the same
@@ -447,7 +447,7 @@ HTTP backend, HTTPX and HTTPX2; the installed WebRTC CLI generates a client that
 compiles. Chromium scenarios cover the aiortc signaling and media paths. This
 local validation does not replace exact-source CI or establish a publication.
 
-Canon core requires FastAPI >=0.143.1; the optional `otel` extra adds
+Canon core requires FastAPI >=0.165; the optional `otel` extra adds
 OpenTelemetry API >=1.40,<2. Core declarations and disabled Dishka decorators
 require no OpenTelemetry imports. Recent FastAPI
 versions have their own OpenTelemetry API dependency. The installed-wheel matrix
@@ -463,8 +463,7 @@ Chromium/aiortc browser tests and installed
 artifact checks. A separate job resolves the lowest direct dependencies the
 declared ranges allow (`uv lock --resolution lowest-direct`) and runs the full
 Python suite on Python 3.12. Because the development environment installs every
-extra together, it exercises their jointly lowest versions, for example FastAPI
-0.143.3 rather than the core minimum 0.143.1; the installed-wheel minimum matrix
+extra together, it exercises their jointly lowest versions; the installed-wheel minimum matrix
 covers each combination at its own bounds.
 
 Pushes to `main`, manual runs and pull requests labeled `full-ci` run all of these

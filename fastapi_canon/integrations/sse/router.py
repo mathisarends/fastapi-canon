@@ -13,17 +13,8 @@ from typing import Any, TypeAliasType, get_args, get_origin, get_type_hints
 from fastapi import APIRouter
 from fastapi.datastructures import DefaultPlaceholder
 from fastapi.routing import APIRoute
+from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import TypeAdapter
-
-try:
-    from fastapi.sse import EventSourceResponse, ServerSentEvent
-except ModuleNotFoundError as error:
-    if error.name != "fastapi.sse":
-        raise
-    raise ModuleNotFoundError(
-        "Typed SSE requires newer FastAPI dependencies; install fastapi-canon[sse]",
-        name=error.name,
-    ) from error
 
 _ASYNC = (AsyncIterator, AsyncIterable, AsyncGenerator)
 _SYNC = (Iterator, Iterable, Generator)
@@ -37,6 +28,7 @@ class StreamRouter(APIRouter):
         path: str,
         *,
         methods: list[str] | None = None,
+        response_class: type[EventSourceResponse] = EventSourceResponse,
         **options: Any,
     ) -> Callable[[Endpoint], Endpoint]:
         """Register a GET (default) or POST JSON-data SSE generator.
@@ -58,10 +50,8 @@ class StreamRouter(APIRouter):
         )
         if not selected or not set(selected) <= {"GET", "POST"}:
             raise ValueError("Streams support GET and POST only")
-        if "response_class" in options or "response_model" in options:
-            raise TypeError(
-                "Streams infer their response model and use EventSourceResponse"
-            )
+        if "response_model" in options:
+            raise TypeError("Streams infer their response model from the event type")
         for option, changes_contract in (
             (
                 "response_model_include",
@@ -100,7 +90,7 @@ class StreamRouter(APIRouter):
                 self.api_route(
                     path,
                     methods=[method],
-                    response_class=EventSourceResponse,
+                    response_class=response_class,
                     **route_options,
                 )(endpoint)
             return endpoint

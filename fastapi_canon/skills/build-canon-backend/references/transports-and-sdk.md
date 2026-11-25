@@ -13,6 +13,8 @@ in that feature:
 ```python
 from collections.abc import AsyncIterator
 
+from fastapi.sse import EventSourceResponse
+
 from fastapi_canon import APIRouter, Inject
 from fastapi_canon.integrations.websockets import RpcChannel
 
@@ -25,7 +27,7 @@ router = APIRouter(namespace="projects", prefix="/projects")
 channel = RpcChannel("projects")
 
 
-@router.sse("/events")
+@router.get("/events", response_class=EventSourceResponse)
 async def events(
     projects: Inject[ProjectService],
 ) -> AsyncIterator[ProjectEvent]:
@@ -54,8 +56,8 @@ for full options; the protocols retain their own admission, scope and cleanup ru
 
 ## Typed SSE
 
-Install the `sse` extra. Declare streams with `@router.sse(...)`; a typed async
-iterator supplies the business event model. The generator requests services
+Install the `sse` extra. Declare streams with
+`@router.get(..., response_class=EventSourceResponse)`; a typed async iterator supplies the business event model. The generator requests services
 with `Inject[T]`; they are resolved on its first iteration, after response start.
 
 | Failure phase | Declaration and behavior |

@@ -1,11 +1,11 @@
 """Run with: uv run --with uvicorn uvicorn examples.streams.app:app."""
 
 from collections.abc import AsyncIterator
-from http import HTTPMethod
 from typing import Annotated, Literal
 
 from dishka import AsyncContainer, Provider, Scope, provide
 from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.sse import EventSourceResponse
 from pydantic import BaseModel, Field
 
 from fastapi_canon import (
@@ -101,8 +101,9 @@ router = APIRouter(
 )
 
 
-@router.sse(
+@router.get(
     "/{run_id}/events",
+    response_class=EventSourceResponse,
     operation_id="run_events",
     raises=[run_not_found],
     dependencies=[Depends(require_existing_run)],
@@ -116,9 +117,9 @@ async def events(
         yield event
 
 
-@router.sse(
+@router.post(
     "/{run_id}/events",
-    methods=[HTTPMethod.POST],
+    response_class=EventSourceResponse,
     operation_id="create_run_events",
     raises=[run_not_found],
     dependencies=[Depends(require_existing_run)],

@@ -13,10 +13,8 @@ from fastapi_canon import (
     ChannelOptions,
     IncludeRouterOptions,
     RouteOptions,
-    StreamOptions,
 )
 from fastapi_canon.errors import ConfigurationError
-from fastapi_canon.integrations.sse.canon import CanonStreamRouter
 from fastapi_canon.integrations.websockets import CanonWebSocketRouter, WebSocketPolicy
 from fastapi_canon.routing.http import FastAPIRouterOptions
 
@@ -26,7 +24,7 @@ def test_core_router_import_keeps_optional_transports_lazy() -> None:
         [
             sys.executable,
             "-c",
-            "import sys; from fastapi_canon import APIRouter, APIRouteOptions, ChannelOptions, IncludeRouterOptions, RouteOptions, StreamOptions; "
+            "import sys; from fastapi_canon import APIRouter, APIRouteOptions, ChannelOptions, IncludeRouterOptions, RouteOptions; "
             "router = APIRouter(); "
             "assert 'fastapi_canon.integrations.sse.canon' not in sys.modules; "
             "assert 'fastapi_canon.integrations.websockets' not in sys.modules; "
@@ -67,15 +65,6 @@ def test_declarations_conflicting_with_the_policy_fail_before_registration() -> 
     with pytest.raises(ConfigurationError, match="strict_errors"):
         router.channel("/session", strict_errors=False)
     assert router.routes == []
-
-
-def test_stream_options_are_route_options() -> None:
-    # Canon's api_route forwards the remaining options to FastAPI's.
-    accepted = _keywords(CanonStreamRouter.api_route) | _keywords(
-        FastAPIRouter.api_route
-    )
-
-    assert set(StreamOptions.__annotations__) <= accepted
 
 
 @pytest.mark.parametrize(
