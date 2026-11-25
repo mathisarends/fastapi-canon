@@ -10,10 +10,11 @@ Install `fastapi-canon[webrtc,aiortc]`.
 from typing import Annotated
 
 from aiortc.contrib.media import MediaRelay
-from fastapi import Depends, FastAPI, HTTPException, Query
+from dishka import Provider, Scope, provide
+from fastapi import FastAPI, Query
 from pydantic import BaseModel
 
-from fastapi_canon import Composition, Feature
+from fastapi_canon import Composition, Error, Feature, Inject
 from fastapi_canon.integrations.webrtc import (
     DataChannelSpec,
     Direction,
@@ -40,13 +41,22 @@ class Feedback(BaseModel):
 MESSAGES = DataChannelSpec("messages", receive_model=Prompt, send_model=Feedback)
 
 
-def lesson_access(lesson_id: str, token: Annotated[str, Query()]) -> str:
-    if token != "demo":
-        raise HTTPException(status_code=403)  # HTTP 403; no peer is created.
-    return lesson_id
+class AccessDenied(Exception):
+    pass
 
 
-rtc = WebRtcRouter(prefix="/rtc", engine=AiortcEngine())
+class Lessons:
+    def require_access(self, lesson_id: str, token: str) -> None:
+        if token != "demo":
+            raise AccessDenied()
+
+
+class LessonProvider(Provider):
+    lessons = provide(Lessons, scope=Scope.APP)
+
+
+access_denied = Error(AccessDenied, status=403, code="access_denied")
+rtc = WebRtcRouter(prefix="/rtc", engine=AiortcEngine(), raises=[access_denied])
 
 
 @rtc.session(
@@ -56,7 +66,10 @@ rtc = WebRtcRouter(prefix="/rtc", engine=AiortcEngine())
     data_channels=(MESSAGES,),
     max_sessions=50,
 )
-def practice(lesson: Annotated[str, Depends(lesson_access)]) -> Session:
+def practice(
+    lesson_id: str, token: Annotated[str, Query()], lessons: Inject[Lessons]
+) -> Session:
+    lessons.require_access(lesson_id, token)  # 403 before any peer exists
     relay = MediaRelay()
 
     async def on_track(peer: Peer, track: IncomingTrack) -> None:
@@ -70,12 +83,14 @@ def practice(lesson: Annotated[str, Depends(lesson_access)]) -> Session:
     return Session(on_track=on_track, on_message={MESSAGES: on_prompt})
 
 
-app = Composition(features=[Feature(name="lessons", routers=[rtc])]).build(FastAPI())
+lessons = Feature(name="lessons", routers=[rtc], providers=[LessonProvider])
+app = Composition(features=[lessons]).build(FastAPI())
 ```
 
-The session factory is a FastAPI dependency chain: authentication and path or
-query parameters run before any peer connection exists. A `Session` is built
-from handlers:
+The factory runs before the WebSocket is accepted. It takes path and query
+parameters, `Inject[T]` services and FastAPI dependencies like a route, and a
+declared error refuses the session with its HTTP status. After acceptance,
+failures use WebRTC close codes. A `Session` is built from handlers:
 
 | Handler | Runs |
 | --- | --- |
@@ -84,18 +99,6 @@ from handlers:
 | `on_track(peer, track)` | for each incoming track |
 | `on_message={spec: handler}` | for each validated data-channel message |
 | `on_close(peer, code)` | before resources are released |
-
-## Errors on admission
-
-Declare admission failures like on any route:
-
-```python
-rtc = WebRtcRouter(engine=AiortcEngine(), raises=[browser_missing])
-```
-
-Before the WebSocket is accepted, a mapped exception refuses the session with
-its HTTP status and no peer is created. After that, failures use WebRTC close
-codes.
 
 ## Browser client
 
