@@ -7,16 +7,13 @@
 [![Checked with mypy](https://img.shields.io/badge/mypy-checked-2a6db2)](https://mypy-lang.org/)
 [![License](https://img.shields.io/pypi/l/fastapi-canon)](LICENSE)
 
-**Typed contracts for FastAPI beyond request/response JSON.**
+**FastAPI for streams, WebSockets and AI apps, with typed clients.**
 
-FastAPI handles JSON endpoints well. Streams, WebSockets, WebRTC sessions and
-their errors are left to you: you write the framing, invent an error format and
-keep clients in sync by hand, because none of it appears in the OpenAPI schema.
-AI applications hit this early, since token streams, tool calls and cancellable
-runs are their normal case. Canon describes these operations as typed contracts
-and generates Python and TypeScript clients from them.
+FastAPI is great at JSON endpoints. Token streams, WebSockets and their errors
+are left to you, and none of it shows up in OpenAPI. Canon makes them typed
+contracts and generates Python and TypeScript clients.
 
-**Plain FastAPI:** manual framing, an ad-hoc error event, no event schema.
+**Plain FastAPI:** hand-written frames, a homemade error event.
 
 ```python
 @app.post("/chats/{chat_id}/reply")
@@ -24,14 +21,19 @@ async def reply(chat_id: str) -> StreamingResponse:
     async def frames():
         try:
             async for text in model.stream(chat_id):
-                yield f"data: {json.dumps({'text': text})}\n\n"
+                yield f"data: {json.dumps({'text': text})}
+
+"
         except QuotaExceeded:
-            yield 'event: error\ndata: {"message": "quota"}\n\n'
+            yield 'event: error
+data: {"message": "quota"}
+
+'
 
     return StreamingResponse(frames(), media_type="text/event-stream")
 ```
 
-**Canon:** a typed stream with a declared failure.
+**Canon:** typed events, a declared error.
 
 ```python
 class Token(BaseModel):
@@ -51,22 +53,14 @@ async def reply(chat_id: str) -> AsyncIterator[Token]:
         yield Token(text=text)
 ```
 
-Generated clients yield `Token` objects, raise a typed problem for
-`quota_exceeded` and tell a completed stream apart from a dropped connection.
-
 ## What Canon adds
 
-- **Errors as declarations.** Handlers raise ordinary domain exceptions instead
-  of `HTTPException`. One `Error` produces the RFC 9457 response, its OpenAPI
-  entry and the client error, so documented and actual errors cannot diverge.
-- **Typed SSE.** Event models, completion and terminal problems are part of the
-  contract and become typed iterators in the clients.
-- **WebSocket channels.** RPC methods, message streams, notifications and binary
-  streams with typed clients that handle request IDs, correlation and cleanup.
-- **Contracts for everything.** SSE events, RPC messages and WebRTC sessions are
-  exported next to OpenAPI and checked for drift in CI.
-- **One application model.** HTTP, streams, channels, WebRTC and MCP tools live in
-  features with Dishka dependencies and managed lifecycles.
+- **Errors, declared once.** Raise plain exceptions; get the response, OpenAPI
+  entry and client error from one `Error`.
+- **Typed SSE.** Clients iterate typed events and know when a stream failed.
+- **WebSocket RPC.** Typed methods and streams, no request-ID plumbing.
+- **Everything in the contract.** Streams, sockets and WebRTC, checked in CI.
+- **One app model.** Features, Dishka dependencies and lifecycles for every transport.
 
 ## Installation
 
