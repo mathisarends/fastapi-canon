@@ -144,6 +144,11 @@ def _main() -> None:
                 await socket.send(SocketOutput(value=message.value + 1))
 
         routers.append(rpc)
+        # InMemorySocketFactory serves a CanonWebSocketRouter, not an APIRouter.
+        rpc_service = CanonWebSocketRouter()
+        rpc_service.socket("/rpc", channels=[channel])
+        rpc_service.socket("/messages", messages, name="messages")
+        rpc_service.socket("/session", session, name="session")
 
         async def connection_label() -> str:
             return "ready"
@@ -211,7 +216,7 @@ def _main() -> None:
     if "webrtc" in selected:
         _webrtc_codegen(app)
     if "websockets" in selected and importlib.util.find_spec("jinja2"):
-        _rpc_codegen(rpc)
+        _rpc_codegen(rpc_service)
     if selected >= _STACK:
         # Run the same composition/lifecycle regression against installed wheels.
 
@@ -796,7 +801,7 @@ def _webrtc_codegen(app) -> None:
         assert not write_files(output, files, check=True)
 
 
-def _rpc_codegen(rpc) -> None:
+def _rpc_codegen(rpc_service) -> None:
     from fastapi_canon.integrations.websockets.codegen import (
         PythonClientOptions,
         TypeScriptClientOptions,
@@ -805,7 +810,7 @@ def _rpc_codegen(rpc) -> None:
     )
     from fastapi_canon.integrations.websockets.testing import InMemorySocketFactory
 
-    document = rpc.contract(title="Health", base_url="ws://test").to_openrpc()
+    document = rpc_service.contract(title="Health", base_url="ws://test").to_openrpc()
     with tempfile.TemporaryDirectory(prefix="canon-rpc-client-") as temporary:
         working = Path(temporary)
         python_options = PythonClientOptions(
@@ -828,7 +833,7 @@ def _rpc_codegen(rpc) -> None:
 
             async def consume() -> None:
                 async with (
-                    InMemorySocketFactory(rpc) as factory,
+                    InMemorySocketFactory(rpc_service) as factory,
                     generated.HealthClient.connect(
                         socket_factory=factory, socket_connection_factory=factory
                     ) as client,

@@ -11,12 +11,12 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from examples.webrtc.practice.app import rtc
+from examples.webrtc.practice.app import practice_feature
+from fastapi_canon import Composition
 
 HERE = Path(__file__).parent
 
-app = FastAPI()
-app.include_router(rtc)
+app = Composition(features=[practice_feature]).build(FastAPI())
 app.mount("/static", StaticFiles(directory=HERE / "dist", check_dir=False))
 
 
