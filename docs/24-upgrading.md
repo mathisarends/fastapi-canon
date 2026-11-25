@@ -844,14 +844,14 @@ dependencies from your application. Replace Canon's former `streams` extra with
 
 ## Agent skill
 
-From your application project, install the bundled backend-building skill:
+From your application project, install the bundled `fastapi-canon` agent skill:
 
 ```console
 uv run fastapi-canon skill install
 ```
 
-This copies the skill and its references to `.agents/skills/build-canon-backend`
-and `.claude/skills/build-canon-backend`. To update both from your installed Canon
+This copies the skill and its references to `.agents/skills/fastapi-canon`
+and `.claude/skills/fastapi-canon`. To update both from your installed Canon
 version:
 
 ```console

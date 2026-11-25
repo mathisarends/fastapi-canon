@@ -85,5 +85,5 @@ The [docs](docs/README.md) are a learning path; start with the
 | 11–12 | [WebRTC](docs/11-webrtc.md), [MCP](docs/12-mcp.md) | Media sessions and agent tools |
 
 Runnable apps are in [`examples/`](examples/README.md). Coding agents can install
-the [bundled backend skill](fastapi_canon/skills/build-canon-backend/SKILL.md)
+the [bundled agent skill](fastapi_canon/skills/fastapi-canon/SKILL.md)
 with `uv run fastapi-canon skill install`.

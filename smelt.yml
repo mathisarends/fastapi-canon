@@ -486,7 +486,7 @@ suppressions:
   require_reason: true
 ignore:
   - rule: layout/file-name-convention
-    paths: [pnpm-lock.yaml, fastapi_canon/skills/build-canon-backend/agents/openai.yaml]
+    paths: [pnpm-lock.yaml, fastapi_canon/skills/fastapi-canon/agents/openai.yaml]
     reason: pnpm and the agent skill format require these exact filenames.
   - rule: imports/forbidden-import-style
     paths: ['**/__init__.py']

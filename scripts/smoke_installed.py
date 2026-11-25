@@ -579,16 +579,16 @@ def _skill_check() -> None:
         root = Path(temporary)
         command = [sys.executable, "-I", "-m", "fastapi_canon", "skill", "install"]
         subprocess.run(command, cwd=root, check=True, capture_output=True, timeout=30)
-        agents = root / ".agents/skills/build-canon-backend"
-        claude = root / ".claude/skills/build-canon-backend"
+        agents = root / ".agents/skills/fastapi-canon"
+        claude = root / ".claude/skills/fastapi-canon"
         expected = {
             path.relative_to(agents): path.read_bytes()
             for path in agents.rglob("*")
             if path.is_file()
         }
         assert Path("SKILL.md") in expected
-        assert Path("references/components.md") in expected
-        (agents / "references/components.md").unlink()
+        assert Path("references/composition.md") in expected
+        (agents / "references/composition.md").unlink()
         (claude / "obsolete.md").write_text("Remove on refresh", encoding="utf-8")
         subprocess.run(
             [*command, "--force"],

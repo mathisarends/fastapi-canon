@@ -26,7 +26,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ("inspect", "Describe an installed application composition"),
         ("explain", "Explain a built-in source, composition or generation diagnostic"),
         ("generate", "Export contracts and run specialized or external generators"),
-        ("skill", "Install the bundled backend-building skill in your project"),
+        ("skill", "Install the bundled fastapi-canon agent skill in your project"),
     )
     extensions = {
         point.name: point
@@ -119,11 +119,11 @@ def _skill_main(argv: Sequence[str]) -> int:
         [args.destination]
         if args.destination is not None
         else [
-            Path(".agents/skills/build-canon-backend"),
-            Path(".claude/skills/build-canon-backend"),
+            Path(".agents/skills/fastapi-canon"),
+            Path(".claude/skills/fastapi-canon"),
         ]
     )
-    source = files("fastapi_canon").joinpath("skills", "build-canon-backend")
+    source = files("fastapi_canon").joinpath("skills", "fastapi-canon")
     try:
         with as_file(source) as source_path:
             _install_skill(source_path, destinations, force=args.force)
@@ -132,7 +132,7 @@ def _skill_main(argv: Sequence[str]) -> int:
         return 2
     for destination in destinations:
         print(
-            f"Installed build-canon-backend (Canon {__version__}) "
+            f"Installed fastapi-canon skill (Canon {__version__}) "
             f"in {destination.resolve()}"
         )
     return 0
