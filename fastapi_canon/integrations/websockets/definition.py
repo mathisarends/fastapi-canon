@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from fastapi_canon.error.catalog import app_registry
 from fastapi_canon.integrations.websockets.protocol import (
+    ChannelPathParams,
     RpcMethodDefinition,
     RpcNotificationDefinition,
     RpcSubscriptionDefinition,
@@ -58,6 +59,7 @@ from fastapi_canon.integrations.websockets.server import (
 )
 
 ENDPOINT_ATTRIBUTE = "__canon_rpc_endpoint__"
+DEFAULT_ENDPOINT_NAME_ATTRIBUTE = "__canon_rpc_default_endpoint_name__"
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -499,7 +501,9 @@ class RpcDefinition:
                 raise ProtocolDefinitionError(
                     "RPC socket path_model must be a Pydantic model"
                 )
-            if set(path_model.model_fields) != set(variables):
+            if not issubclass(path_model, ChannelPathParams) and set(
+                path_model.model_fields
+            ) != set(variables):
                 raise ProtocolDefinitionError(
                     "RPC socket path_model fields must match path variables "
                     f"{variables!r}"
@@ -929,6 +933,12 @@ def endpoint_rejections(endpoint: RpcAnyEndpoint) -> RpcRejections | None:
         contract_rejections(endpoint.rejects),
         contract_rejections(endpoint.service.rejects),
     )
+
+
+def channel_name_for_path(path: str) -> str:
+    value = re.sub(r"[{}]", "", path)
+    value = re.sub(r"[^A-Za-z0-9_-]+", "_", value).strip("_")
+    return f"rpc_{value}" if value else "rpc_root"
 
 
 def _validate_context(context: object) -> None:

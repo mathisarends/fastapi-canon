@@ -213,12 +213,14 @@ class APIRouter(CanonRouter):
             path,
             channels=[snapshot],
             name=self._endpoint_name(path, name),
-            path_model=_channel_path_model(protocol, self.prefix + path),
+            path_model=_channel_path_model(protocol),
             subprotocol=subprotocol,
             summary=summary,
             close_when_events_complete=close_when_events_complete,
         )
-        self._include_websocket_adapter(adapter, path, dependencies)
+        self._include_websocket_adapter(
+            adapter, path, dependencies, default_name=name is None
+        )
 
     def binary_stream[Stream: Callable[..., Any]](
         self,
@@ -261,7 +263,9 @@ class APIRouter(CanonRouter):
                 name=self._endpoint_name(path, name),
                 subprotocol=subprotocol,
             )
-            self._include_websocket_adapter(adapter, path, dependencies)
+            self._include_websocket_adapter(
+                adapter, path, dependencies, default_name=name is None
+            )
             return stream
 
         return decorate
@@ -312,7 +316,9 @@ class APIRouter(CanonRouter):
                 name=self._endpoint_name(path, name),
                 subprotocol=subprotocol,
             )
-            self._include_websocket_adapter(adapter, path, dependencies)
+            self._include_websocket_adapter(
+                adapter, path, dependencies, default_name=name is None
+            )
             return handler
 
         return decorate
@@ -426,17 +432,32 @@ class APIRouter(CanonRouter):
                 raise ConfigurationError(msg)
 
     def _endpoint_name(self, path: str, name: str | None) -> str:
-        return name if name is not None else _channel_name(self.prefix + path)
+        from fastapi_canon.integrations.websockets.definition import (
+            channel_name_for_path,
+        )
+
+        return name if name is not None else channel_name_for_path(self.prefix + path)
 
     def _include_websocket_adapter(
-        self, adapter: Any, path: str, dependencies: Sequence[Depends]
+        self,
+        adapter: Any,
+        path: str,
+        dependencies: Sequence[Depends],
+        *,
+        default_name: bool,
     ) -> None:
+        from fastapi_canon.integrations.websockets.definition import (
+            DEFAULT_ENDPOINT_NAME_ATTRIBUTE,
+        )
+
         adapter.freeze()
         # Keep the full prefix in RPC metadata while registering the native route
         # once on this router. Including the prefixed adapter would double it.
         route = adapter.routes[0]
         if not isinstance(route, APIWebSocketRoute):
             raise ConfigurationError("The channel adapter did not produce a WebSocket")
+        if default_name:
+            route.endpoint.__dict__[DEFAULT_ENDPOINT_NAME_ATTRIBUTE] = True
         if self.websocket_policy is not None:
             route.endpoint.__dict__["__canon_websocket_policy__"] = (
                 self.websocket_policy
@@ -450,9 +471,10 @@ class APIRouter(CanonRouter):
         self._included_error_registries.extend(error_registries(adapter))
 
 
-def _channel_path_model(protocol: RpcProtocol, path: str) -> type[BaseModel] | None:
+def _channel_path_model(protocol: RpcProtocol) -> type[BaseModel] | None:
     """Combine the operations' ``Path()`` parameters into one handshake model."""
-    variables = re.findall(r"\{([^}:]+)(?::[^}]*)?\}", path)
+    from fastapi_canon.integrations.websockets.protocol import ChannelPathParams
+
     fields: dict[str, Any] = {}
     owners: dict[str, str] = {}
     operations: list[tuple[str, type[BaseModel] | None]] = [
@@ -463,12 +485,6 @@ def _channel_path_model(protocol: RpcProtocol, path: str) -> type[BaseModel] | N
         if path_model is None:
             continue
         for field_name, field in path_model.model_fields.items():
-            if field_name not in variables:
-                msg = (
-                    f"RPC operation {operation} reads path parameter "
-                    f"{field_name!r}, which is not a variable of {path!r}"
-                )
-                raise ConfigurationError(msg)
             previous = fields.setdefault(field_name, (field.annotation, field))
             if previous[0] != field.annotation:
                 msg = (
@@ -496,17 +512,11 @@ def _channel_path_model(protocol: RpcProtocol, path: str) -> type[BaseModel] | N
             owners.setdefault(field_name, operation)
     if not fields:
         return None
-    for variable in variables:
-        fields.setdefault(variable, (str, ...))
-    model: type[BaseModel] = create_model("ChannelPathParams", **fields)
+    model: type[BaseModel] = create_model(
+        "ChannelPathParams", __base__=ChannelPathParams, **fields
+    )
     return model
 
 
 def _websocket_path(path: str) -> str:
     return re.sub(r"\{[^}:]+(?=[:}])", "{parameter", path)
-
-
-def _channel_name(path: str) -> str:
-    value = re.sub(r"[{}]", "", path)
-    value = re.sub(r"[^A-Za-z0-9_-]+", "_", value).strip("_")
-    return f"rpc_{value}" if value else "rpc_root"

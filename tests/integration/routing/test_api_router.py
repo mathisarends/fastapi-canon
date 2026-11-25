@@ -315,17 +315,19 @@ def test_mounting_snapshots_and_reuses_a_channel_at_different_paths() -> None:
     assert second_reply["result"] == "later"
 
 
-def test_typed_channel_paths_include_the_router_prefix() -> None:
+@pytest.mark.parametrize("include_prefix", [False, True])
+def test_typed_channel_paths_include_the_router_prefix(include_prefix: bool) -> None:
     channel = RpcChannel()
 
     @channel.method("read")
     async def read(project_id: Annotated[UUID, Path()]) -> UUID:
         return project_id
 
-    router = APIRouter(prefix="/projects/{project_id}")
+    prefix = "/projects/{project_id}"
+    router = APIRouter(prefix="" if include_prefix else prefix)
     router.include_channel(channel, path="/session")
     app = FastAPI()
-    app.include_router(router)
+    app.include_router(router, prefix=prefix if include_prefix else "")
     project_id = "43fcb13b-d963-4a25-9bd1-e14114124378"
 
     async def scenario() -> str:
@@ -824,29 +826,35 @@ async def test_channel_path_parameters_are_validated_before_accepting() -> None:
         }
 
 
-@pytest.mark.parametrize(
-    ("first", "second", "path", "message"),
-    [
-        (int, int, "/session", "not a variable"),
-        (int, str, "/{project_id}/session", "different types"),
-    ],
-)
-def test_channel_path_parameters_must_match_the_endpoint(
-    first: type, second: type, path: str, message: str
-) -> None:
+def test_export_rejects_rpc_path_parameters_missing_from_the_mount() -> None:
     channel = RpcChannel(namespace="projects")
 
     @channel.method()
-    async def read(project_id: Annotated[first, Path()]) -> str:  # type: ignore[valid-type]
+    async def read(project_id: Annotated[int, Path()]) -> int:
+        return project_id
+
+    router = APIRouter()
+    router.include_channel(channel, path="/session")
+    app = FastAPI()
+    app.include_router(router, prefix="/projects")
+    with pytest.raises(ConfigurationError, match=r"'project_id'.*'/projects/session'"):
+        export_contracts(app, kinds=["openrpc"])
+
+
+def test_channel_rejects_conflicting_path_parameter_types() -> None:
+    channel = RpcChannel(namespace="projects")
+
+    @channel.method()
+    async def read(project_id: Annotated[int, Path()]) -> str:
         return str(project_id)
 
     @channel.method()
-    async def write(project_id: Annotated[second, Path()]) -> str:  # type: ignore[valid-type]
+    async def write(project_id: Annotated[str, Path()]) -> str:
         return str(project_id)
 
     router = APIRouter()
-    with pytest.raises(ConfigurationError, match=message):
-        router.include_channel(channel, path=path)
+    with pytest.raises(ConfigurationError, match="different types"):
+        router.include_channel(channel, path="/{project_id}/session")
     assert router.routes == []
 
 

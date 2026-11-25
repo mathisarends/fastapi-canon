@@ -52,6 +52,10 @@ from fastapi_canon.integrations.websockets.streams import (
 )
 
 
+class ChannelPathParams(BaseModel):
+    """Signature-derived path fields resolved against the mounted WebSocket route."""
+
+
 @dataclass(frozen=True, slots=True)
 class RpcMethodDefinition:
     name: str

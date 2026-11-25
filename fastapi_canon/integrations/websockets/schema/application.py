@@ -1,11 +1,14 @@
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from itertools import chain
 from typing import Any
 
 from fastapi import FastAPI
+from starlette.routing import compile_path
 
 from fastapi_canon.error import installed_catalog
+from fastapi_canon.errors import ConfigurationError
 from fastapi_canon.integrations.websockets.channel import request_name
 from fastapi_canon.integrations.websockets.contract import (
     RpcContract,
@@ -13,14 +16,17 @@ from fastapi_canon.integrations.websockets.contract import (
     contract_from_endpoints,
 )
 from fastapi_canon.integrations.websockets.definition import (
+    DEFAULT_ENDPOINT_NAME_ATTRIBUTE,
     ENDPOINT_ATTRIBUTE,
     RpcAnyEndpoint,
     RpcEndpoint,
     RpcSocketEndpoint,
     RpcStreamEndpoint,
+    channel_name_for_path,
 )
 from fastapi_canon.integrations.websockets.errors import ProtocolDefinitionError
 from fastapi_canon.integrations.websockets.protocol import (
+    ChannelPathParams,
     RpcMethodDefinition,
     RpcNotificationDefinition,
     RpcProtocol,
@@ -69,18 +75,30 @@ def application_rpc_contract(
         if registered_routes is None
         else registered_routes
     )
+    mounted: list[tuple[RpcAnyEndpoint, bool]] = []
     for path, route in routes:
-        endpoint = getattr(getattr(route, "endpoint", None), ENDPOINT_ATTRIBUTE, None)
-        if endpoint is None:
-            continue
-        if endpoint.name in paths:
+        handler = getattr(route, "endpoint", None)
+        endpoint = getattr(handler, ENDPOINT_ATTRIBUTE, None)
+        if endpoint is not None:
+            default_name = getattr(handler, DEFAULT_ENDPOINT_NAME_ATTRIBUTE, False)
+            mounted.append((replace(endpoint, path=path), default_name))
+
+    name_counts = Counter(endpoint.name for endpoint, _ in mounted)
+    for endpoint, default_name in mounted:
+        path = endpoint.path
+        name = endpoint.name
+        if default_name and name_counts[name] > 1:
+            name = channel_name_for_path(path)
+        if name in paths:
             raise ProtocolDefinitionError(
-                f"Ambiguous RPC endpoint {endpoint.name!r}: "
-                f"{paths[endpoint.name]!r} and {path!r}; use unique endpoint names"
+                f"Ambiguous RPC endpoint {name!r}: "
+                f"{paths[name]!r} and {path!r}; use unique endpoint names"
             )
-        paths[endpoint.name] = path
+        paths[name] = path
         versions.add(endpoint.service.version)
-        endpoints.append(replace(endpoint, path=path))
+        endpoints.append(
+            replace(endpoint, name=name) if name != endpoint.name else endpoint
+        )
     if not endpoints:
         return None
     if len(versions) != 1:
@@ -97,6 +115,7 @@ def application_rpc_contract(
     for endpoint in sorted(endpoints, key=lambda item: item.name):
         match endpoint:
             case RpcEndpoint():
+                _validate_path_parameters(endpoint)
                 for channel in endpoint.channels:
                     protocol = channel.freeze()
                     methods.extend(
@@ -164,3 +183,15 @@ def application_rpc_contract(
     )
     # Canonical error schemas use the application's installed catalog.
     return contract.with_error_catalog(installed_catalog(app))
+
+
+def _validate_path_parameters(endpoint: RpcEndpoint[Any]) -> None:
+    path_model = endpoint.path_model
+    if path_model is None or not issubclass(path_model, ChannelPathParams):
+        return
+    _, _, variables = compile_path(endpoint.path)
+    if missing := path_model.model_fields.keys() - variables.keys():
+        names = ", ".join(repr(name) for name in sorted(missing))
+        raise ConfigurationError(
+            f"RPC path parameters {names} are not variables of {endpoint.path!r}"
+        )
