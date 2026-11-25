@@ -69,6 +69,8 @@ See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0290).
   limit return Canon problems. See [request limits](docs/08-file-transfers.md#limits).
 - `APIRouter.include_channel(..., close_when_events_complete=True)` closes a
   finite event socket once its sources finish.
+- `Composition(outer_middleware=[...])` wraps FastAPI's stack while returning
+  the FastAPI app. Use it for CORS on early app-wide upload limit responses.
 - The `[contract]` source of `rpcgen.toml` accepts a FastAPI application,
   with `base_url` and `[contract.variables]` for its server URL.
 - `check errors` and `check composition` accept repeatable `--config` files,
