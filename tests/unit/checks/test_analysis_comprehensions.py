@@ -193,7 +193,7 @@ def endpoint(callbacks: list, item_ids: list[int]):
     assert {d["code"] for d in operation["diagnostics"]} == {"CAN003"}
 
 
-def test_unconsumed_generator_expression_does_not_execute_body_or_filters(
+def test_stored_generator_expression_escapes_bypass_creating_handlers(
     analyze: Callable[..., tuple[int, dict[str, Any]]],
 ) -> None:
     status, report = analyze("""
@@ -201,16 +201,21 @@ def allowed(item: int) -> bool:
     raise FilterFailure()
 @router.get('/')
 def endpoint(item_ids: list[int]):
-    pending = (require_item(item) for item in item_ids if allowed(item))
-    return 1
+    try:
+        pending = (require_item(item) for item in item_ids if allowed(item))
+    except (Missing, FilterFailure):
+        return []
+    return list(pending)
 """)
     (operation,) = report["operations"]
-    assert status == 1 and not operation["complete"]
-    assert {d["code"] for d in operation["diagnostics"]} == {"CAN003"}
-    assert any("deferred" in d["message"] for d in operation["diagnostics"])
+    assert status == 1 and operation["complete"]
+    assert {tuple(d["trace"]) for d in operation["diagnostics"]} == {
+        ("api.endpoint", "api.allowed"),
+        ("api.endpoint", "api.require_item"),
+    }
 
 
-def test_generator_creation_still_evaluates_outermost_iterable_expression(
+def test_generator_creation_evaluates_outermost_iterable_expression(
     analyze: Callable[..., tuple[int, dict[str, Any]]],
 ) -> None:
     status, report = analyze("""
@@ -218,13 +223,13 @@ def values() -> list[int]:
     raise IterationFailure()
 @router.get('/')
 def endpoint():
-    pending = (require_item(item) for item in values())
+    pending = (item for item in values())
     return 1
 """)
     (operation,) = report["operations"]
-    assert status == 1 and not operation["complete"]
-    assert {d["code"] for d in operation["diagnostics"]} == {"CAN002", "CAN003"}
-    (gap,) = [d for d in operation["diagnostics"] if d["code"] == "CAN002"]
+    (gap,) = operation["diagnostics"]
+    assert status == 1 and operation["complete"]
+    assert gap["code"] == "CAN002"
     assert gap["trace"] == ["api.endpoint", "api.values"]
 
 
@@ -245,7 +250,7 @@ def endpoint(item_ids: list[int]):
     assert diagnostic["trace"] == ["api.endpoint", "api.require_item"]
 
 
-def test_custom_iteration_protocol_remains_incomplete(
+def test_custom_iteration_protocol_is_followed(
     analyze: Callable[..., tuple[int, dict[str, Any]]],
 ) -> None:
     status, report = analyze("""
@@ -258,23 +263,35 @@ def endpoint(source: Custom):
     return [item for item in source]
 """)
     (operation,) = report["operations"]
-    assert status == 1 and not operation["complete"]
-    assert {d["code"] for d in operation["diagnostics"]} == {"CAN003"}
+    (diagnostic,) = operation["diagnostics"]
+    assert status == 1 and operation["complete"]
+    assert diagnostic["trace"] == ["api.endpoint", "api.Custom.__iter__"]
 
 
-def test_unawaited_coroutine_result_remains_incomplete(
-    analyze: Callable[..., tuple[int, dict[str, Any]]],
+@pytest.mark.parametrize(
+    "body",
+    [
+        "return [required(item) for item in item_ids]",
+        "pending = (await required(item) for item in item_ids)",
+    ],
+)
+def test_deferred_coroutines_report_their_escapes(
+    analyze: Callable[..., tuple[int, dict[str, Any]]], body: str
 ) -> None:
-    status, report = analyze("""
+    status, report = analyze(f"""
 async def required(item: int) -> int:
     raise Missing()
 @router.get('/')
-def endpoint(item_ids: list[int]):
-    return [required(item) for item in item_ids]
+async def endpoint(item_ids: list[int]):
+    try:
+        {body}
+    except Missing:
+        return []
 """)
     (operation,) = report["operations"]
-    assert status == 1 and not operation["complete"]
-    assert {d["code"] for d in operation["diagnostics"]} == {"CAN003"}
+    (diagnostic,) = operation["diagnostics"]
+    assert status == 1 and operation["complete"]
+    assert diagnostic["trace"] == ["api.endpoint", "api.required"]
 
 
 def test_later_target_is_lexically_local_in_earlier_filter(
@@ -322,7 +339,7 @@ def endpoint(groups: list[list[int]]):
     assert diagnostic["trace"] == ["api.endpoint", "api.require_item"]
 
 
-def test_unknown_async_iteration_stays_incomplete(
+def test_library_async_iteration_is_complete(
     analyze: Callable[..., tuple[int, dict[str, Any]]],
 ) -> None:
     status, report = analyze("""
@@ -331,11 +348,10 @@ async def endpoint(source: AsyncIterator[int]):
     return [item async for item in source]
 """)
     (operation,) = report["operations"]
-    assert status == 1 and not operation["complete"]
-    assert {d["code"] for d in operation["diagnostics"]} == {"CAN003"}
+    assert status == 0 and operation["complete"]
 
 
-def test_named_expression_keeps_unsupported_scope_changes_explicit(
+def test_named_expression_follows_its_value(
     analyze: Callable[..., tuple[int, dict[str, Any]]],
 ) -> None:
     status, report = analyze("""
@@ -344,24 +360,8 @@ def endpoint(item_ids: list[int]):
     return [(seen := require_item(item)) for item in item_ids]
 """)
     (operation,) = report["operations"]
-    assert status == 1 and not operation["complete"]
-    assert {d["code"] for d in operation["diagnostics"]} == {"CAN002", "CAN003"}
-
-
-def test_unconsumed_async_generator_expression_keeps_awaits_deferred(
-    analyze: Callable[..., tuple[int, dict[str, Any]]],
-) -> None:
-    status, report = analyze("""
-async def required(item: int) -> int:
-    raise Missing()
-@router.get('/')
-async def endpoint(item_ids: list[int]):
-    pending = (await required(item) for item in item_ids)
-    return 1
-""")
-    (operation,) = report["operations"]
-    assert status == 1 and not operation["complete"]
-    assert {d["code"] for d in operation["diagnostics"]} == {"CAN003"}
+    assert status == 1 and operation["complete"]
+    assert [d["code"] for d in operation["diagnostics"]] == ["CAN002"]
 
 
 def test_dict_comprehension_follows_both_key_and_value_expressions(
@@ -402,7 +402,7 @@ def endpoint(pairs: list[tuple[int, int]]):
     assert diagnostic["trace"] == ["api.endpoint", "api.require_item"]
 
 
-def test_mutating_comprehension_targets_remain_incomplete(
+def test_attribute_comprehension_targets_are_harmless(
     analyze: Callable[..., tuple[int, dict[str, Any]]],
 ) -> None:
     status, report = analyze("""
@@ -413,20 +413,57 @@ def endpoint(box: Box, item_ids: list[int]):
     return [1 for box.value in item_ids]
 """)
     (operation,) = report["operations"]
-    assert status == 1 and not operation["complete"]
-    assert {d["code"] for d in operation["diagnostics"]} == {"CAN003"}
-    assert any("target" in d["message"] for d in operation["diagnostics"])
+    assert status == 0 and operation["complete"]
 
 
-def test_unresolved_element_method_dispatch_stays_incomplete(
+@pytest.mark.parametrize(
+    ("parameter", "body"),
+    [
+        ("items: list[Item]", "return [item.validate() for item in items]"),
+        (
+            "items: list[Item] | None",
+            "return [item.validate() for item in items or []]",
+        ),
+        ("store: Store", "for item in await store.items():\n        item.validate()"),
+        ("index: dict[Item, int]", "for item in index:\n        item.validate()"),
+    ],
+    ids=["list", "optional-list", "awaited-tuple", "mapping-keys"],
+)
+def test_annotated_element_types_resolve_method_dispatch(
+    analyze: Callable[..., tuple[int, dict[str, Any]]], parameter: str, body: str
+) -> None:
+    _, report = analyze(f"""
+class Item:
+    def validate(self) -> int:
+        raise Missing()
+
+class Store:
+    async def items(self) -> tuple[Item, ...]:
+        return ()
+
+@router.get('/')
+async def endpoint({parameter}):
+    {body}
+""")
+    (operation,) = report["operations"]
+    [finding] = operation["diagnostics"]
+    assert finding["code"] == "CAN002"
+    assert finding["trace"][-1] == "api.Item.validate"
+    assert operation["complete"]
+
+
+def test_heterogeneous_tuple_elements_stay_incomplete(
     analyze: Callable[..., tuple[int, dict[str, Any]]],
 ) -> None:
     status, report = analyze("""
 class Item:
     def validate(self) -> int:
         raise Missing()
+class Other:
+    def validate(self) -> int:
+        return 0
 @router.get('/')
-def endpoint(items: list[Item]):
+def endpoint(items: tuple[Item, Other]):
     return [item.validate() for item in items]
 """)
     (operation,) = report["operations"]

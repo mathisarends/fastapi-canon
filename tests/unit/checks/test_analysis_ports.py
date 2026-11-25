@@ -177,12 +177,18 @@ class AppProvider(Provider):
     assert finding["trace"][-1] == "api.BrokenClock.now"
 
 
+OTHER_REPOSITORY = """
+class OtherRepository(Repository):
+    async def get(self) -> None:
+        raise Conflict()
+"""
+
+
 @pytest.mark.parametrize(
-    ("provider", "message"),
+    "provider",
     [
-        ("", "abstract implementation without Dishka binding: api.Repository.get"),
-        (
-            """
+        "",
+        """
 def build() -> Repository:
     return SqlRepository()
 
@@ -191,18 +197,52 @@ class AppProvider(Provider):
     def repository(self) -> Repository:
         return build()
 """,
-            "unresolved Dishka implementation of api.Repository.get",
-        ),
     ],
     ids=["unbound", "opaque-factory"],
 )
-def test_unresolved_ports_stay_incomplete(
-    analyze: Callable[..., dict[str, Any]], provider: str, message: str
+def test_unresolved_ports_follow_every_scanned_implementation(
+    analyze: Callable[..., dict[str, Any]], provider: str
 ) -> None:
-    report = analyze(SQL_REPOSITORY + provider, declaration="raises=[missing]")
+    report = analyze(
+        SQL_REPOSITORY + OTHER_REPOSITORY + provider, declaration="raises=[missing]"
+    )
+
+    [finding] = diagnostics(report)
+    assert finding["code"] == "CAN001"
+    assert finding["trace"][-1] == "api.OtherRepository.get"
+    assert report["operations"][0]["complete"]
+
+
+def test_factory_returning_its_parameter_binds_the_parameter_type(
+    analyze: Callable[..., dict[str, Any]],
+) -> None:
+    provider = """
+class AppProvider(Provider):
+    sql = provide(SqlRepository, scope=Scope.REQUEST)
+
+    @provide(scope=Scope.REQUEST)
+    def repository(self, sql: SqlRepository) -> Repository:
+        return sql
+"""
+
+    report = analyze(
+        SQL_REPOSITORY + OTHER_REPOSITORY + provider, declaration="raises=[missing]"
+    )
+
+    assert diagnostics(report) == []
+    assert report["operations"][0]["complete"]
+
+
+def test_port_without_scanned_implementation_stays_incomplete(
+    analyze: Callable[..., dict[str, Any]],
+) -> None:
+    report = analyze("")
 
     assert [(item["code"], item["message"]) for item in diagnostics(report)] == [
-        ("CAN003", message)
+        (
+            "CAN003",
+            "abstract method without scanned implementation: api.Repository.get",
+        )
     ]
     assert not report["operations"][0]["complete"]
 
@@ -285,36 +325,16 @@ class AppProvider(Provider):
     )
 
 
-def test_factory_nested_definitions_do_not_supply_results(
-    analyze: Callable[..., dict[str, Any]],
-) -> None:
-    provider = """
-class AppProvider(Provider):
-    @provide(scope=Scope.REQUEST)
-    def repository(self) -> Repository:
-        def unrelated():
-            return SqlRepository()
-        class Unrelated:
-            def create(self):
-                yield SqlRepository()
-        return unknown()
-"""
-
-    report = analyze(SQL_REPOSITORY + provider)
-
-    [finding] = diagnostics(report)
-    assert finding["code"] == "CAN003"
-    assert not report["operations"][0]["complete"]
-
-
 @pytest.mark.parametrize(
     "body",
     [
         "return SafeRepository()\nreturn SqlRepository()",
         "impl = SafeRepository()\nif self.flag:\n    impl = SqlRepository()\n    return SafeRepository()\nreturn impl",
         "def unrelated():\n    yield SqlRepository()\nreturn SafeRepository()",
+        "class Unrelated:\n    def create(self):\n        return SqlRepository()\n"
+        "return SafeRepository()",
     ],
-    ids=["unreachable-return", "terminated-branch", "nested-yield"],
+    ids=["unreachable-return", "terminated-branch", "nested-yield", "nested-class"],
 )
 def test_factory_does_not_collect_unreturned_implementations(
     analyze: Callable[..., dict[str, Any]], body: str
@@ -349,7 +369,7 @@ class AppProvider(Provider):
     ],
     ids=["fallthrough", "unknown-branch", "unmodeled-loop", "named-expression"],
 )
-def test_uncertain_factory_paths_prevent_complete_success(
+def test_uncertain_factory_paths_follow_every_implementation(
     analyze: Callable[..., dict[str, Any]], body: str
 ) -> None:
     provider = (
@@ -362,7 +382,10 @@ class AppProvider(Provider):
         + "\n"
     )
 
-    report = analyze(SQL_REPOSITORY + provider, declaration="raises=[missing]")
+    report = analyze(
+        SQL_REPOSITORY + OTHER_REPOSITORY + provider, declaration="raises=[missing]"
+    )
 
-    assert any(item["code"] == "CAN003" for item in diagnostics(report))
-    assert not report["operations"][0]["complete"]
+    [finding] = diagnostics(report)
+    assert finding["trace"][-1] == "api.OtherRepository.get"
+    assert report["operations"][0]["complete"]

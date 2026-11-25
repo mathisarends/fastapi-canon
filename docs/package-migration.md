@@ -38,6 +38,10 @@ Version 0.29.0 is not released yet. See the
   `StreamOptions` annotations with `APIRouteOptions`. A Canon route that yields
   `ServerSentEvent` must yield its event model instead, wrapped as
   `ServerSentEvent(data=event)` when it sets SSE fields.
+- Run `fastapi-canon check errors src --strict` over all application roots,
+  then declare or map the newly reported errors. For a remaining `CAN003`,
+  annotate the receiver it names or fix the top entries under "Root causes".
+  See [error checking](07-error-checking.md#analysis-boundaries).
 
 ## Upgrade to 0.28.0
 

@@ -29,9 +29,9 @@ _EXPLANATIONS = {
         _DOCS + "07-error-checking.md",
     ),
     "CAN003": _Explanation(
-        "A declaration or execution path could not be fully analyzed. This is incomplete source coverage, not a missing-mapping conclusion.",
-        "An operation calls a dynamically selected callback whose implementation the scanned source cannot resolve.",
-        "Include the relevant import roots and explicit implementations/bindings, or replace unsupported dynamic flow. Review the reported trace and analysis boundary; do not treat incomplete coverage as a clean result.",
+        "A call or declaration could not be resolved, so errors on that path are unknown. This is incomplete source coverage, not a missing-mapping conclusion.",
+        "An operation calls item.save() on a receiver of unknown type while application classes define save; the message lists the candidates.",
+        "Annotate the receiver, pass the missing import roots, or replace dynamic dispatch such as getattr(obj, name)(). Fix the top root causes in the report first.",
         _DOCS + "07-error-checking.md#analysis-boundaries",
     ),
     "canon.composition.E001": _Explanation(
