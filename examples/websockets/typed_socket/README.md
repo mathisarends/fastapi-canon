@@ -46,7 +46,7 @@ console.log(result.value);
 
 The SDK exposes `Socket<Pong, Ping>`: receive `Pong`, send `Ping`. TypeScript's
 payload types are static; runtime Pydantic validation runs on the server. The
-Python SDK also validates against its generated models. See the [socket guide](../../../docs/integrations/websockets/sockets.md#typed-json-messages)
+Python SDK also validates against its generated models. See the [socket guide](../../../docs/integrations/websockets/05-sockets.md#typed-json-messages)
 for validation, close codes, schema support, and protocol-binding boundaries.
 
 `tests/unit/integrations/websockets/test_typed_socket_example.py` compiles the TypeScript caller with negative

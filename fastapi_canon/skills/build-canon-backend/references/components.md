@@ -88,6 +88,6 @@ Do not assume they validate every transport's runtime behavior.
 
 Read [transports and SDKs](transports-and-sdk.md) only when exposing another
 protocol or generating clients. For MCP, consult the
-[MCP guide](https://github.com/mathisarends/fastapi-canon/blob/main/docs/integrations/mcp/README.md)
+[MCP guide](https://github.com/mathisarends/fastapi-canon/blob/main/docs/12-mcp.md)
 for separate injection, authentication and scope rules. HTTP dependencies do not
 protect the MCP mount, and this integration does not generate MCP clients.

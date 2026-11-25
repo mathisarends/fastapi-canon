@@ -17,7 +17,7 @@ and assemble them explicitly with `Feature` and `Composition`.
    track development; use the matching release tag when consulting them for an
    older installation. The Canon source checkout is not required.
    For a 0.21.0 migration, use the changelog's `CANON-021-*` markers and
-   [upgrade guide](https://github.com/mathisarends/fastapi-canon/blob/main/docs/package-migration.md#upgrade-to-0210).
+   [upgrade guide](https://github.com/mathisarends/fastapi-canon/blob/main/docs/24-upgrading.md#upgrade-to-0210).
    Older migration sections describe their own version's API.
 3. Read only the reference needed for the current decision:
 

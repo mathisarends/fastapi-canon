@@ -1,8 +1,8 @@
 # Typed streams with Canon errors
 
 A runnable SSE feature: authenticated GET and POST streams of a discriminated
-event union, declared with `APIRouter.sse`. See [`docs/streams.md`](../../docs/streams.md)
-for the complete API.
+event union, declared with `response_class=EventSourceResponse`. See
+[streaming](../../docs/03-streaming.md) for the complete API.
 
 ```console
 uv run --with uvicorn uvicorn examples.streams.app:app

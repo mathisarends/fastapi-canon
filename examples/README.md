@@ -1,7 +1,7 @@
 # Runnable examples
 
 Choose one starting point. Run repository examples after the setup in
-[contributing](../docs/contributing.md).
+[contributing](../docs/90-contributing.md).
 
 | Start here | What it teaches |
 | --- | --- |
@@ -16,7 +16,7 @@ Use these when you need the specific behavior; they are not additional quickstar
 - [SSE admission and authentication](streams/README.md)
 - [WebSocket methods, notifications and protocols](websockets/README.md)
 - [Database resources and migrations](database/README.md)
-- [File uploads, multipart forms and downloads](../docs/08-file-transfers.md#run-the-example)
+- [File uploads, multipart forms and downloads](../docs/08-file-transfers.md)
 - [WebRTC remote video](webrtc/remote_video/README.md)
 
 The remaining transport examples and generated artifacts support specialized

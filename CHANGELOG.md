@@ -6,7 +6,7 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Breaking changes
 
-See the [upgrade guide](docs/package-migration.md#upgrade-to-0290).
+See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0290).
 
 - **`CANON-029-PROBLEM-URI-DIAGNOSTICS`** — Strict SSE generation no longer
   reports `format: uri-reference` on `type` and `instance` of Canon-generated
@@ -62,7 +62,7 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0290).
 
 - Canon routers, operations and `include_router()` accept FastAPI's
   `max_body_size` and `form_limits`. Form limits and bodies that grow past the
-  limit return Canon problems. See [request limits](docs/08-file-transfers.md#request-limits).
+  limit return Canon problems. See [request limits](docs/08-file-transfers.md#limits).
 - `APIRouter.include_channel(..., close_when_events_complete=True)` closes a
   finite event socket once its sources finish.
 - The `[contract]` source of `rpcgen.toml` accepts a FastAPI application,
@@ -78,7 +78,7 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0290).
 
 ### Breaking changes
 
-See the [upgrade guide](docs/package-migration.md#upgrade-to-0280).
+See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0280).
 
 - **`CANON-028-RAW-GET-CONTRACTS`** — `fastapi-canon check composition --fail-on warning`
   now exits with code 1 when `canon.contracts.W001` finds a raw GET success
@@ -90,18 +90,18 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0280).
 
 - `BinaryBody(media_type)` streams raw uploads into an async handler's
   `AsyncIterator[bytes]` parameter and declares a required binary request body
-  in OpenAPI. See [raw uploads](docs/08-file-transfers.md#binary-responses-and-raw-uploads)
+  in OpenAPI. See [raw uploads](docs/08-file-transfers.md#downloads)
   ([#226](https://github.com/mathisarends/fastapi-canon/issues/226)).
 - `Telemetry(sdk=...)` lets each application own its OpenTelemetry SDK
   providers from startup to shutdown. `console(service_name=...)` prints spans
-  to standard output. See [application-owned SDK](docs/10-telemetry.md#application-owned-sdk)
+  to standard output. See [application-owned SDK](docs/10-observability.md#tracing)
   ([#225](https://github.com/mathisarends/fastapi-canon/issues/225)).
 
 ## 0.27.0 - 2026-11-24
 
 ### Breaking changes
 
-See the [upgrade guide](docs/package-migration.md#upgrade-to-0270).
+See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0270).
 
 - **`CANON-027-PREFLIGHT-CLEANUP`** — `check composition --app module:factory`
   now closes the factory's Canon container and runs integration finalizers.
@@ -129,7 +129,7 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0270).
 
 ### Breaking changes
 
-See the [upgrade guide](docs/package-migration.md#upgrade-to-0260).
+See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0260).
 
 - **`CANON-026-FEATURE-ERRORS`** — `Feature.errors` holds only the explicit
   `errors=` list. Read `Feature.error_registry` for the catalog merged with
@@ -169,7 +169,7 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0260).
 
 ### Breaking changes
 
-See the [upgrade guide](docs/package-migration.md#upgrade-to-0250).
+See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0250).
 
 - **`CANON-025-DATABASE-INTEGRATION`** — `Database` is an integration. Replace
   `database.feature` in `Composition(features=[...])` with
@@ -198,7 +198,7 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0250).
   as `canon.providers.E005`. See [feature lifespans](docs/05-composition.md#feature-lifespans).
 - WebSocket `rejects=` and socket `closes=` accept a declared `Error`. Its status
   (401, 403, 404 or 503) names the rejection and its title is the reason. See
-  [rejections](docs/integrations/websockets/connections-and-events.md#map-failures-to-rejections).
+  [rejections](docs/integrations/websockets/03-connections-and-events.md#map-failures-to-rejections).
 - `Tables(...)` lets each feature contribute its mapped classes or tables to the
   `Database`. `AlembicMigrations(metadata=...)` is optional, and
   `fastapi-canon db` accepts an application or application factory as its target.
@@ -225,7 +225,7 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0250).
 
 ### Breaking changes
 
-See the [upgrade guide](docs/package-migration.md#upgrade-to-0240).
+See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0240).
 
 - **`CANON-024-ERROR-TITLE`** — `Error(..., title=None)` and an omitted `title`
   now derive the public title from `code` by replacing underscores with spaces
@@ -276,7 +276,7 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0240).
 
 ### Breaking changes
 
-See the [upgrade guide](docs/package-migration.md#upgrade-to-0230).
+See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0230).
 
 - **`CANON-023-DATACLASS-VALUES`** — Canon dataclass values require `frozen=True`
   and `slots=True`, except records using `cached_property`. Use
@@ -309,7 +309,7 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0230).
 
 ### Breaking changes
 
-See the [upgrade guide](docs/package-migration.md#upgrade-to-0220).
+See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0220).
 
 - **`CANON-022-TRANSACTION-LOCKS`** — The `TransactionLocks` alias is removed.
   Import and inject `AcquireTransactionLock` from
@@ -330,7 +330,7 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0220).
 
 - `WebSocketPolicy` and `APIRouter(websocket_policy=...)` share connection
   options across a router's WebSocket declarations; see
-  [connection policy](docs/routers.md#share-websocket-connection-policy).
+  [connection policy](docs/20-routers.md#share-websocket-connection-policy).
 
 ### Fixed
 
@@ -357,7 +357,7 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0220).
 
 Each `CANON-021-*` marker identifies one migration for coding agents. Apply these
 changes for 0.21.0; older version sections describe their own APIs and may be
-superseded here. See the [upgrade guide](docs/package-migration.md#upgrade-to-0210).
+superseded here. See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0210).
 
 - **`CANON-021-DEFAULTS`** — Optional arguments now use their default only when
   passed `None`. Empty error messages, empty path-parameter overrides and callable
@@ -407,7 +407,7 @@ superseded here. See the [upgrade guide](docs/package-migration.md#upgrade-to-02
   `SessionOptions` is removed. Move engine, ICE-server, event-hook and origin
   options from the decorator to `WebRtcRouter`; keep per-session limits, media,
   dependencies and `raises` on `session()`. See
-  [router options](docs/routers.md#typed-sse-and-webrtc-in-the-same-feature).
+  [router options](docs/20-routers.md#typed-sse-and-webrtc-in-the-same-feature).
 
 - **`CANON-021-CONTRACTS`** — `ContractKind` is removed; pass strings such as
   `kinds=("openapi", "openrpc")`. Omitted `kinds` now exports every available
@@ -489,7 +489,7 @@ superseded here. See the [upgrade guide](docs/package-migration.md#upgrade-to-02
   of installed features or exact registered paths. Selected OpenAPI documents keep
   the used tags and reachable schemas. The CLI and `fastapi-canon generate` still
   export application-wide contracts. See
-  [export an installed feature](docs/contracts.md#export-an-installed-feature).
+  [export an installed feature](docs/22-contracts.md#export-an-installed-feature).
 
 ### Breaking changes
 
@@ -515,7 +515,7 @@ superseded here. See the [upgrade guide](docs/package-migration.md#upgrade-to-02
   The new `selection=ContractSelection(...)` accepts installed `Feature` objects
   and exact registered paths. Reuse the instances passed to `Composition`;
   feature names and newly constructed equal-looking features are not references
-  to the installed application. See [contract export](docs/contracts.md).
+  to the installed application. See [contract export](docs/22-contracts.md).
 - Generated SSE clients derive groups and methods from the operation ID's
   namespace, matching generated RPC clients. `projects.events` is now
   `client.projects.events` instead of `client.<first tag>.projectsEvents` in
@@ -620,7 +620,7 @@ superseded here. See the [upgrade guide](docs/package-migration.md#upgrade-to-02
   exercise the extra independently and alongside code generation.
 - Version-2 generation exports contracts once and coordinates specialized
   clients and external HTTP generate/check commands. See the
-  [design rationale](docs/sdk-design.md).
+  [design rationale](docs/06-codegen.md).
 
 ### Fixed
 
@@ -650,7 +650,7 @@ superseded here. See the [upgrade guide](docs/package-migration.md#upgrade-to-02
 ## 0.16.0 - 2026-11-07
 
 Upgrade servers and regenerated
-Python/TypeScript SDKs together. See the [upgrade guide](docs/package-migration.md#upgrade-to-0160).
+Python/TypeScript SDKs together. See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0160).
 
 ### TL;DR
 
@@ -861,7 +861,7 @@ Python/TypeScript SDKs together. See the [upgrade guide](docs/package-migration.
   `ServiceScope` signatures, provider lifetimes, transport injection markers,
   routing defaults and dependency requirements are unchanged. Existing
   applications require no migration to continue using their current APIs.
-  See [short use-case calls](docs/09-database.md#short-use-case-calls).
+  See [short use-case calls](docs/09-database.md#short-scopes-for-workers-and-streams).
 
 - The bundled `build-canon-backend` skill explains Canon's components and
   Composition/Dishka wiring through focused references and small examples.
@@ -874,7 +874,7 @@ Python/TypeScript SDKs together. See the [upgrade guide](docs/package-migration.
   `RpcChannel()` supports anonymous groups and snapshot-based
   `include_channel(..., namespace=...)` composition. Existing specialized routers,
   wire controls and generated-client runtimes remain supported. See
-  [the shared router guide](docs/routers.md).
+  [the shared router guide](docs/20-routers.md).
 
 - Public `fastapi_canon.export_contracts(app)` and `Contracts` snapshot API for
   HTTP/SSE OpenAPI, mounted RPC OpenRPC and WebRTC session contracts. RPC paths
@@ -887,7 +887,7 @@ Python/TypeScript SDKs together. See the [upgrade guide](docs/package-migration.
   deterministic JSON and read-only `--check`/`--diff`. It needs no SDK target
   configuration and never
   enters application lifespan or resolves runtime dependencies. See
-  [application contracts](docs/contracts.md) for factories without placeholder
+  [application contracts](docs/22-contracts.md) for factories without placeholder
   secrets and the distinction between runtime and contract-affecting settings.
 - Common SDK generation accepts the same FastAPI app/factory as an OpenRPC source
   and reuses one factory result across all source formats and targets. Bindings
@@ -1078,7 +1078,7 @@ Python/TypeScript SDKs together. See the [upgrade guide](docs/package-migration.
   stream ends with `canon.complete` and reports failures as `canon.problem`, so
   regenerate SSE clients after the migration. Existing plain SSE endpoints can
   still get generated clients from an OpenAPI 3.2 contract
-  ([native transports](docs/integrations/sse/native-transports.md)).
+  ([native transports](docs/integrations/sse/03-native-transports.md)).
 - WebRTC sessions are declared with `@router.webrtc(path, ...)` instead of
   `rtc = WebRtcRouter(engine=..., prefix=...)` with `@rtc.session(path, ...)`.
   Router-level `engine=`, `ice_servers=`, `on_event=`, `allowed_origins=` and
@@ -1105,14 +1105,14 @@ Python/TypeScript SDKs together. See the [upgrade guide](docs/package-migration.
   hidden behind unsupported `with`/`async with` statements. Before enabling strict
   checking on 0.16.0, map these escaping errors and declare them in `raises`.
   Keep CAN003 for managers whose suppression/protocol remains unknown; see
-  [context-manager coverage](docs/07-error-checking.md#local-context-managers).
+  [context-manager coverage](docs/07-error-checking.md#analysis-boundaries).
 
 - Source checking can now report CAN001/CAN002 for newly followed comprehension
   paths that previously retained incomplete analysis. Before adopting 0.16.0,
   review new findings and declare their existing Error mappings in `raises`, or
   add missing mappings, before enforcing strict CI. Unresolved protocols and
   consumers still retain CAN003; do not treat those reports as full coverage.
-  See [comprehension coverage](docs/07-error-checking.md#comprehensions-and-deferred-generators).
+  See [comprehension coverage](docs/07-error-checking.md#analysis-boundaries).
 
 - Unexpected common-generation failures now omit raw exception contents in
   text/JSON diagnostics. Before adopting 0.16.0, update parsers that depended on
@@ -1129,14 +1129,14 @@ Python/TypeScript SDKs together. See the [upgrade guide](docs/package-migration.
   update output parsers that depended on raw error text. Keep eager runtime
   configuration in lifespan/dependency code. Common SDK `factory = true`
   selection and standalone contract forms remain available. See
-  [target loading rules](docs/contracts.md#application-target-rules).
+  [target loading rules](docs/22-contracts.md#application-target-rules).
 
 - Composition rejects WebRTC factory marker roots unavailable through APP/SESSION
   scope with `canon.providers.E004`. Before adopting 0.16.0, register missing
   services/components at APP or SESSION scope and move per-message REQUEST work
   into explicit child scopes. External containers and unsupported explicit
   wrappers keep ownership with skipped coverage; nested FastAPI dependencies
-  remain outside this check. See [factory preflight](docs/system-checks.md#webrtc-factory-dependency-preflight).
+  remain outside this check. See [factory preflight](docs/23-checks-and-diagnostics.md#webrtc-factory-dependency-preflight).
 
 - Non-function endpoint callables now need inspectable, named parameter
   signatures. Opaque, variadic and remaining positional-only forms fail during
@@ -1145,7 +1145,7 @@ Python/TypeScript SDKs together. See the [upgrade guide](docs/package-migration.
   Endpoint constructors needing injection require a function or callable
   instance. Injection markers in an effective custom signature are now honored;
   register their providers, or remove the marker when the parameter is public
-  request data. See [typed callable endpoints](docs/routers.md#typed-callable-endpoints).
+  request data. See [typed callable endpoints](docs/20-routers.md#typed-callable-endpoints).
 
 - Composition preflight validates HTTP/SSE endpoint `Inject[T]` and
   `FromDishka[T]` roots with `canon.providers.E003`. Before adopting 0.16.0,
@@ -1157,7 +1157,7 @@ Python/TypeScript SDKs together. See the [upgrade guide](docs/package-migration.
   resources, are rejected before installation. Custom route classes and external
   containers keep ownership with skipped preflight coverage; review incomplete
   reports before using `--require-complete`. FastAPI dependency functions remain
-  outside this endpoint-root check. See [endpoint dependency coverage](docs/system-checks.md#http-and-sse-endpoint-dependency-preflight).
+  outside this endpoint-root check. See [endpoint dependency coverage](docs/23-checks-and-diagnostics.md#http-and-sse-endpoint-dependency-preflight).
 
 - Composition preflight validates default-resolver JSON-RPC method `Inject[T]`
   roots and rejects missing default-component APP/SESSION/REQUEST bindings with
@@ -1169,7 +1169,7 @@ Python/TypeScript SDKs together. See the [upgrade guide](docs/package-migration.
   skipped checks make preflight reports incomplete rather than failing against
   an unrelated Dishka graph. Assess that coverage before using
   `--require-complete`. Provider bodies and lifespans are never executed by this
-  validation. See [RPC dependency coverage](docs/system-checks.md#rpc-method-dependency-preflight).
+  validation. See [RPC dependency coverage](docs/23-checks-and-diagnostics.md#rpc-method-dependency-preflight).
 
 - Composition preflight rejects duplicate effective WebSocket paths across
   features and existing application routes with `canon.routing.E004`, including
@@ -1177,7 +1177,7 @@ Python/TypeScript SDKs together. See the [upgrade guide](docs/package-migration.
   names/converters. Before adopting 0.16.0, give each contribution a distinct
   effective path or remove the duplicate. Changing the endpoint name or channel
   namespace does not change dispatch. HTTP and WebSocket routes can still share
-  a URL. See [path validation](docs/system-checks.md#findings-and-coverage).
+  a URL. See [path validation](docs/23-checks-and-diagnostics.md#findings-and-coverage).
 
 - Composition now rejects ambiguous HTTP method/path contributions with
   `canon.routing.E003`, including hidden routes, existing application routes and
@@ -1185,7 +1185,7 @@ Python/TypeScript SDKs together. See the [upgrade guide](docs/package-migration.
   Before adopting 0.16.0, remove duplicate registrations or give them distinct
   effective paths or HTTP methods. Different operation IDs do not prevent route
   shadowing. Intentional static/parameter overlap remains supported; see
-  [HTTP path checks](docs/system-checks.md#findings-and-coverage).
+  [HTTP path checks](docs/23-checks-and-diagnostics.md#findings-and-coverage).
 
 - Provider-factory analysis in `fastapi-canon check errors` now follows local
   reassignments, aliases and conditional return/yield paths in execution order.
@@ -1206,7 +1206,7 @@ Python/TypeScript SDKs together. See the [upgrade guide](docs/package-migration.
   Rename colliding functions, use distinct namespaces, or set distinct explicit
   IDs; reused handlers and multiple-method routes no longer receive automatic
   path/method suffixes. Declare separately named operations for separate mounts
-  or HTTP methods. See [operation naming](docs/routers.md#automatic-http-and-sse-operation-names).
+  or HTTP methods. See [operation naming](docs/20-routers.md#automatic-http-and-sse-operation-names).
 
 - `Composition.build(app)` replaces `Composition.apply(app)` and
   `Composition.validate(app)`. It installs the composition, checks the installed
@@ -1309,7 +1309,7 @@ Python/TypeScript SDKs together. See the [upgrade guide](docs/package-migration.
   transceiver internals; neither upstream guarantees them across minor releases.
   Before adopting 0.16.0, keep Dishka on 1.10.x and aiortc on 1.14.x or 1.15.x.
   Later Canon releases widen these ranges after the upstream canary passes. See
-  [upstream internals](docs/compatibility.md#upstream-internals).
+  [upstream internals](docs/25-compatibility.md#upstream-internals).
 
 - The `fastapi_canon` root exports only the names needed to build an
   application: `APIRouter`, `CanonResponse`, `Composition`, `Error`,
@@ -1340,7 +1340,7 @@ Python/TypeScript SDKs together. See the [upgrade guide](docs/package-migration.
   `from fastapi_canon.integrations.database import run_alembic_environment`.
   Modules other than the root, `error`, `diagnostics`, `exceptions`, `openapi`,
   `contracts` and the documented `integrations` facades are internal; see
-  [public namespaces](docs/canon.md#public-namespaces).
+  [public namespaces](docs/21-public-api.md#public-namespaces).
 
 ### Fixed
 
@@ -1400,7 +1400,7 @@ Python/TypeScript SDKs together. See the [upgrade guide](docs/package-migration.
   later changes to the source group do not alter existing endpoints. Grouped
   methods share the mounted socket and its path context. For different project
   IDs, create separately bound SDK clients rather than passing an HTTP path
-  argument to retarget an existing RPC connection. See [routers](docs/routers.md).
+  argument to retarget an existing RPC connection. See [routers](docs/20-routers.md).
 - If an application owns its framework exception handlers, set
   `ErrorOptions(include_validation_error=False, include_http_exceptions=False,
   include_unhandled_error=False)` on the composition. Otherwise remove conflicting
@@ -1812,7 +1812,7 @@ remain available. See `docs/problems.md` and the root codegen guide.
   including JSON-RPC 2.0 and `fastapi-webrtc.v1`. Socket binding entry points move
   to `fastapi_canon.integrations.websockets.socket_bindings`; update binding
   package metadata.
-  See the [package migration guide](docs/package-migration.md) for commands.
+  See the [package migration guide](docs/24-upgrading.md) for commands.
 - Extend the public `Composition` constructor with `telemetry=`. Update wrappers
   or signature snapshots that mirror this constructor. Existing compositions
   without telemetry keep their behavior. To opt in, install `fastapi-canon[otel]`
@@ -1840,7 +1840,7 @@ remain available. See `docs/problems.md` and the root codegen guide.
   FastAPI's endpoint spans for propagated domain exceptions.
 - Explicit WebSocket middleware helper forwarding application providers, isolated
   `SpanCapture` testing helpers, reference endpoint trace contracts, and an opt-in
-  two-service OTLP demo. See the [telemetry guide](docs/10-telemetry.md).
+  two-service OTLP demo. See the [telemetry guide](docs/10-observability.md).
 
 ## 0.8.1 - 2026-10-25
 
@@ -1930,7 +1930,7 @@ and [PyPI](https://pypi.org/project/fastapi-canon/0.7.0/).
 - Validate declarations against the existing registry and map dependency/factory
   failures before peer allocation. Export with `build_contract(app)` after
   composition to use the application's problem type URIs. Follow the
-  [WebRTC admission guide](docs/webrtc.md) when migrating a plain router.
+  [WebRTC admission guide](docs/11-webrtc.md) when migrating a plain router.
 
 ## 0.5.5 - 2026-10-20
 
@@ -1969,7 +1969,7 @@ and [PyPI](https://pypi.org/project/fastapi-canon/0.7.0/).
 ## 0.5.1 - 2026-10-18
 
 - Source preparation passed workspace CI, independent wheel matrices and the
-  package release dry run. See the [release process](docs/releases.md).
+  package release dry run. See the [release process](docs/93-releases.md).
 
 - Pin the optional Streams integration and development tooling to 0.2.0.
   Regenerated Python SDKs now enforce supported scalar constraints; follow the

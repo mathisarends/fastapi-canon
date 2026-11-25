@@ -55,7 +55,7 @@ including explicit overrides and collision handling.
 Declare channel operations before inclusion: each mount captures a snapshot.
 Use a `WebRtcRouter` with `@rtc.session(...)` for managed media sessions after
 selecting the required engine and session options; add it to `Feature(routers=[...])`. See
-[routers](https://github.com/mathisarends/fastapi-canon/blob/main/docs/routers.md)
+[routers](https://github.com/mathisarends/fastapi-canon/blob/main/docs/20-routers.md)
 for full options; the protocols retain their own admission, scope and cleanup rules.
 
 ## Typed SSE
@@ -77,8 +77,8 @@ for admission checks. For data access during iteration, inject an APP-owned shor
 scope factory as described in [resources](resources.md).
 
 Generated iterators yield business events, consume completion and raise shared
-`ProblemError` for terminal problems; unexpected EOF is a transport failure. See [streams.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/streams.md) and
-[integrations/sse/clients.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/integrations/sse/clients.md) for complete declarations and client behavior.
+`ProblemError` for terminal problems; unexpected EOF is a transport failure. See [streams.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/03-streaming.md) and
+[integrations/sse/01-clients.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/integrations/sse/01-clients.md) for complete declarations and client behavior.
 
 ## WebSocket RPC
 
@@ -89,7 +89,7 @@ path="/rpc")` after declaring operations. Methods request services with
 `Inject[T]`, resolved from Composition's Dishka container, as in HTTP and SSE
 endpoints. Handshake authentication uses `context=`/`hooks=` and
 `rejects=` on the same call; see
-[integrations/websockets/dependencies.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/integrations/websockets/dependencies.md).
+[integrations/websockets/06-dependencies.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/integrations/websockets/06-dependencies.md).
 
 Install the `codegen` extra for contract export and client generation.
 Export the composed app with `fastapi-canon contracts export --app
@@ -98,13 +98,13 @@ types match runtime. JSON-RPC problem data lives inside its protocol envelope.
 Binary streams and sockets are not JSON-RPC channels; they keep their own
 endpoints, framing and close rules. Mount them with
 `@router.binary_stream(path, ...)` and `@router.socket(path, ...)`. See
-[integrations/websockets/services.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/integrations/websockets/services.md) and
-[problems.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/02-problems.md).
+[integrations/websockets/01-services.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/integrations/websockets/01-services.md) and
+[problems.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/02-errors.md).
 
 ## WebRTC
 
 Install the `webrtc` extra and read
-[webrtc.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/webrtc.md)
+[webrtc.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/11-webrtc.md)
 before choosing an engine for `WebRtcRouter(engine=...)`. Media and session lifetimes
 need explicit ownership; an SSE convention is not a WebRTC or binary-socket
 protocol.
@@ -130,13 +130,13 @@ Do not recreate the removed HTTP generator, shared model registry or domain faca
 
 Enable `Composition(features=features, request_logging=True)` for structured HTTP
 completion/abort records. The application configures logging outputs; Canon does
-not configure process-wide logging. See [request-logging.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/request-logging.md).
+not configure process-wide logging. See [request-logging.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/10-observability.md).
 
 Telemetry is opt-in at composition. Import `Telemetry` and `instrument` from
 `fastapi_canon.integrations.opentelemetry`; declare
 `Feature(..., integrations=[instrument(ProjectRepository, ProjectService)])` and
 enable `Composition(integrations=[Telemetry(...)])`. Pass application-owned providers to `Telemetry` as documented in
-[telemetry.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/10-telemetry.md). Instrument declarations leave ordinary Dishka providers
+[telemetry.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/10-observability.md). Instrument declarations leave ordinary Dishka providers
 usable on their own. Enabled telemetry automatically instruments Dishka-provided
 clients and engines through installed resource adapters; `resources=[]` opts out.
 Explicit resource contexts remain available for per-instance settings. Use

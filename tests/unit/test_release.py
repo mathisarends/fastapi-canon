@@ -22,7 +22,6 @@ def release_repo(tmp_path: Path) -> Path:
         "pyproject.toml",
         "uv.lock",
         "examples/reference-service/pyproject.toml",
-        "docs/streams.md",
         "examples/streams/README.md",
         "docs/03-streaming.md",
         "fastapi_canon/_version.py",
@@ -64,7 +63,7 @@ def release_repo(tmp_path: Path) -> Path:
 
 
 def test_release_rejects_stale_installation_docs(release_repo: Path) -> None:
-    path = release_repo / "docs/streams.md"
+    path = release_repo / "docs/03-streaming.md"
     path.write_text("uv add fastapi-streams==0.0.1", encoding="utf-8")
     with pytest.raises(ValueError, match="install fastapi-canon extras"):
         release.validate_release("fastapi-canon", "0.28.0", root=release_repo)

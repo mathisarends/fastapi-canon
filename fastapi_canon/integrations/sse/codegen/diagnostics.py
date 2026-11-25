@@ -392,7 +392,7 @@ class _SourceDiagnostics:
                         "The generated "
                         "field remains optional; mark it required in the output schema "
                         "if the serializer always emits it. "
-                        "See docs/integrations/sse/codegen.md#event-discriminators.",
+                        "See docs/integrations/sse/02-codegen.md#event-discriminators.",
                     )
 
 

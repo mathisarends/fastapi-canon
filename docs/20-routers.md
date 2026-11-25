@@ -1,0 +1,584 @@
+# 20. Routers
+
+Import `APIRouter` from `fastapi_canon` and `RpcChannel` from
+`fastapi_canon.integrations.websockets`. One application router
+can contribute HTTP calls, typed SSE and JSON-RPC channels:
+
+| Declaration | Endpoint behavior |
+| --- | --- |
+| `@router.get(...)`, `post(...)`, etc. | HTTP with Canon error/success contracts |
+| `@router.get(..., response_class=EventSourceResponse)` | Typed HTTP event stream, terminal problems and completion |
+| `router.include_channel(channel, path=...)` | JSON-RPC methods and message streams over one WebSocket |
+| `@router.binary_stream(path)` | A binary stream on its own WebSocket; the signature sets the direction |
+| `@router.socket(path)` | A typed or raw message socket on its own WebSocket |
+| `@router.websocket(...)` | Native FastAPI WebSocket handler and application protocol |
+
+WebRTC sessions use their own router: declare them with `@rtc.session(...)` on a
+`WebRtcRouter` from `fastapi_canon.integrations.webrtc` and add it to the same
+feature's `routers`.
+
+These additions are available in this checkout. Select the `sse`, `websockets`
+or `webrtc` extra for the transports you use. `aiortc` selects the reference
+WebRTC engine. Core router imports do not load these optional runtimes or SDK
+generators. Existing specialized routers remain supported.
+
+## Typed HTTP options
+
+**TL;DR:** HTTP decorators, the router constructor and `include_router()` expose
+their forwarded keyword options to editors and type checkers. The option types
+are `RouteOptions`, `APIRouteOptions`, `RouterOptions` and `IncludeRouterOptions`
+in `fastapi_canon`.
+
+```python
+router = APIRouter(namespace="projects", prefix="/v1", redirect_slashes=False)
+
+
+@router.get("/projects", response_model=list[str], status_code=200)
+async def list_projects() -> list[str]:
+    return ["canon"]
+```
+
+**Rationale:** Forwarding a keyword at runtime should preserve the development
+experience of calling FastAPI directly. Misspellings such as `summery=` and
+incorrect values such as `status_code="200"` are now type errors. Existing
+supported keyword names keep their runtime behavior; update incorrectly typed
+wrapper dictionaries to the matching option type when migrating.
+
+`Feature.error_registry` reads explicit contributions and the current router
+declarations. Composition collects that catalog at build time, so routes may be registered
+before or after constructing the feature. Finish route registration before
+building the application, just as with FastAPI's router inclusion.
+
+## Typed callable endpoints
+
+The default router resolves `Inject[T]` and `FromDishka[T]` for ordinary functions,
+typed callable instances, bound methods and `functools.partial`. `Inject[T]` also
+works in FastAPI dependency functions, such as an authentication dependency that
+needs a token verifier; no `@inject` decorator is involved, and
+`app.dependency_overrides` keeps addressing the original function. Async and sync
+forms keep their execution behavior; DI values stay out of the public request
+schema. Module/class future annotations and inherited call methods are supported.
+Quoted service types such as `Inject["Store"]` also work in FastAPI dependency
+functions; the service must be defined in that function's namespace before route
+registration.
+
+```python
+from functools import partial
+
+from dishka import Provider, Scope
+from fastapi import FastAPI
+from fastapi_canon import APIRouter, Composition, Feature, Inject
+
+
+class Store:
+    async def read(self) -> str:
+        return "ok"
+
+
+class Read:
+    async def __call__(self, store: Inject[Store]) -> str:
+        return await store.read()
+
+
+async def read_prefixed(prefix: str, store: Inject[Store]) -> str:
+    return prefix + await store.read()
+
+
+router = APIRouter()
+router.get("/read", operation_id="store.read")(Read())
+router.get("/cached", operation_id="store.cached")(partial(read_prefixed, "cached:"))
+bindings = Provider()
+bindings.provide(Store, scope=Scope.REQUEST)
+app = Composition(
+    features=[Feature(name="store", routers=[router], providers=[bindings])]
+).build(FastAPI())
+```
+
+Only parameters left in a partial's signature participate in injection and
+request parsing. Bound positional parameters disappear; keyword-bound business
+parameters retain Python's overridable defaults. Parameters still marked for
+injection resolve from DI. Automatic names retain the callable's existing name
+(the class name for an instance, or `partial` for a partial); explicit IDs give
+stable domain names. Callable lookup uses the original registered object.
+
+Non-function callables need positional-or-keyword or keyword-only parameters.
+Give opaque/variadic forms a typed named-parameter wrapper, and bind remaining
+positional-only arguments before registration. Constructors needing injection
+require a function or callable instance. Unsupported forms receive a setup error
+without executing the handler. Ordinary functions, existing `@inject` wrappers
+and explicit `route_class` declarations keep their existing ownership; a custom
+route class replaces Canon's automatic wiring. See [dependency preflight](23-checks-and-diagnostics.md#http-and-sse-endpoint-dependency-preflight)
+for supported scopes and configuration checks.
+
+## Automatic HTTP and SSE operation names
+
+Declare a stable namespace once per router. Canon derives an omitted
+`operation_id` from the endpoint function name:
+
+```python
+from collections.abc import AsyncIterator
+
+from fastapi.sse import EventSourceResponse
+
+from fastapi_canon import APIRouter
+
+
+router = APIRouter(namespace="projects", prefix="/projects")
+
+
+@router.get("/{project_id}")
+async def get(project_id: int) -> int:
+    return project_id
+
+
+@router.get("/{project_id}/events", response_class=EventSourceResponse)
+async def events(project_id: int) -> AsyncIterator[int]:
+    yield project_id
+```
+
+These operations export stable IDs `projects.get` and `projects.events`.
+Each generator determines its client naming from the exported contract.
+The same rule applies to WebSocket channels declared on the router.
+
+- An explicit `operation_id=` always wins and is never prefixed.
+- Otherwise the ID is `<namespace>.<function_name>`, or just `<function_name>`
+  when `namespace=None` (the default). Namespaces may be dotted public identifiers,
+  such as `organization.projects`; empty or private segments are rejected.
+- URL prefixes, HTTP methods, route `name=`, parameter names, model names and
+  `Feature.name` do not contribute to automatic IDs. Included Canon routers keep
+  their own naming policy; a parent namespace does not replace a child's.
+  Native FastAPI routes with the default naming policy inherit the Canon parent's
+  generator according to FastAPI's inclusion rules.
+- A custom FastAPI `generate_unique_id_function=` replaces Canon's default rule.
+  Streams use the same generator as the owning router.
+
+A route with `response_class=EventSourceResponse` (or a subclass) is a typed
+stream. It infers its event model, so `response_model=` and `response=` are
+rejected.
+
+`Feature.name` identifies a feature in diagnostics and lifecycle only; it is not a
+public API name. Public names come from the declaration that owns them: the
+router `namespace`, an explicit `operation_id` and `tags`, and an `RpcChannel`
+namespace. To group a feature's operations, set the namespace where the router is
+declared (`APIRouter(namespace="projects")`) rather than expecting it from the
+feature. Generated SSE and RPC clients use the namespace as their group, so
+`projects.events` becomes `client.projects.events`. Tags only group operations
+without a namespace and remain available for OpenAPI tooling. This keeps a reusable router's public names
+independent of where it is installed.
+
+Renaming an endpoint function changes its automatic ID and generated SDK member.
+Pin `operation_id="projects.events"` when that public name must survive a Python
+refactor. Use explicit IDs for anonymous or wrapped callables without a stable
+function name; normal wrappers using `functools.wraps` retain that name. Callable
+objects without `__name__` use their class name.
+
+Operation IDs must be unique across all schema-visible HTTP and SSE operations.
+Canon never appends numbers or method/path suffixes to resolve a collision.
+Composition preflight rejects duplicates before installing routes, handlers or
+providers. This includes reused endpoints, routers mounted under multiple URL
+prefixes, and a single declaration selecting multiple HTTP methods. Give distinct
+operations separate declarations and explicit IDs or distinct router namespaces.
+
+Check the same policy from the CLI:
+
+```console
+fastapi-canon check composition app:composition --format json
+```
+
+The command exits with status 1 for collisions and reports `canon.routing.E002`,
+the duplicate ID, owning features, both effective method/path locations and a
+hint to set distinct `operation_id` values. `--require-complete` exits with status
+2 when dependent checks were skipped. Specialized generators validate names in
+their own contracts before writing; the workflow adds no global SDK naming rules.
+
+## Compose channels before choosing their URL
+
+Channels describe operations. The router decides where clients connect.
+Each inclusion copies the current declarations; later changes to the source
+channel do not change an already mounted snapshot.
+
+```python
+from typing import Annotated
+
+from fastapi import FastAPI, Path
+
+from fastapi_canon import APIRouter, Composition, Feature
+from fastapi_canon.integrations.websockets import RpcChannel
+
+projects = RpcChannel(namespace="projects")
+tasks = RpcChannel(namespace="tasks")
+
+
+@projects.method()
+async def rename(title: str, project_id: Annotated[int, Path()]) -> str:
+    return f"{project_id}: {title}"
+
+
+@tasks.method()
+async def create() -> str:
+    return "created"
+
+
+session = RpcChannel()
+session.include_channel(projects)
+session.include_channel(tasks)
+
+router = APIRouter(prefix="/projects")
+router.include_channel(session, path="/{project_id}/session")
+
+app = Composition(features=[Feature(name="projects", routers=[router])]).build(
+    FastAPI()
+)
+```
+
+One connection to `/projects/42/session` provides `projects.rename` and
+`tasks.create`:
+
+```json
+{"jsonrpc":"2.0","id":1,"method":"projects.rename","params":{"title":"Updated"}}
+```
+
+As in FastAPI, the signature is the contract:
+
+- Named parameters form the `params` object; their names are the wire names.
+  Defaults make a parameter optional, and unknown names are rejected.
+- A single Pydantic model parameter is the whole `params` object.
+- `Annotated[T, Path()]` reads a path variable of the mounted URL. Canon validates
+  it before accepting the connection and rejects names missing from the path.
+- `Inject[T]` resolves dependencies and stays out of the contract.
+
+An included channel keeps its namespace, prefixed with the parent's namespace.
+Duplicate operation names, namespace conflicts and stream-control collisions
+fail explicitly. Error registries and per-operation resolver scopes stay
+attached to their declarations.
+
+Separate URLs create separate connections:
+
+```python
+router = APIRouter(prefix="/projects")
+router.include_channel(projects, path="/{project_id}/session")
+router.include_channel(tasks, path="/{project_id}/tasks/session")
+```
+
+Each connection has its own limits, pending requests and message streams.
+`context`, `resolver`, `middleware`, `limits` and the other `include_channel`
+options are typed as `ChannelOptions`. `dependencies=` runs ordinary FastAPI
+dependencies before acceptance. When Composition installs Dishka providers, an
+omitted `resolver=` uses the application's container for `Inject[T]`; APP,
+SESSION and REQUEST lifetimes keep their cleanup behavior.
+Duplicate WebSocket paths on the application router are rejected. Endpoint
+names default to the complete local path, including the router prefix; pass
+`name=` when a contract needs a stable endpoint name.
+
+## Message streams on the same connection
+
+The current RPC message-stream decorator is `channel.stream()`:
+
+```python
+@projects.stream("events")
+async def project_events() -> AsyncIterator[str]:
+    yield "updated"
+```
+
+Register the stream before including `projects` in `session`. The wire
+controls are `projects.events.open` and `projects.events.cancel`, using `streamId`.
+Stream parameters follow the same signature rules as methods.
+Normal completion and failures retain the existing terminal notifications.
+Cancelling one stream leaves other streams and methods usable; disconnect cleans
+up all connection-owned work. This adds no new wire protocol and requires no SDK
+runtime changes. Binary transfers and socket protocols use their own endpoints;
+they are not silently multiplexed into a JSON-RPC channel mount. Declare them on
+the same router:
+
+```python
+@router.binary_stream("/{project_id}/preview", content_type="image/jpeg")
+async def preview(project_id: int) -> AsyncIterator[bytes]: ...
+
+
+@router.socket("/{project_id}/terminal")
+async def terminal(message: Command) -> Output: ...
+```
+
+`include_channel()` rejects a channel that contains binary streams and points to
+`@router.binary_stream`.
+
+## Share WebSocket connection policy
+
+Pass a `WebSocketPolicy` to the router to share connection options across its
+`include_channel()`, `socket()` and `binary_stream()` declarations.
+
+```python
+from fastapi_canon.integrations.websockets import WebSocketPolicy
+
+authenticated = WebSocketPolicy(
+    context=open_session,
+    rejects=session_rejects,
+    middleware=[telemetry],
+    strict_errors=True,
+)
+router = APIRouter(
+    prefix="/browsers/{browser_id}",
+    namespace="browser",
+    websocket_policy=authenticated.extend(rejects=stream_rejects),
+)
+
+
+@router.socket("/video", messages=(RpcMessageType.BINARY,), limits=video_limits)
+async def video(socket: Inject[RpcSocket]) -> None: ...
+```
+
+A policy holds `context`, `hooks`, `resolver`, `rejects`, `rejections`,
+`middleware`, `error_mapper`, `strict_errors` and `before_accept`. `protocol`,
+`messages`, `closes`, `limits`, `drain` and `version` stay on each declaration.
+
+- `hooks`, `rejects` and `middleware` add up, policy first.
+- A declaration may set another option only when the policy leaves it unset;
+  otherwise, also for an explicit `None` or `False`, it raises `ConfigurationError`.
+  Declare public endpoints on a router without the policy.
+- `extend(...)` returns a new policy with the same rules.
+- The policy applies to declarations on its own router. A router with a policy
+  rejects WebSocket routes, including later ones on routers it includes, unless
+  they were declared under that policy or an extension of it.
+  Changes to native included routers are checked again before route inspection
+  or dispatch; unprotected Starlette registrations are also rejected.
+
+See [WebSocket streams](04-websockets.md) for controls, limits,
+error mappings, dependency lifetimes and generated resource APIs. Operation names
+and endpoint names must be unique within their exported transport contract.
+
+## Typed SSE and WebRTC in the same feature
+
+With the relevant extras installed, extend the router above and add a
+`WebRtcRouter` for media sessions:
+
+```python
+from fastapi.sse import EventSourceResponse
+
+from fastapi_canon.integrations.webrtc import Session, WebRtcRouter
+from fastapi_canon.integrations.webrtc.engines.aiortc import AiortcEngine
+
+
+@router.get(
+    "/{project_id}/events",
+    response_class=EventSourceResponse,
+    operation_id="project_events",
+)
+async def project_events(project_id: str) -> AsyncIterator[str]:
+    yield f"Updated {project_id}"
+
+
+rtc = WebRtcRouter(prefix="/projects", engine=AiortcEngine())
+
+
+@rtc.session("/{project_id}/media")
+async def project_media(project_id: str) -> Session:
+    return Session()
+
+
+projects = Feature(name="projects", routers=[router, rtc])
+```
+
+Make these declarations before composing the application. SSE infers its item
+schema and serialization from the return annotation. It sends `canon.complete`
+on normal exhaustion and `canon.problem` for processing failures. Declare
+both pre-response failures and terminal stream failures with `raises=`. Errors
+are registered automatically; no separate registry entry is required.
+Perform admission checks in dependencies, before generator execution starts.
+
+`session()` accepts `name`, `role`, `media`, `data_channels`, `limits`,
+`max_sessions`, `capacity`, `dependencies` and `raises`. Engine, ICE-server,
+event-hook, origin, `raises` and HTTP router options belong to the `WebRtcRouter`;
+the factory may supply an engine through its returned `Session`.
+HTTP options such as `responses` and `redirect_slashes` retain FastAPI's behavior.
+A custom router `lifespan` keeps its yielded state and closes active sessions
+before its resources are released.
+`max_sessions` bounds one declaration. Pass one `SessionCapacity` to several
+declarations, also on different routers, to share a process-wide budget:
+
+```python
+from fastapi_canon.integrations.webrtc import SessionCapacity
+
+MEDIA = SessionCapacity(max_sessions=50)
+voice = WebRtcRouter(prefix="/voice", engine=ENGINE)
+video = WebRtcRouter(prefix="/video", engine=ENGINE)
+
+
+@voice.session("/calls/{call_id}", capacity=MEDIA)
+def call(call_id: str) -> Session:
+    return Session()
+
+
+@video.session("/rooms/{room_id}", capacity=MEDIA)
+def room(room_id: str) -> Session:
+    return Session()
+```
+
+`MEDIA.active` reports the sessions currently holding a slot. Each declaration owns its endpoint limits
+and cleanup. Yield dependencies remain open through session cleanup. Composition
+includes the WebRTC shutdown lifespan with the application's dependency lifetime.
+
+The protocols keep their distinct lifecycles: an RPC failure answers one call,
+an SSE failure terminates that stream, and accepted WebRTC sessions use their own
+signaling and media lifecycle. Their paths and contracts can all be exported with
+[`export_contracts(app)`](22-contracts.md) without starting factories or opening peers.
+
+## Success response contracts
+
+`CanonResponse` describes one successful response that FastAPI cannot infer from
+the return annotation, such as an empty, binary or custom media-type response:
+
+```python
+from fastapi_canon import CanonResponse
+
+
+@router.delete(
+    "/{project_id}",
+    raises=[project_not_found],
+    response=CanonResponse.empty(),
+)
+async def delete_project(project_id: str) -> None: ...
+```
+
+These declarations are self-contained: a success-only router produces clean
+OpenAPI without installing an `ErrorRegistry` or another OpenAPI hook.
+
+The generic form accepts a status, media type, OpenAPI schema, description, and
+response headers:
+
+```python
+success = CanonResponse(
+    status=200,
+    media_type="application/example+json",
+    schema={"type": "object"},
+    description="Example document",
+    headers=["X-Request-ID"],
+)
+```
+
+The available constructors are:
+
+| Constructor | Default contract |
+| --- | --- |
+| `CanonResponse.json()` | `application/json` with status 200 |
+| `CanonResponse.empty()` | No response content with status 204 |
+| `CanonResponse.stream(media_type)` | String stream with status 200 |
+| `CanonResponse.binary(media_type)` | Binary string stream with status 200 |
+
+Typed event streams use `response_class=EventSourceResponse` with a typed
+generator instead of `response=CanonResponse.sse()`.
+
+Success-only routers do not need an empty `ErrorRegistry`:
+
+```python
+@router.get(
+    "/health",
+    response=CanonResponse.json(
+        schema={"type": "object"},
+        description="Service health",
+    ),
+)
+async def health() -> dict[str, str]: ...
+```
+
+The route declaration is independent of the application's error definitions.
+
+Bodyless contracts also replace FastAPI's generated success content for 2xx and
+3xx responses, so a redirect needs no matching `response_class` solely for
+OpenAPI purposes:
+
+```python
+@router.get(
+    "/elsewhere",
+    response=CanonResponse.empty(status=307),
+)
+async def elsewhere() -> RedirectResponse: ...
+```
+
+A bodyless contract combined with an explicit `response_model` raises
+`ResponseConfigurationError` at declaration time.
+
+Schemas and header definitions are copied into immutable mappings. Header names
+may be supplied as a list for standard string-valued header schemas or as a
+mapping containing complete OpenAPI header definitions. The router derives
+the route status from the success contract when `status_code` is omitted.
+
+### Binary and PDF streams
+
+```python
+from collections.abc import Iterator
+from pathlib import Path
+from uuid import UUID
+
+from fastapi.responses import StreamingResponse
+from fastapi_canon import APIRouter, CanonResponse
+
+
+router = APIRouter(raises=[AUTHENTICATION_REQUIRED_ERROR, ACCESS_DENIED_ERROR])
+
+
+def pdf_chunks(path: Path) -> Iterator[bytes]:
+    with path.open("rb") as source:
+        while chunk := source.read(64 * 1024):
+            yield chunk
+
+
+@router.get(
+    "/documents/{document_id}",
+    raises=[document_missing],
+    response=CanonResponse.binary(
+        "application/pdf",
+        headers=["Content-Disposition"],
+    ),
+)
+async def document(document_id: UUID) -> StreamingResponse:
+    path = Path("documents") / f"{document_id}.pdf"
+    if not path.is_file():
+        raise DocumentMissing
+    return StreamingResponse(
+        pdf_chunks(path),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{document_id}.pdf"',
+        },
+    )
+```
+
+The generated operation documents only `application/pdf` for the successful
+response. Error responses continue to use
+`application/problem+json`.
+
+## Low-level FastAPI compatibility
+
+Routers that Canon does not create, such as generated or third-party
+`fastapi.APIRouter` instances, can still declare contracts through FastAPI's
+`responses=` mapping:
+
+```python
+from fastapi import APIRouter as FastAPIRouter
+from fastapi_canon import CanonResponse
+from fastapi_canon.openapi import install_openapi_contracts
+
+generated_router = FastAPIRouter()
+
+
+@generated_router.get(
+    "/private",
+    responses=api_errors.responses(
+        project_not_found,
+        http_statuses=[401, 403],
+        success=CanonResponse.json(),
+    ),
+)
+async def private_project() -> dict[str, str]: ...
+
+
+install_openapi_contracts(app)
+```
+
+`ErrorRegistry.responses()` combines domain errors, normalized `HTTPException`
+statuses, and an optional success contract; `CanonResponse.responses()` covers
+success-only declarations. These primitives populate FastAPI's `responses={...}`
+mapping directly, so they skip the declaration-time consistency checks of
+`fastapi_canon.APIRouter`. A manually assembled application must call
+`install_openapi_contracts(app)` before generating OpenAPI. `Composition`
+installs that compiler automatically, including when no error registry exists.
