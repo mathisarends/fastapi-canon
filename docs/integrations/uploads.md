@@ -76,14 +76,14 @@ body and headers. See the [binary response example](../composition.md#binary-and
 The runnable application uses `application/octet-stream` for its general download
 operation and returns an encoded `Content-Disposition` filename.
 
-`fastapi-canon check composition` warns when a raw GET success response has no
-documented content (unreleased). Use a concrete media type, a range like
+Since 0.28.0, `fastapi-canon check composition` warns when a raw GET success
+response has no documented content. Use a concrete media type, a range like
 `image/*` for dynamic images, or `CanonResponse.empty(status=200)` for an
 intentionally bodyless success.
 
 Use FastAPI's `Annotated[bytes, Body(media_type="application/octet-stream")]`
 for buffered raw uploads. To consume the body as it arrives, declare
-`BinaryBody` on an async Canon `APIRouter` handler (unreleased).
+`BinaryBody` on an async Canon `APIRouter` handler (0.28.0 or later).
 
 ```python
 from collections.abc import AsyncIterator

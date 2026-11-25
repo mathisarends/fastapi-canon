@@ -37,7 +37,7 @@ scope.
 | Database ownership, feature tables, migrations and locks | `fastapi_canon.integrations.database.Database`, `Tables`, `AlembicMigrations`, `AcquireTransactionLock` | [Databases](database.md) |
 | Short service scopes | `fastapi_canon.Scoped`, `ServiceScope` | [Databases](database.md) |
 | HTTP routes and contracts | `fastapi_canon.APIRouter`, `RouterPolicy`, `Error`, `ErrorOptions`, `CanonResponse`; `Problem`; `fastapi_canon.error.ErrorRegistry` for manual assembly without `Composition` | [HTTP contracts](composition.md#error-contracts) |
-| Streaming HTTP request bodies | `fastapi_canon.BinaryBody` (unreleased) | [File uploads](integrations/uploads.md#binary-responses-and-raw-uploads) |
+| Streaming HTTP request bodies | `fastapi_canon.BinaryBody` (0.28.0) | [File uploads](integrations/uploads.md#binary-responses-and-raw-uploads) |
 | Typed SSE | `APIRouter.sse()` | [SSE contracts](streams.md) |
 | WebSocket JSON-RPC | `APIRouter.channel()`; `APIRouter.include_channel()` with `fastapi_canon.integrations.websockets.RpcChannel` for shared channels | [WebSockets](integrations/websockets/README.md) |
 | Typed or raw WebSocket messages and binary streams | `@APIRouter.socket()`, `@APIRouter.binary_stream()`; `RpcSocket` | [Sockets](integrations/websockets/sockets.md), [binary streams](integrations/websockets/streams.md) |

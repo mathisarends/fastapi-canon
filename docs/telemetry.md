@@ -10,7 +10,7 @@ Recent FastAPI versions themselves depend on the OpenTelemetry API.
 
 ## Application-owned SDK
 
-Pass an SDK factory and Canon starts it per application:
+In 0.28.0 and later, pass an SDK factory and Canon starts it per application:
 
 ```python
 from fastapi_canon.integrations.opentelemetry import Telemetry, console

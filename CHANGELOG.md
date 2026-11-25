@@ -4,17 +4,24 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## 0.28.0 - Unreleased
 
+### Breaking changes
+
+See the [upgrade guide](docs/package-migration.md#upgrade-to-0280).
+
+- **`CANON-028-RAW-GET-CONTRACTS`** — `fastapi-canon check composition --fail-on warning`
+  now exits with code 1 when `canon.contracts.W001` finds a raw GET success
+  response without documented content. Declare downloads with
+  `CanonResponse.binary(...)` and intentionally bodyless successes with
+  `CanonResponse.empty(status=...)` ([#227](https://github.com/mathisarends/fastapi-canon/issues/227)).
+
 ### Added
 
 - `BinaryBody(media_type)` streams raw uploads into an async handler's
   `AsyncIterator[bytes]` parameter and declares a required binary request body
-  in OpenAPI ([#226](https://github.com/mathisarends/fastapi-canon/issues/226)).
-- `fastapi-canon check composition` reports `canon.contracts.W001` when a raw
-  GET success response has no documented content. Declare the download with
-  `CanonResponse.binary(...)` or mark an intentionally bodyless response with
-  `CanonResponse.empty(status=200)` ([#227](https://github.com/mathisarends/fastapi-canon/issues/227)).
+  in OpenAPI. See [raw uploads](docs/integrations/uploads.md#binary-responses-and-raw-uploads)
+  ([#226](https://github.com/mathisarends/fastapi-canon/issues/226)).
 - `Telemetry(sdk=...)` lets each application own its OpenTelemetry SDK
-  providers from startup to shutdown; `console(service_name=...)` prints spans
+  providers from startup to shutdown. `console(service_name=...)` prints spans
   to standard output. See [application-owned SDK](docs/telemetry.md#application-owned-sdk)
   ([#225](https://github.com/mathisarends/fastapi-canon/issues/225)).
 
