@@ -190,7 +190,7 @@ def _validate_path_parameters(endpoint: RpcEndpoint[Any]) -> None:
     if path_model is None or not issubclass(path_model, ChannelPathParams):
         return
     _, _, variables = compile_path(endpoint.path)
-    if missing := path_model.model_fields.keys() - variables.keys():
+    if missing := path_model.missing_path_inputs(variables):
         names = ", ".join(repr(name) for name in sorted(missing))
         raise ConfigurationError(
             f"RPC path parameters {names} are not variables of {endpoint.path!r}"

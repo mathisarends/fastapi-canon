@@ -80,6 +80,12 @@ See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0290).
 
 ### Fixed
 
+- OpenRPC keeps request envelopes separate from application payload schemas
+  that use the same name. Regenerate affected RPC clients
+  ([#257](https://github.com/mathisarends/fastapi-canon/issues/257)).
+- RPC `Path(alias=...)` reads the aliased URL placeholder and passes the
+  validated value to the handler's Python argument
+  ([#260](https://github.com/mathisarends/fastapi-canon/issues/260)).
 - OpenRPC exports distinct generated params schemas for RPC operations whose
   names would otherwise produce the same component
   ([#248](https://github.com/mathisarends/fastapi-canon/issues/248)).
