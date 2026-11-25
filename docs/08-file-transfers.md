@@ -45,7 +45,9 @@ from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
 api = composition.build(FastAPI(max_body_size=10_000_000))
-app = CORSMiddleware(api, allow_origins=["https://app.example.com"])
+app = CORSMiddleware(
+    api, allow_origins=["https://app.example.com"], allow_methods=["POST", "PUT"]
+)
 ```
 
 ## Streaming uploads
