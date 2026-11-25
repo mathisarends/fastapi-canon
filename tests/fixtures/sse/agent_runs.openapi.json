@@ -32,7 +32,8 @@
           "code"
         ],
         "title": "Problem",
-        "type": "object"
+        "type": "object",
+        "x-canon-problem": true
       },
       "HTTPValidationError": {
         "properties": {
@@ -82,7 +83,8 @@
           "code"
         ],
         "title": "InternalServerProblem",
-        "type": "object"
+        "type": "object",
+        "x-canon-problem": true
       },
       "Problem": {
         "additionalProperties": true,
@@ -119,7 +121,8 @@
           "code"
         ],
         "title": "Problem",
-        "type": "object"
+        "type": "object",
+        "x-canon-problem": true
       },
       "RequestValidationProblem": {
         "additionalProperties": true,
@@ -191,7 +194,8 @@
           "errors"
         ],
         "title": "RequestValidationProblem",
-        "type": "object"
+        "type": "object",
+        "x-canon-problem": true
       },
       "RunCompleted": {
         "properties": {

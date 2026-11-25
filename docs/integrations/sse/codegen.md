@@ -335,7 +335,9 @@ The report is generated only when requested and adds no SDK runtime checks.
 
 `unsupported-constraint` identifies an unenforced rule for the selected target;
 TypeScript also diagnoses Python-supported scalar constraints because TypeScript
-has no runtime schema validator. Python's `optional-discriminator` diagnoses event
+has no runtime schema validator. The `uri-reference` format of `type` and
+`instance` in Canon-generated problem schemas is not reported, because generated
+SDKs dispatch on `code`. Python's `optional-discriminator` diagnoses event
 selection risks without changing field requiredness. Human-readable warnings
 contain the same location, keyword/value, operation and limitation as the report.
 

@@ -2,6 +2,18 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
+## 0.29.0 - Unreleased
+
+### Breaking changes
+
+See the [upgrade guide](docs/package-migration.md#upgrade-to-0290).
+
+- **`CANON-029-PROBLEM-URI-DIAGNOSTICS`** — Strict SSE generation no longer
+  reports `format: uri-reference` on `type` and `instance` of Canon-generated
+  problem schemas, which now carry `x-canon-problem: true`. Remove the
+  allowances for those diagnostics; they now fail as stale
+  ([#234](https://github.com/mathisarends/fastapi-canon/issues/234)).
+
 ## 0.28.0 - 2026-11-25
 
 ### Breaking changes

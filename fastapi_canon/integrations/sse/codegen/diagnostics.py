@@ -53,6 +53,8 @@ _SCALAR = {
     "exclusiveMaximum",
     "multipleOf",
 }
+# Canon's error adapter owns these fields; generated SDKs dispatch on `code`.
+_PROBLEM_URI_FIELDS = {"type", "instance"}
 
 
 class OptionalDiscriminatorWarning(UserWarning):
@@ -272,7 +274,9 @@ class _SourceDiagnostics:
             elif key not in {"example", "examples", "default"}:
                 self.openapi(value, location, event=event)
 
-    def schema(self, node: Any, pointer: str, *, event: bool = False) -> None:
+    def schema(
+        self, node: Any, pointer: str, *, event: bool = False, problem_uri: bool = False
+    ) -> None:
         if not isinstance(node, dict):
             return
         node, pointer = self.resolve(cast(Document, node), pointer)
@@ -282,6 +286,8 @@ class _SourceDiagnostics:
         unsupported: set[str] = _UNSUPPORTED | (
             _SCALAR if self.target == "typescript" else set()
         )
+        if problem_uri and node.get("format") == "uri-reference":
+            unsupported = unsupported - {"format"}
         for keyword in sorted(unsupported & node.keys()):
             self.add(
                 "unsupported-constraint",
@@ -294,10 +300,16 @@ class _SourceDiagnostics:
             )
         if event and self.target == "python":
             self._optional_discriminator(node, pointer)
+        problem = node.get("x-canon-problem") is True
         for keyword in ("properties", "patternProperties", "dependentSchemas"):
             for name, child in node.get(keyword, {}).items():
                 self.schema(
-                    child, pointer + "/" + keyword + "/" + _escape(name), event=event
+                    child,
+                    pointer + "/" + keyword + "/" + _escape(name),
+                    event=event,
+                    problem_uri=problem
+                    and keyword == "properties"
+                    and name in _PROBLEM_URI_FIELDS,
                 )
         for keyword in ("oneOf", "anyOf", "allOf", "prefixItems"):
             for index, child in enumerate(node.get(keyword, [])):

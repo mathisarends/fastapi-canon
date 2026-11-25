@@ -282,10 +282,10 @@ def _compile_document(
     result = copy.deepcopy(document)
     components = result.setdefault("components", {}).setdefault("schemas", {})
     if registry is not None:
-        _add_component(components, "Problem", _base_problem_schema())
+        _add_problem_component(components, "Problem", _base_problem_schema())
 
         for error in registry.errors:
-            _add_component(
+            _add_problem_component(
                 components,
                 error.effective_schema_name,
                 _compile_error_schema(registry, error),
@@ -295,7 +295,7 @@ def _compile_document(
         if registry is None:
             msg = "validation error normalization requires an error registry"
             raise ErrorConfigurationError(msg)
-        _add_component(
+        _add_problem_component(
             components,
             "RequestValidationProblem",
             _request_validation_schema(registry),
@@ -306,7 +306,7 @@ def _compile_document(
             raise ErrorConfigurationError(
                 "internal error normalization requires type_base"
             )
-        _add_component(
+        _add_problem_component(
             components, "InternalServerProblem", _internal_error_schema(registry)
         )
 
@@ -353,7 +353,7 @@ def _compile_document(
                 error = lookup[identity]
                 name = error.effective_schema_name + "Embedded"
                 schema = compile_problem_schema(registry, error, include_status=False)
-                _add_component(
+                _add_problem_component(
                     components, name, _rewrite_local_definitions(schema, name)
                 )
                 stream["problems"].append({"$ref": f"#/components/schemas/{name}"})
@@ -390,7 +390,7 @@ def _compile_document(
             )
             raise ErrorConfigurationError(msg)
         for status in http_statuses:
-            _add_component(
+            _add_problem_component(
                 components, _http_component_name(status), _http_problem_schema(status)
             )
         for response in responses.values():
@@ -773,7 +773,7 @@ def _compile_stream_contract(
     internal["properties"]["type"]["const"] = internal_type
     internal["properties"]["code"]["const"] = "internal_server_error"
     name = "CanonInternalServerErrorEmbedded"
-    _add_component(components, name, internal)
+    _add_problem_component(components, name, internal)
     problems = [*profile["problems"], {"$ref": f"#/components/schemas/{name}"}]
     for status, response in responses.items():
         media = response.get("content", {}).get("text/event-stream")
@@ -812,9 +812,11 @@ def _compile_stream_contract(
         }
 
 
-def _add_component(
+def _add_problem_component(
     components: dict[str, Any], name: str, schema: dict[str, Any]
 ) -> None:
+    """Register a Canon-owned problem schema with its ownership marker."""
+    schema = {**schema, "x-canon-problem": True}
     existing = components.get(name)
     if existing is not None and existing != schema:
         msg = f"OpenAPI component {name!r} already exists with another schema"

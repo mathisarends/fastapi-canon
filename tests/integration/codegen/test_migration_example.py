@@ -55,8 +55,6 @@ async def test_migration_consumers_run_against_real_http_sse_and_rpc(
         "consumer.ts",
         "tsconfig.json",
         "fastapi-canon.toml",
-        "streams-python-allowances.json",
-        "streams-typescript-allowances.json",
     ):
         (example / name).write_bytes(
             (root / "examples/canonical_errors" / name).read_bytes()

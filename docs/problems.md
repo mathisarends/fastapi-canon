@@ -188,6 +188,7 @@ messages, and WebRTC media do not receive SSE control frames.
 The SSE item schema describes business, problem, and completion frames. The
 contract advertises version 1 in `x-canon-stream`, including its terminal problem
 schemas and the business payload schema consumed by code generation. HTTP problem unions discriminate on resolved `type`.
+Canon-generated OpenAPI problem schemas carry `x-canon-problem: true`.
 The OpenRPC contract identifies canonical schemas with `x-canon-problem-schema`
 and their stable URI with `x-canon-problem-type`.
 
