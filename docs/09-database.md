@@ -108,7 +108,7 @@ isolation mode with this transaction handling.
 ## Engine instrumentation lifetime
 
 `Telemetry` instruments the `Database` engine automatically; see
-[HTTP clients and database engines](telemetry.md#http-clients-and-database-engines).
+[HTTP clients and database engines](10-telemetry.md#http-clients-and-database-engines).
 For other engine-local listeners, pass `engine_context`, a factory taking the
 created `AsyncEngine` and returning a synchronous context manager:
 
@@ -428,3 +428,7 @@ Existing repositories keep `get`, `merge`, `flush`, `exec`/`execute`, eager-load
 options and native SQL. Existing migration environments keep the borrowed-
 connection protocol. No Canon entity base class, generic repository, lock-key
 convention, settings prefix or deployment platform is imposed.
+
+---
+
+Previous: [File transfers](08-file-transfers.md) · [Learning path](README.md) · Next: [Instrumentation](10-telemetry.md)

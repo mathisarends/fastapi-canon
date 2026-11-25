@@ -37,7 +37,7 @@ scanned source. Policy, router and operation `raises` combine.
 Default mode reports and exits zero. `--strict` exits one for CAN001/CAN002;
 `--require-complete` independently exits one for CAN003 or a scan without
 supported operations. Invalid roots, duplicate modules and syntax errors exit two.
-The [quickstart](quickstart.md#check-the-contract-in-ci) shows a minimal CI setup.
+The [quickstart](01-quickstart.md#check-the-contract-in-ci) shows a minimal CI setup.
 
 Text output ends with the root causes of incomplete analysis, ranked by the number
 of affected operations; fix the top entries first. `--format json` reports each
@@ -147,3 +147,7 @@ These cases stay `CAN003`; the message names what to fix:
 
 Measure the checker on your own runner with
 `uv run --locked python scripts/benchmark_error_contracts.py --output dist/checker-benchmark.json`.
+
+---
+
+Previous: [Client generation](06-codegen.md) · [Learning path](README.md) · Next: [File transfers](08-file-transfers.md)

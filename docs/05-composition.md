@@ -8,7 +8,7 @@ composition root.
 
 Composition closes HTTP dependency scopes after handler/response validation and
 before sending the response. Streams and background work use independent short
-scopes. See [databases and service scopes](database.md) for automatic transactions
+scopes. See [databases and service scopes](09-database.md) for automatic transactions
 and Alembic migrations.
 
 Each feature declares its endpoints on one `fastapi_canon.APIRouter`. It keeps
@@ -18,9 +18,9 @@ contracts, and declares typed SSE (`@router.sse`), JSON-RPC channels
 `WebRtcRouter.session()` on a separate router in the same feature.
 See [routers](routers.md) for every transport option.
 
-Use the [quickstart](quickstart.md#core-api-routes-errors-and-composition)
+Use the [quickstart](01-quickstart.md#core-api-routes-errors-and-composition)
 for HTTP, typed SSE and WebSocket RPC declarations. This guide covers core
-composition and HTTP options; the [codegen guide](codegen.md) explains contract
+composition and HTTP options; the [codegen guide](06-codegen.md) explains contract
 export and the workflow for separate generated clients.
 
 Dishka is a deliberate part of this canon, not an optional integration.
@@ -42,7 +42,7 @@ outside the library's intended architecture.
   - [Router policies](#router-policies)
   - [Dishka](#dishka)
 - [Error contracts](#error-contracts)
-  - [Optional source checking](error-checking.md)
+  - [Optional source checking](07-error-checking.md)
   - [OpenAPI representation](#openapi-representation)
   - [Shared and operation errors](#shared-and-operation-errors)
   - [Typed server-sent events](#typed-server-sent-events)
@@ -52,7 +52,7 @@ outside the library's intended architecture.
 - [Client generation](#client-generation)
 - [Low-level FastAPI compatibility](#low-level-fastapi-compatibility)
 - [Installation guarantees](#installation-guarantees)
-- [Optional OpenTelemetry integration](telemetry.md)
+- [Optional OpenTelemetry integration](10-telemetry.md)
 - [Requirements](#requirements)
 - [Development](#development)
 - [Showcase](#showcase)
@@ -62,7 +62,7 @@ outside the library's intended architecture.
 Install feature dependencies with `fastapi-canon[sse,websockets,webrtc]` and
 generation tooling with `fastapi-canon[codegen]`. The generation workflow exports
 shared server contracts and coordinates separate clients; see the
-[codegen guide](codegen.md).
+[codegen guide](06-codegen.md).
 
 ```python
 from fastapi import FastAPI
@@ -148,7 +148,7 @@ feature = Feature(name="projects", providers=[provider], lifespan=worker_lifespa
 
 Services must be bound at APP scope; a missing binding fails preflight with
 `canon.providers.E005`. For short database work, inject an APP-scoped
-[`ServiceScope`](database.md#short-scopes-for-workers-and-streams) factory.
+[`ServiceScope`](09-database.md#short-scopes-for-workers-and-streams) factory.
 A lifespan may also take the application as one further parameter. Without
 `Inject[T]` parameters it keeps FastAPI's `lifespan(app)` contract.
 
@@ -161,7 +161,7 @@ configuration diagnostics.
 ### Integrations
 
 Optional integrations, such as MCP, OpenTelemetry and the
-[database](database.md), are enabled once per application and receive parts from
+[database](09-database.md), are enabled once per application and receive parts from
 features:
 
 ```python
@@ -441,7 +441,7 @@ binding for any other type fails with
 
 ## Error contracts
 
-The optional [source checker](error-checking.md) finds explicit application
+The optional [source checker](07-error-checking.md) finds explicit application
 exceptions with missing registry mappings or route `raises=` declarations,
 without importing your application:
 
@@ -514,7 +514,7 @@ discriminated `oneOf` representation.
 `type` is the primary RFC 9457 problem identity. `code` is a stable Canon
 extension for application convenience. Both describe the same registered
 problem; clients should not parse human-readable `title` or `detail` text.
-See [shared problem contracts](problems.md) for rendering occurrences and
+See [shared problem contracts](02-problems.md) for rendering occurrences and
 self-contained schemas outside an HTTP response.
 
 FastAPI `responses={...}` entries without canon error declarations require no
@@ -681,7 +681,7 @@ errors for both phases: an HTTP problem before response start, or a terminal
 `canon.problem` during processing. Generated iterators yield business events, consume
 completion frames and raise `ProblemError` for declared terminal problems.
 Connection failures remain transport errors. See
-[shared problem bindings](problems.md).
+[shared problem bindings](02-problems.md).
 
 See the [streams guide](streams.md) for Dishka injection, POST bodies and the
 streaming boundary. [`examples/streams`](../examples/streams) is an executable
@@ -822,7 +822,7 @@ such failures as terminal `canon.problem` events instead.
 
 ## Client generation
 
-The [generation workflow](codegen.md) exports contracts and runs specialized
+The [generation workflow](06-codegen.md) exports contracts and runs specialized
 SSE/RPC/WebRTC generators together with external HTTP tooling. Shared Python
 models and `Error` declarations supply the contracts; each generator owns its
 client API and generated files. Use `fastapi-canon generate --check --diff` for
@@ -904,3 +904,7 @@ uv run --locked python scripts/check_distributions.py
 See [`examples/showcase`](../examples/showcase) for a runnable two-feature FastAPI
 application. It keeps error contracts alongside their feature routes and merges
 them once at the composition root.
+
+---
+
+Previous: [WebSockets](04-websockets.md) · [Learning path](README.md) · Next: [Client generation](06-codegen.md)

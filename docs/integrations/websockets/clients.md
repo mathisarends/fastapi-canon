@@ -5,7 +5,7 @@ then generates clients from that document rather than from Python internals.
 The resulting artifact can therefore be reviewed, versioned, and consumed by
 other tooling.
 
-Use the [generation workflow](../../codegen.md) to coordinate specialized
+Use the [generation workflow](../../06-codegen.md) to coordinate specialized
 clients and external HTTP tooling. This guide documents standalone generation
 and transport-specific options.
 
@@ -549,7 +549,7 @@ come from the document. See
 [`examples/websockets/generated_clients`](../../../examples/websockets/generated_clients) for complete
 generated Python and TypeScript packages.
 
-[Back to documentation](README.md)
+[Back to documentation](../../04-websockets.md)
 # Connection keepalive
 
 Generated TypeScript `connect()` enables application heartbeats when the OpenRPC

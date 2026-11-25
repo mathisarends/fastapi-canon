@@ -40,7 +40,7 @@ async def upload(
 ```
 
 The example exports its file/form contract in OpenAPI and returns
-filenames; the [runnable application](../../examples/uploads/app.py) stores file
+filenames; the [runnable application](../examples/uploads/app.py) stores file
 contents through an application-owned service resolved with `Inject[FileStore]`.
 It also provides single-file upload and download operations.
 
@@ -65,14 +65,14 @@ application. A declared MIME type does not validate the file's contents.
 Use your OpenAPI generator's multipart and binary support. Canon does not generate
 HTTP clients or impose a client-side upload representation. Configure Orval or
 another tool against OpenAPI and include its generate/check commands in the
-[workflow](../codegen.md).
+[workflow](06-codegen.md).
 
 ## Binary responses and raw uploads
 
 Declare downloads with `response=CanonResponse.binary("application/pdf")` and
 return a matching FastAPI `Response`, `FileResponse` or `StreamingResponse`.
 `CanonResponse` describes the HTTP contract; the returned response supplies the
-body and headers. See the [binary response example](../composition.md#binary-and-pdf-streams).
+body and headers. See the [binary response example](05-composition.md#binary-and-pdf-streams).
 The runnable application uses `application/octet-stream` for its general download
 operation and returns an encoded `Content-Disposition` filename.
 
@@ -110,7 +110,7 @@ application code. Use one body consumer per operation, including dependencies.
 
 ## Run the example
 
-From the repository root after [development setup](../contributing.md):
+From the repository root after [development setup](contributing.md):
 
 ```console
 uv run --frozen uvicorn examples.uploads.app:app --reload
@@ -135,3 +135,7 @@ uv run fastapi-canon contracts export --app examples.uploads.app:app --output-di
 
 Server file/form declarations remain ordinary FastAPI operations. Client-side
 multipart limitations are determined by the external HTTP generator.
+
+---
+
+Previous: [Static error checks](07-error-checking.md) · [Learning path](README.md) · Next: [Database resources](09-database.md)

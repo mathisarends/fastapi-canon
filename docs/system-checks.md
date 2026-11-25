@@ -340,7 +340,7 @@ Composition defaults to `--fail-on error`; choose `warning` to include warning
 findings in exit 1. `--require-complete` independently rejects skipped or
 incomplete checks with exit 2. It does not run unmodeled runtime behavior or
 establish complete exception coverage. The source check's `--require-complete`
-policy uses exit 1; see [source checking](error-checking.md).
+policy uses exit 1; see [source checking](07-error-checking.md).
 
 JSON output has `schema_version: 1` and the corresponding dataclass fields.
 Check reports also include `has_errors` and `complete`. Exit codes are 0 for
@@ -355,4 +355,4 @@ code:
 fastapi-canon check errors src --strict --require-complete
 ```
 
-See [source error checking](error-checking.md) for its coverage and exit policy.
+See [source error checking](07-error-checking.md) for its coverage and exit policy.

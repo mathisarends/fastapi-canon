@@ -85,9 +85,9 @@ supplies its typed result and validates the server's returned data.
 A feature can also contribute Dishka `providers=`, a `lifespan=` and optional
 `integrations=` parts such as `instrument(...)`. Composition owns installation and cleanup. Shared
 `RouterPolicy` declarations reduce repeated authentication, dependencies and
-error contracts. See the [core API guide](composition.md),
-[router policies](composition.md#router-policies) and
-[shared problem contracts](problems.md).
+error contracts. See the [core API guide](05-composition.md),
+[router policies](05-composition.md#router-policies) and
+[shared problem contracts](02-problems.md).
 
 ## Streams: typed events from server to SDK
 
@@ -130,7 +130,7 @@ second error mapping is needed.
 
 See [Canon stream contracts](streams.md),
 [stream clients](integrations/sse/clients.md) and
-[terminal problem behavior](problems.md#what-goes-over-the-wire).
+[terminal problem behavior](02-problems.md#what-goes-over-the-wire).
 
 ## WebSockets: RPC calls as domain methods
 
@@ -183,7 +183,7 @@ endpoint defaults and supported execution lifetimes.
 ## Generate and use clients
 
 Use external OpenAPI tooling for HTTP and specialized generators for streams,
-RPC and media. The [generation workflow](codegen.md) coordinates them without
+RPC and media. The [generation workflow](06-codegen.md) coordinates them without
 imposing a shared model graph or client API.
 
 Save `fastapi-canon.toml` in your project root. This configuration generates
@@ -224,7 +224,8 @@ uv run fastapi-canon generate --check --diff
 
 The error checker reports missing mappings, missing declarations and paths it
 cannot resolve. It analyzes supported source paths; keep behavioral tests for
-runtime behavior. See [error checking](error-checking.md) for analysis limits.
+runtime behavior. See [error checking](07-error-checking.md) for analysis limits.
 
-Next: [application structure](composition.md), [stream behavior](streams.md),
-[WebSockets](integrations/websockets/README.md) and [instrumentation](telemetry.md).
+---
+
+[Learning path](README.md) · Next: [Shared problems](02-problems.md)

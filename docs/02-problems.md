@@ -156,7 +156,7 @@ alone does not add those errors to an operation's documented contract.
 `export_contracts` reads the composed app, so `contracts.openapi` and
 `contracts.openrpc` use the same resolved type URIs as the runtime responses.
 
-Use the [generation workflow](codegen.md) for separate clients. Reuse comes
+Use the [generation workflow](06-codegen.md) for separate clients. Reuse comes
 from Python declarations and public problem contracts. Generated classes have
 separate runtime identities.
 
@@ -206,7 +206,7 @@ Python stream problems are validated against the operation's declared models.
 TypeScript follows the generator's existing static model validation policy;
 standard problem members and stream control messages are checked at runtime.
 
-The [source checker](error-checking.md) can additionally find missing
+The [source checker](07-error-checking.md) can additionally find missing
 registry mappings (`CAN002`) and `raises=` entries (`CAN001`) along supported
 explicit source paths. Run `fastapi-canon check errors src --strict` in CI;
 add `--require-complete` to fail for unresolved paths or an empty supported scan.
@@ -260,3 +260,7 @@ for HTTP problem responses instead of inspecting `HttpError.details`;
 consumers to handle the two terminal events. Update HTTP schema consumers that
 used the old `code` discriminator to use `type`. Give business-specific problems
 distinct stable type URIs; ambiguous `about:blank` unions fail compilation.
+
+---
+
+Previous: [From Python to typed clients](01-quickstart.md) · [Learning path](README.md) · Next: [Streaming](03-streaming.md)

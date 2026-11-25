@@ -25,9 +25,9 @@ and application documentation, rather than a built-in catalogue entry.
 
 | Family | Meaning and authoritative guide |
 | --- | --- |
-| `CAN001` | A known Error mapping is missing from an operation's `raises`; see [source checking](error-checking.md). |
-| `CAN002` | A supported explicit application exception lacks a known mapping; see [source checking](error-checking.md). |
-| `CAN003` | Source analysis is incomplete; see [analysis boundaries](error-checking.md#analysis-boundaries). |
+| `CAN001` | A known Error mapping is missing from an operation's `raises`; see [source checking](07-error-checking.md). |
+| `CAN002` | A supported explicit application exception lacks a known mapping; see [source checking](07-error-checking.md). |
+| `CAN003` | Source analysis is incomplete; see [analysis boundaries](07-error-checking.md#analysis-boundaries). |
 | `canon.*` composition codes | Configuration, routing, provider-root and contract checks; see [findings and coverage](system-checks.md#findings-and-coverage). |
 
 The catalogue also links specific [RPC roots](system-checks.md#rpc-method-dependency-preflight),

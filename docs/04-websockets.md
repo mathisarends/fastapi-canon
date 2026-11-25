@@ -35,7 +35,7 @@ The public operation is `hello.greet`. Parameters and return annotations drive
 the contract. Add `raises=[public_error]` for declared domain failures; request
 application services through `Inject[T]` and feature-owned Dishka providers.
 
-The [quickstart](../../quickstart.md) combines an RPC method with HTTP and SSE,
+The [quickstart](01-quickstart.md) combines an RPC method with HTTP and SSE,
 then generates one Python and TypeScript SDK. Clients handle request IDs,
 serialization, correlation and connection cleanup.
 
@@ -43,11 +43,11 @@ serialization, correlation and connection cleanup.
 
 | Need | Use |
 | --- | --- |
-| One typed result | [Channel method](services.md) |
-| A sequence of typed results | [Message stream](message-streams.md) |
-| Push notifications and connection hooks | [Connections and events](connections-and-events.md) |
-| Upload or download bytes | [Binary stream](streams.md) |
-| An existing WebSocket protocol | [Typed or raw socket](sockets.md) |
+| One typed result | [Channel method](integrations/websockets/services.md) |
+| A sequence of typed results | [Message stream](integrations/websockets/message-streams.md) |
+| Push notifications and connection hooks | [Connections and events](integrations/websockets/connections-and-events.md) |
+| Upload or download bytes | [Binary stream](integrations/websockets/streams.md) |
+| An existing WebSocket protocol | [Typed or raw socket](integrations/websockets/sockets.md) |
 
 Message streams support explicit completion, failure and cancellation. A stream's
 cleanup ends that delivery; cancelling an independently running business job
@@ -56,12 +56,16 @@ early, and close owned clients on shutdown.
 
 ## Application concerns
 
-- [Dependencies and authentication](dependencies.md)
-- [Public errors](errors.md)
-- [Generated clients](clients.md) and [generation workflow](../../codegen.md)
-- [Telemetry](observability.md)
-- [Upgrade guide](migration.md) and [resilience options](hardening-overview.md)
+- [Dependencies and authentication](integrations/websockets/dependencies.md)
+- [Public errors](integrations/websockets/errors.md)
+- [Generated clients](integrations/websockets/clients.md) and [generation workflow](06-codegen.md)
+- [Telemetry](integrations/websockets/observability.md)
+- [Upgrade guide](integrations/websockets/migration.md) and [resilience options](integrations/websockets/hardening-overview.md)
 
-For custom implementations, consult the [wire protocol](protocol.md) and
-[transport adapters](transports.md). These references are optional for normal
+For custom implementations, consult the [wire protocol](integrations/websockets/protocol.md) and
+[transport adapters](integrations/websockets/transports.md). These references are optional for normal
 application development.
+
+---
+
+Previous: [Streaming](03-streaming.md) · [Learning path](README.md) · Next: [Application composition](05-composition.md)
