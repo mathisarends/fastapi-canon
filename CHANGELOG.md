@@ -45,6 +45,18 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0290).
   longer exports `Inject`, `CanonWebSocketRouter`, `FastApiSocket` or
   `serve_websocket`. Import `Inject` from `fastapi_canon` and the adapter types
   from `fastapi_canon.integrations.websockets.adapters.fastapi`.
+- **`CANON-029-COMPLETE-ERROR-CHECK`** — `check errors` follows ordinary Python
+  instead of reporting it as `CAN003`: library handlers and context managers,
+  generic and union annotations, properties, loop elements, `super()`,
+  validators, raised factories, deferred generators and coroutines, recursion,
+  HTTP connections passed to helpers, every scanned implementation of an
+  unbound port, callables passed, stored or provided by Dishka, `ServiceScope`,
+  `isinstance` narrowing and `RpcError` declarations. Run
+  `fastapi-canon check errors src --strict`, then declare or map the newly
+  reported errors. Remaining `CAN003` findings name their
+  candidates; text and JSON reports rank their root causes. See
+  [error checking](docs/07-error-checking.md)
+  ([#232](https://github.com/mathisarends/fastapi-canon/issues/232)).
 
 ### Added
 

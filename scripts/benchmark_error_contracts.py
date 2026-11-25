@@ -13,10 +13,10 @@ from pathlib import Path
 from time import perf_counter
 
 from fastapi_canon.checks.contracts import (  # smelt: ignore[ARC007] -- Timing phases.
-    _Checker,
+    CheckContracts,
 )
 from fastapi_canon.checks.source import (  # smelt: ignore[ARC007] -- Timing phases.
-    _Source,
+    SourceIndex,
 )
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -132,9 +132,9 @@ def _measure(root: Path, rounds: int, profile: Path | None) -> dict:
     fingerprints = set()
     for _ in range(rounds):
         started = perf_counter()
-        source = _Source.read([root])
+        source = SourceIndex.read([root])
         indexed = perf_counter()
-        report = _Checker(source).check()
+        report = CheckContracts(source)()
         analyzed = perf_counter()
         payload = report.as_dict()
         for operation in payload["operations"]:
@@ -171,7 +171,7 @@ def _measure(root: Path, rounds: int, profile: Path | None) -> dict:
         raise RuntimeError("non-deterministic analysis results")
     if profile:
         profiler = cProfile.Profile()
-        profiler.runcall(lambda: _Checker(_Source.read([root])).check())
+        profiler.runcall(lambda: CheckContracts(SourceIndex.read([root]))())
         profiler.dump_stats(profile)
     return {
         "files": len(source.paths),

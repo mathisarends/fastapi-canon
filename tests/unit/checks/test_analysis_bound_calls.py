@@ -173,33 +173,48 @@ async def protected(guard: FromDishka[Guard]) -> None:
     ]
 
 
-@pytest.mark.parametrize("first", ["direct", "dependency"])
-def test_only_framework_injected_connections_are_narrowed(
-    scan: Callable[[str], tuple[int, dict[str, Any]]],
-    first: str,
-) -> None:
-    direct = """
-@router.get("/direct", raises=[missing])
-async def direct(guard: FromDishka[Guard], connection: HTTPConnection) -> None:
+@pytest.mark.parametrize(
+    ("operation", "complete"),
+    [
+        (
+            """
+@router.get("/", raises=[missing], dependencies=[Depends(verify)])
+async def endpoint() -> None: pass
+""",
+            True,
+        ),
+        (
+            """
+@router.get("/", raises=[missing])
+async def endpoint(guard: FromDishka[Guard], connection: HTTPConnection) -> None:
     await verify(guard, connection, "bad")
-"""
-    dependency = """
-@router.get("/dependency", raises=[missing], dependencies=[Depends(verify)])
-async def dependency() -> None: pass
-"""
+""",
+            True,
+        ),
+        (
+            """
+@router.get("/", raises=[missing])
+async def endpoint(
+    guard: FromDishka[Guard], connections: list[HTTPConnection]
+) -> None:
+    await verify(guard, connections[0], "bad")
+""",
+            False,
+        ),
+    ],
+    ids=["dependency", "passed-to-helper", "unknown-connection"],
+)
+def test_injected_http_connections_narrow_websocket_branches(
+    scan: Callable[[str], tuple[int, dict[str, Any]]], operation: str, complete: bool
+) -> None:
+    _, report = scan(PRELUDE + AUTH + operation)
 
-    status, report = scan(
-        PRELUDE
-        + AUTH
-        + (direct + dependency if first == "direct" else dependency + direct)
+    [result] = report["operations"]
+    assert result["complete"] is complete
+    messages = [item["message"] for item in result["diagnostics"]]
+    assert any("transport narrowing is unresolved" in item for item in messages) is (
+        not complete
     )
-
-    assert status == 1
-    operations = {item["function"]: item for item in report["operations"]}
-    assert operations["api.dependency"]["complete"]
-    [diagnostic] = operations["api.direct"]["diagnostics"]
-    assert diagnostic["code"] == "CAN003"
-    assert "transport narrowing is unresolved" in diagnostic["message"]
 
 
 @pytest.mark.parametrize(
@@ -355,7 +370,7 @@ async def endpoint(session: AsyncSession, strategy: Strategy) -> None:
     "expression",
     [
         "result = await session.execute(select(1)); item = result.scalar_one_or_none(); item.validate()",
-        "result = await session.unknown(select(1)); result.scalar_one_or_none()",
+        "result = await session.unknown(select(1)); result.validate()",
     ],
 )
 def test_unknown_external_returns_stay_incomplete(
@@ -438,7 +453,7 @@ def test_chained_factory_construction_errors_are_followed(
         + """
 @router.get("/user")
 def endpoint() -> None:
-    User.restore("example").validate()
+    User.restore("example").name.strip()
 """
     )
 

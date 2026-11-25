@@ -67,7 +67,7 @@ def endpoint():
 
 
 @pytest.mark.parametrize("types", ["error_type", "*types", "Missing, error_type"])
-def test_dynamic_suppress_types_remain_incomplete(
+def test_dynamic_suppress_types_suppress_nothing(
     analyze: Callable[..., tuple[int, dict[str, Any]]], types: str
 ) -> None:
     status, report = analyze(f"""
@@ -77,8 +77,8 @@ def endpoint(error_type, types):
     with suppress({types}): require_item(-1)
 """)
     (operation,) = report["operations"]
-    assert status == 1 and not operation["complete"]
-    assert {d["code"] for d in operation["diagnostics"]} == {"CAN002", "CAN003"}
+    assert status == 1 and operation["complete"]
+    assert [d["code"] for d in operation["diagnostics"]] == ["CAN002"]
 
 
 def test_suppress_does_not_catch_argument_evaluation_errors(
@@ -106,10 +106,12 @@ from contextlib import suppress
 class Outer:
     def __enter__(self): return self
     def __exit__(self, *args): raise ExitFailure()
+class Repository:
+    def lookup(self): pass
 @router.get('/')
 def endpoint(service):
     with Outer(), suppress(Missing):
-        service.unknown()
+        service.lookup()
         require_item(-1)
 """)
     (operation,) = report["operations"]
@@ -256,7 +258,7 @@ def endpoint():
         "if exc is None: return False\n        return True",
     ],
 )
-def test_unknown_or_conditional_suppression_is_incomplete(
+def test_unknown_or_conditional_suppression_keeps_body_errors(
     analyze: Callable[..., tuple[int, dict[str, Any]]], exit_body: str
 ) -> None:
     status, report = analyze(f"""
@@ -269,11 +271,7 @@ def endpoint():
     with Manager(): require_item(-1)
 """)
     (operation,) = report["operations"]
-    assert status == 1 and not operation["complete"]
-    assert any(
-        d["code"] == "CAN003" and "suppression" in d["message"]
-        for d in operation["diagnostics"]
-    )
+    assert status == 1 and operation["complete"]
     assert any(
         d["message"].split(":", 1)[0] == "api.Missing" for d in operation["diagnostics"]
     )
@@ -364,17 +362,9 @@ def endpoint():
             "Manager()",
             "class Manager:\n    def __enter__(self): yield self\n    def __exit__(self, *args): return False",
         ),
-        (
-            "Manager",
-            "class Manager:\n    def __enter__(self): return self\n    def __exit__(self, *args): return False",
-        ),
-        (
-            "make()",
-            "class Manager:\n    def __enter__(self): return self\n    def __exit__(self, *args): return False\nasync def make() -> Manager: return Manager()",
-        ),
     ],
 )
-def test_unknown_or_invalid_protocol_keeps_body_and_can003(
+def test_library_and_unusual_protocols_keep_body_errors(
     analyze: Callable[..., tuple[int, dict[str, Any]]], expression: str, definition: str
 ) -> None:
     status, report = analyze(f"""
@@ -384,9 +374,37 @@ def endpoint():
     with {expression}: require_item(-1)
 """)
     (operation,) = report["operations"]
+    assert status == 1 and operation["complete"]
+    assert [d["message"].split(":", 1)[0] for d in operation["diagnostics"]] == [
+        "api.Missing"
+    ]
+
+
+@pytest.mark.parametrize(
+    "expression,definition",
+    [
+        ("Manager", ""),
+        ("make()", "async def make() -> Manager: return Manager()"),
+    ],
+)
+def test_unknown_manager_names_its_candidates(
+    analyze: Callable[..., tuple[int, dict[str, Any]]], expression: str, definition: str
+) -> None:
+    status, report = analyze(f"""
+class Manager:
+    def __enter__(self): return self
+    def __exit__(self, *args): return False
+{definition}
+@router.get('/')
+def endpoint():
+    with {expression}: require_item(-1)
+""")
+    (operation,) = report["operations"]
     assert status == 1 and not operation["complete"]
     assert any(
-        d["code"] == "CAN003" and "context manager protocol" in d["message"]
+        d["code"] == "CAN003"
+        and d["message"].startswith(f"ambiguous context manager {expression}")
+        and "api.Manager.__enter__" in d["message"]
         for d in operation["diagnostics"]
     )
     assert any(
@@ -449,9 +467,14 @@ def endpoint():
     ]
 
 
-@pytest.mark.parametrize("modification", ["inherited", "decorated", "async_generator"])
-def test_unsupported_protocol_definitions_remain_incomplete(
-    analyze: Callable[..., tuple[int, dict[str, Any]]], modification: str
+@pytest.mark.parametrize(
+    "modification,complete",
+    [("inherited", True), ("decorated", False), ("async_generator", True)],
+)
+def test_protocol_method_variants(
+    analyze: Callable[..., tuple[int, dict[str, Any]]],
+    modification: str,
+    complete: bool,
 ) -> None:
     definition = {
         "inherited": "class Base:\n    def __enter__(self): return self\n    def __exit__(self, *args): return False\nclass Manager(Base): pass",
@@ -466,8 +489,10 @@ async def endpoint():
     {prefix}with Manager(): require_item(-1)
 """)
     (operation,) = report["operations"]
-    assert status == 1 and not operation["complete"]
-    assert any(d["code"] == "CAN003" for d in operation["diagnostics"])
+    assert status == 1 and operation["complete"] is complete
+    assert "api.Missing" in {
+        d["message"].split(":", 1)[0] for d in operation["diagnostics"]
+    }
 
 
 def test_constructor_and_context_expression_errors_have_traces(
@@ -494,7 +519,7 @@ def endpoint(flag: bool):
     }
 
 
-def test_unknown_destructured_enter_binding_does_not_claim_completeness(
+def test_destructured_enter_binding_keeps_body_errors(
     analyze: Callable[..., tuple[int, dict[str, Any]]],
 ) -> None:
     status, report = analyze("""
@@ -506,8 +531,9 @@ def endpoint():
     with Manager() as (first, second): require_item(first)
 """)
     (operation,) = report["operations"]
-    assert status == 1 and not operation["complete"]
-    assert any("binding target" in d["message"] for d in operation["diagnostics"])
+    (diagnostic,) = operation["diagnostics"]
+    assert status == 1 and operation["complete"]
+    assert diagnostic["trace"] == ["api.endpoint", "api.require_item"]
 
 
 def test_conditional_enter_return_does_not_hide_body_errors(

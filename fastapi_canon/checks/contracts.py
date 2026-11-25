@@ -33,6 +33,12 @@ _ERROR = "fastapi_canon.Error"
 _ERRORS = frozenset(
     {_ERROR, "fastapi_canon.error.Error", "fastapi_canon.error.error.Error"}
 )
+_RPC_BINDINGS = frozenset(
+    {
+        "fastapi_canon.integrations.websockets.RpcErrorBinding",
+        "fastapi_canon.integrations.websockets.errors.RpcErrorBinding",
+    }
+)
 _DEPENDENCIES = {
     "fastapi.Depends",
     "fastapi.params.Depends",
@@ -64,6 +70,14 @@ class _Operation:
 
 
 @dataclass(frozen=True, slots=True)
+class RootCause:
+    path: str
+    line: int
+    message: str
+    operations: int
+
+
+@dataclass(frozen=True, slots=True)
 class ContractReport:
     operations: tuple[_Operation, ...]
 
@@ -78,6 +92,22 @@ class ContractReport:
     @property
     def incomplete(self) -> int:
         return sum(not operation.complete for operation in self.operations)
+
+    @property
+    def root_causes(self) -> tuple[RootCause, ...]:
+        affected: dict[tuple[str, int, str], set[str]] = {}
+        for operation in self.operations:
+            for item in operation.diagnostics:
+                if item.code == "CAN003":
+                    key = (item.path, item.line, item.message)
+                    affected.setdefault(key, set()).add(operation.function)
+        causes = (
+            RootCause(path, line, message, len(functions))
+            for (path, line, message), functions in affected.items()
+        )
+        return tuple(
+            sorted(causes, key=lambda item: (-item.operations, item.path, item.line))
+        )
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -94,6 +124,7 @@ class ContractReport:
             ],
             "contract_gaps": self.gaps,
             "incomplete_operations": self.incomplete,
+            "root_causes": [asdict(item) for item in self.root_causes],
         }
 
 
@@ -101,7 +132,7 @@ def _keyword(node: ast.Call, name: str) -> ast.expr | None:
     return next((item.value for item in node.keywords if item.arg == name), None)
 
 
-class _CheckContracts:
+class CheckContracts:
     def __init__(self, source: SourceIndex) -> None:
         self.source = source
         self._catalog_cache: dict[str, str] | None = None
@@ -360,7 +391,21 @@ class _CheckContracts:
         result: dict[str, str] = {}
         for scope, element in self._sequence(node, module, operation):
             identity = self.source.resolve(element, scope)
+            rpc = operation.transport == "rpc"
+            if rpc and identity is not None and self.source.rpc_error(identity):
+                result[identity] = identity
+                continue
             scope, definition = self.source.value(element, scope)
+            if (
+                rpc
+                and isinstance(definition, ast.Call)
+                and definition.args
+                and self.source.resolve(definition.func, scope) in _RPC_BINDINGS
+            ):
+                bound = self.source.resolve(definition.args[0], scope)
+                if bound is not None and self.source.exception(bound):
+                    result[bound] = identity or ast.unparse(element)
+                    continue
             if (
                 not isinstance(definition, ast.Call)
                 or self.source.resolve(definition.func, scope) not in _ERRORS
@@ -575,6 +620,16 @@ class _CheckContracts:
                 ),
                 None,
             )
+            if mapped is None and operation.transport == "rpc":
+                # An undeclared RpcError still names its own contract.
+                mapped = next(
+                    (
+                        base
+                        for base in self.source.mro(escape.exception) or []
+                        if self.source.rpc_error(base)
+                    ),
+                    None,
+                )
             code = "CAN001" if mapped else "CAN002"
             if mapped and mapped in declared.values():
                 continue
@@ -612,7 +667,7 @@ class _CheckContracts:
 
 
 def analyze_error_contracts(roots: list[Path]) -> ContractReport:
-    return _CheckContracts(SourceIndex.read(roots))()
+    return CheckContracts(SourceIndex.read(roots))()
 
 
 class _ErrorMapping(NamedTuple):
