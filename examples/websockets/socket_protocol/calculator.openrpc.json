@@ -3,7 +3,7 @@
   "info": {
     "title": "Calculator",
     "version": "1.0.0",
-    "description": "Typed JSON-RPC API."
+    "description": ""
   },
   "servers": [
     {
@@ -37,7 +37,7 @@
         }
       },
       "x-rpc-request-schema": {
-        "$ref": "#/components/schemas/OperationsRequest"
+        "$ref": "#/components/schemas/CalculatorOperationsRequest"
       },
       "servers": [
         {
@@ -59,10 +59,10 @@
   ],
   "components": {
     "schemas": {
-      "OperationsRequest": {
+      "CalculatorOperationsRequest": {
         "additionalProperties": false,
         "type": "object",
-        "title": "OperationsRequest",
+        "title": "CalculatorOperationsRequest",
         "properties": {
           "jsonrpc": {
             "const": "2.0",

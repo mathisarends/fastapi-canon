@@ -39,7 +39,7 @@ scope.
 | HTTP routes and contracts | `fastapi_canon.APIRouter`, `RouterPolicy`, `Error`, `ErrorOptions`, `CanonResponse`; `Problem`; `fastapi_canon.error.ErrorRegistry` for manual assembly without `Composition` | [HTTP contracts](05-composition.md#error-contracts) |
 | Streaming HTTP request bodies | `fastapi_canon.BinaryBody` (0.28.0) | [File uploads](08-file-transfers.md#binary-responses-and-raw-uploads) |
 | Typed SSE | `APIRouter.get(..., response_class=EventSourceResponse)` | [SSE contracts](streams.md) |
-| WebSocket JSON-RPC | `APIRouter.channel()`; `APIRouter.include_channel()` with `fastapi_canon.integrations.websockets.RpcChannel` for shared channels | [WebSockets](04-websockets.md) |
+| WebSocket JSON-RPC | `APIRouter.include_channel()` with `fastapi_canon.integrations.websockets.RpcChannel`; `Annotated[T, Path()]` for path variables | [WebSockets](04-websockets.md) |
 | Typed or raw WebSocket messages and binary streams | `@APIRouter.socket()`, `@APIRouter.binary_stream()`; `RpcSocket` | [Sockets](integrations/websockets/sockets.md), [binary streams](integrations/websockets/streams.md) |
 | Shared WebSocket connection options | `APIRouter(websocket_policy=...)` with `fastapi_canon.integrations.websockets.WebSocketPolicy` | [Connection policy](routers.md#share-websocket-connection-policy) |
 | WebRTC with Canon admission errors | `fastapi_canon.integrations.webrtc.WebRtcRouter` and `@rtc.session()`, `Session`, `SessionCapacity`; engine adapters in `.webrtc.engines` | [WebRTC admission](webrtc.md) |

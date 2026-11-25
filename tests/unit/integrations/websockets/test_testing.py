@@ -18,7 +18,7 @@ from fastapi_canon.integrations.websockets.testing import (
     SocketFaults,
 )
 
-control_channel = RpcChannel("control")
+control_channel = RpcChannel(namespace="control")
 
 
 @control_channel.method("ping")

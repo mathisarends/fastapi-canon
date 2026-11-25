@@ -12,24 +12,24 @@ from fastapi_canon.integrations.websockets import (
     RpcChannel,
     RpcDisconnect,
     RpcErrorBinding,
-    RpcModel,
 )
 from fastapi_canon.integrations.websockets.codegen import generate_python_client
 from fastapi_canon.integrations.websockets.codegen.python import PythonClientOptions
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
 
+from tests.fixtures.websockets import CamelModel
 from tests.unit.integrations.websockets.testing import InMemorySocket
 
 
-class SessionParams(RpcModel):
+class SessionParams(CamelModel):
     session_id: str
 
 
-class SessionEvent(RpcModel):
+class SessionEvent(CamelModel):
     value: str
 
 
-class FailureDetails(RpcModel):
+class FailureDetails(CamelModel):
     resource_id: int
 
 
@@ -44,7 +44,7 @@ async def test_generated_python_subscription_errors_are_typed(
 ) -> None:
     async with asyncio.timeout(10):
         default = RpcErrorBinding(SessionMissing, code="session_unavailable")
-        channel = RpcChannel("session", raises=[default] if declared else [])
+        channel = RpcChannel(namespace="session", raises=[default] if declared else [])
         binding = RpcErrorBinding(SessionMissing, details=FailureDetails)
 
         @channel.stream(raises=[binding] if declared else [])
@@ -116,7 +116,7 @@ async def test_generated_python_subscription_errors_are_typed(
 
 async def test_generated_python_subscription_roundtrip(tmp_path: Path) -> None:
     async with asyncio.timeout(10):
-        channel = RpcChannel("session")
+        channel = RpcChannel(namespace="session")
         stopped = asyncio.Event()
 
         @channel.stream()
@@ -179,7 +179,7 @@ async def test_generated_python_subscription_roundtrip(tmp_path: Path) -> None:
 
 
 async def test_subscription_resubscribes_after_reconnect(tmp_path: Path) -> None:
-    channel = RpcChannel("session")
+    channel = RpcChannel(namespace="session")
 
     @channel.stream()
     async def events(params: SessionParams) -> AsyncIterator[SessionEvent]:

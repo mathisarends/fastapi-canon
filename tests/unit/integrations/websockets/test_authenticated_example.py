@@ -5,7 +5,7 @@ import fastapi_canon.integrations.websockets.connection as connection_module
 import pytest
 from examples.websockets.authenticated import Login, Sessions, create_app
 from fastapi.testclient import TestClient
-from fastapi_canon.integrations.websockets import CanonWebSocketRouter
+from fastapi_canon.integrations.websockets.adapters.fastapi import CanonWebSocketRouter
 from starlette.testclient import WebSocketDenialResponse
 from starlette.websockets import WebSocketDisconnect
 

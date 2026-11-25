@@ -497,7 +497,7 @@ def test_generated_typescript_passes_strict_type_checking(
 
 
 def test_contracts_without_models_do_not_export_a_models_module() -> None:
-    channel = RpcChannel("control")
+    channel = RpcChannel(namespace="control")
 
     @channel.method
     async def ping() -> str:

@@ -2,16 +2,17 @@ import asyncio
 import json
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
 import pytest
 from dishka import Provider, Scope, provide
-from fastapi import Depends, FastAPI, WebSocket
+from fastapi import Depends, FastAPI, Path, WebSocket
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 from pydantic import BaseModel
+from starlette.testclient import WebSocketDenialResponse
 from starlette.types import Message
 
 from fastapi_canon import (
@@ -20,12 +21,11 @@ from fastapi_canon import (
     Composition,
     Error,
     Feature,
+    Inject,
     export_contracts,
 )
 from fastapi_canon.errors import ConfigurationError, ResponseConfigurationError
 from fastapi_canon.integrations.websockets import (
-    Inject,
-    ProtocolDefinitionError,
     RpcChannel,
     RpcConnection,
 )
@@ -243,20 +243,20 @@ def test_rpc_preflight_accepts_context_and_hook_values_without_providers() -> No
 
 
 def test_composed_channels_share_one_connection_and_keep_path_context() -> None:
-    projects = RpcChannel()
-    tasks = RpcChannel()
+    projects = RpcChannel(namespace="projects")
+    tasks = RpcChannel(namespace="tasks")
 
     @projects.method("rename")
-    async def rename(data: Rename, connection: Inject[RpcConnection]) -> str:
-        return f"{connection.path_params['project_id']}: {data.title}"
+    async def rename(title: str, project_id: Annotated[int, Path()]) -> str:
+        return f"{project_id}: {title}"
 
     @tasks.method("create")
     async def create() -> str:
         return "created"
 
     session = RpcChannel()
-    session.include_channel(projects, namespace="projects")
-    session.include_channel(tasks, namespace="tasks")
+    session.include_channel(projects)
+    session.include_channel(tasks)
     router = APIRouter(prefix="/projects")
     router.include_channel(session, path="/{project_id}/session")
     app = Composition(features=[Feature(name="projects", routers=[router])]).build(
@@ -285,50 +285,45 @@ def test_composed_channels_share_one_connection_and_keep_path_context() -> None:
 
 
 def test_mounting_snapshots_and_reuses_a_channel_at_different_paths() -> None:
-    source = RpcChannel()
+    source = RpcChannel(namespace="tasks")
 
     @source.method("first")
     async def first() -> str:
         return "first"
 
     router = APIRouter()
-    router.include_channel(source, path="/first", namespace="first")
+    router.include_channel(source, path="/first")
 
     @source.method("later")
     async def later() -> str:
         return "later"
 
-    router.include_channel(source, path="/second", namespace="second")
+    router.include_channel(source, path="/second")
     app = FastAPI()
     app.include_router(router)
 
-    async def scenario() -> None:
+    async def scenario() -> tuple[dict[str, Any], dict[str, Any]]:
         async with _connection(app, "/first") as (incoming, outgoing):
-            await _send(incoming, 1, "first.later")
-            assert (await _receive(outgoing))["error"]["code"] == -32601
+            await _send(incoming, 1, "tasks.later")
+            first_reply = await _receive(outgoing)
         async with _connection(app, "/second") as (incoming, outgoing):
-            await _send(incoming, 2, "second.later")
-            assert (await _receive(outgoing))["result"] == "later"
+            await _send(incoming, 2, "tasks.later")
+            return first_reply, await _receive(outgoing)
 
-    asyncio.run(scenario())
-    document = export_contracts(app, kinds=["openrpc"]).openrpc
-    assert document is not None
-    assert {method["name"] for method in document["methods"]} == {
-        "first.first",
-        "second.first",
-        "second.later",
-    }
+    first_reply, second_reply = asyncio.run(scenario())
+    assert first_reply["error"]["code"] == -32601
+    assert second_reply["result"] == "later"
 
 
 def test_typed_channel_paths_include_the_router_prefix() -> None:
     channel = RpcChannel()
 
     @channel.method("read")
-    async def read(path: Inject[ProjectPath]) -> UUID:
-        return path.project_id
+    async def read(project_id: Annotated[UUID, Path()]) -> UUID:
+        return project_id
 
     router = APIRouter(prefix="/projects/{project_id}")
-    router.include_channel(channel, path="/session", path_model=ProjectPath)
+    router.include_channel(channel, path="/session")
     app = FastAPI()
     app.include_router(router)
     project_id = "43fcb13b-d963-4a25-9bd1-e14114124378"
@@ -348,7 +343,7 @@ def test_nested_channel_errors_are_collected_and_do_not_close_the_connection() -
     missing = Error(
         MissingProject, status=404, code="project_missing", title="Project missing"
     )
-    projects = RpcChannel()
+    projects = RpcChannel(namespace="projects")
 
     @projects.method("read", raises=[missing])
     async def read() -> None:
@@ -359,7 +354,7 @@ def test_nested_channel_errors_are_collected_and_do_not_close_the_connection() -
         return "pong"
 
     session = RpcChannel()
-    session.include_channel(projects, namespace="projects")
+    session.include_channel(projects)
     router = APIRouter()
     router.include_channel(session, path="/session")
     parent = APIRouter(prefix="/api")
@@ -386,7 +381,7 @@ def test_nested_channel_errors_are_collected_and_do_not_close_the_connection() -
 
 def test_message_stream_cancel_keeps_methods_available_and_cleans_up() -> None:
     cleaned = asyncio.Event()
-    projects = RpcChannel()
+    projects = RpcChannel(namespace="projects")
 
     @projects.stream("events")
     async def events() -> AsyncIterator[str]:
@@ -401,7 +396,7 @@ def test_message_stream_cancel_keeps_methods_available_and_cleans_up() -> None:
         return "pong"
 
     session = RpcChannel()
-    session.include_channel(projects, namespace="projects")
+    session.include_channel(projects)
     router = APIRouter()
     router.include_channel(session, path="/session")
     app = FastAPI()
@@ -656,33 +651,8 @@ def test_binary_streams_and_typed_sockets_are_declared_on_the_router() -> None:
     ] == [("projects.rename", "{baseUrl}/projects/{project_id}/rename")]
 
 
-def test_router_channel_mounts_methods_declared_after_it() -> None:
-    router = APIRouter(prefix="/projects", namespace="projects")
-    session = router.channel("/{project_id}/session")
-
-    @session.method()
-    async def rename(data: Rename, connection: Inject[RpcConnection]) -> str:
-        return f"{connection.path_params['project_id']}: {data.title}"
-
-    app = Composition(features=[Feature(name="projects", routers=[router])]).build(
-        FastAPI()
-    )
-
-    async def scenario() -> Any:
-        async with _connection(app, "/projects/42/session") as (incoming, outgoing):
-            await _send(incoming, 1, "projects.rename", {"title": "Updated"})
-            return (await _receive(outgoing))["result"]
-
-    assert asyncio.run(scenario()) == "42: Updated"
-    with pytest.raises(ProtocolDefinitionError, match="frozen"):
-
-        @session.method()
-        async def late() -> str:
-            return "never mounted"
-
-
 def test_channels_with_streams_or_sockets_point_to_router_declarations() -> None:
-    channel = RpcChannel("media")
+    channel = RpcChannel(namespace="media")
 
     @channel.stream(content_type="application/octet-stream")
     async def preview() -> AsyncIterator[bytes]:
@@ -809,3 +779,67 @@ async def _receive(outgoing: asyncio.Queue[Message]) -> Any:
     message = await outgoing.get()
     assert message["type"] == "websocket.send", message
     return json.loads(message["text"])
+
+
+def test_channel_path_parameters_are_validated_before_accepting() -> None:
+    channel = RpcChannel(namespace="projects")
+
+    @channel.method()
+    async def read(project_id: Annotated[int, Path()]) -> int:
+        return project_id
+
+    router = APIRouter(prefix="/projects")
+    router.include_channel(channel, path="/{project_id}/session")
+    app = FastAPI()
+    app.include_router(router)
+
+    with (
+        TestClient(app) as client,
+        pytest.raises(WebSocketDenialResponse) as denied,
+        client.websocket_connect("/projects/not-a-number/session"),
+    ):
+        pass
+    assert denied.value.status_code == 404
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "path", "message"),
+    [
+        (int, int, "/session", "not a variable"),
+        (int, str, "/{project_id}/session", "different types"),
+    ],
+)
+def test_channel_path_parameters_must_match_the_endpoint(
+    first: type, second: type, path: str, message: str
+) -> None:
+    channel = RpcChannel(namespace="projects")
+
+    @channel.method()
+    async def read(project_id: Annotated[first, Path()]) -> str:  # type: ignore[valid-type]
+        return str(project_id)
+
+    @channel.method()
+    async def write(project_id: Annotated[second, Path()]) -> str:  # type: ignore[valid-type]
+        return str(project_id)
+
+    router = APIRouter()
+    with pytest.raises(ConfigurationError, match=message):
+        router.include_channel(channel, path=path)
+    assert router.routes == []
+
+
+def test_finite_event_channels_close_after_their_sources_complete() -> None:
+    channel = RpcChannel(namespace="exports")
+
+    @channel.event()
+    async def progress() -> AsyncIterator[Rename]:
+        yield Rename(title="done")
+
+    router = APIRouter()
+    router.include_channel(channel, path="/export", close_when_events_complete=True)
+    app = FastAPI()
+    app.include_router(router)
+
+    with TestClient(app) as client, client.websocket_connect("/export") as socket:
+        assert socket.receive_json()["params"] == {"title": "done"}
+        assert socket.receive()["type"] == "websocket.close"

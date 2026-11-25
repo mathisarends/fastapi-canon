@@ -28,7 +28,7 @@ from tests.unit.integrations.websockets.codegen.test_reconnect import (
 
 
 def test_idempotency_round_trips_contract_and_both_generated_metadata(tmp_path):
-    channel = RpcChannel("reads")
+    channel = RpcChannel(namespace="reads")
 
     @channel.method(idempotent=True)
     async def value() -> int:
@@ -53,7 +53,7 @@ def test_idempotency_round_trips_contract_and_both_generated_metadata(tmp_path):
     assert "idempotent=True" in (tmp_path / "python/routes.py").read_text()
     assert "idempotent: true" in (tmp_path / "typescript/routes.ts").read_text()
     with pytest.raises(ProtocolDefinitionError, match="idempotent"):
-        RpcChannel("invalid").method(idempotent=1)
+        RpcChannel(namespace="invalid").method(idempotent=1)
 
 
 @pytest.mark.parametrize("idempotent", [False, True])
@@ -61,7 +61,7 @@ async def test_retry_after_execution_and_lost_response(
     client_module, pool_runtime, idempotent
 ):
     executions = 0
-    channel = RpcChannel("reads")
+    channel = RpcChannel(namespace="reads")
 
     @channel.method(idempotent=idempotent)
     async def value() -> int:

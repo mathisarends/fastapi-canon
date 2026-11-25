@@ -1,43 +1,36 @@
 import json
 
-from fastapi_canon.integrations.websockets import (
-    CanonWebSocketRouter,
-    RpcChannel,
-    RpcModel,
-)
-from fastapi_canon.integrations.websockets.schema import render_openrpc
+from fastapi import FastAPI
+from fastapi_canon import APIRouter, Composition, Feature, export_contracts
+from fastapi_canon.integrations.websockets import RpcChannel
+from pydantic import BaseModel
 
 
-class SearchParams(RpcModel):
-    project_id: str
-    query: str
-    max_results: int = 10
-
-
-class SearchResult(RpcModel):
+class SearchResult(BaseModel):
     items: list[str]
     next_page_token: str | None = None
 
 
-router = RpcChannel("search")
+search = RpcChannel(namespace="search")
 
 
-@router.method()
-async def run(params: SearchParams) -> SearchResult:
+@search.method()
+async def run(project_id: str, query: str, max_results: int = 10) -> SearchResult:
     return SearchResult(items=[])
 
 
-app = CanonWebSocketRouter(version=3)
-app.socket("/rpc", channels=(router,))
+router = APIRouter()
+router.include_channel(search, path="/rpc", version=3)
+app = Composition(features=[Feature(name="search", routers=[router])]).build(
+    FastAPI(title="Search API")
+)
 
 
 def main() -> None:
-    contract = app.contract(title="Search API", base_url="ws://localhost:8000")
-    openrpc = render_openrpc(
-        contract.protocol,
-        title=contract.title,
-        servers=contract.servers,
-    )
+    openrpc = export_contracts(
+        app, kinds=("openrpc",), base_url="ws://localhost:8000"
+    ).openrpc
+    assert openrpc is not None
     print("OpenRPC method:")
     print(json.dumps(openrpc["methods"][0], indent=2))
 

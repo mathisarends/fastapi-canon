@@ -5,11 +5,8 @@ Application objects do not belong in the public request schema. Mark them with
 the handler.
 
 ```python
-from fastapi_canon.integrations.websockets import Inject, RpcChannel, RpcModel
-
-
-class CreateTask(RpcModel):
-    title: str
+from fastapi_canon import Inject
+from fastapi_canon.integrations.websockets import RpcChannel
 
 
 class TaskStore:
@@ -17,16 +14,16 @@ class TaskStore:
         return 1
 
 
-tasks = RpcChannel("tasks")
+tasks = RpcChannel(namespace="tasks")
 
 
 @tasks.method()
-async def create(params: CreateTask, store: Inject[TaskStore]) -> int:
-    return await store.create(params.title)
+async def create(title: str, store: Inject[TaskStore]) -> int:
+    return await store.create(title)
 ```
 
-`store` is invisible to callers and to OpenRPC. Only `CreateTask` is serialized
-on the wire.
+`store` is invisible to callers and to OpenRPC. Only `title` is serialized on
+the wire.
 
 ## Context terms
 
@@ -35,7 +32,7 @@ supply to handlers, not after when they run:
 
 | Term | Declared with | When it runs | Supplies |
 | --- | --- | --- | --- |
-| Connection context | `include_channel(..., context=async_function)` or `CanonWebSocketRouter` `context=` | Once per WebSocket, before acceptance | One typed value from the function's return annotation, available as `Inject[T]` |
+| Connection context | `include_channel(..., context=async_function)` or a socket decorator's `context=` | Once per WebSocket, before acceptance | One typed value from the function's return annotation, available as `Inject[T]` |
 | Hook | `hooks=(function, ...)` next to a connection context | During that preparation, only when reachable | Reusable typed values, looked up by return type; requires `context=` |
 | Injected service | Dishka provider or a `resolver=` | On demand when a handler asks for `Inject[T]` | Application services such as repositories |
 | Server values | `channel.create_server(context=object_or_mapping)` | Fixed when the server is built | Known objects, by concrete type or by an explicit type mapping; for small applications and tests |
@@ -95,7 +92,7 @@ looks for an optional `enter_scope()` async context manager on the resolver,
 which makes request-scoped cleanup possible:
 
 ```python
-channel = RpcChannel("tasks", resolver_scope=call_scope)
+channel = RpcChannel(namespace="tasks", resolver_scope=call_scope)
 ```
 
 After acceptance, fastapi_canon.integrations.websockets optionally enters the resolver's

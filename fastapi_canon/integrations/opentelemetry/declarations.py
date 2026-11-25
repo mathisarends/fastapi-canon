@@ -213,7 +213,7 @@ class Telemetry(Integration):
         """Create the WebSocket middleware explicitly, forwarding the same providers.
 
         Install ``fastapi-canon[websockets,otel]`` and pass this to
-        ``CanonWebSocketRouter``. Calls without message context start independent
+        ``middleware=`` of a WebSocket endpoint. Calls without message context start independent
         traces. No connection span is added, and remote baggage remains disabled.
         Providers owned through ``sdk`` do not exist yet, so ``sdk`` is rejected.
         """

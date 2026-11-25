@@ -1,7 +1,8 @@
 version = 1
 
 [contract]
-source = "ping:contract"
+source = "ping:app"
+base_url = "ws://{host}"
 output = "ping.openrpc.json"
 
 [[clients]]

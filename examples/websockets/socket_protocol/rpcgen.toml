@@ -1,8 +1,12 @@
 version = 1
 
 [contract]
-source = "calculator:contract"
+source = "calculator:app"
+base_url = "ws://{host}"
 output = "calculator.openrpc.json"
+
+[contract.variables]
+host = "localhost:8000"
 
 [[clients]]
 language = "python"

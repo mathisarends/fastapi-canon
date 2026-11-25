@@ -8,8 +8,8 @@ from fastapi_canon.integrations.websockets.definition import RpcDefinition
 
 
 def test_endpoint_matching_and_static_priority() -> None:
-    dynamic = RpcChannel("dynamic")
-    static = RpcChannel("static")
+    dynamic = RpcChannel(namespace="dynamic")
+    static = RpcChannel(namespace="static")
     service = RpcDefinition()
     service.socket("/items/{item_id}", channels=(dynamic,), name="item")
     expected = service.socket("/items/special", channels=(static,), name="special")
@@ -22,11 +22,11 @@ def test_endpoint_matching_and_static_priority() -> None:
 @pytest.mark.parametrize("path", ["rpc", "/rpc/", "/a//b", "/rpc?q=1", "/rpc#x"])
 def test_invalid_paths(path: str) -> None:
     with pytest.raises(ProtocolDefinitionError):
-        RpcDefinition().socket(path, channels=(RpcChannel("channel"),))
+        RpcDefinition().socket(path, channels=(RpcChannel(namespace="channel"),))
 
 
 def test_channel_cannot_be_mounted_twice() -> None:
-    channel = RpcChannel("control")
+    channel = RpcChannel(namespace="control")
     service = RpcDefinition()
     service.socket("/one", channels=(channel,))
     with pytest.raises(ProtocolDefinitionError, match="only be mounted once"):
@@ -39,27 +39,27 @@ def test_endpoints_record_their_declared_context() -> None:
 
     service = RpcDefinition()
     session = service.socket(
-        "/session", channels=(RpcChannel("session"),), context=Session
+        "/session", channels=(RpcChannel(namespace="session"),), context=Session
     )
-    plain = service.socket("/plain", channels=(RpcChannel("plain"),))
+    plain = service.socket("/plain", channels=(RpcChannel(namespace="plain"),))
 
     assert session.context is Session
     assert plain.context is None
     with pytest.raises(ProtocolDefinitionError, match="context must be a class"):
         service.socket(
             "/invalid",
-            channels=(RpcChannel("invalid"),),
+            channels=(RpcChannel(namespace="invalid"),),
             context="Session",  # type: ignore[arg-type]
         )
 
 
 def test_service_freezes_channels() -> None:
-    channel = RpcChannel("control")
+    channel = RpcChannel(namespace="control")
     service = RpcDefinition()
     service.socket("/rpc", channels=(channel,))
     service.freeze()
     with pytest.raises(ProtocolDefinitionError, match="frozen"):
-        service.socket("/other", channels=(RpcChannel("other"),))
+        service.socket("/other", channels=(RpcChannel(namespace="other"),))
 
 
 def test_endpoints_inherit_and_override_serve_configuration() -> None:
@@ -72,10 +72,12 @@ def test_endpoints_inherit_and_override_serve_configuration() -> None:
     default_limits = RpcLimits(max_concurrency=4)
     endpoint_limits = RpcLimits(max_concurrency=2)
     service = RpcDefinition(error_mapper=default_mapper, limits=default_limits)
-    inherited = service.socket("/one", channels=(RpcChannel("one"),), name="one")
+    inherited = service.socket(
+        "/one", channels=(RpcChannel(namespace="one"),), name="one"
+    )
     overridden = service.socket(
         "/two",
-        channels=(RpcChannel("two"),),
+        channels=(RpcChannel(namespace="two"),),
         name="two",
         error_mapper=endpoint_mapper,
         limits=endpoint_limits,
@@ -88,7 +90,7 @@ def test_endpoints_inherit_and_override_serve_configuration() -> None:
 
 
 def test_mounting_a_root_channel_includes_its_children() -> None:
-    root = RpcChannel("voice")
+    root = RpcChannel(namespace="voice")
     turn = root.child("turn")
 
     @turn.method()
@@ -101,8 +103,8 @@ def test_mounting_a_root_channel_includes_its_children() -> None:
 
 
 def test_method_names_collide_across_channels() -> None:
-    first = RpcChannel("first", namespace="room")
-    second = RpcChannel("second", namespace="room")
+    first = RpcChannel(namespace="room")
+    second = RpcChannel(namespace="room")
 
     @first.method("play")
     async def play() -> None: ...
@@ -120,7 +122,9 @@ def test_method_names_collide_across_channels() -> None:
 def test_close_when_events_complete_requires_events() -> None:
     service = RpcDefinition()
     service.socket(
-        "/rpc", channels=(RpcChannel("plain"),), close_when_events_complete=True
+        "/rpc",
+        channels=(RpcChannel(namespace="plain"),),
+        close_when_events_complete=True,
     )
     with pytest.raises(ProtocolDefinitionError, match="declare no events"):
         service.freeze()

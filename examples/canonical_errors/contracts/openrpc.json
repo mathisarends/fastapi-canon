@@ -1,19 +1,6 @@
 {
   "components": {
     "schemas": {
-      "CancelProject": {
-        "properties": {
-          "project_id": {
-            "title": "Project Id",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "project_id"
-        ],
-        "title": "CancelProject",
-        "type": "object"
-      },
       "ProjectMissingProblem": {
         "additionalProperties": true,
         "description": "RFC 9457 Problem Details with a stable application code.",
@@ -59,6 +46,20 @@
         "type": "object",
         "x-canon-problem": true
       },
+      "ProjectsCancelParams": {
+        "additionalProperties": false,
+        "properties": {
+          "project_id": {
+            "title": "Project Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "project_id"
+        ],
+        "title": "ProjectsCancelParams",
+        "type": "object"
+      },
       "ProjectsCancelRequest": {
         "additionalProperties": false,
         "properties": {
@@ -101,7 +102,7 @@
             "type": "string"
           },
           "params": {
-            "$ref": "#/components/schemas/CancelProject"
+            "$ref": "#/components/schemas/ProjectsCancelParams"
           }
         },
         "required": [
@@ -167,7 +168,7 @@
         }
       ],
       "x-rpc-params-schema": {
-        "$ref": "#/components/schemas/CancelProject"
+        "$ref": "#/components/schemas/ProjectsCancelParams"
       },
       "x-rpc-request-schema": {
         "$ref": "#/components/schemas/ProjectsCancelRequest"

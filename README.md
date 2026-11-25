@@ -141,17 +141,17 @@ Methods and streams in one channel, on the same router.
 ```python
 from fastapi_canon.integrations.websockets import RpcChannel
 
-runs = RpcChannel("runs")
+runs = RpcChannel(namespace="runs")
 
 
 @runs.method(raises=[run_missing])
-async def cancel(params: RunRef) -> None:
-    await scheduler.cancel(params.run_id)
+async def cancel(run_id: str) -> None:
+    await scheduler.cancel(run_id)
 
 
 @runs.stream()
-async def answer(params: Prompt) -> AsyncIterator[TokenDelta]:
-    async for text in model.stream(params.text):
+async def answer(prompt: str) -> AsyncIterator[TokenDelta]:
+    async for text in model.stream(prompt):
         yield TokenDelta(text=text)
 
 

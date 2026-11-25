@@ -8,9 +8,9 @@ export type BinaryStreamDirection =
   "server-to-client" | "client-to-server" | "bidirectional";
 
 export type BinaryStreamName =
+  | "browser.screencast.control"
   | "browser.screencast.frames"
-  | "browser.screencast.upload"
-  | "browser.screencast.control";
+  | "browser.screencast.upload";
 
 export type BinaryStreamEndpoint = {
   readonly name: BinaryStreamName;
@@ -196,6 +196,18 @@ export type BinaryStreamInfo = {
 };
 
 export const binaryStreams = {
+  browserScreencastControl: {
+    name: "browser.screencast.control",
+    url: "wss://{host}/browser/screencast/control",
+    direction: "bidirectional",
+    contentType: "image/jpeg",
+    inputContentType: "application/x-input-event",
+    variables: {
+      host: {
+        default: "api.example.com",
+      },
+    },
+  },
   browserScreencastFrames: {
     name: "browser.screencast.frames",
     url: "wss://{host}/browser/screencast",
@@ -212,18 +224,6 @@ export const binaryStreams = {
     url: "wss://{host}/browser/screencast/upload",
     direction: "client-to-server",
     inputContentType: "video/webm",
-    variables: {
-      host: {
-        default: "api.example.com",
-      },
-    },
-  },
-  browserScreencastControl: {
-    name: "browser.screencast.control",
-    url: "wss://{host}/browser/screencast/control",
-    direction: "bidirectional",
-    contentType: "image/jpeg",
-    inputContentType: "application/x-input-event",
     variables: {
       host: {
         default: "api.example.com",

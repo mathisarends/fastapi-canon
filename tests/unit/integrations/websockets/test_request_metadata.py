@@ -26,7 +26,7 @@ from pydantic import BaseModel, ValidationError
 )
 async def test_invalid_metadata_is_rejected_before_handler_or_scope_adoption(metadata):
     calls, observed = [], []
-    channel = RpcChannel("demo")
+    channel = RpcChannel(namespace="demo")
 
     @channel.method()
     async def ping() -> str:
@@ -49,7 +49,7 @@ async def test_invalid_metadata_is_rejected_before_handler_or_scope_adoption(met
 
 async def test_metadata_is_immutable_independent_of_named_params_and_batch_members():
     observed = []
-    channel = RpcChannel("demo")
+    channel = RpcChannel(namespace="demo")
 
     class Params(BaseModel):
         name: str
@@ -85,7 +85,7 @@ async def test_metadata_is_immutable_independent_of_named_params_and_batch_membe
 
 
 def test_metadata_wire_schema_and_exact_capability_negotiation():
-    channel = RpcChannel("demo")
+    channel = RpcChannel(namespace="demo")
 
     @channel.method()
     async def ping() -> None:

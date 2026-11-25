@@ -5,10 +5,11 @@ subclass defines a stable application code, a JSON-RPC integer code, a default
 message, and optional typed details.
 
 ```python
-from fastapi_canon.integrations.websockets import RpcError, RpcModel
+from fastapi_canon.integrations.websockets import RpcError
+from pydantic import BaseModel
 
 
-class MissingTaskDetails(RpcModel):
+class MissingTaskDetails(BaseModel):
     task_id: int
 
 
@@ -24,10 +25,10 @@ fields:
 
 ```python
 @tasks.method(raises=(MissingTaskError,))
-async def get(params: GetTask) -> Task:
-    task = await find_task(params.task_id)
+async def get(task_id: int) -> Task:
+    task = await find_task(task_id)
     if task is None:
-        raise MissingTaskError(task_id=params.task_id)
+        raise MissingTaskError(task_id=task_id)
     return task
 ```
 
@@ -52,7 +53,7 @@ are required when constructing the error.
 Errors may be declared for every method in a channel:
 
 ```python
-tasks = RpcChannel("tasks", raises=(PermissionDeniedError,))
+tasks = RpcChannel(namespace="tasks", raises=(PermissionDeniedError,))
 ```
 
 Operation-level declarations extend the channel-level set. A local binding
@@ -81,14 +82,11 @@ class TaskNotFound(Exception):
 
 ```python
 # tasks/rpc_errors.py
-from fastapi_canon.integrations.websockets import (
-    RpcErrorBinding,
-    RpcModel,
-    RpcRejection,
-)
+from fastapi_canon.integrations.websockets import RpcErrorBinding, RpcRejection
+from pydantic import BaseModel
 
 
-class TaskRef(RpcModel):
+class TaskRef(BaseModel):
     task_id: int
 
 
@@ -105,8 +103,8 @@ lets `TaskNotFound` escape answers with the `task_not_found` error:
 
 ```python
 @tasks.method(raises=[task_not_found])
-async def get(params: GetTask, repository: Inject[TaskRepository]) -> Task:
-    return await repository.get(params.task_id)
+async def get(task_id: int, repository: Inject[TaskRepository]) -> Task:
+    return await repository.get(task_id)
 ```
 
 The binding accepts the same settings as an `RpcError` subclass, with the same
@@ -139,11 +137,11 @@ parent channel or affect sibling operations.
 permission_denied = RpcErrorBinding(PermissionError, code="permission_denied")
 admin_required = RpcErrorBinding(PermissionError, code="admin_required")
 
-tasks = RpcChannel("tasks", raises=[permission_denied])
+tasks = RpcChannel(namespace="tasks", raises=[permission_denied])
 
 
 @tasks.method(raises=[admin_required])
-async def delete(params: TaskRef) -> None:
+async def delete(task_id: int) -> None:
     raise PermissionError()
 ```
 

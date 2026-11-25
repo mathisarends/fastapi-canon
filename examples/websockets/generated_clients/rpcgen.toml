@@ -1,8 +1,12 @@
 version = 1
 
 [contract]
-source = "automation:contract"
+source = "automation:app"
+base_url = "wss://{host}"
 output = "automation.openrpc.json"
+
+[contract.variables]
+host = "api.example.com"
 
 [[clients]]
 language = "python"

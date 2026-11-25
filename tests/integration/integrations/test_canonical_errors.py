@@ -18,21 +18,20 @@ from fastapi_canon import (
     Composition,
     ErrorOptions,
     Feature,
+    Inject,
     export_contracts,
 )
 from fastapi_canon.error import ErrorRegistry
 from fastapi_canon.integrations.sse.codegen.ir import build_ir as stream_ir
 from fastapi_canon.integrations.sse.codegen.openapi import export_schema
 from fastapi_canon.integrations.sse.codegen.python import generate_python
-from fastapi_canon.integrations.websockets import (
-    CanonWebSocketRouter,
-    Inject,
-    RpcChannel,
-)
+from fastapi_canon.integrations.websockets import RpcChannel
+from fastapi_canon.integrations.websockets.adapters.fastapi import CanonWebSocketRouter
 from fastapi_canon.integrations.websockets.codegen import (
     PythonClientOptions,
     render_python_client,
 )
+from tests.fixtures.websockets import socket_of
 
 
 def test_empty_catalog_keeps_its_configured_internal_problem_identity() -> None:
@@ -179,7 +178,7 @@ async def test_rpc_router_contributes_catalog_and_uses_composition_type_base() -
 
     from tests.unit.integrations.webrtc.server import serve
 
-    channel = RpcChannel("projects")
+    channel = RpcChannel(namespace="projects")
 
     @channel.method(raises=[project_missing])
     async def missing() -> None:
@@ -187,7 +186,7 @@ async def test_rpc_router_contributes_catalog_and_uses_composition_type_base() -
 
         raise ProjectMissing("secret")
 
-    system = RpcChannel("system")
+    system = RpcChannel(namespace="system")
 
     async def session(tenant: str) -> str:
         return tenant
@@ -240,7 +239,7 @@ async def test_rpc_router_serves_all_endpoint_kinds_with_one_contract() -> None:
     from fastapi_canon.integrations.websockets import RpcSocket
     from tests.unit.integrations.webrtc.server import serve
 
-    channel = RpcChannel("demo")
+    channel = RpcChannel(namespace="demo")
 
     @channel.method()
     async def ping() -> str:
@@ -250,7 +249,7 @@ async def test_rpc_router_serves_all_endpoint_kinds_with_one_contract() -> None:
     async def frames() -> AsyncIterator[bytes]:
         yield b"frame"
 
-    @channel.socket()  # type: ignore[arg-type]  # Runtime checks require a free function.
+    @socket_of(channel)
     async def echo(socket: Inject[RpcSocket]) -> None:
         await socket.send(await socket.receive())
 
@@ -263,7 +262,7 @@ async def test_rpc_router_serves_all_endpoint_kinds_with_one_contract() -> None:
     router.socket("/rpc", channels=[channel])
     router.stream("/frames", frames)
     router.socket("/echo", echo)
-    router.socket("/custom", channels=[RpcChannel("custom")], serve=custom)
+    router.socket("/custom", channels=[RpcChannel(namespace="custom")], serve=custom)
     app = Composition(features=[Feature(name="demo", routers=[router])]).build(
         FastAPI()
     )
@@ -312,7 +311,7 @@ def test_nested_public_extensions_keep_aliases_and_valid_contract_references() -
         extensions_model=PublicFields,
         extensions=public_fields,
     )
-    channel = RpcChannel("items")
+    channel = RpcChannel(namespace="items")
 
     @channel.method(raises=[error])
     async def missing() -> None:

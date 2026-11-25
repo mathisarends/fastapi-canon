@@ -38,7 +38,7 @@ async def test_deadlines_include_semaphore_wait_and_method_none_disables_default
 ):
     async with asyncio.timeout(10):
         clock = ControlledDeadlines(monkeypatch)
-        channel = RpcChannel("deadlines")
+        channel = RpcChannel(namespace="deadlines")
         entered = asyncio.Event()
         cancelled = asyncio.Event()
         release = asyncio.Event()
@@ -104,7 +104,8 @@ async def test_deadlines_include_semaphore_wait_and_method_none_disables_default
 async def test_deadline_cancels_dependency_resolution_and_exits_its_scope(monkeypatch):
 
     async with asyncio.timeout(10):
-        from fastapi_canon.integrations.websockets import Inject, RpcRequestTimeoutError
+        from fastapi_canon import Inject
+        from fastapi_canon.integrations.websockets import RpcRequestTimeoutError
 
         clock = ControlledDeadlines(monkeypatch)
         resolving = asyncio.Event()
@@ -122,7 +123,7 @@ async def test_deadline_cancels_dependency_resolution_and_exits_its_scope(monkey
                 resolving.set()
                 await asyncio.Future()
 
-        channel = RpcChannel("dependencies")
+        channel = RpcChannel(namespace="dependencies")
 
         @channel.method(timeout_seconds=2)
         async def work(value: Inject[str]) -> str:
@@ -142,7 +143,7 @@ async def test_deadline_cancels_dependency_resolution_and_exits_its_scope(monkey
 
 async def test_cancelling_standalone_batch_preserves_outer_cancellation():
     async with asyncio.timeout(10):
-        channel = RpcChannel("shutdown")
+        channel = RpcChannel(namespace="shutdown")
         started = asyncio.Queue()
         finished = []
 
@@ -188,7 +189,7 @@ async def test_deep_any_params_and_recursive_models_have_controlled_outcomes(cap
     class Tree(BaseModel):
         child: "Tree | None" = None
 
-    channel = RpcChannel("deep")
+    channel = RpcChannel(namespace="deep")
 
     @channel.method
     async def arbitrary(params: AnyParams) -> None: ...
@@ -398,7 +399,7 @@ async def test_a_boolean_id_on_a_failed_request_is_not_echoed_back(
 @pytest.mark.parametrize("request_id", [True, False, 1.0])
 @pytest.mark.parametrize("encoded", [False, True])
 async def test_invalid_id_types_cannot_execute_handlers(request_id, encoded):
-    channel = RpcChannel("strict")
+    channel = RpcChannel(namespace="strict")
 
     @channel.method()
     async def work() -> None:
@@ -418,7 +419,7 @@ async def test_a_validation_error_in_handler_is_internal(caplog) -> None:
     class NestedParams(BaseModel):
         params: str
 
-    router = RpcChannel("greeting")
+    router = RpcChannel(namespace="greeting")
 
     @router.method("broken")
     async def broken(params: SayParams) -> None:
@@ -440,7 +441,7 @@ async def test_a_validation_error_in_handler_is_internal(caplog) -> None:
 
 
 async def test_invalid_handler_result_is_internal(caplog) -> None:
-    channel = RpcChannel("result")
+    channel = RpcChannel(namespace="result")
 
     @channel.method()
     async def broken() -> int:
@@ -460,7 +461,7 @@ async def test_matching_dict_handler_result_is_accepted() -> None:
     class Result(BaseModel):
         value: int
 
-    channel = RpcChannel("result")
+    channel = RpcChannel(namespace="result")
 
     @channel.method()
     async def valid() -> Result:
@@ -479,7 +480,7 @@ async def test_batch_runs_concurrently_with_shared_limit() -> None:
     release = asyncio.Event()
     running = 0
     peak = 0
-    channel = RpcChannel("batch")
+    channel = RpcChannel(namespace="batch")
 
     @channel.method()
     async def wait() -> None:
@@ -519,7 +520,7 @@ async def test_custom_error_mapper_and_strict_errors() -> None:
     class MissingError(RpcError):
         pass
 
-    channel = RpcChannel("mapped")
+    channel = RpcChannel(namespace="mapped")
 
     @channel.method(raises=(MissingError,))
     async def declared() -> None:
@@ -560,7 +561,7 @@ class BrokenParams(BaseModel):
     pass
 
 
-broken_channel = RpcChannel("greeting")
+broken_channel = RpcChannel(namespace="greeting")
 
 
 @broken_channel.method("break")

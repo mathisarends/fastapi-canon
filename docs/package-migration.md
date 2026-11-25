@@ -38,6 +38,38 @@ Version 0.29.0 is not released yet. See the
   `StreamOptions` annotations with `APIRouteOptions`. A Canon route that yields
   `ServerSentEvent` must yield its event model instead, wrapped as
   `ServerSentEvent(data=event)` when it sets SSE fields.
+- Mount WebSocket RPC channels on the router, and read path variables from the
+  signature:
+
+  ```python
+  from typing import Annotated
+
+  from fastapi import Path
+  from fastapi_canon import APIRouter
+  from fastapi_canon.integrations.websockets import RpcChannel
+
+  tasks = RpcChannel(namespace="tasks")
+
+
+  @tasks.method()
+  async def rename(project_id: Annotated[int, Path()], title: str) -> None: ...
+
+
+  router = APIRouter(prefix="/projects")
+  router.include_channel(tasks, path="/{project_id}/rpc")
+  ```
+
+  Replace `router.channel(path, namespace=...)` with this form,
+  `RpcChannel("tasks")` with `RpcChannel(namespace="tasks")`, and
+  `@channel.socket(...)` with `@router.socket(path, ...)`. Remove
+  `namespace=` and `path_model=` from `include_channel()`.
+- Replace `RpcModel` with `BaseModel`. To keep camel-case wire names, use your
+  own base model with `alias_generator=to_camel` and `populate_by_name=True`.
+- Params models may be replaced with named parameters. Regenerate clients:
+  params models are named after the operation, such as `TasksRenameParams`.
+- Import `Inject` from `fastapi_canon`, and `CanonWebSocketRouter`,
+  `FastApiSocket` and `serve_websocket` from
+  `fastapi_canon.integrations.websockets.adapters.fastapi`.
 
 ## Upgrade to 0.28.0
 

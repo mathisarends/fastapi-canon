@@ -10,16 +10,21 @@ import sys
 import time
 from pathlib import Path
 
-from fastapi_canon.integrations.websockets import (
-    CanonWebSocketRouter,
-    RpcChannel,
-    RpcModel,
-)
+from fastapi_canon.integrations.websockets import RpcChannel
+from fastapi_canon.integrations.websockets.adapters.fastapi import CanonWebSocketRouter
 from fastapi_canon.integrations.websockets.testing import InMemorySocket
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+from pydantic.alias_generators import to_camel
 
 
-class Echo(RpcModel):
+class Echo(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        validate_by_alias=True,
+        validate_by_name=True,
+        serialize_by_alias=True,
+        extra="forbid",
+    )
     value: int
     text: str
 
@@ -29,7 +34,7 @@ class PlainEcho(BaseModel):
     text: str
 
 
-bench = RpcChannel("bench")
+bench = RpcChannel(namespace="bench")
 
 
 @bench.method()

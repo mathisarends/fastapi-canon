@@ -11,7 +11,7 @@ from tests.unit.integrations.websockets.conftest import (
 
 
 def test_contract_exports_cancellation_and_only_explicit_method_deadlines():
-    channel = RpcChannel("deadlines")
+    channel = RpcChannel(namespace="deadlines")
 
     @channel.method()
     async def inherited() -> None: ...

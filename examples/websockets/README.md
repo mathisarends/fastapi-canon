@@ -1,28 +1,25 @@
 # Examples
 
-Applications mount JSON-RPC channels on their feature router with
-`APIRouter.include_channel`, as [`authenticated.py`](authenticated.py) does:
+Each example declares an `RpcChannel` and mounts it on a feature router:
 
 ```python
 router = APIRouter()
-router.include_channel(channel, path="/rpc", context=open_session, resolver=...)
+router.include_channel(channel, path="/rpc")
 ```
 
-The other examples work one level lower, on the `fastapi_canon.integrations.websockets`
-protocol model: channels, frozen protocols, schemas, binary streams and raw sockets.
+Binary streams and sockets use `@router.binary_stream()` and `@router.socket()`.
 Each file is standalone and executable.
 
 - [`authenticated.py`](authenticated.py) authenticates the WebSocket handshake,
   binds the login to the Dishka connection scope and closes the connection when
   the credentials expire.
-- [`basic.py`](basic.py) declares a typed method, serves one raw JSON-RPC request,
-  and prints the response.
+- [`basic.py`](basic.py) declares a typed method with an injected service, sends
+  one JSON-RPC request and prints the response.
 - [`features.py`](features.py) mounts multiple channels on one versioned
-  service.
+  endpoint.
 - [`notifications.py`](notifications.py) decorates an injected async event
   source and declares its typed payload.
-- [`schemas.py`](schemas.py) renders JSON Schema and OpenRPC documents from the
-  same protocol definition.
+- [`schemas.py`](schemas.py) exports the OpenRPC document of an application.
 - [`generated_clients`](generated_clients) contains inspectable Python and
   TypeScript clients generated from
   [`automation.py`](generated_clients/automation.py). That module declares

@@ -9,11 +9,11 @@ from fastapi_canon.integrations.websockets import (
     RpcErrorBinding,
     RpcLimits,
     RpcMiddleware,
-    RpcModel,
 )
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.testing import RpcTestClient
 
+from tests.fixtures.websockets import CamelModel
 from tests.unit.integrations.websockets.deadlines import ControlledDeadlines
 from tests.unit.integrations.websockets.testing import InMemorySocket
 
@@ -33,7 +33,7 @@ async def test_subscription_ack_is_not_followed_by_a_second_response(
     clock = ControlledDeadlines(monkeypatch)
     exiting, started, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
     responses = []
-    channel = RpcChannel("session")
+    channel = RpcChannel(namespace="session")
 
     class Middleware(RpcMiddleware):
         @asynccontextmanager
@@ -96,7 +96,7 @@ async def test_deadline_bounds_subscription_handshake_but_does_not_limit_stream(
     stream_started = asyncio.Event()
     release_stream = asyncio.Event()
     stream_stopped = asyncio.Event()
-    channel = RpcChannel("session")
+    channel = RpcChannel(namespace="session")
 
     @channel.method(timeout_seconds=None)
     async def occupy() -> None:
@@ -172,11 +172,11 @@ async def test_deadline_bounds_subscription_handshake_but_does_not_limit_stream(
         await asyncio.wait_for(serving, 1)
 
 
-class SessionParams(RpcModel):
+class SessionParams(CamelModel):
     session_id: str
 
 
-class SessionEvent(RpcModel):
+class SessionEvent(CamelModel):
     value: str
 
 
@@ -188,7 +188,7 @@ class SessionMissing(Exception):
 @pytest.mark.parametrize("declared", [True, False])
 async def test_subscription_failures_use_scoped_bindings(declared, caplog) -> None:
     binding = RpcErrorBinding(SessionMissing, details=SessionParams)
-    channel = RpcChannel("session")
+    channel = RpcChannel(namespace="session")
 
     @channel.stream(raises=[binding] if declared else [])
     async def events(params: SessionParams) -> AsyncIterator[SessionEvent]:
@@ -229,7 +229,7 @@ async def test_subscription_failures_use_scoped_bindings(declared, caplog) -> No
 
 async def test_subscription_params_notifications_and_cleanup() -> None:
     async with asyncio.timeout(10):
-        channel = RpcChannel("session")
+        channel = RpcChannel(namespace="session")
         stopped = asyncio.Event()
 
         @channel.stream()
@@ -303,7 +303,7 @@ async def test_subscription_params_notifications_and_cleanup() -> None:
 
 async def test_stream_limit_and_contract() -> None:
     async with asyncio.timeout(10):
-        channel = RpcChannel("session")
+        channel = RpcChannel(namespace="session")
 
         @channel.stream()
         async def events(params: SessionParams) -> AsyncIterator[SessionEvent]:
@@ -347,7 +347,7 @@ async def test_stream_limit_reserves_blocked_handshakes(cancel_handshake):
             SubscriptionSession,
         )
 
-        channel = RpcChannel("session")
+        channel = RpcChannel(namespace="session")
         sending, release = asyncio.Event(), asyncio.Event()
         responses = []
 
@@ -397,7 +397,7 @@ async def test_stream_limit_reserves_blocked_handshakes(cancel_handshake):
 
 
 async def test_stream_cancel_is_idempotent_and_preserves_the_connection() -> None:
-    channel = RpcChannel("jobs")
+    channel = RpcChannel(namespace="jobs")
     stopped = asyncio.Event()
 
     @channel.method()

@@ -1,5 +1,9 @@
 # Migrate WebSocket applications to Canon
 
+From 0.29.0, applications declare WebSocket endpoints on `APIRouter`; follow the
+[0.29.0 upgrade](../../package-migration.md#upgrade-to-0290). The sections below
+describe earlier migrations.
+
 ## Canon 0.13.0 server composition
 
 `CanonWebSocketRouter` is the public WebSocket composition API. Replace the separate
@@ -9,7 +13,8 @@ If using an earlier development snapshot, replace `RpcRouter` with
 `Telemetry.websocket_middleware()`. Neither old name has a compatibility alias.
 
 ```python
-from fastapi_canon.integrations.websockets import RpcChannel, CanonWebSocketRouter
+from fastapi_canon.integrations.websockets import RpcChannel
+from fastapi_canon.integrations.websockets.adapters.fastapi import CanonWebSocketRouter
 from fastapi_canon.integrations.websockets.adapters.dishka import Dishka
 
 rpc = CanonWebSocketRouter("/rpc", channels=[tasks], resolver=Dishka())
@@ -49,7 +54,7 @@ targets, and configuration.
 The FastAPI transport APIs are directly available:
 
 ```python
-from fastapi_canon.integrations.websockets import (
+from fastapi_canon.integrations.websockets.adapters.fastapi import (
     CanonWebSocketRouter,
     FastApiSocket,
     serve_websocket,

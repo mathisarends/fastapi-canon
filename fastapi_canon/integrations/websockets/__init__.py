@@ -1,10 +1,5 @@
 from fastapi_canon._version import __version__
 
-from .adapters.fastapi import (
-    CanonWebSocketRouter,
-    FastApiSocket,
-    serve_websocket,
-)
 from .channel import RpcChannel
 from .codec import RpcCodec
 from .connection import (
@@ -25,7 +20,6 @@ from .constants import LOGGER_NAME
 from .contract import RpcContract, ServerVariable
 from .definition import RpcEndpoint, RpcSocketEndpoint, RpcStreamEndpoint
 from .dependencies import (
-    Inject,
     RpcResolver,
     RpcResolverLike,
     RpcResolverScope,
@@ -64,7 +58,6 @@ from .middleware import (
     RpcStreamOutcome,
     RpcStreamScope,
 )
-from .models import RpcModel
 from .policy import WebSocketPolicy
 from .protocol import RpcProtocol
 from .server import RpcErrorMapper, RpcResponseMessage, RpcServer
@@ -86,9 +79,6 @@ from .streams import (
 
 __all__ = [
     "LOGGER_NAME",
-    "CanonWebSocketRouter",
-    "FastApiSocket",
-    "Inject",
     "ProtocolDefinitionError",
     "RpcBeforeAccept",
     "RpcBinaryInput",
@@ -123,7 +113,6 @@ __all__ = [
     "RpcMethodNotFoundError",
     "RpcMiddleware",
     "RpcMiddlewareLike",
-    "RpcModel",
     "RpcNotification",
     "RpcParseError",
     "RpcProtocol",
@@ -162,5 +151,4 @@ __all__ = [
     "__version__",
     "call_scope",
     "error_message",
-    "serve_websocket",
 ]

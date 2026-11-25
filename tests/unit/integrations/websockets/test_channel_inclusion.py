@@ -15,8 +15,8 @@ def test_anonymous_channels_have_unprefixed_operations() -> None:
     assert [method.name for method in channel.freeze().methods] == ["rename"]
 
 
-def test_included_channels_replace_root_and_preserve_nested_namespaces() -> None:
-    projects = RpcChannel("original")
+def test_included_channels_keep_their_namespace_under_the_parent() -> None:
+    projects = RpcChannel(namespace="projects")
     tasks = projects.child("tasks")
 
     @projects.method("rename")
@@ -28,67 +28,56 @@ def test_included_channels_replace_root_and_preserve_nested_namespaces() -> None
         return None
 
     session = RpcChannel()
-    session.include_channel(projects, namespace="projects")
+    session.include_channel(projects)
+    workspace = RpcChannel(namespace="workspace")
+    workspace.include_channel(projects)
     assert [method.name for method in session.freeze().methods] == [
         "projects.rename",
         "projects.tasks.create",
     ]
-    assert [method.name for method in projects.freeze().methods] == [
-        "original.rename",
-        "original.tasks.create",
+    assert [method.name for method in workspace.freeze().methods] == [
+        "workspace.projects.rename",
+        "workspace.projects.tasks.create",
     ]
 
 
 def test_inclusion_snapshots_without_freezing_the_source() -> None:
-    source = RpcChannel()
+    source = RpcChannel(namespace="tasks")
 
     @source.method("first")
     async def first() -> None:
         return None
 
     session = RpcChannel()
-    session.include_channel(source, namespace="tasks")
+    session.include_channel(source)
 
     @source.method("later")
     async def later() -> None:
         return None
 
     assert [method.name for method in session.freeze().methods] == ["tasks.first"]
-    assert [method.name for method in source.freeze().methods] == ["first", "later"]
-
-
-def test_the_same_channel_can_be_included_under_two_namespaces() -> None:
-    source = RpcChannel()
-
-    @source.method("read")
-    async def read() -> None:
-        return None
-
-    session = RpcChannel()
-    session.include_channel(source, namespace="first")
-    session.include_channel(source, namespace="second")
-    assert [method.name for method in session.freeze().methods] == [
-        "first.read",
-        "second.read",
+    assert [method.name for method in source.freeze().methods] == [
+        "tasks.first",
+        "tasks.later",
     ]
 
 
 def test_duplicate_inclusion_fails_atomically() -> None:
-    source = RpcChannel()
+    source = RpcChannel(namespace="tasks")
 
     @source.method("read")
     async def read() -> None:
         return None
 
     session = RpcChannel()
-    session.include_channel(source, namespace="tasks")
+    session.include_channel(source)
     with pytest.raises(ProtocolDefinitionError, match="Duplicate RPC route"):
-        session.include_channel(source, namespace="tasks")
+        session.include_channel(source)
     assert [method.name for method in session.freeze().methods] == ["tasks.read"]
 
 
 def test_operations_cannot_become_included_namespaces() -> None:
-    source = RpcChannel()
+    source = RpcChannel(namespace="tasks")
 
     @source.method("read")
     async def read() -> None:
@@ -101,19 +90,19 @@ def test_operations_cannot_become_included_namespaces() -> None:
         return None
 
     with pytest.raises(ProtocolDefinitionError, match="operation namespace"):
-        session.include_channel(source, namespace="tasks")
+        session.include_channel(source)
     assert [method.name for method in session.freeze().methods] == ["tasks"]
 
 
 def test_message_stream_names_and_controls_are_composed() -> None:
-    source = RpcChannel()
+    source = RpcChannel(namespace="projects")
 
     @source.stream("events")
     async def events() -> AsyncIterator[str]:
         yield "updated"
 
     session = RpcChannel()
-    session.include_channel(source, namespace="projects")
+    session.include_channel(source)
 
     async def shadow() -> None:
         return None
@@ -133,8 +122,6 @@ def test_channels_cannot_include_themselves() -> None:
 
 
 @pytest.mark.parametrize("namespace", [None, 4, "bad/name", "two..parts"])
-def test_inclusion_rejects_invalid_namespaces(namespace: object) -> None:
-    channel = RpcChannel()
+def test_channels_reject_invalid_namespaces(namespace: object) -> None:
     with pytest.raises(ProtocolDefinitionError, match="namespace"):
-        channel.include_channel(RpcChannel(), namespace=namespace)  # type: ignore[arg-type]
-    assert channel.children == ()
+        RpcChannel(namespace=namespace)  # type: ignore[arg-type]

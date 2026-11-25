@@ -1,12 +1,8 @@
 from typing import Literal
 
 from fastapi import FastAPI
-from fastapi_canon.integrations.websockets import (
-    CanonWebSocketRouter,
-    Inject,
-    RpcChannel,
-    RpcSocket,
-)
+from fastapi_canon import APIRouter, Composition, Feature, Inject
+from fastapi_canon.integrations.websockets import RpcChannel, RpcSocket
 from pydantic import BaseModel, ConfigDict
 
 
@@ -22,7 +18,7 @@ class Pong(BaseModel):
     value: int
 
 
-messages = RpcChannel("messages")
+messages = RpcChannel(namespace="messages")
 type PingSocket = RpcSocket[Ping, Pong]
 
 
@@ -31,12 +27,16 @@ async def health() -> bool:
     return True
 
 
-@messages.socket("ping")
+router = APIRouter(namespace="messages")
+router.include_channel(messages, path="/rpc", name="rpc")
+
+
+@router.socket("/messages/ping", name="ping")
 async def ping(message: Ping) -> Pong:
     return Pong(value=message.value + 1)
 
 
-@messages.socket("session")
+@router.socket("/messages/session", name="session")
 async def session(socket: Inject[PingSocket]) -> None:
     await socket.send(Pong(value=0))
     async for message in socket:
@@ -44,10 +44,6 @@ async def session(socket: Inject[PingSocket]) -> None:
         await socket.send(Pong(value=message.value + 1))
 
 
-service = CanonWebSocketRouter()
-service.socket("/rpc", channels=(messages,))
-service.socket("/messages/ping", ping)
-service.socket("/messages/session", session)
-contract = service.contract(title="Typed Socket", base_url="ws://{host}")
-app = FastAPI()
-app.include_router(service)
+app = Composition(features=[Feature(name="messages", routers=[router])]).build(
+    FastAPI(title="Typed Socket")
+)

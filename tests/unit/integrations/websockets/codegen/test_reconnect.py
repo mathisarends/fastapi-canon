@@ -409,7 +409,7 @@ async def test_proactive_recovery_refreshes_headers_or_surfaces_permanent_reject
     reject,
     close,
 ):
-    channel = RpcChannel("greeting")
+    channel = RpcChannel(namespace="greeting")
 
     class Params(BaseModel):
         name: str

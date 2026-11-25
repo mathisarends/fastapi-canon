@@ -12,8 +12,8 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import pytest
+from fastapi_canon import Inject
 from fastapi_canon.integrations.websockets import (
-    Inject,
     RpcChannel,
     RpcMessageType,
     RpcSocket,
@@ -43,6 +43,7 @@ from fastapi_canon.integrations.websockets.codegen.typescript import (
 )
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
 
+from tests.fixtures.websockets import socket_of
 from tests.unit.integrations.websockets.codegen.test_socket_roundtrip import (
     LoopbackSocket,
     UnusedTransport,
@@ -50,10 +51,11 @@ from tests.unit.integrations.websockets.codegen.test_socket_roundtrip import (
 
 PACKAGE = "echo_client"
 
-echo = RpcChannel("echo")
+echo = RpcChannel(namespace="echo")
 
 
-@echo.socket(
+@socket_of(
+    echo,
     "session",
     protocol=RpcSocketProtocol("echo", version="1", schemas=("echo.json",)),
     messages=(RpcMessageType.TEXT,),
@@ -63,7 +65,7 @@ async def session(socket: Inject[RpcSocket]) -> None:
         await socket.send(f"echo:{message}")
 
 
-@echo.socket("raw")
+@socket_of(echo, "raw")
 async def raw(socket: Inject[RpcSocket]) -> None:
     async for message in socket:
         await socket.send(message)

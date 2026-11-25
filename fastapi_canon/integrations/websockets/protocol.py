@@ -17,8 +17,10 @@ from typing import (
     get_type_hints,
 )
 
+from fastapi import params as fastapi_params
 from pydantic import (
     BaseModel,
+    ConfigDict,
     PydanticSchemaGenerationError,
     TypeAdapter,
     create_model,
@@ -68,6 +70,9 @@ class RpcMethodDefinition:
     timeout_seconds: float | None = None
     _has_timeout: bool = False
     idempotent: bool = False
+    params_fields: tuple[str, ...] = ()
+    path_parameters: tuple[str, ...] = ()
+    path_model: type[BaseModel] | None = None
 
     def __post_init__(self) -> None:
         if type(self.idempotent) is not bool:
@@ -104,6 +109,9 @@ class RpcSubscriptionDefinition:
     summary: str | None = None
     server: str | None = None
     raises: tuple[type[RpcError], ...] = ()
+    params_fields: tuple[str, ...] = ()
+    path_parameters: tuple[str, ...] = ()
+    path_model: type[BaseModel] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -254,9 +262,12 @@ def method_definition(
     has_timeout: bool = False,
     idempotent: bool = False,
     request_name: str | None = None,
+    params_name: str | None = None,
 ) -> RpcMethodDefinition:
     request_name = request_name or f"{_pascal_case(handler_name)}Request"
-    params, params_parameter, injected = _router_params_model(function)
+    params_name = params_name if params_name is not None else name
+    signature = _router_params_model(function, params_name, "method")
+    params_parameter = signature.parameter
     return RpcMethodDefinition(
         timeout_seconds=timeout_seconds,
         _has_timeout=has_timeout,
@@ -264,13 +275,13 @@ def method_definition(
         name=name,
         handler_name=handler_name,
         request_name=request_name,
-        params=params,
+        params=signature.model,
         result=_result_annotation(function),
         summary=summary,
         raises=raises,
         server=server,
         function=function,
-        injected_parameters=injected,
+        injected_parameters=signature.injected,
         resolver_scope=resolver_scope,
         params_parameter=params_parameter,
         params_origin=(
@@ -278,6 +289,9 @@ def method_definition(
             if params_parameter is not None
             else None
         ),
+        params_fields=signature.fields,
+        path_parameters=signature.path_parameters,
+        path_model=signature.path_model,
     )
 
 
@@ -333,8 +347,8 @@ def notification_definition(
             f"RPC event source {function.__qualname__} yields {yielded!r}, "
             f"expected {payload!r}"
         )
-    params, _, injected = _router_params_model(function)
-    if params is not None:
+    signature = _router_params_model(function, name, "event source")
+    if signature.model is not None or signature.path_model is not None:
         raise ProtocolDefinitionError(
             f"RPC event source {function.__qualname__} parameters must use Inject[T]"
         )
@@ -344,7 +358,7 @@ def notification_definition(
         summary=summary,
         server=server,
         function=function,
-        injected_parameters=injected,
+        injected_parameters=signature.injected,
         on_error=on_error,
         raises=raises,
     )
@@ -365,13 +379,14 @@ def subscription_definition(
     hints = get_type_hints(function, include_extras=True)
     payload = stream_payload(function)
     TypeAdapter(payload).json_schema()
-    params, params_parameter, injected = _router_params_model(function)
+    signature = _router_params_model(function, name, "message stream")
+    params_parameter = signature.parameter
     return RpcSubscriptionDefinition(
         name=name,
-        params=params,
+        params=signature.model,
         payload=payload,
         function=function,
-        injected_parameters=injected,
+        injected_parameters=signature.injected,
         params_parameter=params_parameter,
         params_origin=(
             hints[params_parameter] if params_parameter is not None else None
@@ -379,6 +394,9 @@ def subscription_definition(
         resolver_scope=resolver_scope,
         summary=summary,
         raises=raises,
+        params_fields=signature.fields,
+        path_parameters=signature.path_parameters,
+        path_model=signature.path_model,
     )
 
 
@@ -590,25 +608,64 @@ def socket_definition(
     )
 
 
-def _router_params_model(
-    function: Any,
-) -> _ParamsModel:
-    hints, injected, wire_parameters = _split_parameters(function)
-    if not wire_parameters:
-        return _ParamsModel(None, None, injected)
+def _router_params_model(function: Any, name: str, kind: str) -> _ParamsModel:
+    """Read a handler's JSON-RPC params, path values and injected dependencies.
 
+    A single positional Pydantic model is the complete params object. Other
+    named parameters form one generated params model, by name. Parameters
+    annotated with FastAPI's ``Path()`` read the connection's path values.
+    """
+    hints, injected, parameters = _split_parameters(function)
+    path_parameters = [p for p in parameters if _is_path_parameter(hints[p.name])]
+    wire_parameters = [p for p in parameters if p not in path_parameters]
+    path_model = (
+        _path_model(function, hints, path_parameters, kind=f"RPC {kind}")
+        if path_parameters
+        else None
+    )
+    path_names = tuple(parameter.name for parameter in path_parameters)
+    if not wire_parameters:
+        return _ParamsModel(None, None, (), injected, path_names, path_model)
     if len(wire_parameters) == 1:
         parameter = wire_parameters[0]
         annotation = hints[parameter.name]
-        if parameter.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD,) and _is_model(
+        if parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD and _is_model(
             annotation
         ):
-            return _ParamsModel(annotation, parameter.name, injected)
+            return _ParamsModel(
+                annotation, parameter.name, (), injected, path_names, path_model
+            )
+    fields: dict[str, Any] = {}
+    for parameter in wire_parameters:
+        if parameter.kind not in (
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+        ):
+            raise ProtocolDefinitionError(
+                f"RPC {kind} {function.__qualname__} parameter {parameter.name!r} "
+                "must be passable by name"
+            )
+        default = (
+            ... if parameter.default is inspect.Parameter.empty else parameter.default
+        )
+        fields[parameter.name] = (hints[parameter.name], default)
+    try:
+        model = create_model(
+            f"{_pascal_case(name.replace('.', '_'))}Params",
+            __config__=ConfigDict(extra="forbid"),
+            **fields,
+        )
+    except (PydanticSchemaGenerationError, NameError, TypeError) as error:
+        raise ProtocolDefinitionError(
+            f"RPC {kind} {function.__qualname__} has unsupported params: {error}"
+        ) from error
+    return _ParamsModel(model, None, tuple(fields), injected, path_names, path_model)
 
-    names = ", ".join(parameter.name for parameter in wire_parameters)
-    raise ProtocolDefinitionError(
-        f"RPC handler {function.__qualname__} must use at most one positional "
-        f"Pydantic params model; unsupported wire parameters: {names}"
+
+def _is_path_parameter(annotation: Any) -> bool:
+    annotation = _resolve_alias(annotation)
+    return get_origin(annotation) is Annotated and any(
+        isinstance(item, fastapi_params.Path) for item in annotation.__metadata__
     )
 
 
@@ -707,6 +764,7 @@ def _path_model(
 
 
 def _path_type_message(name: str, kind: str) -> str:
+    kind = kind.removeprefix("RPC ")
     return (
         f"RPC {kind} parameter {name!r} is not a path variable type; "
         "path variables are scalars such as str, int, UUID, or an Enum, and "
@@ -754,7 +812,10 @@ def _pascal_case(value: str) -> str:
 class _ParamsModel(NamedTuple):
     model: type[BaseModel] | None
     parameter: str | None
+    fields: tuple[str, ...]
     injected: tuple[RpcInjectedParameter, ...]
+    path_parameters: tuple[str, ...]
+    path_model: type[BaseModel] | None
 
 
 class _SplitParameters(NamedTuple):

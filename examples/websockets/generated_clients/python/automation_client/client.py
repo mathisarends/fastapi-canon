@@ -64,8 +64,8 @@ class AutomationClient:
             socket_opener=socket_opener,
             variables=variables,
         )
-        self.tasks = Tasks(self._rpc)
         self.browser = Browser(self._rpc)
+        self.tasks = Tasks(self._rpc)
 
     @property
     def closed(self) -> asyncio.Future[BaseException | None]:

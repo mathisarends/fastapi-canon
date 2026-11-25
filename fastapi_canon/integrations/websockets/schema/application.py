@@ -1,13 +1,17 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from itertools import chain
 from typing import Any
 
 from fastapi import FastAPI
 
-from fastapi_canon.error import installed_catalog, registry_scope
+from fastapi_canon.error import installed_catalog
 from fastapi_canon.integrations.websockets.channel import request_name
-from fastapi_canon.integrations.websockets.contract import contract_from_endpoints
+from fastapi_canon.integrations.websockets.contract import (
+    RpcContract,
+    ServerVariable,
+    contract_from_endpoints,
+)
 from fastapi_canon.integrations.websockets.definition import (
     ENDPOINT_ATTRIBUTE,
     RpcAnyEndpoint,
@@ -33,7 +37,25 @@ def export_rpc_contract(
     base_url: str = "{baseUrl}",
     registered_routes: Sequence[tuple[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
-    """Export only mounted RPC endpoints, using their effective registered paths.
+    """Export the OpenRPC document of the application's mounted RPC endpoints."""
+    contract = application_rpc_contract(
+        app, base_url=base_url, registered_routes=registered_routes
+    )
+    if contract is None:
+        return None
+    document = contract.to_openrpc()
+    document["x-canon-application"] = True
+    return document
+
+
+def application_rpc_contract(
+    app: FastAPI,
+    *,
+    base_url: str = "{baseUrl}",
+    variables: Mapping[str, ServerVariable] | None = None,
+    registered_routes: Sequence[tuple[str, Any]] | None = None,
+) -> RpcContract | None:
+    """Collect only mounted RPC endpoints, using their effective registered paths.
 
     Endpoint and operation names must be unique within the exported selection.
     Mounting one endpoint twice is ambiguous for the current one-server-per-method
@@ -138,19 +160,7 @@ def export_rpc_contract(
         title=app.title,
         description=app.description,
         base_url=base_url,
+        variables=variables,
     )
-    with registry_scope(installed_catalog(app)):
-        # RpcContract.to_openrpc installs its own registry context; render directly
-        # here to preserve the application's catalog for canonical error schemas.
-        from fastapi_canon.integrations.websockets.schema import render_openrpc
-
-        document = render_openrpc(
-            contract.protocol,
-            title=contract.title,
-            description=contract.description,
-            servers=contract.servers,
-            binary_streams=contract.binary_streams,
-            sockets=contract.sockets,
-        )
-    document["x-canon-application"] = True
-    return document
+    # Canonical error schemas use the application's installed catalog.
+    return contract.with_error_catalog(installed_catalog(app))

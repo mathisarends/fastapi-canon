@@ -6,15 +6,17 @@ from collections.abc import AsyncIterator
 import pytest
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.testclient import TestClient
+from fastapi_canon import Inject
 from fastapi_canon.integrations.websockets import (
-    CanonWebSocketRouter,
-    Inject,
     RpcBinaryInput,
     RpcBinaryOutput,
     RpcChannel,
     RpcConnectionClose,
     RpcLimits,
     RpcRequestScope,
+)
+from fastapi_canon.integrations.websockets.adapters.fastapi import (
+    CanonWebSocketRouter,
     serve_websocket,
 )
 from fastapi_canon.integrations.websockets.adapters.opentelemetry import OpenTelemetry
@@ -74,7 +76,7 @@ async def test_per_request_contexts_are_remote_independent_and_detached(
 ):
     async with asyncio.timeout(10):
         tracer, meter, exporter, _ = providers
-        channel = RpcChannel("trace")
+        channel = RpcChannel(namespace="trace")
         entered = asyncio.Queue()
         release = asyncio.Event()
         baggage_values = []
@@ -147,7 +149,7 @@ async def test_request_metadata_overrides_handshake_and_links_connection(provide
         import json
 
         tracer, meter, exporter, _ = providers
-        channel = RpcChannel("trace")
+        channel = RpcChannel(namespace="trace")
 
         @channel.method()
         async def ping() -> str:
@@ -207,7 +209,7 @@ async def test_request_metadata_overrides_handshake_and_links_connection(provide
 @pytest.mark.parametrize("include_baggage", [False, True])
 async def test_remote_handshake_baggage_requires_opt_in(providers, include_baggage):
     tracer, meter, _, _ = providers
-    channel = RpcChannel("trace")
+    channel = RpcChannel(namespace="trace")
 
     @channel.method()
     async def baggage_value() -> str | None:
@@ -236,7 +238,7 @@ async def test_subscription_metadata_parents_controls_and_generator(providers):
         import json
 
         tracer, meter, exporter, _ = providers
-        channel = RpcChannel("updates")
+        channel = RpcChannel(namespace="updates")
         stream_parent = asyncio.get_running_loop().create_future()
 
         @channel.stream()
@@ -291,7 +293,7 @@ async def test_subscription_metadata_parents_controls_and_generator(providers):
 async def test_stream_tracing_and_metrics_are_live_and_parent_child(providers):
     tracer, meter, exporter, reader = providers
     instrumentation = OpenTelemetry(tracer_provider=tracer, meter_provider=meter)
-    channel = RpcChannel("media")
+    channel = RpcChannel(namespace="media")
     custom = tracer.get_tracer("application")
 
     @channel.stream()
@@ -324,7 +326,7 @@ async def test_stream_tracing_and_metrics_are_live_and_parent_child(providers):
 
 async def test_duplex_counts_empty_messages_and_excludes_input_end(providers):
     tracer, meter, exporter, reader = providers
-    channel = RpcChannel("voice")
+    channel = RpcChannel(namespace="voice")
 
     @channel.stream()
     async def echo(
@@ -372,7 +374,7 @@ async def test_stream_failures_preserve_original_exception(
     providers, record_exceptions
 ):
     tracer, meter, exporter, reader = providers
-    channel = RpcChannel("media")
+    channel = RpcChannel(namespace="media")
 
     @channel.stream()
     async def broken() -> AsyncIterator[bytes]:
@@ -401,7 +403,7 @@ async def test_stream_failures_preserve_original_exception(
 
 async def test_requests_have_separate_spans_with_transport_parent(providers):
     tracer, meter, exporter, reader = providers
-    channel = RpcChannel("demo")
+    channel = RpcChannel(namespace="demo")
     custom = tracer.get_tracer("application")
 
     @channel.method()
@@ -438,7 +440,7 @@ async def test_handshake_is_linked_without_parenting_calls_or_recording_unknown_
     providers,
 ):
     tracer, meter, exporter, _reader = providers
-    channel = RpcChannel("demo")
+    channel = RpcChannel(namespace="demo")
 
     @channel.method()
     async def ping() -> str:
@@ -474,7 +476,7 @@ async def test_handshake_is_linked_without_parenting_calls_or_recording_unknown_
 )
 async def test_signal_settings_are_independent(providers, tracing, metrics):
     tracer, meter, exporter, reader = providers
-    channel = RpcChannel("demo")
+    channel = RpcChannel(namespace="demo")
 
     @channel.method()
     async def ping() -> None:
@@ -497,7 +499,7 @@ async def test_signal_settings_are_independent(providers, tracing, metrics):
 
 async def test_excluded_connections_are_isolated(providers):
     tracer, meter, exporter, reader = providers
-    channel = RpcChannel("media")
+    channel = RpcChannel(namespace="media")
 
     @channel.stream()
     async def frames() -> AsyncIterator[bytes]:
@@ -515,7 +517,7 @@ async def test_excluded_connections_are_isolated(providers):
     )
     rpc.stream("/excluded", frames)
     # Streams are mounted once; use a separate channel for the other connection.
-    other = RpcChannel("other")
+    other = RpcChannel(namespace="other")
 
     @other.stream()
     async def other_frames() -> AsyncIterator[bytes]:
@@ -537,7 +539,7 @@ async def test_excluded_connections_are_isolated(providers):
 
 def test_fastapi_routes_add_real_rpc_spans_and_clean_up(providers):
     tracer, meter, exporter, reader = providers
-    channel = RpcChannel("demo")
+    channel = RpcChannel(namespace="demo")
 
     @channel.method()
     async def ping() -> str:
@@ -591,7 +593,7 @@ else:
 async def test_metrics_work_with_trace_sampling_disabled(providers):
     _, meter, _, reader = providers
     tracer = TracerProvider(sampler=ALWAYS_OFF)
-    channel = RpcChannel("media")
+    channel = RpcChannel(namespace="media")
 
     @channel.stream()
     async def frames() -> AsyncIterator[bytes]:
@@ -611,7 +613,7 @@ async def test_metrics_work_with_trace_sampling_disabled(providers):
 
 async def test_subscription_control_calls_are_instrumented(providers):
     tracer, meter, exporter, reader = providers
-    channel = RpcChannel("updates")
+    channel = RpcChannel(namespace="updates")
 
     @channel.stream()
     async def values() -> AsyncIterator[int]:
@@ -640,7 +642,7 @@ async def test_subscription_control_calls_are_instrumented(providers):
 
 async def test_request_exclusion_and_optional_connection_span(providers):
     tracer, meter, exporter, reader = providers
-    channel = RpcChannel("demo")
+    channel = RpcChannel(namespace="demo")
 
     @channel.method()
     async def ping() -> str:
@@ -671,7 +673,7 @@ async def test_request_exclusion_and_optional_connection_span(providers):
 @pytest.mark.parametrize("failed_send", [False, True])
 async def test_failed_sends_and_invalid_input_are_not_counted(providers, failed_send):
     tracer, meter, exporter, reader = providers
-    channel = RpcChannel("media")
+    channel = RpcChannel(namespace="media")
 
     @channel.stream()
     async def frames(output: Inject[RpcBinaryOutput]) -> None:
@@ -705,7 +707,7 @@ async def test_failed_sends_and_invalid_input_are_not_counted(providers, failed_
 
 def test_custom_handlers_measure_live_connections_and_accepted_duration(providers):
     tracer, meter, exporter, reader = providers
-    endpoint = RpcDefinition().socket("/rpc", channels=[RpcChannel("demo")])
+    endpoint = RpcDefinition().socket("/rpc", channels=[RpcChannel(namespace="demo")])
 
     async def handler(websocket: WebSocket) -> None:
         await websocket.accept()
@@ -742,7 +744,7 @@ def test_custom_handlers_measure_live_connections_and_accepted_duration(provider
 def test_delegated_middleware_records_rpc_and_connection_once(providers):
     tracer, meter, exporter, reader = providers
     telemetry = OpenTelemetry(tracer_provider=tracer, meter_provider=meter)
-    channel = RpcChannel("demo")
+    channel = RpcChannel(namespace="demo")
 
     @channel.method()
     async def ping() -> str:
@@ -770,7 +772,7 @@ def test_delegated_middleware_records_rpc_and_connection_once(providers):
 
 def test_custom_handler_peer_disconnect_keeps_connection_span_successful(providers):
     tracer, meter, exporter, reader = providers
-    endpoint = RpcDefinition().socket("/rpc", channels=[RpcChannel("demo")])
+    endpoint = RpcDefinition().socket("/rpc", channels=[RpcChannel(namespace="demo")])
 
     async def handler(websocket: WebSocket) -> None:
         await websocket.accept()

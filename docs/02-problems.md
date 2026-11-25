@@ -80,7 +80,7 @@ from fastapi_canon import APIRouter
 from fastapi_canon.integrations.websockets import RpcChannel
 
 router = APIRouter()
-projects = RpcChannel("projects")
+projects = RpcChannel(namespace="projects")
 
 
 class ProjectEvent(BaseModel):

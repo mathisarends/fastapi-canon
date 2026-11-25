@@ -75,6 +75,8 @@ class RpcChannelMethod:
     timeout_seconds: float | None = None
     _has_timeout: bool = False
     idempotent: bool = False
+    # The declared name keeps generated params model names stable when included.
+    params_name: str = ""
 
     @property
     def has_timeout(self) -> bool:
@@ -83,31 +85,23 @@ class RpcChannelMethod:
 
 
 class RpcChannel:
-    """Methods, events, streams and sockets the server implements."""
+    """JSON-RPC methods, events and message streams under one namespace.
+
+    Operation names are ``<namespace>.<function_name>``. Including a channel in
+    another prefixes its operations with the parent's namespace.
+    """
 
     def __init__(
         self,
-        name: str | None = None,
-        /,
         *,
-        namespace: str | None = None,
+        namespace: str = "",
         raises: Iterable[RpcErrorDeclaration] = (),
         resolver_scope: RpcResolverScope = call_scope,
     ) -> None:
-        if namespace is not None:
-            resolved_namespace = normalize_namespace(namespace)
-        elif name is not None:
-            resolved_namespace = normalize_namespace(name)
-        else:
-            resolved_namespace = ""
-        self._name = (
-            normalize_namespace(name)
-            if name is not None
-            else resolved_namespace or "channel"
-        )
-        if not self._name:
-            raise ProtocolDefinitionError("RPC channel name cannot be empty")
-        self._namespace = resolved_namespace
+        if not isinstance(namespace, str):
+            raise ProtocolDefinitionError("RPC namespace must be a string")
+        self._namespace = normalize_namespace(namespace)
+        self._name = self._namespace or "channel"
         # Collected from raises; Composition merges it into the application catalog.
         self.error_registry: ErrorRegistry | None = None
         self._raises: tuple[type[RpcError], ...] = ()
@@ -242,6 +236,7 @@ class RpcChannel:
                     else None,
                     has_timeout,
                     idempotent,
+                    wire_name,
                 )
             )
             return function
@@ -409,92 +404,6 @@ class RpcChannel:
 
         return decorate
 
-    @overload
-    def socket(self, function: FunctionType, /) -> FunctionType: ...
-
-    @overload
-    def socket(
-        self,
-        name: str | None = None,
-        /,
-        *,
-        protocol: RpcSocketProtocol | None = None,
-        messages: Iterable[RpcMessageType] = (
-            RpcMessageType.TEXT,
-            RpcMessageType.BINARY,
-        ),
-        closes: Iterable[RpcRejectionDeclaration] = (),
-        summary: str | None = None,
-    ) -> Callable[[FunctionType], FunctionType]: ...
-
-    def socket(
-        self,
-        name: str | FunctionType | None = None,
-        /,
-        *,
-        protocol: RpcSocketProtocol | None = None,
-        messages: Iterable[RpcMessageType] = (
-            RpcMessageType.TEXT,
-            RpcMessageType.BINARY,
-        ),
-        closes: Iterable[RpcRejectionDeclaration] = (),
-        summary: str | None = None,
-    ) -> Any:
-        """Declare a WebSocket endpoint with a message or connection handler.
-
-        A message handler receives its first non-injected parameter as validated
-        JSON and returns one response per message. Inject ``RpcSocket`` instead
-        to manage the connection. ``RpcSocket[Incoming, Outgoing]`` infers JSON
-        validation from its type arguments; bare ``RpcSocket`` forwards text and
-        binary frames unchanged. Message types come only from annotations.
-
-        ``protocol`` declares the application protocol the messages follow, for
-        the contract and generated client bindings; it never changes how messages
-        are handled. ``closes`` binds the exceptions the handler may raise to the
-        close code and reason the client receives.
-        """
-        channel = self
-        channel.ensure_mutable()
-        if isinstance(name, FunctionType):
-            return self.socket()(name)
-        if name is not None and not isinstance(name, str):
-            raise ProtocolDefinitionError(
-                "RPC socket decorator expects a function or name"
-            )
-        if protocol is not None and not isinstance(protocol, RpcSocketProtocol):
-            raise ProtocolDefinitionError(
-                "RPC socket protocol must be an RpcSocketProtocol"
-            )
-        try:
-            declared = frozenset(RpcMessageType(item) for item in messages)
-        except ValueError as error:
-            raise ProtocolDefinitionError(
-                "RPC socket messages must be RpcMessageType values"
-            ) from error
-        if not declared:
-            raise ProtocolDefinitionError("RPC socket needs at least one message type")
-        message_types = tuple(item for item in RpcMessageType if item in declared)
-
-        def decorate(function: FunctionType) -> FunctionType:
-            channel.validate_function(function, "socket", coroutine=False)
-            local = _name(name or function.__name__, "socket name")
-            wire_name = join_rpc_name(channel.namespace, local)
-            definition = socket_definition(
-                name=wire_name,
-                function=function,
-                messages=message_types,
-                protocol=protocol,
-                closes=rejecting_contracts(closes, f"RPC socket {wire_name}"),
-                summary=summary or _docstring_summary(function),
-                resolver_scope=channel.resolver_scope,
-            )
-            channel.reserve_name(wire_name)
-            channel._sockets.append(definition)
-            function.__dict__["__rpckit_socket__"] = channel, local
-            return function
-
-        return decorate
-
     def child(
         self,
         name: str,
@@ -506,34 +415,31 @@ class RpcChannel:
         self.ensure_mutable()
         local = _name(name, "child channel name")
         child = RpcChannel(
-            join_rpc_name(self.name, local),
             namespace=join_rpc_name(self.namespace, local),
             resolver_scope=resolver_scope
             if resolver_scope is not None
             else self.resolver_scope,
         )
+        child._name = join_rpc_name(self.name, local)
         child.error_registry = self.error_registry
         child._raises = self.raises
         child._raises = child.merge_raises(raises, owner=f"RPC channel {child.name}")
         self._children.append(child)
         return child
 
-    def include_channel(self, channel: RpcChannel, *, namespace: str = "") -> None:
-        """Include an independent snapshot under a relative namespace.
+    def include_channel(self, channel: RpcChannel) -> None:
+        """Include an independent snapshot under this channel's namespace.
 
-        The namespace replaces the included channel's root namespace. Nested
-        child namespaces, handler functions, error mappings and scopes are kept.
-        Later registrations on the original channel do not change this snapshot.
+        The included channel keeps its own namespace, prefixed with this one.
+        Handler functions, error mappings and scopes are kept. Later
+        registrations on the original channel do not change this snapshot.
         """
         self.ensure_mutable()
         if not isinstance(channel, RpcChannel):
             raise ProtocolDefinitionError("include_channel expects an RpcChannel")
         if channel is self:
             raise ProtocolDefinitionError("A channel cannot include itself")
-        if not isinstance(namespace, str):
-            raise ProtocolDefinitionError("RPC namespace must be a string")
-        namespace = normalize_namespace(namespace)
-        snapshot = channel.snapshot(join_rpc_name(self.namespace, namespace))
+        snapshot = channel.snapshot(join_rpc_name(self.namespace, channel.namespace))
         names = _channel_names(self)
         included = _channel_names(snapshot)
         duplicates = names.intersection(included)
@@ -569,6 +475,7 @@ class RpcChannel:
                     timeout_seconds=r.timeout_seconds,
                     has_timeout=r.has_timeout,
                     idempotent=r.idempotent,
+                    params_name=r.params_name or r.name,
                 )
                 for r in self.routes
             ]
@@ -659,9 +566,8 @@ class RpcChannel:
         self._names.add(name)
 
     def snapshot(self, namespace: str) -> RpcChannel:
-        snapshot = RpcChannel(
-            self.name, namespace=namespace, resolver_scope=self.resolver_scope
-        )
+        snapshot = RpcChannel(namespace=namespace, resolver_scope=self.resolver_scope)
+        snapshot._name = self.name
         snapshot.error_registry = self.error_registry
         snapshot._raises = self.raises
 
@@ -706,6 +612,55 @@ class RpcChannel:
                 f"RpcChannel {self.name!r} is frozen because its protocol was "
                 "already materialized (directly or by RpcDefinition)"
             )
+
+
+def declare_socket(
+    channel: RpcChannel,
+    function: Any,
+    *,
+    name: str | None = None,
+    protocol: RpcSocketProtocol | None = None,
+    messages: Iterable[RpcMessageType] = (RpcMessageType.TEXT, RpcMessageType.BINARY),
+    closes: Iterable[RpcRejectionDeclaration] = (),
+    summary: str | None = None,
+) -> None:
+    """Declare ``function`` as a socket of ``channel`` for one WebSocket endpoint.
+
+    A message handler receives its first non-injected parameter as validated
+    JSON and returns one response per message. Inject ``RpcSocket`` instead
+    to manage the connection. ``RpcSocket[Incoming, Outgoing]`` infers JSON
+    validation from its type arguments; bare ``RpcSocket`` forwards text and
+    binary frames unchanged.
+    """
+    channel.ensure_mutable()
+    if protocol is not None and not isinstance(protocol, RpcSocketProtocol):
+        raise ProtocolDefinitionError(
+            "RPC socket protocol must be an RpcSocketProtocol"
+        )
+    try:
+        declared = frozenset(RpcMessageType(item) for item in messages)
+    except ValueError as error:
+        raise ProtocolDefinitionError(
+            "RPC socket messages must be RpcMessageType values"
+        ) from error
+    if not declared:
+        raise ProtocolDefinitionError("RPC socket needs at least one message type")
+    message_types = tuple(item for item in RpcMessageType if item in declared)
+    channel.validate_function(function, "socket", coroutine=False)
+    local = _name(name if name is not None else function.__name__, "socket name")
+    wire_name = join_rpc_name(channel.namespace, local)
+    definition = socket_definition(
+        name=wire_name,
+        function=function,
+        messages=message_types,
+        protocol=protocol,
+        closes=rejecting_contracts(closes, f"RPC socket {wire_name}"),
+        summary=summary if summary is not None else _docstring_summary(function),
+        resolver_scope=channel.resolver_scope,
+    )
+    channel.reserve_name(wire_name)
+    channel._sockets.append(definition)
+    function.__dict__["__rpckit_socket__"] = channel, local
 
 
 def join_rpc_name(*parts: str) -> str:

@@ -5,54 +5,50 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 
 class RpcModel(BaseModel):
     model_config = ConfigDict(validate_by_name=True)
 
 
-class CreateTaskParams(RpcModel):
-    model_config = ConfigDict(extra="forbid")
-    title: str
-
-
-class DeleteTaskParams(RpcModel):
-    model_config = ConfigDict(extra="forbid")
-    task_id: str = Field(alias="taskId")
-
-
-class OpenTabParams(RpcModel):
-    model_config = ConfigDict(extra="forbid")
-    url: str
-
-
-class StartScreencastParams(RpcModel):
+class BrowserScreencastStartParams(RpcModel):
     model_config = ConfigDict(extra="forbid")
     quality: int = 80
 
 
-class Tab(RpcModel):
+class BrowserTabsOpenParams(RpcModel):
     model_config = ConfigDict(extra="forbid")
+    url: str
+
+
+class Tab(RpcModel):
     id: str
     url: str
 
 
 class Task(RpcModel):
-    model_config = ConfigDict(extra="forbid")
     id: str
     title: str
     done: bool = False
 
 
 class TaskList(RpcModel):
-    model_config = ConfigDict(extra="forbid")
     tasks: list[Task]
 
 
 class TaskUpdated(RpcModel):
-    model_config = ConfigDict(extra="forbid")
     task: Task
+
+
+class TasksCreateParams(RpcModel):
+    model_config = ConfigDict(extra="forbid")
+    title: str
+
+
+class TasksDeleteParams(RpcModel):
+    model_config = ConfigDict(extra="forbid")
+    task_id: str
 
 
 class TasksUpdatedNotification(RpcModel):
@@ -62,12 +58,12 @@ class TasksUpdatedNotification(RpcModel):
     params: TaskUpdated
 
 
-CreateTaskParams.model_rebuild()
-DeleteTaskParams.model_rebuild()
-OpenTabParams.model_rebuild()
-StartScreencastParams.model_rebuild()
+BrowserScreencastStartParams.model_rebuild()
+BrowserTabsOpenParams.model_rebuild()
 Tab.model_rebuild()
 Task.model_rebuild()
 TaskList.model_rebuild()
 TaskUpdated.model_rebuild()
+TasksCreateParams.model_rebuild()
+TasksDeleteParams.model_rebuild()
 TasksUpdatedNotification.model_rebuild()

@@ -14,11 +14,8 @@ from starlette.routing import Route
 from fastapi_canon import Composition, Feature, export_contracts
 from fastapi_canon.contracts import ContractSelection
 from fastapi_canon.integrations.webrtc import Session, WebRtcRouter
-from fastapi_canon.integrations.websockets import (
-    CanonWebSocketRouter,
-    ProtocolDefinitionError,
-    RpcChannel,
-)
+from fastapi_canon.integrations.websockets import ProtocolDefinitionError, RpcChannel
+from fastapi_canon.integrations.websockets.adapters.fastapi import CanonWebSocketRouter
 
 
 @pytest.mark.parametrize(
@@ -343,7 +340,7 @@ def test_webrtc_selection_precedes_duplicate_session_name_validation() -> None:
 
 
 def _rpc_feature(name: str, path: str, *, endpoint: str, version: int = 1) -> Feature:
-    channel = RpcChannel("control")
+    channel = RpcChannel(namespace="control")
 
     @channel.method()
     async def ping() -> str:

@@ -40,7 +40,7 @@ project_missing = Error(
     extensions={"replacement": None},
 )
 router = APIRouter(namespace="projects")
-projects = RpcChannel("projects")
+projects = RpcChannel(namespace="projects")
 
 
 def require_project(project_id: int) -> None:
@@ -71,13 +71,9 @@ async def events(project_id: int) -> AsyncIterator[ProjectEvent]:
         raise ProjectMissing("private database information")
 
 
-class CancelProject(BaseModel):
-    project_id: int
-
-
 @projects.method(raises=[project_missing])
-async def cancel(params: CancelProject) -> None:
-    require_project(params.project_id)
+async def cancel(project_id: int) -> None:
+    require_project(project_id)
 
 
 router.include_channel(projects, path="/ws")

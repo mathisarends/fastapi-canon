@@ -387,7 +387,7 @@ async def test_typescript_abort_and_timeout_cancel_a_real_server(
         )
         entered, stopped = asyncio.Event(), asyncio.Event()
         cancellations = []
-        channel = RpcChannel("cancellation")
+        channel = RpcChannel(namespace="cancellation")
 
         @channel.method()
         async def work() -> None:

@@ -6,8 +6,8 @@ from types import ModuleType
 from urllib.parse import urlsplit
 
 import pytest
+from fastapi_canon import Inject
 from fastapi_canon.integrations.websockets import (
-    Inject,
     RpcChannel,
     RpcConnectionClose,
     RpcDisconnect,
@@ -25,6 +25,7 @@ from fastapi_canon.integrations.websockets.websocket import (
     REJECTION_CLOSE_CODES,
 )
 
+from tests.fixtures.websockets import socket_of
 from tests.unit.integrations.websockets.testing import InMemorySocket
 
 PACKAGE = "browser_client"
@@ -34,11 +35,12 @@ class BrowserNotFound(Exception):
     pass
 
 
-browser = RpcChannel("browser")
+browser = RpcChannel(namespace="browser")
 tabs = browser.child("tabs")
 
 
-@browser.socket(
+@socket_of(
+    browser,
     "cdp",
     closes=(
         RpcErrorBinding(
@@ -57,7 +59,8 @@ async def cdp(socket: Inject[RpcSocket]) -> None:
         await socket.send(message)
 
 
-@tabs.socket(
+@socket_of(
+    tabs,
     "cdp",
     protocol=RpcSocketProtocol("cdp", version="1.3", schemas=("cdp.json",)),
     messages=(RpcMessageType.TEXT,),

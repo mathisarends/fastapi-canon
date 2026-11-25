@@ -4,36 +4,36 @@
 
 import { defineNotification, defineRoute } from "./core.js";
 import type {
-  CreateTaskParams,
-  DeleteTaskParams,
-  OpenTabParams,
-  StartScreencastParams,
+  BrowserScreencastStartParams,
+  BrowserTabsOpenParams,
   Tab,
   Task,
   TaskList,
   TaskUpdated,
+  TasksCreateParams,
+  TasksDeleteParams,
 } from "./models.js";
 
 export const routes = {
+  browserTabsOpen: defineRoute<BrowserTabsOpenParams, Tab>({
+    method: "browser.tabs.open",
+    server: "browser",
+  }),
+  browserScreencastStart: defineRoute<BrowserScreencastStartParams, null>({
+    method: "browser.screencast.start",
+    server: "streaming",
+  }),
   tasksList: defineRoute<undefined, TaskList>({
     method: "tasks.list",
     server: "production",
   }),
-  tasksCreate: defineRoute<CreateTaskParams, Task>({
+  tasksCreate: defineRoute<TasksCreateParams, Task>({
     method: "tasks.create",
     server: "production",
   }),
-  tasksDelete: defineRoute<DeleteTaskParams, boolean>({
+  tasksDelete: defineRoute<TasksDeleteParams, boolean>({
     method: "tasks.delete",
     server: "production",
-  }),
-  browserTabsOpen: defineRoute<OpenTabParams, Tab>({
-    method: "browser.tabs.open",
-    server: "browser",
-  }),
-  browserScreencastStart: defineRoute<StartScreencastParams, null>({
-    method: "browser.screencast.start",
-    server: "streaming",
   }),
 } as const;
 

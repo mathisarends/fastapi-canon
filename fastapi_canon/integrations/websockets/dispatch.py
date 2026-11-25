@@ -5,6 +5,7 @@ from pydantic import BaseModel, ValidationError
 from pydantic_core import InitErrorDetails
 
 from fastapi_canon.integrations.websockets.adapter import adapter
+from fastapi_canon.integrations.websockets.connection import RpcConnection
 from fastapi_canon.integrations.websockets.dependencies import (
     EmptyResolver,
     RpcResolver,
@@ -18,6 +19,7 @@ from fastapi_canon.integrations.websockets.errors import (
 from fastapi_canon.integrations.websockets.protocol import (
     RpcMethodDefinition,
     RpcProtocol,
+    RpcSubscriptionDefinition,
 )
 
 
@@ -70,18 +72,44 @@ class RpcDispatcher:
             raise ProtocolDefinitionError(f"RPC method {method.name} is not executable")
 
         async with resolver_scope(self._resolver) as resolver:
-            arguments = {
-                parameter.name: await resolver.resolve(parameter.dependency)
-                for parameter in method.injected_parameters
-            }
-            if invocation.params is not None:
-                if method.params_parameter is None:
-                    raise ProtocolDefinitionError(
-                        f"RPC method {method.name} has no params parameter"
-                    )
-                arguments[method.params_parameter] = invocation.params
+            arguments = await handler_arguments(method, invocation.params, resolver)
             result = await function(**arguments)
             return adapter(method.result).validate_python(result, from_attributes=True)
+
+
+async def handler_arguments(
+    definition: RpcMethodDefinition | RpcSubscriptionDefinition,
+    params: BaseModel | None,
+    resolver: RpcResolver,
+) -> dict[str, Any]:
+    """Return a handler's injected dependencies, params and path values."""
+    arguments = {
+        parameter.name: await resolver.resolve(parameter.dependency)
+        for parameter in definition.injected_parameters
+    }
+    if params is not None:
+        if definition.params_parameter is not None:
+            arguments[definition.params_parameter] = params
+        elif definition.params_fields:
+            arguments.update(
+                {name: getattr(params, name) for name in definition.params_fields}
+            )
+        else:
+            raise ProtocolDefinitionError(
+                f"RPC operation {definition.name} has no params parameter"
+            )
+    if definition.path_model is not None:
+        connection = await resolver.resolve(RpcConnection)
+        try:
+            values = definition.path_model.model_validate(dict(connection.path_params))
+        except ValidationError as error:
+            raise ProtocolDefinitionError(
+                f"RPC operation {definition.name} received invalid path values"
+            ) from error
+        arguments.update(
+            {name: getattr(values, name) for name in definition.path_parameters}
+        )
+    return arguments
 
 
 def _validated_params(

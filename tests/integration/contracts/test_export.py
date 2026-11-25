@@ -11,22 +11,23 @@ from fastapi_canon import (
     Error,
     ErrorOptions,
     Feature,
+    Inject,
     export_contracts,
 )
 from fastapi_canon.contracts import ContractSelection
 from fastapi_canon.integrations.sse.canon import CanonStreamRouter
 from fastapi_canon.integrations.webrtc import Session, WebRtcRouter
 from fastapi_canon.integrations.websockets import (
-    CanonWebSocketRouter,
-    Inject,
     ProtocolDefinitionError,
     RpcChannel,
     RpcSocket,
 )
+from fastapi_canon.integrations.websockets.adapters.fastapi import CanonWebSocketRouter
+from tests.fixtures.websockets import socket_of
 
 
 def test_export_matches_registered_http_sse_rpc_and_webrtc_paths() -> None:
-    channel = RpcChannel("control")
+    channel = RpcChannel(namespace="control")
 
     @channel.method()
     async def ping() -> str:
@@ -102,8 +103,8 @@ def test_export_matches_registered_http_sse_rpc_and_webrtc_paths() -> None:
 def test_export_omits_unmounted_endpoints_and_keeps_service_contract_independent() -> (
     None
 ):
-    public = RpcChannel("public")
-    private = RpcChannel("private")
+    public = RpcChannel(namespace="public")
+    private = RpcChannel(namespace="private")
 
     @public.method()
     async def ping() -> str:
@@ -136,7 +137,7 @@ def test_export_omits_unmounted_endpoints_and_keeps_service_contract_independent
 
 
 def test_export_reads_custom_handlers_and_mounted_subapplications() -> None:
-    channel = RpcChannel("custom")
+    channel = RpcChannel(namespace="custom")
 
     @channel.method()
     async def ping() -> None:
@@ -160,7 +161,7 @@ def test_export_reads_custom_handlers_and_mounted_subapplications() -> None:
 
 
 def test_export_rejects_ambiguous_multiple_mounts_with_both_paths() -> None:
-    channel = RpcChannel("jobs")
+    channel = RpcChannel(namespace="jobs")
 
     @channel.method()
     async def ping() -> None:
@@ -205,13 +206,13 @@ def test_export_preserves_raw_sockets_and_composed_error_catalog(
         pass
 
     missing = Error(Missing, status=404, code="missing", title="Missing")
-    channel = RpcChannel("browser")
+    channel = RpcChannel(namespace="browser")
 
     @channel.method(raises=[missing])
     async def open() -> None:
         raise Missing()
 
-    @channel.socket()
+    @socket_of(channel)
     async def frames(socket: Inject[RpcSocket]) -> None:
         await socket.close()
 

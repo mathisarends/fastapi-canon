@@ -23,6 +23,7 @@ from fastapi_canon.integrations.websockets.codegen.bindings import bind_sockets
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from pydantic import Field
 
+from tests.fixtures.websockets import socket_of
 from tests.unit.integrations.websockets.codegen.test_bindings import EchoBinding
 from tests.unit.integrations.websockets.codegen.test_bindings import (
     session as raw_session,
@@ -36,10 +37,10 @@ from tests.unit.integrations.websockets.test_typed_connections import (
 )
 from tests.unit.integrations.websockets.test_typed_sockets import Ping, Pong
 
-channel = RpcChannel("messages")
+channel = RpcChannel(namespace="messages")
 
 
-@channel.socket(protocol=RpcSocketProtocol("example"))
+@socket_of(channel, protocol=RpcSocketProtocol("example"))
 async def union(
     message: Annotated[Ping | Pong, Field(discriminator="type")],
 ) -> Annotated[Ping | Pong, Field(discriminator="type")]:

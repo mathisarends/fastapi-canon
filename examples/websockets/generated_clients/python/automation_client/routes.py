@@ -5,15 +5,31 @@ from pydantic import TypeAdapter
 
 from automation_client.internal import RpcNotificationInfo, RpcRouteInfo
 from automation_client.models import (
-    CreateTaskParams,
-    DeleteTaskParams,
-    OpenTabParams,
-    StartScreencastParams,
+    BrowserScreencastStartParams,
+    BrowserTabsOpenParams,
     Tab,
     Task,
     TaskList,
+    TasksCreateParams,
+    TasksDeleteParams,
     TasksUpdatedNotification,
     TaskUpdated,
+)
+
+BROWSER_TABS_OPEN: RpcRouteInfo[BrowserTabsOpenParams, Tab] = RpcRouteInfo(
+    method="browser.tabs.open",
+    result_adapter=TypeAdapter(Tab),
+    params_adapter=TypeAdapter(BrowserTabsOpenParams),
+    server="browser",
+)
+
+BROWSER_SCREENCAST_START: RpcRouteInfo[BrowserScreencastStartParams, None] = (
+    RpcRouteInfo(
+        method="browser.screencast.start",
+        result_adapter=TypeAdapter(None),
+        params_adapter=TypeAdapter(BrowserScreencastStartParams),
+        server="streaming",
+    )
 )
 
 TASKS_LIST: RpcRouteInfo[None, TaskList] = RpcRouteInfo(
@@ -23,32 +39,18 @@ TASKS_LIST: RpcRouteInfo[None, TaskList] = RpcRouteInfo(
     server="production",
 )
 
-TASKS_CREATE: RpcRouteInfo[CreateTaskParams, Task] = RpcRouteInfo(
+TASKS_CREATE: RpcRouteInfo[TasksCreateParams, Task] = RpcRouteInfo(
     method="tasks.create",
     result_adapter=TypeAdapter(Task),
-    params_adapter=TypeAdapter(CreateTaskParams),
+    params_adapter=TypeAdapter(TasksCreateParams),
     server="production",
 )
 
-TASKS_DELETE: RpcRouteInfo[DeleteTaskParams, bool] = RpcRouteInfo(
+TASKS_DELETE: RpcRouteInfo[TasksDeleteParams, bool] = RpcRouteInfo(
     method="tasks.delete",
     result_adapter=TypeAdapter(bool),
-    params_adapter=TypeAdapter(DeleteTaskParams),
+    params_adapter=TypeAdapter(TasksDeleteParams),
     server="production",
-)
-
-BROWSER_TABS_OPEN: RpcRouteInfo[OpenTabParams, Tab] = RpcRouteInfo(
-    method="browser.tabs.open",
-    result_adapter=TypeAdapter(Tab),
-    params_adapter=TypeAdapter(OpenTabParams),
-    server="browser",
-)
-
-BROWSER_SCREENCAST_START: RpcRouteInfo[StartScreencastParams, None] = RpcRouteInfo(
-    method="browser.screencast.start",
-    result_adapter=TypeAdapter(None),
-    params_adapter=TypeAdapter(StartScreencastParams),
-    server="streaming",
 )
 
 TASKS_UPDATED: RpcNotificationInfo[TaskUpdated] = RpcNotificationInfo(

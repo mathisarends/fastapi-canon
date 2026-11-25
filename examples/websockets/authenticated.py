@@ -80,7 +80,7 @@ async def open_session(websocket: WebSocket, sessions: FromDishka[Sessions]) -> 
 
 def create_app() -> FastAPI:
     router = APIRouter()
-    channel = RpcChannel("account")
+    channel = RpcChannel(namespace="account")
 
     @channel.method()
     async def whoami(identity: Inject[RequestIdentity]) -> str:

@@ -20,6 +20,7 @@ from fastapi_canon.integrations.websockets.codegen.options import (
     TypeScriptClientOptions,
 )
 from fastapi_canon.integrations.websockets.codegen.writer import write_files
+from fastapi_canon.integrations.websockets.contract import ServerVariable
 from fastapi_canon.integrations.websockets.schema.export import (
     ProtocolReferenceError,
     load_contract_source,
@@ -266,9 +267,16 @@ def _config_contract(base: Path, contract: object) -> tuple[Path, str]:
         raise TypeError("contract must be a table")
     source_name = _config_string(contract, "source")
     output = base / _config_string(contract, "output")
+    base_url = contract.get("base_url")
+    if base_url is not None and not isinstance(base_url, str):
+        raise TypeError("contract.base_url must be a string")
     sys.path.insert(0, str(base))
     try:
-        source = load_contract_source(source_name)
+        source = load_contract_source(
+            source_name,
+            base_url=base_url,
+            variables=_config_variables(contract.get("variables")),
+        )
     finally:
         sys.path.pop(0)
     servers = contract.get("servers")
@@ -290,6 +298,17 @@ def _config_contract(base: Path, contract: object) -> tuple[Path, str]:
         servers=server_entries,
     )
     return output, content
+
+
+def _config_variables(value: object) -> dict[str, ServerVariable] | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict) or not all(
+        isinstance(name, str) and isinstance(default, str)
+        for name, default in value.items()
+    ):
+        raise TypeError("contract.variables must be a string-to-string table")
+    return {name: ServerVariable(default=default) for name, default in value.items()}
 
 
 def _config_arguments(
@@ -389,13 +408,13 @@ def _add_schema_command(
         "schema",
         help="Render the contract of a protocol.",
         description=(
-            "Render an RpcChannel or RpcContract as the contract "
+            "Render a FastAPI application or RpcContract as the contract "
             "clients are generated from. The source is named as "
             "module:attribute and imported from the current directory."
         ),
     )
     schema.add_argument(
-        "source", help="RpcChannel or RpcContract, as module:attribute."
+        "source", help="FastAPI application or RpcContract, as module:attribute."
     )
     schema.add_argument(
         "--output",
@@ -405,7 +424,7 @@ def _add_schema_command(
     )
     schema.add_argument(
         "--title",
-        help="Title of the API (required unless the source is an RpcContract).",
+        help="Title of the API; defaults to the source's title.",
     )
     schema.add_argument("--description", help="Description of the API.")
     schema.add_argument(

@@ -1,24 +1,25 @@
 import pytest
+from fastapi_canon import Inject
 from fastapi_canon.integrations.websockets import (
-    Inject,
     ProtocolDefinitionError,
     RpcChannel,
-    RpcModel,
 )
 from fastapi_canon.integrations.websockets.schema import render_openrpc
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from tests.fixtures.websockets import CamelModel
 
-class NavigateParams(RpcModel):
+
+class NavigateParams(CamelModel):
     project_id: str
     ignore_cache: bool
 
 
-class NavigateResult(RpcModel):
+class NavigateResult(CamelModel):
     active_project_id: str
 
 
-navigation_channel = RpcChannel("navigation", namespace="browser.nav")
+navigation_channel = RpcChannel(namespace="browser.nav")
 
 
 class Navigation:
@@ -92,11 +93,11 @@ async def test_server_accepts_camel_case_and_serializes_results_with_aliases() -
 
 
 def test_contract_rejects_colliding_wire_field_names() -> None:
-    class CollidingParams(RpcModel):
+    class CollidingParams(CamelModel):
         foo_bar: str
         fooBar: str
 
-    router = RpcChannel("collision")
+    router = RpcChannel(namespace="collision")
 
     @router.method("test")
     async def test(params: CollidingParams) -> None: ...

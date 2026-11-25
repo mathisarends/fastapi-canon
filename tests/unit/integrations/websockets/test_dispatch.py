@@ -117,7 +117,7 @@ def test_foreign_model_params_keep_declared_class_and_field_names() -> None:
     class ForeignParams(BaseModel):
         user_id: int
 
-    channel = RpcChannel("foreign")
+    channel = RpcChannel(namespace="foreign")
 
     @channel.method()
     async def accept(params: ForeignParams) -> None: ...
@@ -145,7 +145,7 @@ class PriceView(BaseModel):
 async def test_results_are_serialized_as_the_declared_model(
     returned: BaseModel,
 ) -> None:
-    channel = RpcChannel("catalog")
+    channel = RpcChannel(namespace="catalog")
 
     @channel.method()
     async def price() -> PriceView:
