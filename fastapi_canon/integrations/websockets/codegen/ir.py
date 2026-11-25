@@ -138,6 +138,7 @@ class RouteDecl:
     server: str | None = None
     deprecated: bool = False
     idempotent: bool = False
+    params_optional: bool = False
 
     @property
     def name(self) -> str:
@@ -282,6 +283,7 @@ class NotificationDecl:
     server: str | None = None
     subscription: bool = False
     params_model: str | None = None
+    params_optional: bool = False
     params: tuple[ParamDecl, ...] = ()
     errors: tuple[ErrorDecl, ...] = ()
 
@@ -641,6 +643,7 @@ def _route(method: dict[str, Any]) -> RouteDecl:
         errors=tuple(_error(error) for error in method.get("errors", ())),
         server=_server_reference(method, owner=f"Method {method['name']!r}"),
         deprecated=bool(method.get("deprecated", False)),
+        params_optional=method.get("x-rpc-params-optional") is True,
         idempotent=method.get("x-rpc-idempotent") is True,
     )
 
@@ -718,6 +721,7 @@ def _notifications(
                     owner=f"Stream {subscription['name']!r}",
                 ),
                 subscription=True,
+                params_optional=subscription.get("x-rpc-params-optional") is True,
                 errors=tuple(_error(error) for error in subscription.get("errors", ())),
                 params_model=params_model,
                 params=tuple(

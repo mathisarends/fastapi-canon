@@ -12,7 +12,7 @@ from fastapi_canon.integrations.websockets.codegen import (
     generate_python_client,
 )
 from fastapi_canon.integrations.websockets.schema import render_openrpc
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from tests.unit.integrations.websockets.conftest import GreetingState, greeting_app
 
@@ -111,7 +111,19 @@ async def test_generated_client_uses_validation_aliases_on_requests(
             validation_alias="inputName", serialization_alias="outputName"
         )
 
+    class Pagination(BaseModel):
+        model_config = ConfigDict(validate_by_alias=False, validate_by_name=True)
+        limit: int = Field(alias="maxItems")
+
     channel = RpcChannel(namespace="tasks")
+
+    default_page = Pagination(limit=10)
+
+    @channel.method()
+    async def page(filters: Pagination = default_page) -> int:
+        limit = filters.limit
+        filters.limit += 1
+        return limit
 
     @channel.method()
     async def get(task_id: Annotated[int, Field(validation_alias="taskId")]) -> int:
@@ -137,6 +149,9 @@ async def test_generated_client_uses_validation_aliases_on_requests(
     )
 
     async with asyncio.timeout(5), generated.AliasClient(transport) as client:
+        assert await client.tasks.page() == 10
+        assert await client.tasks.page(limit=25) == 25
+        assert default_page.limit == 10
         assert await client.tasks.get(task_id=42) == 42
         (review,) = await client.tasks.echo(input_name="Ada")
         assert review.output_name == "Ada"
@@ -145,10 +160,17 @@ async def test_generated_client_uses_validation_aliases_on_requests(
 async def test_generated_request_envelope_keeps_a_same_named_params_model(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    class TasksUpdatedNotification(BaseModel):
+        task_id: int
+
     class CreateRequest(BaseModel):
         title: str
 
     channel = RpcChannel(namespace="tasks")
+
+    @channel.event()
+    async def updated() -> AsyncIterator[TasksUpdatedNotification]:
+        yield TasksUpdatedNotification(task_id=7)
 
     @channel.method()
     async def create(request: CreateRequest) -> str:
@@ -171,6 +193,11 @@ async def test_generated_request_envelope_keeps_a_same_named_params_model(
 
     async with asyncio.timeout(5), generated.TasksClient(transport) as client:
         assert await client.tasks.create(title="Ada") == "Ada"
+        transport.publish(
+            {"jsonrpc": "2.0", "method": "tasks.updated", "params": {"task_id": 7}}
+        )
+        update = await anext(client.tasks.updated())
+        assert update.task_id == 7
 
     method = document["methods"][0]
     schemas = document["components"]["schemas"]

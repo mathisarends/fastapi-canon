@@ -15,7 +15,9 @@ Methods are async free functions. As in FastAPI, the signature is the contract:
 - Named parameters form the `params` object. Their names are the wire names,
   defaults make them optional and unknown names are rejected. Canon names the
   generated params model after the operation, such as `TasksCreateParams`.
-- A single Pydantic model parameter is the whole `params` object.
+- A single positional-or-keyword Pydantic model parameter is the whole `params`
+  object. Omitting `params` uses a fresh copy of its signature default, if
+  declared. An explicit object uses the model's validators and field defaults.
 - `Annotated[T, Path()]` reads a path variable; see [mount endpoints](#mount-endpoints).
 - `Inject[T]` parameters are dependencies; see [dependency injection](06-dependencies.md).
 

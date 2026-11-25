@@ -924,8 +924,8 @@ export class RpcClientCore {
 
   async request<Route extends RpcRouteInfo>(
     route: Route,
-    ...args: RouteParams<Route> extends undefined
-      ? [params?: undefined, options?: RpcRequestOptions]
+    ...args: undefined extends RouteParams<Route>
+      ? [params?: RouteParams<Route>, options?: RpcRequestOptions]
       : [params: RouteParams<Route>, options?: RpcRequestOptions]
   ): Promise<RouteResult<Route>> {
     const params = args[0];

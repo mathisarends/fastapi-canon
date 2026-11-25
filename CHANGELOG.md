@@ -8,6 +8,12 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0290).
 
+- **`CANON-029-RPC-WIRE-FIELDS`** — Give RPC input fields distinct flat
+  validation names. Add a flat alternative for a nested-only alias or enable
+  validation by field name. Regenerate RPC clients for corrected alias,
+  notification and socket schemas and whole-model parameter defaults. URL
+  path parameters also need a flat name matching a route placeholder.
+
 - **`CANON-029-PROBLEM-URI-DIAGNOSTICS`** — Strict SSE generation no longer
   reports `format: uri-reference` on `type` and `instance` of Canon-generated
   problem schemas, which now carry `x-canon-problem: true`. Remove the
@@ -20,7 +26,7 @@ See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0290).
   removed. Declare streams with FastAPI's `response_class=EventSourceResponse`
   on `get()`, `post()` or `api_route()`. Such routes on a Canon `APIRouter` are
   typed Canon streams. Annotate the generator with its concrete event type and
-  use `ServerSentEvent(data=event)` when setting SSE fields.
+  include `ServerSentEvent` in the item union when yielding it to set SSE fields.
 - **`CANON-029-RPC-SIGNATURE-PARAMS`** — RPC methods and message streams read
   params from their signature. A single positional-or-keyword Pydantic model
   parameter is the whole params object. Otherwise named parameters form a
@@ -85,6 +91,14 @@ See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0290).
   ([#231](https://github.com/mathisarends/fastapi-canon/issues/231)).
 
 ### Fixed
+
+- RPC methods and message streams honor whole-model signature defaults when
+  clients omit params. Explicit objects use model validation.
+- Typed sockets and binary streams accept aliased URL placeholders.
+- Chunked uploads that exceed the limit while middleware reads the body return
+  the same 413 problem as fixed-length uploads.
+- Standalone RPC schema export preserves adjacent generated SDK files. Give
+  each configured client its own output directory.
 
 - OpenRPC keeps request envelopes separate from application payload schemas
   that use the same name. Regenerate affected RPC clients

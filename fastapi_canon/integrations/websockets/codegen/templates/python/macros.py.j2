@@ -1,14 +1,14 @@
 {% macro operation(route) %}    async def {{ route.operation_name | identifier }}({% if not route.params %}self{% else %}
         self,
         *,
-{% for parameter in route.params %}        {{ parameter.name | identifier }}: {{ parameter | parameter_annotation }},
+{% for parameter in route.params %}        {{ parameter.name | identifier }}: {{ parameter | parameter_annotation(route.params_optional) }},
 {% endfor %}    {% endif %}) -> {{ route.result | annotation }}:
 {% set description = route.summary or route.description %}{% if description %}        """{{ description | docstring }}"""
 {% endif %}{% if route.params_model is not none %}        values: dict[str, object] = {}
-{% for parameter in route.params %}{% if parameter.required %}        values[{{ parameter.name | literal }}] = {{ parameter.name | identifier }}
+{% for parameter in route.params %}{% if parameter.required and not route.params_optional %}        values[{{ parameter.name | literal }}] = {{ parameter.name | identifier }}
 {% else %}        if {{ parameter.name | identifier }} is not UNSET:
             values[{{ parameter.name | literal }}] = {{ parameter.name | identifier }}
-{% endif %}{% endfor %}        params = {{ route.params_model | schema_name }}.model_validate(values)
+{% endif %}{% endfor %}        params = {{ route.params_model | schema_name }}.model_validate(values){% if route.params_optional %} if values else None{% endif %}
 {% endif %}        {{ "await" if route.result | null_type else "return await" }} self._rpc.request(
             {{ route.method_member }},
 {% if route.params_model is not none %}            params=params,
@@ -18,14 +18,14 @@
 {% macro notification(event) %}{% if event.subscription %}    def {{ event.operation_name | identifier }}({% if not event.params %}self{% else %}
         self,
         *,
-{% for parameter in event.params %}        {{ parameter.name | identifier }}: {{ parameter | parameter_annotation }},
+{% for parameter in event.params %}        {{ parameter.name | identifier }}: {{ parameter | parameter_annotation(event.params_optional) }},
 {% endfor %}    {% endif %}) -> RpcStream[{{ event.payload | annotation }}]:
 {% if event.summary %}        """{{ event.summary | docstring }}"""
 {% endif %}{% if event.params_model is not none %}        values: dict[str, object] = {}
-{% for parameter in event.params %}{% if parameter.required %}        values[{{ parameter.name | literal }}] = {{ parameter.name | identifier }}
+{% for parameter in event.params %}{% if parameter.required and not event.params_optional %}        values[{{ parameter.name | literal }}] = {{ parameter.name | identifier }}
 {% else %}        if {{ parameter.name | identifier }} is not UNSET:
             values[{{ parameter.name | literal }}] = {{ parameter.name | identifier }}
-{% endif %}{% endfor %}        params = {{ event.params_model | schema_name }}.model_validate(values)
+{% endif %}{% endfor %}        params = {{ event.params_model | schema_name }}.model_validate(values){% if event.params_optional %} if values else None{% endif %}
 {% endif %}        return self._rpc.open_message_stream({{ event.rpc_name | constant }}{% if event.params_model is not none %}, params=params{% endif %})
 {% else %}    def {{ event.operation_name | identifier }}(self) -> AsyncIterator[{{ event.payload | annotation }}]:
 {% if event.summary %}        """{{ event.summary | docstring }}"""

@@ -54,11 +54,14 @@ def _load(path: Path) -> ApplicationConfig:
         document = tomllib.loads(path.read_text(encoding="utf-8"))
     except tomllib.TOMLDecodeError as error:
         raise ValueError(f"{path}: {error}") from None
-    raw = (
-        document.get("tool", {}).get("fastapi-canon", {})
-        if path.name == "pyproject.toml"
-        else document
-    )
+    raw = document
+    if path.name == "pyproject.toml":
+        raw = document.get("tool", {})
+        if not isinstance(raw, dict):
+            raise ValueError(f"{path}: tool must be a table")
+        raw = raw.get("fastapi-canon", {})
+        if not isinstance(raw, dict):
+            raise ValueError(f"{path}: tool.fastapi-canon must be a table")
     name = raw.get("name", path.parent.name)
     if not isinstance(name, str) or not name:
         raise ValueError(f"{path}: name must be a nonempty string")
@@ -79,7 +82,7 @@ def _load(path: Path) -> ApplicationConfig:
     if app is not None and (not isinstance(app, str) or not app):
         raise ValueError(f"{path}: checks.composition.app must be a nonempty string")
     threshold = composition.get("fail-on", "error")
-    if threshold not in {"error", "warning"}:
+    if threshold not in ("error", "warning"):
         raise ValueError(f"{path}: checks.composition.fail-on must be error or warning")
     fail_on: FailOn = "warning" if threshold == "warning" else "error"
     return ApplicationConfig(

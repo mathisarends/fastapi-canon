@@ -3,7 +3,7 @@ import logging
 from collections.abc import AsyncGenerator, AsyncIterator, Callable, Sequence
 from contextlib import aclosing
 from functools import wraps
-from typing import Any, cast, get_args, get_type_hints
+from typing import Any, cast, get_type_hints
 
 from fastapi import Request
 from pydantic import TypeAdapter
@@ -59,8 +59,8 @@ class CanonStreamRouter(CanonRouter, StreamRouter):
         register = super().stream(path, methods=methods, raises=local, **options)
 
         def decorate(endpoint: Endpoint) -> Endpoint:
-            validate_endpoint(endpoint)
-            wrapped = _terminal_stream(endpoint, registry, errors)
+            item_type = validate_endpoint(endpoint)
+            wrapped = _terminal_stream(endpoint, registry, errors, item_type=item_type)
             register(wrapped)
             return endpoint
 
@@ -71,9 +71,10 @@ def _terminal_stream(
     endpoint: Callable[..., Any],
     registry: ErrorRegistry | None,
     errors: tuple[AnyError, ...],
+    *,
+    item_type: Any,
 ) -> Callable[..., Any]:
     hints = get_type_hints(endpoint, include_extras=True)
-    item_type = get_args(hints["return"])[0]
     adapter = TypeAdapter(item_type)
     signature = inspect.signature(endpoint)
     request_hints = get_type_hints(endpoint)

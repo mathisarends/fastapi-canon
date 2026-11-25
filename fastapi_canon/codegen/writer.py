@@ -8,7 +8,7 @@ def write_generated_files(
     output: Path,
     files: Mapping[str, str],
     *,
-    manifest: str,
+    manifest: str | None = None,
     legacy_manifests: tuple[str, ...] = (),
     check: bool = False,
     sort_files: bool = True,
@@ -16,7 +16,8 @@ def write_generated_files(
 ) -> tuple[Path, ...]:
     """Preflight ownership, then atomically replace each changed generated file."""
     previous: set[str] = set()
-    for name in (manifest, *legacy_manifests):
+    manifests = (manifest, *legacy_manifests) if manifest else legacy_manifests
+    for name in manifests:
         path = _owned_path(output, name)
         if not path.exists():
             continue

@@ -677,7 +677,9 @@ def _add_notification_imports(
         imports.add(f"{options.package}.models", _schema_name(event.params_model))
     for parameter in event.params:
         imports.add(f"{options.package}.models", *_model_names(parameter.type))
-        _parameter_annotation(parameter, imports, options)
+        _parameter_annotation(
+            parameter, imports, options, optional=event.params_optional
+        )
     if event.params_model is not None:
         imports.add(f"{options.package}.models", _schema_name(event.params_model))
     imports.add(f"{options.package}.routes", _constant(event.rpc_name))
@@ -853,7 +855,9 @@ def _add_operation_imports(
     imports.add(models, *_model_names(route.result))
     _annotation(route.result, imports)
     for parameter in route.params:
-        _parameter_annotation(parameter, imports, options)
+        _parameter_annotation(
+            parameter, imports, options, optional=route.params_optional
+        )
 
 
 def _field_line(field: FieldDecl, imports: _Imports) -> str:
@@ -922,9 +926,11 @@ def _parameter_annotation(
     parameter: Any,
     imports: _Imports,
     options: PythonClientOptions,
+    *,
+    optional: bool,
 ) -> str:
     annotation = _annotation(parameter.type, imports)
-    if parameter.required:
+    if parameter.required and not optional:
         return annotation
     imports.add(_runtime_module(options), "UNSET", "UnsetType")
     return f"{_union((annotation, 'UnsetType'))} = UNSET"
@@ -1044,8 +1050,8 @@ def _template_filters(
         "null_type": _is_null,
         "options_literal": lambda values: _literal(dict(values)),
         "placeholder": lambda value: _literal(f"{{{value}}}"),
-        "parameter_annotation": lambda parameter: _parameter_annotation(
-            parameter, imports, options
+        "parameter_annotation": lambda parameter, optional: _parameter_annotation(
+            parameter, imports, options, optional=optional
         ),
         "route_params": lambda route: (
             "None" if route.params_model is None else _schema_name(route.params_model)

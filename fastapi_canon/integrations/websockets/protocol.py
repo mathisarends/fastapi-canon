@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import inspect
 from collections import Counter
-from collections.abc import AsyncGenerator, AsyncIterator, Iterable
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Iterable
+from copy import deepcopy
 from dataclasses import dataclass
+from functools import partial
 from itertools import chain
 from types import FunctionType, UnionType
 from typing import (
@@ -59,10 +61,15 @@ class ChannelPathParams(BaseModel):
     """Signature-derived path fields resolved against the mounted WebSocket route."""
 
     @classmethod
-    def missing_path_inputs(cls, available: Iterable[str]) -> set[str]:
+    def missing_path_inputs(
+        cls, available: Iterable[str], *, local: bool = False
+    ) -> set[str]:
         supplied = set(available)
         missing: set[str] = set()
         for name, field in cls.model_fields.items():
+            # Explicit Path() values can come from a later router inclusion prefix.
+            if local and _is_path_parameter(cls.__annotations__.get(name)):
+                continue
             inputs = path_input_names(name, field)
             if supplied.isdisjoint(inputs):
                 missing.update(inputs)
@@ -90,6 +97,7 @@ class RpcMethodDefinition:
     params_fields: tuple[str, ...] = ()
     path_parameters: tuple[str, ...] = ()
     path_model: type[BaseModel] | None = None
+    params_default: Callable[[], Any] | None = None
 
     def __post_init__(self) -> None:
         if type(self.idempotent) is not bool:
@@ -129,6 +137,7 @@ class RpcSubscriptionDefinition:
     params_fields: tuple[str, ...] = ()
     path_parameters: tuple[str, ...] = ()
     path_model: type[BaseModel] | None = None
+    params_default: Callable[[], Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -270,13 +279,21 @@ def path_input_names(name: str, field: FieldInfo) -> tuple[str, ...]:
     """Return the route keys Pydantic reads for a path field."""
     match field.validation_alias:
         case AliasChoices() as choices:
-            return tuple(str(path[0]) for path in choices.convert_to_aliases())
+            paths = choices.convert_to_aliases()
         case AliasPath() as path:
-            return (str(path.path[0]),)
+            paths = [path.path]
         case str() as alias:
             return (alias,)
         case None:
             return (name,)
+    flat = tuple(
+        path[0] for path in paths if len(path) == 1 and isinstance(path[0], str)
+    )
+    if not flat:
+        raise ProtocolDefinitionError(
+            f"URL path parameter {name!r} needs a flat validation alias"
+        )
+    return flat
 
 
 def method_definition(
@@ -320,6 +337,7 @@ def method_definition(
             else None
         ),
         params_fields=signature.fields,
+        params_default=signature.default,
         path_parameters=signature.path_parameters,
         path_model=signature.path_model,
     )
@@ -425,6 +443,7 @@ def subscription_definition(
         summary=summary,
         raises=raises,
         params_fields=signature.fields,
+        params_default=signature.default,
         path_parameters=signature.path_parameters,
         path_model=signature.path_model,
     )
@@ -663,7 +682,15 @@ def _router_params_model(function: Any, name: str, kind: str) -> _ParamsModel:
             annotation
         ):
             return _ParamsModel(
-                annotation, parameter.name, (), injected, path_names, path_model
+                annotation,
+                parameter.name,
+                (),
+                injected,
+                path_names,
+                path_model,
+                None
+                if parameter.default is inspect.Parameter.empty
+                else partial(deepcopy, parameter.default),
             )
     fields: dict[str, Any] = {}
     for parameter in wire_parameters:
@@ -787,7 +814,11 @@ def _path_model(
         )
         fields[parameter.name] = (annotation, default)
     try:
-        return create_model(f"{_pascal_case(function.__name__)}PathParams", **fields)
+        return create_model(
+            f"{_pascal_case(function.__name__)}PathParams",
+            __base__=ChannelPathParams,
+            **fields,
+        )
     except PydanticSchemaGenerationError as error:
         names = ", ".join(fields)
         raise ProtocolDefinitionError(_path_type_message(names, kind)) from error
@@ -815,7 +846,7 @@ def _notification_message_types(annotation: Any) -> tuple[type[BaseModel], ...]:
 
 
 def _declared_notification_type(message: type[BaseModel]) -> Any:
-    schema = message.model_json_schema()
+    schema = message.model_json_schema(mode="serialization", by_alias=True)
     return schema.get("properties", {}).get("type", {}).get("const")
 
 
@@ -846,6 +877,7 @@ class _ParamsModel(NamedTuple):
     injected: tuple[RpcInjectedParameter, ...]
     path_parameters: tuple[str, ...]
     path_model: type[BaseModel] | None
+    default: Callable[[], Any] | None = None
 
 
 class _SplitParameters(NamedTuple):

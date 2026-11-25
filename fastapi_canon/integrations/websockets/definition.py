@@ -601,11 +601,16 @@ class RpcDefinition:
             raise ProtocolDefinitionError("An RPC stream can only be mounted once")
         channel, _ = marker
         definition = next(item for item in channel.streams if item.function is stream)
-        missing = [p for p in definition.path_parameters if p not in variables]
+        missing = (
+            definition.path_model.missing_path_inputs(variables, local=True)
+            if definition.path_model is not None
+            and issubclass(definition.path_model, ChannelPathParams)
+            else set()
+        )
         if missing:
             raise ProtocolDefinitionError(
                 f"RPC binary stream {definition.name} parameters "
-                f"{', '.join(missing)} are not path variables of {path!r}; "
+                f"{', '.join(sorted(missing))} are not path variables of {path!r}; "
                 "annotate dependencies as Inject[T]"
             )
         endpoint = RpcStreamEndpoint(
@@ -697,11 +702,16 @@ class RpcDefinition:
             raise ProtocolDefinitionError(
                 "The socket message parameter cannot also be a path variable"
             )
-        missing = [p for p in definition.path_parameters if p not in variables]
+        missing = (
+            definition.path_model.missing_path_inputs(variables, local=True)
+            if definition.path_model is not None
+            and issubclass(definition.path_model, ChannelPathParams)
+            else set()
+        )
         if missing:
             raise ProtocolDefinitionError(
                 f"RPC socket {definition.name} parameters "
-                f"{', '.join(missing)} are not path variables of {path!r}; "
+                f"{', '.join(sorted(missing))} are not path variables of {path!r}; "
                 "annotate dependencies as Inject[T]"
             )
         endpoint = RpcSocketEndpoint(

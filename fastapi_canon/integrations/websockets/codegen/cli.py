@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import NamedTuple
 
+from fastapi_canon.codegen.writer import write_generated_files
 from fastapi_canon.integrations.websockets.codegen import (
     render_python_client,
     render_typescript_client,
@@ -36,10 +37,13 @@ def main(  # smelt: ignore[VIS009] -- fastapi_canon.commands entry point.
     """Export OpenRPC contracts and generate WebSocket clients."""
     parser = _parser()
     arguments = parser.parse_args(argv)
-    if arguments.command == "schema":
-        return _schema(arguments)
     try:
+        if arguments.command == "schema":
+            return _schema(arguments)
         return _generate(arguments)
+    except (OSError, ValueError, ProtocolReferenceError) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 2
     except ModuleNotFoundError as error:
         if error.name != "jinja2":
             raise
@@ -62,11 +66,12 @@ def _schema(arguments: argparse.Namespace) -> int:
                 else None
             ),
         )
-    except ProtocolReferenceError as error:
-        print(f"error: {error}", file=sys.stderr)
-        return 2
+    finally:
+        sys.path.pop(0)
     output = arguments.output
-    changed = write_files(output.parent, {output.name: contract}, check=arguments.check)
+    changed = write_generated_files(
+        output.parent, {output.name: contract}, check=arguments.check
+    )
     if arguments.check:
         return _report_check(changed, subject="Contract")
     for path in changed:
@@ -139,6 +144,9 @@ def _generate_config(path: Path, *, check: bool) -> int:
             print(f"error: Invalid clients[{index}]: {error}", file=sys.stderr)
             return 2
 
+    output_dirs = [arguments.output.resolve() for arguments in arguments_list]
+    if len(set(output_dirs)) != len(output_dirs):
+        raise ValueError("Each client needs its own output directory")
     contract_document = json.loads(contract_job[1]) if contract_job else None
     rendered: list[tuple[argparse.Namespace, dict[str, str]]] = []
     # Bindings named as module:attr resolve relative to the config file.
@@ -159,10 +167,20 @@ def _generate_config(path: Path, *, check: bool) -> int:
     finally:
         sys.path.pop(0)
 
+    if contract_job is not None:
+        output, _ = contract_job
+        for arguments, files in rendered:
+            if output.resolve() in {
+                (arguments.output / name).resolve() for name in files
+            }:
+                raise ValueError(
+                    f"Contract output {output} is also a generated client file"
+                )
+
     changed_contract: tuple[Path, ...] = ()
     if contract_job is not None:
         output, content = contract_job
-        changed_contract = write_files(
+        changed_contract = write_generated_files(
             output.parent, {output.name: content}, check=check
         )
     failed = bool(changed_contract)

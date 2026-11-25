@@ -33,9 +33,11 @@ Version 0.29.0 is unreleased. See the [changelog](../CHANGELOG.md).
 
   Use `@router.post(...)` for `methods=[HTTPMethod.POST]`. When serving GET and
   POST at the same path, declare them separately with distinct operation IDs.
-  Replace `StreamOptions` annotations with `APIRouteOptions`. Annotate the generator
-  with its concrete event type. Use `ServerSentEvent(data=event)` to set SSE
-  fields. For native FastAPI SSE, register the route on `fastapi.APIRouter`.
+  Replace `StreamOptions` annotations with `APIRouteOptions`. Use
+  `AsyncIterator[Event]` for plain payloads. To set SSE metadata, annotate
+  the generator with `AsyncIterator[Event | ServerSentEvent]` and yield
+  `ServerSentEvent(data=event, id=...)`. For native FastAPI SSE, register
+  the route on `fastapi.APIRouter`.
 - Mount WebSocket RPC channels on the router, and read path variables from the
   signature:
 
@@ -89,7 +91,12 @@ Version 0.29.0 is unreleased. See the [changelog](../CHANGELOG.md).
 
 - Keep a single Pydantic params model or switch to named parameters. Regenerate
   clients to pick up operation-based params names, request validation aliases
-  and distinct default endpoint names for colliding router paths.
+  and distinct default endpoint names for colliding router paths. For a default
+  on a whole params model, omitting `params` selects the handler default.
+  Passing an explicit object, including `{}`, validates it against the model.
+  Give each request field a distinct flat input key. For nested validation
+  aliases, provide a flat alternative with `AliasChoices` or enable validation
+  by field name.
 - Handle body-limit rejections as 413 `application/problem+json` responses.
   This includes rejections based on an oversized `Content-Length` header.
 - Import `Inject` from `fastapi_canon`, and `CanonWebSocketRouter`,

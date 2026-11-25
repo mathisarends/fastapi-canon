@@ -2,7 +2,7 @@
     method={{ route.rpc_name | literal }},
 {% if route.idempotent %}    idempotent=True,
 {% endif %}    result_adapter=TypeAdapter({{ route.result | annotation }}),
-    params_adapter=TypeAdapter({{ route | route_params }}),
+    params_adapter=TypeAdapter({{ route | route_params }}{% if route.params_optional %} | None{% endif %}),
 {% if route.server is not none %}    server={{ route.server | literal }},
 {% endif %}){% endfilter %}
 {% if not loop.last or notifications %}
