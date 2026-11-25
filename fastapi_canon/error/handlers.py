@@ -12,9 +12,11 @@ from fastapi.exception_handlers import (
 from fastapi.exceptions import RequestValidationError, ResponseValidationError
 from fastapi.responses import JSONResponse
 from fastapi.utils import is_body_allowed_for_status_code
+from starlette.datastructures import Headers
 from starlette.exceptions import HTTPException
+from starlette.middleware.body_limit import MAX_BODY_SIZE_SCOPE_KEY
 from starlette.responses import Response
-from starlette.types import ExceptionHandler, Scope
+from starlette.types import ASGIApp, ExceptionHandler, Message, Receive, Scope, Send
 from starlette.websockets import WebSocketState
 
 from fastapi_canon.error.contracts import (
@@ -146,6 +148,12 @@ def install_handlers(
         app.add_exception_handler(
             HTTPException, cast(ExceptionHandler, _http_exception_handler)
         )
+        build = app.build_middleware_stack
+
+        def build_with_body_limit_problems() -> ASGIApp:
+            return _BodyLimitProblems(build())
+
+        app.build_middleware_stack = build_with_body_limit_problems  # type: ignore[method-assign]  # Wrap FastAPI's lazy stack outside the body limiter.
     if include_validation_error:
         app.add_exception_handler(
             RequestValidationError, _request_validation_handler(registry)
@@ -157,6 +165,51 @@ def install_handlers(
         app.add_exception_handler(Exception, _unhandled_handler(registry))
     setattr(app.state, INSTALLED_REGISTRY_STATE_KEY, registry)
     setattr(app.state, INSTALLED_HANDLERS_STATE_KEY, options)
+
+
+class _BodyLimitProblems:
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        problem: Response | None = None
+
+        async def send_problem(message: Message) -> None:
+            nonlocal problem
+            if message["type"] == "http.response.start" and message["status"] == 413:
+                if _declared_length_exceeds_limit(scope):
+                    # The active limiter sends this response outside exception handling.
+                    problem = _http_problem_response(
+                        Request(scope), HTTPException(413, "Content Too Large")
+                    )
+                    headers = [
+                        (name, value)
+                        for name, value in message.get("headers", ())
+                        if name
+                        not in (b"content-type", b"content-length", b"content-encoding")
+                    ]
+                    message = {**message, "headers": [*headers, *problem.raw_headers]}
+            elif problem is not None and message["type"] == "http.response.body":
+                if not message.get("more_body", False):
+                    await send({"type": "http.response.body", "body": problem.body})
+                return
+            await send(message)
+
+        await self.app(scope, receive, send_problem)
+
+
+def _declared_length_exceeds_limit(scope: Scope) -> bool:
+    limit = scope.get(MAX_BODY_SIZE_SCOPE_KEY)
+    if not isinstance(limit, int):
+        return False
+    try:
+        return int(Headers(scope=scope).get("content-length", "0")) > limit
+    except ValueError:
+        return False
 
 
 def _domain_handler(registry: ErrorCatalog) -> ExceptionHandler:
@@ -210,21 +263,24 @@ async def _http_exception_handler(
             Response(status_code=status, headers=exception.headers),
             code=f"http_{status}",
         )
-    title = http_problem_title(status)
-    detail = exception.detail if isinstance(exception.detail, str) else None
+    return await _connection_response(
+        request, _http_problem_response(request, exception), code=f"http_{status}"
+    )
+
+
+def _http_problem_response(
+    request: Request | WebSocket, exception: HTTPException
+) -> Response:
+    status = exception.status_code
     payload: dict[str, JsonValue] = {
         "type": "about:blank",
-        "title": title,
+        "title": http_problem_title(status),
         "status": status,
         "code": f"http_{status}",
     }
-    if detail is not None:
-        payload["detail"] = detail
-    return await _connection_response(
-        request,
-        _problem_response(request, payload, status, headers=exception.headers),
-        code=f"http_{status}",
-    )
+    if isinstance(exception.detail, str):
+        payload["detail"] = exception.detail
+    return _problem_response(request, payload, status, headers=exception.headers)
 
 
 def _request_validation_handler(registry: ErrorCatalog) -> ExceptionHandler:

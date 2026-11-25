@@ -22,7 +22,7 @@ def _upload_app(
 ) -> FastAPI:
     files = APIRouter(**(router_options or {}))
 
-    @files.put("/files", **(route_options or {}))
+    @files.put("/files", http_statuses=[413], **(route_options or {}))
     async def upload(
         chunks: Annotated[AsyncIterator[bytes], BinaryBody("application/octet-stream")],
     ) -> int:
@@ -39,7 +39,7 @@ def _upload_app(
     "declaration",
     ["router_options", "route_options", "include_options"],
 )
-async def test_streamed_body_over_the_limit_is_a_canon_problem(
+async def test_body_over_the_limit_matches_the_canon_problem_contract(
     declaration: str,
 ) -> None:
     app = _upload_app(**{declaration: {"max_body_size": 8}})
@@ -48,25 +48,17 @@ async def test_streamed_body_over_the_limit_is_a_canon_problem(
         AsyncClient(transport=ASGITransport(app), base_url="http://test") as client,
     ):
         accepted = await client.put("/files", content=_chunks(b"x" * 8))
-        rejected = await client.put("/files", content=_chunks(b"x" * 8, b"x"))
+        streamed = await client.put("/files", content=_chunks(b"x" * 8, b"x"))
+        fixed = await client.put("/files", content=b"x" * 9)
 
+    declared = app.openapi()["paths"]["/files"]["put"]["responses"]["413"]["content"]
+    assert set(declared) == {"application/problem+json"}
     assert accepted.json() == 8
-    assert rejected.status_code == 413
-    assert rejected.headers["content-type"] == "application/problem+json"
-    assert rejected.json()["code"] == "http_413"
-
-
-async def test_declared_length_over_the_limit_uses_starlettes_plain_413() -> None:
-    # Starlette rejects an oversized Content-Length before exception handlers run.
-    app = _upload_app(route_options={"max_body_size": 8})
-    async with (
-        asyncio.timeout(5),
-        AsyncClient(transport=ASGITransport(app), base_url="http://test") as client,
-    ):
-        response = await client.put("/files", content=b"x" * 9)
-
-    assert response.status_code == 413
-    assert response.headers["content-type"].startswith("text/plain")
+    assert streamed.status_code == fixed.status_code == 413
+    assert streamed.headers["content-type"] == fixed.headers["content-type"]
+    assert fixed.headers["content-type"] == "application/problem+json"
+    assert streamed.json() == fixed.json()
+    assert fixed.json()["code"] == "http_413"
 
 
 async def test_form_limits_reject_extra_fields_with_a_canon_problem() -> None:

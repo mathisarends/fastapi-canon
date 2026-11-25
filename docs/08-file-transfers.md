@@ -33,7 +33,8 @@ finish with them before the handler returns.
 @router.post("/reports", max_body_size=10_000_000, form_limits={"max_files": 5}, http_statuses=[413])
 ```
 
-Oversized bodies return a 413 problem, too many files a 400 problem.
+Oversized bodies return a 413 problem with either a fixed or streamed request body.
+Too many files return a 400 problem.
 
 ## Streaming uploads
 
