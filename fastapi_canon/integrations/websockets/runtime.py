@@ -962,10 +962,9 @@ async def _prepare(
     path_values: dict[str, Any] = {}
     if path_model is not None:
         parsed = None
-        if (
-            not issubclass(path_model, ChannelPathParams)
-            or path_model.model_fields.keys() <= path_params.keys()
-        ):
+        if not issubclass(
+            path_model, ChannelPathParams
+        ) or not path_model.missing_path_inputs(path_params):
             with suppress(ValidationError):
                 parsed = path_model.model_validate(dict(path_params))
         if parsed is None:

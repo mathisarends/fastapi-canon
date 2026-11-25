@@ -96,8 +96,10 @@ composition = Composition(
 )
 ```
 
-List middleware outermost first. Constructor parameters typed `Inject[T]` are
-resolved from the container.
+Use `outer_middleware=` for middleware that wraps FastAPI's full stack, such as
+CORS for [app-wide upload limits](08-file-transfers.md#limits). List each group
+outermost first. Both groups resolve `Inject[T]` constructor parameters from the
+application container.
 
 ## Integrations
 

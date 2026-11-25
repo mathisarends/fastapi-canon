@@ -1,9 +1,7 @@
 # Contract and clients
 
-The service definition is the source of truth. fastapi_canon.integrations.websockets exports it as OpenRPC,
-then generates clients from that document rather than from Python internals.
-The resulting artifact can therefore be reviewed, versioned, and consumed by
-other tooling.
+Export the application's mounted RPC endpoints as OpenRPC, then generate Python
+or TypeScript clients from that document.
 
 Use the [generation workflow](../../06-codegen.md) to coordinate specialized
 clients and external HTTP tooling. This guide documents standalone generation
@@ -17,30 +15,13 @@ uv add "fastapi-canon[websockets,codegen]"
 
 ## Build a contract
 
-```python
-from fastapi_canon.integrations.websockets import ServerVariable
+Starting in 0.29.0, `rpcgen.toml` can import the `FastAPI` app that serves your
+channels. Set `source` to `module:app` and use the app's `title` and `description`
+for the contract metadata. `source` also accepts a module-level `RpcContract`.
 
-contract = app.contract(
-    title="Tasks API",
-    description="Realtime task operations.",
-    base_url="https://{host}",
-    variables={
-        "host": ServerVariable(
-            default="api.example.com",
-            description="API host",
-        )
-    },
-)
-```
-
-Endpoint paths, names, subprotocols, protocol version, typed errors, and binary
-streams are derived from the service. `base_url` accepts either an HTTP or
-WebSocket URL (or a URL template); `http` and `https` are translated to `ws`
-and `wss`. Every supplied variable must occur in the resulting server URLs.
-
-Use `contract.write("tasks.openrpc.json")` to write canonical UTF-8 JSON, or
-`contract.to_json()` to get the same text. `contract.to_openrpc()` returns the
-complete document as a dictionary for integrations that need one.
+For an app source, set its public origin with `base_url`. HTTP and HTTPS origins
+become WebSocket origins. Give each URL template variable a default under
+`[contract.variables]`.
 
 Generation preserves handwritten files and removes only manifest-owned stale
 files. A corrupt `.rpcgen/manifest.json` now fails before any write; restore it
@@ -48,23 +29,24 @@ from version control or follow the [ownership migration](../../24-upgrading.md#u
 
 ## One configuration for contract and clients
 
-Put the importable contract in a module, then create `rpcgen.toml` beside your
-project paths:
+For a FastAPI app named `app` in `my_api.py`, put this `rpcgen.toml` beside it.
 
 ```toml
 version = 1
 
 [contract]
-source = "my_api:contract"
+source = "my_api:app"
+base_url = "wss://{host}"
 output = "schema/tasks.openrpc.json"
+
+[contract.variables]
+host = "api.example.com"
 
 [[clients]]
 language = "python"
 output = "src/tasks_client"
 package = "tasks_client"
 with_transport = "websocket"
-extra_files = ["src/extra/authenticated.py"]
-extra_exports = ["connect_gateway"]
 
 [[clients]]
 language = "typescript"
@@ -80,7 +62,7 @@ fastapi-canon websockets generate --config rpcgen.toml
 
 Paths are resolved relative to the config file. Client generation reads the
 rendered OpenRPC document; it does not receive the live router or `RpcProtocol`
-object.
+object. See the [runnable configuration](../../../examples/websockets/generated_clients/rpcgen.toml).
 
 Run the same command in CI with `--check`. It exits nonzero and lists stale
 files instead of writing them:
@@ -100,7 +82,7 @@ regeneration.
 The schema and client stages can also run separately:
 
 ```bash
-fastapi-canon websockets schema my_api:contract \
+fastapi-canon websockets schema my_api:app \
   --output schema/tasks.openrpc.json
 
 fastapi-canon websockets generate schema/tasks.openrpc.json \
@@ -109,6 +91,8 @@ fastapi-canon websockets generate schema/tasks.openrpc.json \
   --package tasks_client \
   --with-transport websocket
 ```
+
+Use `rpcgen.toml` to set an app's public origin and server variables.
 
 Omit `with_transport` when integrating with an existing transport. Python
 clients accept an `RpcTransport`; TypeScript clients accept the corresponding

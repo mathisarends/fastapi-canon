@@ -19,12 +19,15 @@ from typing import (
 
 from fastapi import params as fastapi_params
 from pydantic import (
+    AliasChoices,
+    AliasPath,
     BaseModel,
     ConfigDict,
     PydanticSchemaGenerationError,
     TypeAdapter,
     create_model,
 )
+from pydantic.fields import FieldInfo
 
 from fastapi_canon.integrations.websockets.dependencies import (
     RpcInjectedParameter,
@@ -54,6 +57,16 @@ from fastapi_canon.integrations.websockets.streams import (
 
 class ChannelPathParams(BaseModel):
     """Signature-derived path fields resolved against the mounted WebSocket route."""
+
+    @classmethod
+    def missing_path_inputs(cls, available: Iterable[str]) -> set[str]:
+        supplied = set(available)
+        missing: set[str] = set()
+        for name, field in cls.model_fields.items():
+            inputs = path_input_names(name, field)
+            if supplied.isdisjoint(inputs):
+                missing.update(inputs)
+        return missing
 
 
 @dataclass(frozen=True, slots=True)
@@ -251,6 +264,19 @@ class RpcProtocol:
             return self._methods[name]
         except KeyError as error:
             raise RpcMethodNotFoundError(name) from error
+
+
+def path_input_names(name: str, field: FieldInfo) -> tuple[str, ...]:
+    """Return the route keys Pydantic reads for a path field."""
+    match field.validation_alias:
+        case AliasChoices() as choices:
+            return tuple(str(path[0]) for path in choices.convert_to_aliases())
+        case AliasPath() as path:
+            return (str(path.path[0]),)
+        case str() as alias:
+            return (alias,)
+        case None:
+            return (name,)
 
 
 def method_definition(

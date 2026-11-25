@@ -142,6 +142,45 @@ async def test_generated_client_uses_validation_aliases_on_requests(
         assert review.output_name == "Ada"
 
 
+async def test_generated_request_envelope_keeps_a_same_named_params_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class CreateRequest(BaseModel):
+        title: str
+
+    channel = RpcChannel(namespace="tasks")
+
+    @channel.method()
+    async def create(request: CreateRequest) -> str:
+        return request.title
+
+    protocol = channel.freeze()
+    document = render_openrpc(protocol, title="Tasks")
+    package = "request_collision_client"
+    generate_python_client(
+        document,
+        tmp_path / package,
+        PythonClientOptions(package=package, client_name="TasksClient"),
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    generated = import_module(package)
+    errors = import_module(f"{package}.errors")
+    transport = LoopbackTransport(
+        RpcServer.from_channel(protocol), errors.error_from_response
+    )
+
+    async with asyncio.timeout(5), generated.TasksClient(transport) as client:
+        assert await client.tasks.create(title="Ada") == "Ada"
+
+    method = document["methods"][0]
+    schemas = document["components"]["schemas"]
+    request = schemas[method["x-rpc-request-schema"]["$ref"].rsplit("/", 1)[1]]
+    assert request["properties"]["params"] == {
+        "$ref": "#/components/schemas/CreateRequest"
+    }
+    assert schemas["CreateRequest"]["required"] == ["title"]
+
+
 async def test_a_call_without_a_result_returns_none(
     generated_client: ModuleType,
     transport: LoopbackTransport,

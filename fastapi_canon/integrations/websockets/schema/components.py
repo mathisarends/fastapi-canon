@@ -32,6 +32,7 @@ class SchemaComponents(NamedTuple):
     schemas: dict[str, Any]
     params: dict[str, str]
     outputs: dict[SchemaKey, dict[str, Any]]
+    requests: dict[str, str]
 
 
 def components(protocol: RpcProtocol) -> SchemaComponents:
@@ -85,9 +86,11 @@ def components(protocol: RpcProtocol) -> SchemaComponents:
         )
         for operation, model in params_models.items()
     }
+    requests = _request_names(protocol, definitions)
     for method in protocol.methods:
-        definitions[method.request_name] = _request_schema(
-            method, params_names.get(method.name), definitions
+        name = requests[method.name]
+        definitions[name] = _request_schema(
+            method, definitions, name=name, params_name=params_names.get(method.name)
         )
     outputs = {
         key: schema for (key, mode), schema in roots.items() if mode == "serialization"
@@ -110,7 +113,7 @@ def components(protocol: RpcProtocol) -> SchemaComponents:
                         f"Duplicate socket schema name: {name}"
                     )
                 definitions[name] = roots[(name, mode)]
-    return SchemaComponents(definitions, params_names, outputs)
+    return SchemaComponents(definitions, params_names, outputs, requests)
 
 
 def socket_message_schema_name(name: str, direction: str) -> str:
@@ -182,10 +185,7 @@ def _params_models(
             continue
         # A channel can reuse the same params class under multiple wire names.
         # Use separate schema models without modifying that runtime class.
-        digest = sha256(operation_name.encode()).hexdigest()[:12]
-        candidate = f"{name}For{digest}"
-        while candidate in used:
-            candidate += "X"
+        candidate = _distinct_schema_name(name, operation_name, used)
         params[operation_name] = create_model(candidate, __base__=model)
         used.add(candidate)
     return params
@@ -209,10 +209,45 @@ def _add(annotations: dict[str, Any], annotation: Any) -> None:
     annotations[name] = annotation
 
 
+def _request_names(
+    protocol: RpcProtocol, definitions: dict[str, Any]
+) -> dict[str, str]:
+    reserved = set(definitions)
+    reserved.update(
+        notification_schema_name(item.name) for item in protocol.notifications
+    )
+    for socket in protocol.sockets:
+        if socket.message_contract is not None:
+            reserved.update(
+                socket_message_schema_name(socket.name, direction)
+                for direction in ("client", "server")
+            )
+    preferred = Counter(method.request_name for method in protocol.methods)
+    used = reserved.union(preferred)
+    names: dict[str, str] = {}
+    for method in sorted(protocol.methods, key=lambda item: item.name):
+        name = method.request_name
+        if name in reserved or preferred[name] > 1:
+            name = _distinct_schema_name(name, method.name, used)
+            used.add(name)
+        names[method.name] = name
+    return names
+
+
+def _distinct_schema_name(name: str, operation: str, used: set[str]) -> str:
+    digest = sha256(operation.encode()).hexdigest()[:12]
+    candidate = f"{name}For{digest}"
+    while candidate in used:
+        candidate += "X"
+    return candidate
+
+
 def _request_schema(
     method: RpcMethodDefinition,
-    params_name: str | None,
     definitions: dict[str, Any],
+    *,
+    name: str,
+    params_name: str | None,
 ) -> dict[str, Any]:
     required = ["jsonrpc", "method"]
     if params_name is None:
@@ -224,7 +259,7 @@ def _request_schema(
     schema: dict[str, Any] = {
         "additionalProperties": False,
         "type": "object",
-        "title": method.request_name,
+        "title": name,
         "properties": {
             "jsonrpc": {"const": "2.0", "type": "string"},
             "id": {

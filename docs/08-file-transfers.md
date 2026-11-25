@@ -36,6 +36,28 @@ finish with them before the handler returns.
 Oversized bodies return a 413 problem with either a fixed or streamed request body.
 Too many files return a 400 problem.
 
+For an app-wide limit with a cross-origin frontend, declare CORS in
+`outer_middleware` so early 413 responses include CORS headers.
+
+```python
+from fastapi import FastAPI
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
+
+from fastapi_canon import Composition, Feature
+
+app = Composition(
+    features=[Feature(name="files", routers=[router])],
+    outer_middleware=[
+        Middleware(
+            CORSMiddleware,
+            allow_origins=["https://app.example.com"],
+            allow_methods=["POST", "PUT"],
+        ),
+    ],
+).build(FastAPI(max_body_size=10_000_000))
+```
+
 ## Streaming uploads
 
 Consume a raw body as it arrives:

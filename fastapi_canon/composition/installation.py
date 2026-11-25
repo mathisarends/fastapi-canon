@@ -80,6 +80,7 @@ class Installation:
     request_logging: bool
     override_ids: tuple[int, ...]
     middleware_ids: tuple[int, ...]
+    outer_middleware_ids: tuple[int, ...]
     container: AsyncContainer | None = field(compare=False)
     finalizers: IntegrationFinalizers = field(compare=False)
     description: CompositionInfo | None = field(default=None, compare=False)
@@ -149,6 +150,7 @@ def apply_composition(
         ),
         override_ids=tuple(id(source) for source in composition.overrides),
         middleware_ids=tuple(id(entry) for entry in composition.middleware),
+        outer_middleware_ids=tuple(id(entry) for entry in composition.outer_middleware),
         container=None,
         finalizers=finalizers,
     )
@@ -205,7 +207,9 @@ def apply_composition(
         include_unhandled_error=composition.errors.include_unhandled_error,
     )
     integrations.install(app, container, prepared.installers, before_routes=False)
-    middleware_startup = install_middleware(app, composition.middleware)
+    middleware_startup = install_middleware(
+        app, composition.middleware, outer=composition.outer_middleware
+    )
     app.router.lifespan_context = compose_lifespan(
         original_lifespan,
         (
@@ -271,6 +275,8 @@ def validate_applied_composition(app: object, composition: CompositionSource) ->
         != tuple(id(source) for source in composition.overrides)
         or installed.middleware_ids
         != tuple(id(entry) for entry in composition.middleware)
+        or installed.outer_middleware_ids
+        != tuple(id(entry) for entry in composition.outer_middleware)
         or installed.router_factory_id != expected_router_factory_id
     ):
         msg = "composition must be applied to the application before validation"
