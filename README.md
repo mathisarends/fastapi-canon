@@ -21,14 +21,9 @@ async def reply(chat_id: str) -> StreamingResponse:
     async def frames():
         try:
             async for text in model.stream(chat_id):
-                yield f"data: {json.dumps({'text': text})}
-
-"
+                yield f"data: {json.dumps({'text': text})}\n\n"
         except QuotaExceeded:
-            yield 'event: error
-data: {"message": "quota"}
-
-'
+            yield 'event: error\ndata: {"message": "quota"}\n\n'
 
     return StreamingResponse(frames(), media_type="text/event-stream")
 ```
