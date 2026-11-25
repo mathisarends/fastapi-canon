@@ -8,6 +8,7 @@ import fastapi_canon.error
 APPLICATION_NAMES = {
     "APIRouteOptions",
     "APIRouter",
+    "BinaryBody",
     "CanonResponse",
     "ChannelOptions",
     "Composition",

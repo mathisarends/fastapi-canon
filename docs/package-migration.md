@@ -11,6 +11,27 @@ The [repository migration](repository-migration.md) records the
 source history and publishing setup. The repository move does not rename the
 PyPI project or add further Python import changes.
 
+## Upgrade to 0.28.0
+
+Version 0.28.0 is prepared for release. See the
+[changelog](../CHANGELOG.md#0280---unreleased).
+
+- Rerun `fastapi-canon check composition --app module:app --fail-on warning`.
+  If it reports `canon.contracts.W001`, declare the GET response with
+  `response=CanonResponse.binary("application/pdf")` using its actual media type,
+  or `response=CanonResponse.empty(status=200)` for an intentionally empty 200.
+  For a native FastAPI router, pass the declaration's `responses()` result
+  as `responses=`. See [binary responses](integrations/uploads.md#binary-responses-and-raw-uploads).
+- To adopt streamed uploads on a Canon router, replace a buffered `bytes`
+  parameter with `Annotated[AsyncIterator[bytes], BinaryBody(media_type)]` and
+  consume it with `async for` during the request. Keep content-type and size
+  validation in the application. See [raw uploads](integrations/uploads.md#binary-responses-and-raw-uploads).
+- To move OpenTelemetry SDK setup into Canon, pass `Telemetry(sdk=...)` with
+  a factory that yields `SdkProviders` from a context manager and shuts them
+  down on exit. Remove the explicit provider arguments and `shutdown=` when
+  switching. Keep explicit providers if you use `telemetry.websocket_middleware()`.
+  See [application-owned SDK](telemetry.md#application-owned-sdk).
+
 ## Upgrade to 0.27.0
 
 Version 0.27.0 was published on 2026-11-24. See the

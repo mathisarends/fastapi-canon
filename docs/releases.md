@@ -6,6 +6,10 @@ version; the reference service is an example. `release.toml` and
 
 ## Current versions
 
+**Prepared: 0.28.0.** Adds streamed HTTP uploads and application-owned
+OpenTelemetry SDKs. Follow the [upgrade guide](package-migration.md#upgrade-to-0280)
+for the new raw GET response check.
+
 **Published: 0.27.0 (2026-11-24).** Adds installed-app preflight and TypeScript
 WebSocket credential renewal, and improves inherited router diagnostics.
 See the [upgrade guide](package-migration.md#upgrade-to-0270) and
