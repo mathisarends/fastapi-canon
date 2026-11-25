@@ -62,7 +62,9 @@ Version 0.29.0 is not released yet. See the
   Replace `router.channel(path, namespace=...)` with this form,
   `RpcChannel("tasks")` with `RpcChannel(namespace="tasks")`, and
   `@channel.socket(...)` with `@router.socket(path, ...)`. Remove
-  `namespace=` and `path_model=` from `include_channel()`.
+  `namespace=` and `path_model=` from `include_channel()`. For a shared path
+  variable, use the URL placeholder as the input name and give every operation
+  the same `Path()` constraints.
 - Replace `RpcModel` with `BaseModel`. To keep camel-case wire names, use your
   own base model with `alias_generator=to_camel` and `populate_by_name=True`.
 - Params models may be replaced with named parameters. Regenerate clients:

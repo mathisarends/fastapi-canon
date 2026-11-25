@@ -48,7 +48,7 @@ def render_openrpc(
     server_documents = tuple(dict(server) for server in servers)
     server_lookup = _server_lookup(server_documents)
     _validate_server_references(protocol, server_lookup)
-    raw_schemas = components(protocol)
+    raw_schemas, params_names = components(protocol)
     for operation in chain[
         RpcMethodDefinition | RpcNotificationDefinition | RpcSubscriptionDefinition
     ](protocol.methods, protocol.notifications, protocol.subscriptions):
@@ -86,7 +86,13 @@ def render_openrpc(
         },
         "servers": list(server_documents),
         "methods": [
-            _method(method, schemas, server_lookup) for method in protocol.methods
+            _method(
+                method,
+                schemas,
+                server_lookup,
+                params_name=params_names.get(method.name),
+            )
+            for method in protocol.methods
         ],
         "components": {"schemas": schemas},
         "x-rpc-protocol-version": protocol.version,
@@ -136,8 +142,8 @@ def render_openrpc(
                         "overflow": "error",
                         "reconnect": {"default": "fail", "optIn": "restart"},
                         "params": (
-                            _ref(type_name(subscription.params))
-                            if subscription.params is not None
+                            _ref(params_names[subscription.name])
+                            if subscription.name in params_names
                             else None
                         ),
                         "payload": _payload_schema(subscription.payload, schemas),
@@ -180,6 +186,8 @@ def _method(
     method: RpcMethodDefinition,
     components: dict[str, Any],
     servers: Mapping[str, dict[str, Any]],
+    *,
+    params_name: str | None,
 ) -> dict[str, Any]:
     document: dict[str, Any] = {"name": method.name}
     if method.idempotent:
@@ -190,12 +198,12 @@ def _method(
         document["summary"] = method.summary
     document |= {
         "paramStructure": "by-name",
-        "params": _params(method, components),
+        "params": _params(params_name, components),
         "result": {"name": "result", "schema": _result_schema(method, components)},
         "x-rpc-request-schema": _ref(method.request_name),
     }
-    if method.params is not None:
-        document["x-rpc-params-schema"] = _ref(type_name(method.params))
+    if params_name is not None:
+        document["x-rpc-params-schema"] = _ref(params_name)
     if method.raises:
         document["errors"] = [_error(error) for error in method.raises]
     if method.server is not None:
@@ -276,12 +284,12 @@ def _with_server(
 
 
 def _params(
-    method: RpcMethodDefinition,
+    params_name: str | None,
     components: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    if method.params is None:
+    if params_name is None:
         return []
-    schema = components[type_name(method.params)]
+    schema = components[params_name]
     required = set(schema.get("required", ()))
     return [
         {"name": name, "required": name in required, "schema": member}

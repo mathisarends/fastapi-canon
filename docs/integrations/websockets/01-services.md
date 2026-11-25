@@ -114,7 +114,8 @@ router.include_channel(
 ```
 
 Read path variables with `Path()`. Canon validates them before accepting the
-connection and rejects parameters that are not variables of the mounted path:
+connection. Use the mounted path's variable names and give shared variables
+the same type, constraints and input alias across operations.
 
 ```python
 from typing import Annotated
@@ -128,6 +129,8 @@ async def archive(task_id: int, project_id: Annotated[int, Path()]) -> None: ...
 
 Endpoint names identify servers in OpenRPC and generated clients; when omitted,
 the name is derived from the full path, such as `rpc_ws` for `/ws`.
+OpenRPC disambiguates generated params schema names when they collide across
+operations.
 
 Use child channels for nested wire namespaces. Mount only the root; its children
 inherit declared errors and the resolver scope:

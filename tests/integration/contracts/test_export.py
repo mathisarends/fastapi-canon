@@ -1,11 +1,13 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
 import pytest
 from dishka import Provider, Scope, provide
 from fastapi import APIRouter, FastAPI, WebSocket
 from fastapi.testclient import TestClient
 
+from fastapi_canon import APIRouter as CanonRouter
 from fastapi_canon import (
     Composition,
     Error,
@@ -24,6 +26,83 @@ from fastapi_canon.integrations.websockets import (
 )
 from fastapi_canon.integrations.websockets.adapters.fastapi import CanonWebSocketRouter
 from tests.fixtures.websockets import socket_of
+
+
+def test_export_resolves_generated_params_names_across_mounted_namespaces() -> None:
+    tasks = RpcChannel(namespace="tasks")
+
+    @tasks.stream()
+    async def watch(limit: int) -> AsyncIterator[int]:
+        yield limit
+
+    dotted = RpcChannel(namespace="draft.team")
+    dotted.include_channel(tasks)
+
+    @dotted.method("tasks.rename")
+    async def rename_title(title: str) -> str:
+        return title
+
+    underscored = RpcChannel(namespace="draft_team")
+    underscored.include_channel(tasks)
+
+    @underscored.method("tasks.rename")
+    async def rename_number(number: int) -> int:
+        return number
+
+    published = RpcChannel(namespace="published")
+
+    @published.method()
+    async def archive(force: bool) -> bool:
+        return force
+
+    def export(first: RpcChannel, second: RpcChannel) -> dict[str, Any]:
+        router = CanonRouter()
+        router.include_channel(first, path="/first")
+        router.include_channel(second, path="/second")
+        router.include_channel(published, path="/published")
+        app = FastAPI()
+        app.include_router(router)
+        document = export_contracts(app).openrpc
+        assert document is not None
+        return document
+
+    document = export(dotted, underscored)
+    reordered = export(underscored, dotted)
+
+    methods = {method["name"]: method for method in document["methods"]}
+    assert set(methods) == {
+        "draft.team.tasks.rename",
+        "draft_team.tasks.rename",
+        "published.archive",
+    }
+    schemas = document["components"]["schemas"]
+    assert schemas == reordered["components"]["schemas"]
+    for name, field, field_type in (
+        ("draft.team.tasks.rename", "title", "string"),
+        ("draft_team.tasks.rename", "number", "integer"),
+    ):
+        method = methods[name]
+        params = method["x-rpc-params-schema"]
+        schema = schemas[params["$ref"].rsplit("/", 1)[1]]
+        request = schemas[method["x-rpc-request-schema"]["$ref"].rsplit("/", 1)[1]]
+        assert schema["required"] == [field]
+        assert schema["properties"][field]["type"] == field_type
+        assert request["properties"]["method"]["const"] == name
+        assert request["properties"]["params"] == params
+    assert methods["published.archive"]["x-rpc-params-schema"] == {
+        "$ref": "#/components/schemas/PublishedArchiveParams"
+    }
+    streams = document["x-rpc-streams"]
+    assert {stream["name"] for stream in streams} == {
+        "draft.team.tasks.watch",
+        "draft_team.tasks.watch",
+    }
+    stream_refs = {stream["params"]["$ref"] for stream in streams}
+    assert len(stream_refs) == 2
+    assert all(
+        schemas[ref.rsplit("/", 1)[1]]["properties"]["limit"]["type"] == "integer"
+        for ref in stream_refs
+    )
 
 
 def test_export_matches_registered_http_sse_rpc_and_webrtc_paths() -> None:
