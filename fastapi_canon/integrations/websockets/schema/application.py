@@ -5,10 +5,8 @@ from itertools import chain
 from typing import Any
 
 from fastapi import FastAPI
-from starlette.routing import compile_path
 
 from fastapi_canon.error import installed_catalog
-from fastapi_canon.errors import ConfigurationError
 from fastapi_canon.integrations.websockets.channel import request_name
 from fastapi_canon.integrations.websockets.contract import (
     RpcContract,
@@ -26,7 +24,6 @@ from fastapi_canon.integrations.websockets.definition import (
 )
 from fastapi_canon.integrations.websockets.errors import ProtocolDefinitionError
 from fastapi_canon.integrations.websockets.protocol import (
-    ChannelPathParams,
     RpcMethodDefinition,
     RpcNotificationDefinition,
     RpcProtocol,
@@ -115,7 +112,6 @@ def application_rpc_contract(
     for endpoint in sorted(endpoints, key=lambda item: item.name):
         match endpoint:
             case RpcEndpoint():
-                _validate_path_parameters(endpoint)
                 for channel in endpoint.channels:
                     protocol = channel.freeze()
                     methods.extend(
@@ -183,15 +179,3 @@ def application_rpc_contract(
     )
     # Canonical error schemas use the application's installed catalog.
     return contract.with_error_catalog(installed_catalog(app))
-
-
-def _validate_path_parameters(endpoint: RpcEndpoint[Any]) -> None:
-    path_model = endpoint.path_model
-    if path_model is None or not issubclass(path_model, ChannelPathParams):
-        return
-    _, _, variables = compile_path(endpoint.path)
-    if missing := path_model.missing_path_inputs(variables):
-        names = ", ".join(repr(name) for name in sorted(missing))
-        raise ConfigurationError(
-            f"RPC path parameters {names} are not variables of {endpoint.path!r}"
-        )

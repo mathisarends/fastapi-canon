@@ -8,6 +8,12 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0290).
 
+- **`CANON-029-RPC-WIRE-FIELDS`** — Give RPC input fields distinct flat
+  validation names. Add a flat alternative for a nested-only alias or enable
+  validation by field name. Regenerate RPC clients for corrected alias,
+  notification and socket schemas and whole-model parameter defaults. URL
+  path parameters also need a flat name matching a route placeholder.
+
 - **`CANON-029-PROBLEM-URI-DIAGNOSTICS`** — Strict SSE generation no longer
   reports `format: uri-reference` on `type` and `instance` of Canon-generated
   problem schemas, which now carry `x-canon-problem: true`. Remove the
@@ -19,32 +25,37 @@ See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0290).
 - **`CANON-029-NATIVE-SSE-ROUTES`** — `APIRouter.sse()` and `StreamOptions` are
   removed. Declare streams with FastAPI's `response_class=EventSourceResponse`
   on `get()`, `post()` or `api_route()`. Such routes on a Canon `APIRouter` are
-  typed Canon streams and must yield a concrete event model, not
-  `ServerSentEvent`. OpenAPI and generated clients are unchanged.
+  typed Canon streams. Annotate the generator with its concrete event type and
+  include `ServerSentEvent` in the item union when yielding it to set SSE fields.
 - **`CANON-029-RPC-SIGNATURE-PARAMS`** — RPC methods and message streams read
-  params from their signature, like FastAPI bodies: a single Pydantic model
-  parameter is the whole params object; otherwise named parameters form a
-  synthesized `<Namespace><Method>Params` model that rejects unknown fields.
-  Contracts name params models after the operation and use Pydantic validation
-  aliases for requests. Regenerate clients.
+  params from their signature. A single positional-or-keyword Pydantic model
+  parameter is the whole params object. Otherwise named parameters form a
+  synthesized model such as `TasksRenameParams` that rejects unknown fields.
+  OpenRPC uses Pydantic validation aliases for requests. Regenerate clients.
 - **`CANON-029-RPC-MODEL-REMOVED`** — `RpcModel` is removed and wire names
-  follow the Pydantic fields as written. Inherit from `BaseModel`, or define a
-  base with `alias_generator=to_camel` and `populate_by_name=True` to keep
-  camel-case wire names. Built-in protocol errors such as `RpcInvalidParams`
-  are plain models.
+  follow the Pydantic fields as written. Inherit from `BaseModel`, or use the
+  alias and validation settings in the upgrade guide to keep camel-case wire
+  names and reject unknown fields. Built-in protocol errors such as
+  `RpcInvalidParams` are plain models.
 - **`CANON-029-RPC-CHANNEL-ROUTING`** — `APIRouter.channel()`,
-  `RpcChannel.socket()` and the `namespace=` and `path_model=` arguments of
-  `include_channel()` are removed. Declare an `RpcChannel` and mount it with
-  `router.include_channel(channel, path=...)`; declare sockets with
-  `@router.socket()`. Included channels keep their namespace under the parent's.
-  Read path variables with `Annotated[T, Path()]` parameters; invalid values
-  reject the handshake with 404.
+  `RpcChannel.socket()` are removed. Register handlers before mounting the
+  channel with `router.include_channel(channel, path=...)`. Declare sockets
+  with `@router.socket()`. Move `namespace=` from either `include_channel()`
+  API to the channel declaration. Included channels keep their namespace under
+  the parent's. Replace the router mount's `path_model=` with
+  `Annotated[T, Path()]` handler parameters. Invalid values reject the handshake
+  with 404.
 - **`CANON-029-RPC-PATH-DECLARATIONS`** — Operations that share a WebSocket
   path variable must agree on its input alias and constraints. Use the URL
   placeholder as the input name and align the `Path()` declarations
   ([#247](https://github.com/mathisarends/fastapi-canon/issues/247)).
 - **`CANON-029-RPC-CHANNEL-NAMESPACE`** — `RpcChannel` takes the namespace only as
   a keyword: `RpcChannel(namespace="tasks")`.
+- **`CANON-029-BODY-LIMIT-PROBLEMS`** — With Canon's HTTP exception handling,
+  body-limit rejections return a 413 `application/problem+json` response for
+  fixed and streamed bodies. Update callers that parsed Starlette's plain-text
+  413 when the declared `Content-Length` exceeded the limit
+  ([#249](https://github.com/mathisarends/fastapi-canon/issues/249)).
 - **`CANON-029-WEBSOCKETS-FACADE`** — `fastapi_canon.integrations.websockets` no
   longer exports `Inject`, `CanonWebSocketRouter`, `FastApiSocket` or
   `serve_websocket`. Import `Inject` from `fastapi_canon` and the adapter types
@@ -55,7 +66,7 @@ See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0290).
   validators, raised factories, deferred generators and coroutines, recursion,
   HTTP connections passed to helpers, every scanned implementation of an
   unbound port, callables passed, stored or provided by Dishka, `ServiceScope`,
-  `isinstance` narrowing and `RpcError` declarations. Run
+  `isinstance` narrowing, child-channel handlers and `RpcError` declarations. Run
   `fastapi-canon check errors src --strict`, then declare or map the newly
   reported errors. Remaining `CAN003` findings name their
   candidates; text and JSON reports rank their root causes. See
@@ -65,8 +76,7 @@ See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0290).
 ### Added
 
 - Canon routers, operations and `include_router()` accept FastAPI's
-  `max_body_size` and `form_limits`. Form limits and bodies that grow past the
-  limit return Canon problems. See [request limits](docs/08-file-transfers.md#limits).
+  `max_body_size` and `form_limits`. See [request limits](docs/08-file-transfers.md#limits).
 - `APIRouter.include_channel(..., close_when_events_complete=True)` closes a
   finite event socket once its sources finish.
 - `Composition(outer_middleware=[...])` wraps FastAPI's stack while returning
@@ -82,6 +92,17 @@ See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0290).
 
 ### Fixed
 
+- Regenerate WebSocket clients to preserve dictionary entries and explicitly
+  allowed extra fields. Python clients now accept parameters named `values`
+  or `self` and read unions with aliased discriminator fields.
+- RPC methods and message streams honor whole-model signature defaults when
+  clients omit params. Explicit objects use model validation.
+- Typed sockets and binary streams accept aliased URL placeholders.
+- Chunked uploads that exceed the limit while middleware reads the body return
+  the same 413 problem as fixed-length uploads.
+- Standalone RPC schema export preserves adjacent generated SDK files. Give
+  each configured client its own output directory.
+
 - OpenRPC keeps request envelopes separate from application payload schemas
   that use the same name. Regenerate affected RPC clients
   ([#257](https://github.com/mathisarends/fastapi-canon/issues/257)).
@@ -91,9 +112,21 @@ See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0290).
 - OpenRPC exports distinct generated params schemas for RPC operations whose
   names would otherwise produce the same component
   ([#248](https://github.com/mathisarends/fastapi-canon/issues/248)).
+- RPC `Path()` parameters can read variables from router inclusion prefixes.
+  OpenRPC uses the full mounted paths to distinguish colliding default RPC
+  endpoint names ([#251](https://github.com/mathisarends/fastapi-canon/issues/251),
+  [#252](https://github.com/mathisarends/fastapi-canon/issues/252)).
 - Generated Python RPC clients pass `ty check` without rule overrides.
   Regenerate clients to remove consumer `[[tool.ty.overrides]]` for generated
   files ([#233](https://github.com/mathisarends/fastapi-canon/issues/233)).
+
+### Documentation
+
+- The numbered [learning path](docs/README.md) includes a
+  [WebRTC example](docs/11-webrtc.md) with injected admission checks and a
+  declared error.
+- The [WebSocket authentication example](docs/integrations/websockets/03-connections-and-events.md#authentication-and-credential-expiry)
+  shows how to set credential expiry from a typed connection hook.
 
 ## 0.28.0 - 2026-11-25
 
@@ -111,7 +144,7 @@ See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0280).
 
 - `BinaryBody(media_type)` streams raw uploads into an async handler's
   `AsyncIterator[bytes]` parameter and declares a required binary request body
-  in OpenAPI. See [raw uploads](docs/08-file-transfers.md#downloads)
+  in OpenAPI. See [raw uploads](docs/08-file-transfers.md#streaming-uploads)
   ([#226](https://github.com/mathisarends/fastapi-canon/issues/226)).
 - `Telemetry(sdk=...)` lets each application own its OpenTelemetry SDK
   providers from startup to shutdown. `console(service_name=...)` prints spans

@@ -3,8 +3,11 @@ from collections.abc import AsyncIterator
 from typing import Annotated, Any
 
 import pytest
-from fastapi import FastAPI, Form
+from fastapi import FastAPI, Form, Request
 from httpx import ASGITransport, AsyncClient
+from starlette.middleware import Middleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.responses import Response
 
 from fastapi_canon import APIRouter, BinaryBody, Composition, Feature
 
@@ -82,3 +85,23 @@ async def test_form_limits_reject_extra_fields_with_a_canon_problem() -> None:
     assert rejected.status_code == 400
     assert rejected.headers["content-type"] == "application/problem+json"
     assert rejected.json()["code"] == "http_400"
+
+
+async def test_chunked_body_read_in_middleware_returns_a_problem() -> None:
+    async def read_body(
+        request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        await request.body()
+        return await call_next(request)
+
+    app = Composition(
+        features=[], middleware=[Middleware(BaseHTTPMiddleware, dispatch=read_body)]
+    ).build(FastAPI(max_body_size=4))
+    async with (
+        asyncio.timeout(5),
+        AsyncClient(transport=ASGITransport(app), base_url="http://test") as client,
+    ):
+        response = await client.post("/", content=_chunks(b"12", b"345"))
+    assert response.status_code == 413
+    assert response.headers["content-type"] == "application/problem+json"
+    assert response.json()["code"] == "http_413"

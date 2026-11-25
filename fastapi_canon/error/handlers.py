@@ -177,11 +177,19 @@ class _BodyLimitProblems:
             return
 
         problem: Response | None = None
+        received_bytes = 0
+
+        async def count_body() -> Message:
+            nonlocal received_bytes
+            message = await receive()
+            if message["type"] == "http.request":
+                received_bytes += len(message.get("body", b""))
+            return message
 
         async def send_problem(message: Message) -> None:
             nonlocal problem
             if message["type"] == "http.response.start" and message["status"] == 413:
-                if _declared_length_exceeds_limit(scope):
+                if _body_exceeds_limit(scope, received_bytes):
                     # The active limiter sends this response outside exception handling.
                     problem = _http_problem_response(
                         Request(scope), HTTPException(413, "Content Too Large")
@@ -199,13 +207,15 @@ class _BodyLimitProblems:
                 return
             await send(message)
 
-        await self.app(scope, receive, send_problem)
+        await self.app(scope, count_body, send_problem)
 
 
-def _declared_length_exceeds_limit(scope: Scope) -> bool:
+def _body_exceeds_limit(scope: Scope, received_bytes: int) -> bool:
     limit = scope.get(MAX_BODY_SIZE_SCOPE_KEY)
     if not isinstance(limit, int):
         return False
+    if received_bytes > limit:
+        return True
     try:
         return int(Headers(scope=scope).get("content-length", "0")) > limit
     except ValueError:

@@ -272,3 +272,56 @@ def test_generate_passes_api_tree_options_to_both_emitters(
             == 0
         )
         assert (output / "namespaces" / leaf).exists()
+
+
+def test_schema_export_alongside_client_preserves_sdk_files(
+    schema: Path, tmp_path: Path
+) -> None:
+    output = tmp_path / "client"
+    assert (
+        main(["generate", str(schema), "--language", "python", "--output", str(output)])
+        == 0
+    )
+    assert (
+        main(
+            [
+                "schema",
+                "tests.unit.integrations.websockets.test_contract:contract",
+                "--output",
+                str(output / "contract.json"),
+            ]
+        )
+        == 0
+    )
+    assert (output / "client.py").is_file()
+    assert (
+        main(
+            [
+                "generate",
+                str(schema),
+                "--language",
+                "python",
+                "--output",
+                str(output),
+                "--check",
+            ]
+        )
+        == 0
+    )
+
+
+def test_shared_client_output_fails_before_writing(
+    schema: Path, tmp_path: Path
+) -> None:
+    config = tmp_path / "rpcgen.toml"
+    config.write_text(
+        "version = 1\n"
+        + "".join(
+            f'[[clients]]\nschema = "{schema.name}"\n'
+            f'language = "{language}"\noutput = "sdk"\n'
+            for language in ("python", "typescript")
+        ),
+        encoding="utf-8",
+    )
+    assert main(["generate", "--config", str(config)]) == 2
+    assert not (tmp_path / "sdk").exists()

@@ -11,7 +11,7 @@ from fastapi import Depends, FastAPI, Path, WebSocket
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
-from pydantic import AliasChoices, BaseModel
+from pydantic import AliasChoices, AliasPath, BaseModel
 from starlette.testclient import WebSocketDenialResponse
 from starlette.types import Message
 
@@ -570,7 +570,7 @@ def test_post_stream_keeps_its_event_source_response_subclass() -> None:
     router = APIRouter()
 
     @router.post("/renames", response_class=Utf8EventSource)
-    async def renames(request: Rename) -> AsyncIterator[Rename]:
+    async def renames(request: Rename) -> AsyncIterator[Rename | ServerSentEvent]:
         yield ServerSentEvent(data=request, event="renamed", id="1")
 
     app = Composition(features=[Feature(name="projects", routers=[router])]).build(
@@ -581,7 +581,13 @@ def test_post_stream_keeps_its_event_source_response_subclass() -> None:
     assert response.headers["content-type"] == "text/event-stream; charset=utf-8"
     assert 'event: renamed\ndata: {"title":"Roadmap"}\nid: 1' in response.text
     assert "event: canon.complete" in response.text
-    assert "x-canon-stream" in app.openapi()["paths"]["/renames"]["post"]
+    operation = app.openapi()["paths"]["/renames"]["post"]
+    assert "x-canon-stream" in operation
+    stream = operation["responses"]["200"]["content"]["text/event-stream"]
+    frame = stream["itemSchema"]["oneOf"][0]
+    assert frame["properties"]["data"]["contentSchema"] == {
+        "$ref": "#/components/schemas/Rename"
+    }
 
 
 async def _raw_events() -> AsyncIterator[ServerSentEvent]:
@@ -865,6 +871,18 @@ async def test_channel_reads_aliased_path_parameters_from_the_mounted_url(
     assert document["servers"][0]["url"].endswith("/projects/{projectId}/rpc")
 
 
+def test_channel_rejects_nested_alias_for_a_url_path_parameter() -> None:
+    channel = RpcChannel(namespace="projects")
+    parameter = Path(validation_alias=AliasPath("project", "id"))
+
+    @channel.method()
+    async def read(project_id: Annotated[int, parameter]) -> int:
+        return project_id
+
+    with pytest.raises(ConfigurationError, match=r"project_id.*flat"):
+        APIRouter().include_channel(channel, path="/projects/{project}/rpc")
+
+
 def test_export_rejects_rpc_path_parameters_missing_from_the_mount() -> None:
     channel = RpcChannel(namespace="projects")
 
@@ -974,3 +992,65 @@ def test_finite_event_channels_close_after_their_sources_complete() -> None:
     with TestClient(app) as client, client.websocket_connect("/export") as socket:
         assert socket.receive_json()["params"] == {"title": "done"}
         assert socket.receive()["type"] == "websocket.close"
+
+
+@pytest.mark.parametrize("transport", ["socket", "binary_stream"])
+def test_dedicated_socket_receives_aliased_path_argument(transport: str) -> None:
+    router = APIRouter()
+
+    if transport == "socket":
+
+        @router.socket("/echo")
+        async def echo(
+            message: str, project_id: Annotated[int, Path(alias="projectId")]
+        ) -> str:
+            return f"{project_id}:{message}"
+    else:
+
+        @router.binary_stream("/echo", content_type="application/octet-stream")
+        async def frames(
+            project_id: Annotated[int, Path(alias="projectId")],
+        ) -> AsyncIterator[bytes]:
+            yield bytes([project_id])
+
+    app = FastAPI()
+    app.include_router(router, prefix="/projects/{projectId}")
+    assert export_contracts(app, kinds=["openrpc"]).openrpc is not None
+    with (
+        TestClient(app) as client,
+        client.websocket_connect("/projects/42/echo") as socket,
+    ):
+        if transport == "socket":
+            socket.send_json("hello")
+            assert socket.receive_json() == "42:hello"
+        else:
+            assert socket.receive_bytes() == bytes([42])
+
+
+def test_message_stream_distinguishes_omitted_params_from_an_empty_object() -> None:
+    class Page(BaseModel):
+        size: int = 100
+
+    channel = RpcChannel()
+
+    default_page = Page(size=10)
+
+    @channel.stream()
+    async def sizes(page: Page = default_page) -> AsyncIterator[int]:
+        yield page.size
+
+    router = APIRouter()
+    router.include_channel(channel, path="/pages")
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client, client.websocket_connect("/pages") as socket:
+        for identifier, params, expected in [(1, {}, 10), (2, {"params": {}}, 100)]:
+            socket.send_json(
+                {"jsonrpc": "2.0", "method": "sizes.open", "id": identifier, **params}
+            )
+            stream_id = socket.receive_json()["result"]["streamId"]
+            assert socket.receive_json()["params"] == {
+                "streamId": stream_id,
+                "payload": expected,
+            }
+            assert socket.receive_json()["params"]["complete"]

@@ -1,11 +1,14 @@
 import shutil
 import subprocess
+from collections.abc import AsyncIterator
 from copy import deepcopy
 from pathlib import Path
 from textwrap import dedent
 from typing import Any
 
 import pytest
+from fastapi import FastAPI
+from fastapi_canon import APIRouter, export_contracts
 from fastapi_canon.integrations.websockets import RpcChannel
 from fastapi_canon.integrations.websockets.codegen import (
     generate_typescript_client,
@@ -16,6 +19,7 @@ from fastapi_canon.integrations.websockets.codegen.typescript import (
 )
 from fastapi_canon.integrations.websockets.codegen.writer import MANIFEST
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
+from pydantic import BaseModel, ConfigDict, Field, RootModel
 
 
 def options() -> TypeScriptClientOptions:
@@ -571,3 +575,84 @@ def test_sdk_error_types_do_not_require_upgrading_the_consumers_lib_target(
         timeout=120,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_default_model_and_directional_aliases_compile_for_both_rpc_calls(
+    tmp_path: Path,
+) -> None:
+    class Page(BaseModel):
+        model_config = ConfigDict(validate_by_name=True, validate_by_alias=False)
+        limit: int = Field(alias="maxItems")
+
+    channel = RpcChannel(namespace="tasks")
+    default_page = Page(limit=10)
+
+    class Counts(RootModel[dict[str, int]]):
+        pass
+
+    @channel.method()
+    async def totals(counts: Counts) -> Counts:
+        return counts
+
+    @channel.method()
+    async def search(page: Page = default_page) -> Page:
+        return page
+
+    @channel.stream()
+    async def pages(page: Page = default_page) -> AsyncIterator[Page]:
+        yield page
+
+    router = APIRouter()
+    router.include_channel(channel, path="/ws")
+    app = FastAPI()
+    app.include_router(router)
+    document = export_contracts(app, kinds=["openrpc"]).openrpc
+    assert document is not None
+    generate_typescript_client(
+        document,
+        tmp_path / "sdk",
+        TypeScriptClientOptions(client_name="TasksClient", with_transport="websocket"),
+    )
+    consumer = tmp_path / "consumer.ts"
+    consumer.write_text(
+        dedent("""
+        import {RpcClientCore, TasksClient, routes} from "./sdk";
+        declare const tasks: TasksClient;
+        declare const rpc: RpcClientCore;
+        async function consume() {
+            const counts = await tasks.tasks.totals({apples: 2});
+            const apples: number = counts.apples;
+            const page = await tasks.tasks.search();
+            await rpc.request(routes.tasksSearch);
+            await rpc.request(routes.tasksSearch, {limit: 1});
+            await tasks.tasks.search({limit: page.maxItems});
+            await tasks.tasks.pages();
+            await tasks.tasks.pages({limit: 1});
+        }
+    """),
+        encoding="utf-8",
+    )
+    compiler = Path(__file__).resolve().parents[5] / "node_modules/typescript/bin/tsc"
+    if not compiler.is_file() or not shutil.which("node"):
+        pytest.skip("Node.js and the installed TypeScript compiler are required")
+    compiled = subprocess.run(
+        [
+            "node",
+            str(compiler),
+            "--strict",
+            "--target",
+            "ES2022",
+            "--moduleResolution",
+            "bundler",
+            "--module",
+            "ESNext",
+            "--lib",
+            "ES2022,DOM,ESNext.Disposable",
+            "--noEmit",
+            str(consumer),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert compiled.returncode == 0, compiled.stdout + compiled.stderr

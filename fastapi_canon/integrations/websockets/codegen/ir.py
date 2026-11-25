@@ -105,6 +105,7 @@ class ModelDecl:
     fields: tuple[FieldDecl, ...]
     closed: bool = False
     problem: bool = False
+    additional_properties: TypeExpr | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,6 +139,8 @@ class RouteDecl:
     server: str | None = None
     deprecated: bool = False
     idempotent: bool = False
+    params_optional: bool = False
+    accepts_extra_params: bool = False
 
     @property
     def name(self) -> str:
@@ -282,8 +285,10 @@ class NotificationDecl:
     server: str | None = None
     subscription: bool = False
     params_model: str | None = None
+    params_optional: bool = False
     params: tuple[ParamDecl, ...] = ()
     errors: tuple[ErrorDecl, ...] = ()
+    accepts_extra_params: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -326,7 +331,7 @@ def build_ir(document: dict[str, Any]) -> ClientIr:
     methods: list[dict[str, Any]] = document.get("methods", [])
     discriminator_enums, discriminator_fields = _discriminators(schemas)
     info = document.get("info", {})
-    routes = tuple(_route(method) for method in methods)
+    routes = tuple(_route(method, schemas) for method in methods)
     root_operations = tuple(route for route in routes if not route.path)
     servers = _servers(document)
     server_variables = {
@@ -504,11 +509,14 @@ def _reachable(
 
 def _dependencies(declaration: Declaration) -> set[str]:
     if isinstance(declaration, ModelDecl):
-        return {
+        dependencies = {
             name
             for model_field in declaration.fields
             for name in named_types(model_field.type)
         }
+        if declaration.additional_properties is not None:
+            dependencies.update(named_types(declaration.additional_properties))
+        return dependencies
     if isinstance(declaration, AliasDecl):
         return named_types(declaration.target)
     return set()
@@ -558,6 +566,7 @@ def _model(
         fields,
         closed=schema.get("additionalProperties") is False,
         problem=schema.get("x-canon-problem") is True,
+        additional_properties=_additional_properties(schema),
     )
 
 
@@ -619,7 +628,7 @@ def _discriminators(
     return tuple(enums), fields
 
 
-def _route(method: dict[str, Any]) -> RouteDecl:
+def _route(method: dict[str, Any], schemas: dict[str, Any]) -> RouteDecl:
     if "x-rpc-request-schema" not in method:
         raise UnsupportedSchemaError(
             f"Method {method['name']} carries no x-rpc-request-schema; "
@@ -634,6 +643,11 @@ def _route(method: dict[str, Any]) -> RouteDecl:
         method_member=_member_name(method["name"]),
         params=tuple(_parameter(parameter) for parameter in method.get("params", ())),
         params_model=None if params_schema is None else ref_name(params_schema),
+        accepts_extra_params=(
+            params_schema is not None
+            and _additional_properties(schemas.get(ref_name(params_schema), {}))
+            is not None
+        ),
         result=type_expression(method["result"]["schema"]),
         summary=method.get("summary", ""),
         description=method.get("description", ""),
@@ -641,6 +655,7 @@ def _route(method: dict[str, Any]) -> RouteDecl:
         errors=tuple(_error(error) for error in method.get("errors", ())),
         server=_server_reference(method, owner=f"Method {method['name']!r}"),
         deprecated=bool(method.get("deprecated", False)),
+        params_optional=method.get("x-rpc-params-optional") is True,
         idempotent=method.get("x-rpc-idempotent") is True,
     )
 
@@ -718,8 +733,13 @@ def _notifications(
                     owner=f"Stream {subscription['name']!r}",
                 ),
                 subscription=True,
+                params_optional=subscription.get("x-rpc-params-optional") is True,
                 errors=tuple(_error(error) for error in subscription.get("errors", ())),
                 params_model=params_model,
+                accepts_extra_params=(
+                    params_model is not None
+                    and _additional_properties(schemas[params_model]) is not None
+                ),
                 params=tuple(
                     _parameter(
                         {"name": name, "schema": schema, "required": name in required}
@@ -729,6 +749,11 @@ def _notifications(
             )
         )
     return tuple(declarations)
+
+
+def _additional_properties(schema: dict[str, Any]) -> TypeExpr | None:
+    value = schema.get("additionalProperties")
+    return type_expression(value) if value is True or isinstance(value, dict) else None
 
 
 def _servers(document: dict[str, Any]) -> tuple[ServerDecl, ...]:

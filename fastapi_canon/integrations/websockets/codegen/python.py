@@ -677,7 +677,9 @@ def _add_notification_imports(
         imports.add(f"{options.package}.models", _schema_name(event.params_model))
     for parameter in event.params:
         imports.add(f"{options.package}.models", *_model_names(parameter.type))
-        _parameter_annotation(parameter, imports, options)
+        _parameter_annotation(
+            parameter, imports, options, optional=event.params_optional
+        )
     if event.params_model is not None:
         imports.add(f"{options.package}.models", _schema_name(event.params_model))
     imports.add(f"{options.package}.routes", _constant(event.rpc_name))
@@ -853,12 +855,14 @@ def _add_operation_imports(
     imports.add(models, *_model_names(route.result))
     _annotation(route.result, imports)
     for parameter in route.params:
-        _parameter_annotation(parameter, imports, options)
+        _parameter_annotation(
+            parameter, imports, options, optional=route.params_optional
+        )
 
 
 def _field_line(field: FieldDecl, imports: _Imports) -> str:
     annotation = _annotation(field.type, imports)
-    name = _identifier(field.name)
+    name = _model_field_name(field.name)
     if isinstance(field.type, EnumLiteralType):
         default = f"{_schema_name(field.type.enum)}.{field.type.member}"
     elif field.has_default:
@@ -892,7 +896,7 @@ def _type_alias(declaration: AliasDecl, imports: _Imports) -> str:
         if target.discriminator is not None:
             return (
                 f"{prefix}Annotated[\n    {members},\n"
-                f"    Field(discriminator={_literal(target.discriminator)}),\n]"
+                f"    {_discriminator_field(target.discriminator)},\n]"
             )
         return f"{prefix}(\n    {members}\n)"
     return prefix + annotation
@@ -922,9 +926,11 @@ def _parameter_annotation(
     parameter: Any,
     imports: _Imports,
     options: PythonClientOptions,
+    *,
+    optional: bool,
 ) -> str:
     annotation = _annotation(parameter.type, imports)
-    if parameter.required:
+    if parameter.required and not optional:
         return annotation
     imports.add(_runtime_module(options), "UNSET", "UnsetType")
     return f"{_union((annotation, 'UnsetType'))} = UNSET"
@@ -950,9 +956,7 @@ def _annotation(expression: TypeExpr, imports: _Imports) -> str:
         return union
     imports.add("typing", "Annotated")
     imports.add("pydantic", "Field")
-    return (
-        f"Annotated[{union}, Field(discriminator={_literal(expression.discriminator)})]"
-    )
+    return f"Annotated[{union}, {_discriminator_field(expression.discriminator)}]"
 
 
 def _primitive_annotation(primitive: Primitive, imports: _Imports) -> str:
@@ -1044,8 +1048,8 @@ def _template_filters(
         "null_type": _is_null,
         "options_literal": lambda values: _literal(dict(values)),
         "placeholder": lambda value: _literal(f"{{{value}}}"),
-        "parameter_annotation": lambda parameter: _parameter_annotation(
-            parameter, imports, options
+        "parameter_annotation": lambda parameter, optional: _parameter_annotation(
+            parameter, imports, options, optional=optional
         ),
         "route_params": lambda route: (
             "None" if route.params_model is None else _schema_name(route.params_model)
@@ -1122,7 +1126,7 @@ def _validate(
         assert_unique_names(
             f"model {model.name}",
             (
-                NameBinding(field.name, _identifier(field.name))
+                NameBinding(field.name, _model_field_name(field.name))
                 for field in model.fields
             ),
         )
@@ -1314,6 +1318,19 @@ def _api_module(node: NamespaceViewNode) -> str:
 
 def _api_file(node: NamespaceViewNode) -> str:
     return f"namespaces/{_identifier(node.path[0])}.py"
+
+
+def _discriminator_field(wire_name: str) -> str:
+    return f"Field(discriminator={_literal(_model_field_name(wire_name))})"
+
+
+def _model_field_name(wire_name: str) -> str:
+    name = _identifier(wire_name)
+    if name.startswith("_"):
+        return f"field{name}"
+    if name in {"model_config", "model_validate", "model_dump", "model_rebuild"}:
+        return f"{name}_"
+    return name
 
 
 def _identifier(value: str) -> str:

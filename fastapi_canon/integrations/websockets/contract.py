@@ -14,7 +14,10 @@ from fastapi_canon.integrations.websockets.errors import (
     ProtocolDefinitionError,
     RpcErrorBinding,
 )
-from fastapi_canon.integrations.websockets.protocol import RpcProtocol
+from fastapi_canon.integrations.websockets.protocol import (
+    ChannelPathParams,
+    RpcProtocol,
+)
 from fastapi_canon.integrations.websockets.sockets import RpcSocketProtocol
 from fastapi_canon.integrations.websockets.streams import RpcStreamDirection
 from fastapi_canon.integrations.websockets.websocket import (
@@ -158,6 +161,23 @@ def contract_from_endpoints(
     streams = []
     sockets = []
     for endpoint in endpoints:
+        match endpoint:
+            case RpcEndpoint():
+                path_model = endpoint.path_model
+            case RpcStreamEndpoint():
+                path_model = endpoint.stream.path_model
+            case RpcSocketEndpoint():
+                path_model = endpoint.socket.path_model
+        if path_model is not None and issubclass(path_model, ChannelPathParams):
+            missing = path_model.missing_path_inputs(
+                re.findall(r"{([^{}]+)}", endpoint.path)
+            )
+            if missing:
+                fields = ", ".join(repr(name) for name in sorted(missing))
+                raise ProtocolDefinitionError(
+                    f"RPC path parameters {fields} are not variables of "
+                    f"{endpoint.path!r}"
+                )
         url = base_url + endpoint.path
         names = tuple(dict.fromkeys(re.findall(r"{([^{}]+)}", url)))
         used.update(names)

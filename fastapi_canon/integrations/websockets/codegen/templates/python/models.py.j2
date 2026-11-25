@@ -8,6 +8,8 @@
 {% else %}    pass
 {% endfor %}{% elif declaration | model_decl %}class {{ declaration.name | schema_name }}({{ base_model_name }}):
 {% if declaration.problem %}    model_config = ConfigDict(extra="allow", frozen=True)
+{% elif declaration.additional_properties is not none %}    model_config = ConfigDict(extra="allow")
+    __pydantic_extra__: dict[str, {{ declaration.additional_properties | annotation }}]
 {% elif declaration.closed %}    model_config = ConfigDict(extra="forbid")
 {% endif %}{% for field in declaration.fields %}{{ field | field_line }}
 {% else %}    pass

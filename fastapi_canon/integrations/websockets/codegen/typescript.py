@@ -254,7 +254,7 @@ class _Renderer:
                 for name in _model_names(event.payload)
             )
             model_names.update(
-                event.params_model
+                _schema_name(event.params_model)
                 for event in node.notifications
                 if event.params_model is not None
             )
@@ -332,7 +332,7 @@ class _Renderer:
             name for event in self.root_events for name in _model_names(event.payload)
         )
         models.update(
-            event.params_model
+            _schema_name(event.params_model)
             for event in self.root_events
             if event.params_model is not None
         )
@@ -559,7 +559,13 @@ class _Renderer:
     def _message_stream_signature(self, event: NotificationDecl) -> str:
         parameters = []
         if event.params_model is not None:
-            parameters.append(f"params: {event.params_model}")
+            if event.params_optional:
+                parameters.append(f"params?: {_schema_name(event.params_model)}")
+            else:
+                default = "" if any(p.required for p in event.params) else " = {}"
+                parameters.append(
+                    f"params: {_schema_name(event.params_model)}{default}"
+                )
         parameters.append("options?: { readonly signal?: AbortSignal }")
         name = f"  {_identifier(event.operation_name)}"
         suffix = f"): Promise<RpcStream<{self._type(event.payload)}>> {{"
@@ -591,9 +597,15 @@ class _Renderer:
 
     def _operation_signature(self, route: RouteDecl) -> str:
         parameters = []
-        if route.params:
+        if route.params_model is not None and (
+            route.params or route.accepts_extra_params
+        ):
             default = " = {}" if all(not p.required for p in route.params) else ""
-            parameters.append(f"params: {route.params_model}{default}")
+            model = _schema_name(route.params_model)
+            if route.params_optional:
+                parameters.append(f"params?: {model}")
+            else:
+                parameters.append(f"params: {model}{default}")
         parameters.append("options?: RpcRequestOptions")
         prefix = "async " if _is_null(route.result) else ""
         returns = "void" if _is_null(route.result) else self._type(route.result)
@@ -607,9 +619,14 @@ class _Renderer:
     def _operation_call(self, route: RouteDecl, root: bool) -> str:
         rpc = "this.#rpc"
         prefix = "await" if _is_null(route.result) else "return"
+        params = "undefined"
+        if route.params or route.accepts_extra_params:
+            params = "params"
+        elif route.params_model is not None and not route.params_optional:
+            params = "{}"
         arguments = [
             f"routes.{_route_key(route)}",
-            "params" if route.params else "undefined",
+            params,
             "options",
         ]
         statement = f"    {prefix} {rpc}.request"
@@ -830,7 +847,9 @@ def _api_file(node: NamespaceViewNode) -> str:
 def _route_model_names(routes: Iterable[RouteDecl]) -> set[str]:
     names: set[str] = set()
     for route in routes:
-        if route.params and route.params_model is not None:
+        if route.params_model is not None and (
+            route.params or route.accepts_extra_params
+        ):
             names.add(_schema_name(route.params_model))
         names.update(_model_names(route.result))
     return names

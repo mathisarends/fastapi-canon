@@ -24,8 +24,6 @@ from fastapi_canon.integrations.websockets.schema.components import (
     SchemaKey,
     components,
     described,
-    notification_schema_name,
-    socket_message_schema_name,
     type_name,
 )
 
@@ -47,7 +45,7 @@ def render_openrpc(
     server_documents = tuple(dict(server) for server in servers)
     server_lookup = _server_lookup(server_documents)
     _validate_server_references(protocol, server_lookup)
-    raw_schemas, params_names, raw_outputs, request_names = components(protocol)
+    raw_schemas, params_names, raw_outputs, envelopes = components(protocol)
     for operation in chain[
         RpcMethodDefinition | RpcNotificationDefinition | RpcSubscriptionDefinition
     ](protocol.methods, protocol.notifications, protocol.subscriptions):
@@ -91,7 +89,7 @@ def render_openrpc(
                 schemas,
                 server_lookup,
                 params_name=params_names.get(method.name),
-                request_name=request_names[method.name],
+                request_name=envelopes[("method", method.name)],
                 outputs=outputs,
             )
             for method in protocol.methods
@@ -116,8 +114,8 @@ def render_openrpc(
                 _with_server(
                     {
                         "name": notification.name,
-                        "payload": outputs[type_name(notification.payload)],
-                        "message": _ref(notification_schema_name(notification.name)),
+                        "payload": outputs[("notification", notification.name)],
+                        "message": _ref(envelopes[("notification", notification.name)]),
                         **(
                             {
                                 "errors": [
@@ -141,6 +139,11 @@ def render_openrpc(
                 _with_server(
                     {
                         "name": subscription.name,
+                        **(
+                            {"x-rpc-params-optional": True}
+                            if subscription.params_default is not None
+                            else {}
+                        ),
                         "open": f"{subscription.name}.open",
                         "cancel": f"{subscription.name}.cancel",
                         "id": "streamId",
@@ -186,7 +189,7 @@ def render_openrpc(
         definition = definitions.get(socket["name"])
         if definition is not None and definition.message_contract is not None:
             socket["messages"] = {
-                direction: _ref(socket_message_schema_name(definition.name, direction))
+                direction: _ref(envelopes[(direction, definition.name)])
                 for direction in ("client", "server")
             }
     if socket_documents:
@@ -204,6 +207,8 @@ def _method(
     outputs: Mapping[SchemaKey, dict[str, Any]],
 ) -> dict[str, Any]:
     document: dict[str, Any] = {"name": method.name}
+    if method.params_default is not None:
+        document["x-rpc-params-optional"] = True
     if method.idempotent:
         document["x-rpc-idempotent"] = True
     if method.has_timeout:

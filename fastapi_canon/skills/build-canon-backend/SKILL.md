@@ -39,7 +39,7 @@ them. Supporting references are installed beside this file for both agent tools.
   Infrastructure implements I/O. Presentation maps wire models and public errors.
   Both outer layers depend inward; `feature.py` and the app root assemble them.
 - Give each feature one `fastapi_canon.APIRouter` for HTTP, typed SSE
-  (`@router.sse`) and JSON-RPC channels (`router.include_channel`). WebRTC uses
+  (`response_class=EventSourceResponse`) and JSON-RPC channels (`router.include_channel`). WebRTC uses
   `WebRtcRouter` from `fastapi_canon.integrations.webrtc`, with `@rtc.session`.
   Contribute both through `Feature(routers=[router, rtc])` when needed.
 - Use Dishka for application dependencies. HTTP handlers, SSE endpoints and

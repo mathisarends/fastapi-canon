@@ -4,7 +4,7 @@ import { {% if notifications %}defineNotification{% if routes %}, {% endif %}{% 
 {% endif %}
 {% if routes %}
 export const routes = {
-{% for route in routes %}  {{ route | route_key }}: defineRoute<{{ route | route_params }}, {{ route.result | type }}>({
+{% for route in routes %}  {{ route | route_key }}: defineRoute<{{ route | route_params }}{% if route.params_optional %} | undefined{% endif %}, {{ route.result | type }}>({
     method: {{ route.rpc_name | literal }},
 {% if route.idempotent %}    idempotent: true,
 {% endif %}{% if route.server is not none %}    server: {{ route.server | literal }},

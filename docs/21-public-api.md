@@ -14,7 +14,7 @@ scope.
 | Extra | Purpose |
 | --- | --- |
 | `uploads` | Multipart parser for single/multiple HTTP file uploads and form fields |
-| `sse` | FastAPI and Pydantic versions required by typed SSE |
+| `sse` | Pydantic version required by typed SSE |
 | `websockets` | Pydantic, core-schema and typing requirements for RPC and sockets |
 | `webrtc` | AnyIO, Starlette and typing requirements for session signaling |
 | `aiortc` | Optional reference media engine; use with `webrtc` |
@@ -37,7 +37,7 @@ scope.
 | Database ownership, feature tables, migrations and locks | `fastapi_canon.integrations.database.Database`, `Tables`, `AlembicMigrations`, `AcquireTransactionLock` | [Databases](09-database.md) |
 | Short service scopes | `fastapi_canon.Scoped`, `ServiceScope` | [Databases](09-database.md) |
 | HTTP routes and contracts | `fastapi_canon.APIRouter`, `RouterPolicy`, `Error`, `ErrorOptions`, `CanonResponse`; `Problem`; `fastapi_canon.error.ErrorRegistry` for manual assembly without `Composition` | [HTTP contracts](02-errors.md) |
-| Streaming HTTP request bodies | `fastapi_canon.BinaryBody` (0.28.0) | [File uploads](08-file-transfers.md#downloads) |
+| Streaming HTTP request bodies | `fastapi_canon.BinaryBody` (0.28.0) | [File uploads](08-file-transfers.md#streaming-uploads) |
 | Typed SSE | `APIRouter.get(..., response_class=EventSourceResponse)` | [SSE contracts](03-streaming.md) |
 | WebSocket JSON-RPC | `APIRouter.include_channel()` with `fastapi_canon.integrations.websockets.RpcChannel`; `Annotated[T, Path()]` for path variables | [WebSockets](04-websockets.md) |
 | Typed or raw WebSocket messages and binary streams | `@APIRouter.socket()`, `@APIRouter.binary_stream()`; `RpcSocket` | [Sockets](integrations/websockets/05-sockets.md), [binary streams](integrations/websockets/04-streams.md) |

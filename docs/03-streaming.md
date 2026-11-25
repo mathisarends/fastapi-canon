@@ -38,7 +38,10 @@ async def events(run_id: str) -> AsyncIterator[RunEvent]:
     yield RunEvent(run_id=run_id, message="Completed")
 ```
 
-A plain FastAPI SSE route; the return annotation is the contract. Every stream
+For event IDs or custom event names, import `ServerSentEvent` from `fastapi.sse`,
+annotate the generator with `AsyncIterator[RunEvent | ServerSentEvent]`, and
+yield `ServerSentEvent(data=event, id=event.run_id)`.
+The payload type defines the contract. Every stream
 ends with either `canon.complete` or a `canon.problem` event, so clients can
 tell "done" from "connection dropped".
 

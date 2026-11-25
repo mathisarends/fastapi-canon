@@ -8,7 +8,8 @@ from collections.abc import (
     Iterable,
     Iterator,
 )
-from typing import Any, TypeAliasType, get_args, get_origin, get_type_hints
+from types import UnionType
+from typing import Any, TypeAliasType, Union, get_args, get_origin, get_type_hints
 
 from fastapi import APIRouter
 from fastapi.datastructures import DefaultPlaceholder
@@ -122,7 +123,7 @@ class StreamRouter(APIRouter):
         return {**options, "generate_unique_id_function": suffixed}
 
 
-def validate_endpoint(endpoint: Callable[..., Any]) -> None:
+def validate_endpoint(endpoint: Callable[..., Any]) -> Any:
     try:
         annotation = get_type_hints(endpoint, include_extras=True).get("return")
     except (NameError, TypeError) as exc:
@@ -140,7 +141,7 @@ def validate_endpoint(endpoint: Callable[..., Any]) -> None:
         raise TypeError(
             "A stream must declare AsyncIterator[Event] (or Iterable[Event] for def)"
         )
-    item = args[0]
+    item = _payload_type(args[0])
     if _has_any(item) or item is ServerSentEvent:
         raise TypeError(
             "Declare a concrete JSON event type, not Any or ServerSentEvent"
@@ -149,6 +150,23 @@ def validate_endpoint(endpoint: Callable[..., Any]) -> None:
         TypeAdapter(item).json_schema(mode="serialization")
     except Exception as exc:
         raise TypeError(f"Unsupported stream item type: {item!r}") from exc
+    return item
+
+
+def _payload_type(item: Any) -> Any:
+    if isinstance(item, TypeAliasType):
+        payload = _payload_type(item.__value__)
+        if payload is ServerSentEvent:
+            return payload
+        return item if payload is item.__value__ else payload
+    if get_origin(item) in (UnionType, Union) and ServerSentEvent in get_args(item):
+        payloads = (
+            member for member in get_args(item) if member is not ServerSentEvent
+        )
+        item = next(payloads)
+        for member in payloads:
+            item = item | member
+    return item
 
 
 def _has_any(annotation: Any, seen: frozenset[int] = frozenset()) -> bool:

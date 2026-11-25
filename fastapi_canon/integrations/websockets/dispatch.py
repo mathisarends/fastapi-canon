@@ -61,7 +61,12 @@ class RpcDispatcher:
         return RpcInvocation(
             request=request,
             method=method,
-            params=_validated_params(method, request.params),
+            params=(
+                method.params_default()
+                if method.params_default is not None
+                and "params" not in request.model_fields_set
+                else _validated_params(method, request.params)
+            ),
         )
 
     async def execute(self, invocation: RpcInvocation) -> Any:

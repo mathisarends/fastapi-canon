@@ -512,3 +512,36 @@ def test_cli_rejects_a_configuration_with_an_explicit_application(
 
     assert result.returncode == 2
     assert "--config cannot be combined" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "contents",
+    [
+        'tool = "fastapi-canon"',
+        '[tool]\nfastapi-canon = "app"',
+        '[tool.fastapi-canon.checks.composition]\napp = "app:app"\nfail-on = ["warning"]',
+    ],
+)
+def test_invalid_pyproject_check_returns_a_json_diagnostic(
+    tmp_path: Path, contents: str
+) -> None:
+    config = tmp_path / "pyproject.toml"
+    config.write_text(contents, encoding="utf-8")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "fastapi_canon",
+            "check",
+            "composition",
+            "--config",
+            str(config),
+            "--format",
+            "json",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert result.returncode == 2
+    assert str(config) in json.loads(result.stdout)["error"]

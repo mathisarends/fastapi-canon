@@ -10,6 +10,9 @@ version; the reference service is an example. `release.toml` and
 OpenTelemetry SDKs. See the [upgrade guide](24-upgrading.md#upgrade-to-0280)
 and [changelog](../CHANGELOG.md#0280---2026-11-25).
 
+**Prepared: 0.29.0 (unreleased).** See the
+[migration guide](24-upgrading.md#upgrade-to-0290) for FastAPI, SSE and RPC changes.
+
 Published artifacts, manifests and run results are linked below. They record
 verified publications; prepared source versions are not publication evidence.
 Historical links retain their original repositories.

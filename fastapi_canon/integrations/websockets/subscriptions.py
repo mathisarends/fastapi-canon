@@ -127,7 +127,12 @@ class SubscriptionSession:
             try:
                 if len(self._tasks) + self._pending_subscriptions >= self._limit:
                     raise RpcStreamLimitError()
-                params = _params(definition, request.params)
+                params = (
+                    definition.params_default()
+                    if definition.params_default is not None
+                    and "params" not in request.model_fields_set
+                    else _params(definition, request.params)
+                )
             except RpcError as error:
                 scope = self._request.get()
                 if scope is not None:

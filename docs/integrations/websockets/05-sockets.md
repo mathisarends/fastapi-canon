@@ -51,7 +51,8 @@ options of `include_channel`, plus `protocol=`, `messages=` and `closes=`. The
 operation name is the router's namespace plus the function name (`messages.ping`).
 
 The first parameter without `Inject[...]` is the incoming message; its name is
-not significant. Further non-injected parameters are path variables. Message
+not significant. Further non-injected parameters are path variables. Use `Annotated[int, Path(alias="projectId")]`
+for an aliased placeholder or a variable supplied by an inclusion prefix. Message
 and return annotations are required. Injected dependencies are resolved in a
 fresh invocation scope per message, within the existing connection scope. The
 scope stays open through response validation and sending, and is released on

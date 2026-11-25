@@ -3,7 +3,7 @@ from collections.abc import AsyncIterator, Callable
 from importlib import import_module
 from pathlib import Path
 from types import ModuleType
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import pytest
 from fastapi_canon.integrations.websockets import RpcChannel, RpcServer
@@ -12,7 +12,7 @@ from fastapi_canon.integrations.websockets.codegen import (
     generate_python_client,
 )
 from fastapi_canon.integrations.websockets.schema import render_openrpc
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, RootModel
 
 from tests.unit.integrations.websockets.conftest import GreetingState, greeting_app
 
@@ -111,7 +111,19 @@ async def test_generated_client_uses_validation_aliases_on_requests(
             validation_alias="inputName", serialization_alias="outputName"
         )
 
+    class Pagination(BaseModel):
+        model_config = ConfigDict(validate_by_alias=False, validate_by_name=True)
+        limit: int = Field(alias="maxItems")
+
     channel = RpcChannel(namespace="tasks")
+
+    default_page = Pagination(limit=10)
+
+    @channel.method()
+    async def page(filters: Pagination = default_page) -> int:
+        limit = filters.limit
+        filters.limit += 1
+        return limit
 
     @channel.method()
     async def get(task_id: Annotated[int, Field(validation_alias="taskId")]) -> int:
@@ -137,18 +149,89 @@ async def test_generated_client_uses_validation_aliases_on_requests(
     )
 
     async with asyncio.timeout(5), generated.AliasClient(transport) as client:
+        assert await client.tasks.page() == 10
+        assert await client.tasks.page(limit=25) == 25
+        assert default_page.limit == 10
         assert await client.tasks.get(task_id=42) == 42
         (review,) = await client.tasks.echo(input_name="Ada")
         assert review.output_name == "Ada"
 
 
+async def test_generated_rpc_preserves_open_models_and_aliased_union_tags(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Added(BaseModel):
+        event_type: Literal["added"] = Field(alias="eventType")
+
+    class Removed(BaseModel):
+        event_type: Literal["removed"] = Field(alias="eventType")
+
+    class Update(BaseModel):
+        model_config = ConfigDict(extra="allow")
+        event: Annotated[Added | Removed, Field(discriminator="event_type")]
+        owner: str = Field(alias="self")
+        configuration: str = Field(alias="modelConfig")
+        values: list[int]
+
+    class Counts(RootModel[dict[str, int]]):
+        pass
+
+    tasks = RpcChannel(namespace="tasks")
+
+    @tasks.method()
+    async def echo(update: Update) -> Update:
+        return update
+
+    @tasks.method()
+    async def totals(counts: Counts) -> Counts:
+        return counts
+
+    protocol = tasks.freeze()
+    package = "open_models_client"
+    generate_python_client(
+        render_openrpc(protocol, title="Tasks"),
+        tmp_path / package,
+        PythonClientOptions(package=package, client_name="TasksClient"),
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    generated = import_module(package)
+    errors = import_module(f"{package}.errors")
+    transport = LoopbackTransport(
+        RpcServer.from_channel(protocol), errors.error_from_response
+    )
+    async with asyncio.timeout(5), generated.TasksClient(transport) as client:
+        observed = await client.tasks.echo(
+            event=generated.Added(event_type="added"),
+            self="Ada",
+            model_config="default",
+            values=[2, 3],
+            revision=7,
+        )
+        assert observed.model_dump(by_alias=True) == {
+            "event": {"eventType": "added"},
+            "self": "Ada",
+            "modelConfig": "default",
+            "values": [2, 3],
+            "revision": 7,
+        }
+        counts = await client.tasks.totals(apples=5)
+        assert counts.model_dump() == {"apples": 5}
+
+
 async def test_generated_request_envelope_keeps_a_same_named_params_model(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    class TasksUpdatedNotification(BaseModel):
+        task_id: int
+
     class CreateRequest(BaseModel):
         title: str
 
     channel = RpcChannel(namespace="tasks")
+
+    @channel.event()
+    async def updated() -> AsyncIterator[TasksUpdatedNotification]:
+        yield TasksUpdatedNotification(task_id=7)
 
     @channel.method()
     async def create(request: CreateRequest) -> str:
@@ -171,6 +254,11 @@ async def test_generated_request_envelope_keeps_a_same_named_params_model(
 
     async with asyncio.timeout(5), generated.TasksClient(transport) as client:
         assert await client.tasks.create(title="Ada") == "Ada"
+        transport.publish(
+            {"jsonrpc": "2.0", "method": "tasks.updated", "params": {"task_id": 7}}
+        )
+        update = await anext(client.tasks.updated())
+        assert update.task_id == 7
 
     method = document["methods"][0]
     schemas = document["components"]["schemas"]
