@@ -25,8 +25,8 @@ See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0290).
   params from their signature, like FastAPI bodies: a single Pydantic model
   parameter is the whole params object; otherwise named parameters form a
   synthesized `<Namespace><Method>Params` model that rejects unknown fields.
-  Contracts and generated clients name params models after the operation;
-  regenerate clients.
+  Contracts name params models after the operation and use Pydantic validation
+  aliases for requests. Regenerate clients.
 - **`CANON-029-RPC-MODEL-REMOVED`** — `RpcModel` is removed and wire names
   follow the Pydantic fields as written. Inherit from `BaseModel`, or define a
   base with `alias_generator=to_camel` and `populate_by_name=True` to keep

@@ -1,9 +1,7 @@
 from collections.abc import Iterable, Mapping
 from copy import deepcopy
 from itertools import chain
-from typing import Any, cast
-
-from pydantic import TypeAdapter
+from typing import Any
 
 from fastapi_canon.error import resolved_registry
 from fastapi_canon.error.catalog import problem_schema
@@ -23,6 +21,7 @@ from fastapi_canon.integrations.websockets.request_metadata import (
     REQUEST_METADATA_CAPABILITY,
 )
 from fastapi_canon.integrations.websockets.schema.components import (
+    SchemaKey,
     components,
     described,
     notification_schema_name,
@@ -48,7 +47,7 @@ def render_openrpc(
     server_documents = tuple(dict(server) for server in servers)
     server_lookup = _server_lookup(server_documents)
     _validate_server_references(protocol, server_lookup)
-    raw_schemas, params_names = components(protocol)
+    raw_schemas, params_names, raw_outputs = components(protocol)
     for operation in chain[
         RpcMethodDefinition | RpcNotificationDefinition | RpcSubscriptionDefinition
     ](protocol.methods, protocol.notifications, protocol.subscriptions):
@@ -77,6 +76,7 @@ def render_openrpc(
                     )
                 raw_schemas[key] = value
     schemas = _rewrite_refs(raw_schemas)
+    outputs: dict[SchemaKey, dict[str, Any]] = _rewrite_refs(raw_outputs)
     document = {
         "openrpc": OPENRPC_VERSION,
         "info": {
@@ -91,6 +91,7 @@ def render_openrpc(
                 schemas,
                 server_lookup,
                 params_name=params_names.get(method.name),
+                outputs=outputs,
             )
             for method in protocol.methods
         ],
@@ -114,10 +115,15 @@ def render_openrpc(
                 _with_server(
                     {
                         "name": notification.name,
-                        "payload": _ref(type_name(notification.payload)),
+                        "payload": outputs[type_name(notification.payload)],
                         "message": _ref(notification_schema_name(notification.name)),
                         **(
-                            {"errors": [_error(error) for error in notification.raises]}
+                            {
+                                "errors": [
+                                    _error(error, outputs)
+                                    for error in notification.raises
+                                ]
+                            }
                             if notification.raises
                             else {}
                         ),
@@ -146,9 +152,14 @@ def render_openrpc(
                             if subscription.name in params_names
                             else None
                         ),
-                        "payload": _payload_schema(subscription.payload, schemas),
+                        "payload": outputs[("stream", subscription.name)],
                         **(
-                            {"errors": [_error(error) for error in subscription.raises]}
+                            {
+                                "errors": [
+                                    _error(error, outputs)
+                                    for error in subscription.raises
+                                ]
+                            }
                             if subscription.raises
                             else {}
                         ),
@@ -161,7 +172,7 @@ def render_openrpc(
             for subscription in protocol.subscriptions
         ],
         "x-rpc-notification-types": [
-            {"name": item.name, "payload": _ref(type_name(item.payload))}
+            {"name": item.name, "payload": outputs[type_name(item.payload)]}
             for item in protocol.notification_types
         ],
     }
@@ -188,6 +199,7 @@ def _method(
     servers: Mapping[str, dict[str, Any]],
     *,
     params_name: str | None,
+    outputs: Mapping[SchemaKey, dict[str, Any]],
 ) -> dict[str, Any]:
     document: dict[str, Any] = {"name": method.name}
     if method.idempotent:
@@ -199,19 +211,21 @@ def _method(
     document |= {
         "paramStructure": "by-name",
         "params": _params(params_name, components),
-        "result": {"name": "result", "schema": _result_schema(method, components)},
+        "result": {"name": "result", "schema": outputs[("method", method.name)]},
         "x-rpc-request-schema": _ref(method.request_name),
     }
     if params_name is not None:
         document["x-rpc-params-schema"] = _ref(params_name)
     if method.raises:
-        document["errors"] = [_error(error) for error in method.raises]
+        document["errors"] = [_error(error, outputs) for error in method.raises]
     if method.server is not None:
         document["servers"] = [servers[method.server]]
     return document
 
 
-def _error(error: type[RpcError]) -> dict[str, Any]:
+def _error(
+    error: type[RpcError], outputs: Mapping[SchemaKey, dict[str, Any]]
+) -> dict[str, Any]:
     document: dict[str, Any] = {
         "code": int(error.rpc_code),
         "message": error.message,
@@ -226,7 +240,7 @@ def _error(error: type[RpcError]) -> dict[str, Any]:
             binding.registry
         ).type_uri_for(binding.definition)
     if error.details_type is not None:
-        document["x-rpckit-details-schema"] = _ref(type_name(error.details_type))
+        document["x-rpckit-details-schema"] = outputs[type_name(error.details_type)]
     return document
 
 
@@ -295,25 +309,6 @@ def _params(
         {"name": name, "required": name in required, "schema": member}
         for name, member in schema.get("properties", {}).items()
     ]
-
-
-def _result_schema(
-    method: RpcMethodDefinition,
-    components: dict[str, Any],
-) -> dict[str, Any]:
-    return _payload_schema(method.result, components)
-
-
-def _payload_schema(annotation: Any, components: dict[str, Any]) -> dict[str, Any]:
-    name = getattr(annotation, "__name__", None)
-    if isinstance(name, str) and name in components:
-        return _ref(name)
-    schema = TypeAdapter(annotation).json_schema(
-        by_alias=True,
-        mode="serialization",
-    )
-    schema.pop("$defs", None)
-    return cast(dict[str, Any], _rewrite_refs(schema))
 
 
 def _ref(name: str) -> dict[str, str]:

@@ -1,10 +1,18 @@
 import asyncio
 from collections.abc import AsyncIterator, Callable
+from importlib import import_module
+from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Annotated, Any
 
 import pytest
-from fastapi_canon.integrations.websockets import RpcServer
+from fastapi_canon.integrations.websockets import RpcChannel, RpcServer
+from fastapi_canon.integrations.websockets.codegen import (
+    PythonClientOptions,
+    generate_python_client,
+)
+from fastapi_canon.integrations.websockets.schema import render_openrpc
+from pydantic import BaseModel, Field
 
 from tests.unit.integrations.websockets.conftest import GreetingState, greeting_app
 
@@ -93,6 +101,45 @@ async def test_a_generated_call_reaches_the_handler_and_returns_a_model(
     assert result.text == "Hello, Mathis!"
     assert type(result).__name__ == "SayResult"
     assert handler.greeted == ["Mathis"]
+
+
+async def test_generated_client_uses_validation_aliases_on_requests(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Review(BaseModel):
+        name: str = Field(
+            validation_alias="inputName", serialization_alias="outputName"
+        )
+
+    channel = RpcChannel(namespace="tasks")
+
+    @channel.method()
+    async def get(task_id: Annotated[int, Field(validation_alias="taskId")]) -> int:
+        return task_id
+
+    @channel.method()
+    async def echo(review: Review) -> list[Review]:
+        return [review]
+
+    protocol = channel.freeze()
+    document = render_openrpc(protocol, title="Aliases")
+    package = "alias_roundtrip_client"
+    generate_python_client(
+        document,
+        tmp_path / package,
+        PythonClientOptions(package=package, client_name="AliasClient"),
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    generated = import_module(package)
+    errors = import_module(f"{package}.errors")
+    transport = LoopbackTransport(
+        RpcServer.from_channel(protocol), errors.error_from_response
+    )
+
+    async with asyncio.timeout(5), generated.AliasClient(transport) as client:
+        assert await client.tasks.get(task_id=42) == 42
+        (review,) = await client.tasks.echo(input_name="Ada")
+        assert review.output_name == "Ada"
 
 
 async def test_a_call_without_a_result_returns_none(

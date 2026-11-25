@@ -369,9 +369,9 @@ often qualify; writes require careful service-level design.
 
 ## Pydantic models
 
-Parameter and result models are plain Pydantic models. Their field names,
-aliases, validators and extra-field policy define the wire shape; RPC adds no
-alias generator. `project_id: int` stays `project_id` on the wire unless the
+Parameter and result models are plain Pydantic models. OpenRPC uses validation
+aliases for inputs and serialization aliases for outputs. RPC adds no alias
+generator. `project_id: int` stays `project_id` on the wire unless the
 model declares an alias. For camelCase wire names, give your models a shared
 base with `alias_generator=to_camel` and regenerate clients. See
 [shared DTOs](../../06-codegen.md).
