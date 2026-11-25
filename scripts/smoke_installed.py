@@ -587,8 +587,8 @@ def _skill_check() -> None:
             if path.is_file()
         }
         assert Path("SKILL.md") in expected
-        assert Path("references/composition.md") in expected
-        (agents / "references/composition.md").unlink()
+        assert Path("references/feature.md") in expected
+        (agents / "references/feature.md").unlink()
         (claude / "obsolete.md").write_text("Remove on refresh", encoding="utf-8")
         subprocess.run(
             [*command, "--force"],

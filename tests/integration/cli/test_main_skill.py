@@ -23,8 +23,7 @@ def test_install_bundled_skill_in_consumer_project(tmp_path: Path, agent: str) -
     } == {
         "SKILL.md",
         "agents/openai.yaml",
-        "references/composition.md",
-        "references/http-feature.md",
+        "references/feature.md",
         "references/layout.md",
         "references/resources.md",
         "references/testing.md",
@@ -82,7 +81,7 @@ def test_install_skill_at_custom_destination(tmp_path: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     assert (destination / "SKILL.md").is_file()
-    assert (destination / "references/http-feature.md").is_file()
+    assert (destination / "references/feature.md").is_file()
     assert not (tmp_path / ".agents").exists()
     assert not (tmp_path / ".claude").exists()
 
@@ -119,7 +118,7 @@ def test_force_refreshes_both_copies_and_restores_missing_resources(
     claude = tmp_path / ".claude/skills/fastapi-canon"
     expected = _contents(agents)
     (agents / "SKILL.md").write_text("Old skill", encoding="utf-8")
-    (agents / "references/composition.md").unlink()
+    (agents / "references/feature.md").unlink()
     (claude / "references/obsolete.md").write_text("Obsolete", encoding="utf-8")
     unrelated = claude.parent / "another-skill/SKILL.md"
     unrelated.parent.mkdir()
@@ -144,7 +143,7 @@ def test_force_installs_a_missing_agent_directory(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert _contents(agents) == _contents(tmp_path / ".claude/skills/fastapi-canon")
-    assert (agents / "references/composition.md").is_file()
+    assert (agents / "references/feature.md").is_file()
 
 
 def test_force_refreshes_only_a_custom_destination(tmp_path: Path) -> None:
@@ -156,7 +155,7 @@ def test_force_refreshes_only_a_custom_destination(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert (destination / "SKILL.md").is_file()
-    assert (destination / "references/composition.md").is_file()
+    assert (destination / "references/feature.md").is_file()
     assert not (destination / "old.md").exists()
     assert not (tmp_path / ".agents").exists()
     assert not (tmp_path / ".claude").exists()

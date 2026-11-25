@@ -14,8 +14,8 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Changed
 
-- The skill is shorter and matches the 0.29 API, including the APP-scope rule
-  for stream injections.
+- The skill is a short overview that points agents to the installed source
+  for details, and matches the 0.29 API.
 
 ## 0.29.0 - 2026-11-25
 

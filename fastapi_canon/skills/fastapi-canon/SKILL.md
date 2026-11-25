@@ -5,45 +5,25 @@ description: Build, extend or review FastAPI applications that use fastapi-canon
 
 # FastAPI Canon
 
-Write business features as plain Python, expose them through typed Canon routers
-and assemble them explicitly with `Feature` and `Composition`.
-
-## Before you change code
-
-1. Follow the project's own instructions, pins and architecture tooling.
-2. Run `uv run fastapi-canon --version`. This skill matches the installed
-   version; check signatures in that environment before using an option.
-3. Load only the reference for the current decision:
+Features are plain Python, exposed through typed Canon routers and assembled
+with `Feature` and `Composition`. This skill gives the overview; for details read
+the installed source (`python -c "import fastapi_canon; print(fastapi_canon.__file__)"`)
+and its docstrings. Public names are in `fastapi_canon/__init__.py` and
+`fastapi_canon/integrations/*/__init__.py`.
 
 | Task | Reference |
 | --- | --- |
-| Find where code belongs | [layout.md](references/layout.md) |
-| Wire features, errors, telemetry or the app | [composition.md](references/composition.md) |
-| Add a route, service, port, provider or error | [http-feature.md](references/http-feature.md) |
-| Add persistence, transactions or background work | [resources.md](references/resources.md) |
-| Add SSE, WebSocket RPC, WebRTC, MCP or SDKs | [transports.md](references/transports.md) |
-| Test and verify a change | [testing.md](references/testing.md) |
+| Where code belongs | [layout.md](references/layout.md) |
+| Route, service, provider, error, app wiring | [feature.md](references/feature.md) |
+| Database, transactions, background work | [resources.md](references/resources.md) |
+| SSE, WebSocket RPC, WebRTC, MCP, SDKs | [transports.md](references/transports.md) |
+| Tests and checks | [testing.md](references/testing.md) |
 
 ## Rules
 
-- Domain owns rules and plain exceptions; application owns workflows and ports;
-  infrastructure implements I/O; presentation owns wire models and `Error`s.
-  `feature.py` and the app root assemble them.
-- One `fastapi_canon.APIRouter(namespace=...)` per feature carries HTTP, SSE
-  (`response_class=EventSourceResponse`) and RPC (`router.include_channel`).
-  WebRTC uses `WebRtcRouter`. Contribute both via `Feature(routers=[...])`.
-- Endpoints, streams and RPC methods request services with `Inject[T]`. Only
-  FastAPI dependency functions using `FromDishka[T]` need `@inject`.
-  `Composition` owns the container: no `setup_dishka`, no manual registry.
-- Define each public `Error` once and declare it with `raises=[...]`.
-- Import from `fastapi_canon`, `fastapi_canon.error` and
-  `fastapi_canon.integrations.*` only.
-- Streams, sockets and background tasks never hold request resources; they
-  inject APP services or a `Scoped` factory.
-- Keep published operation IDs stable; pin them with `operation_id=` on rename.
-
-## Finish
-
-Run the project's gates plus `fastapi-canon check composition` and
-`fastapi-canon check errors` ([testing.md](references/testing.md)). Regenerate
-clients when contracts change. Report only the checks you actually ran.
+- One `APIRouter(namespace=...)` per feature for HTTP, SSE and RPC channels.
+- Inject services with `Inject[T]`; `Composition` owns the Dishka container.
+- Declare each public `Error` once and list it in `raises=[...]`.
+- Streams, sockets and background tasks never use request resources.
+- Keep published operation IDs stable (`operation_id=` when renaming).
+- Finish with `fastapi-canon check composition` and `check errors`.
