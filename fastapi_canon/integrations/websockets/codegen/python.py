@@ -423,7 +423,7 @@ def _render_sockets(ir: ClientIr, options: PythonClientOptions) -> str:
         imports.add(_runtime_module(options), "RpcStreamFailed", "RpcStreamRefused")
     typed = any(socket.client_message is not None for socket in ir.sockets)
     if typed:
-        imports.add("typing", "Any", "Generic")
+        imports.add("typing", "Any", "Generic", "cast")
         imports.add("typing_extensions", "TypeVar")
         imports.add("pydantic", "TypeAdapter", "ValidationError")
         imports.add("pydantic_core", "PydanticSerializationError")

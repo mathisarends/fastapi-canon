@@ -223,7 +223,8 @@ class RpcTransportPool[ServerT: str]:
         try:
             return await asyncio.shield(self._start(name))
         except asyncio.CancelledError:
-            if self._closing.is_set() and not asyncio.current_task().cancelling():
+            task = asyncio.current_task()
+            if self._closing.is_set() and task is not None and not task.cancelling():
                 raise RpcConnectionLostError(
                     sent=False, reason="The RPC client is closed"
                 ) from None

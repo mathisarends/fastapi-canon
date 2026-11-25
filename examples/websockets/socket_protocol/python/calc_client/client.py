@@ -141,7 +141,9 @@ class CalculatorClient:
             overrides.setdefault(ServerName.RPC, url)
 
         async def resolve_headers() -> Mapping[str, str] | None:
-            return await headers() if callable(headers) else headers
+            if headers is None or isinstance(headers, Mapping):
+                return headers
+            return await headers()
 
         async def open_transport(
             endpoint_url: str,

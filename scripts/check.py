@@ -161,6 +161,22 @@ def _main() -> None:
                     "--check",
                 )
             runner(_ROOT, "scripts/sse/codegen.py", "--check")
+            # Consumers type-check generated Python clients with ty; the dev
+            # group pins its version.
+            runner(
+                _ROOT,
+                "-m",
+                "ty",
+                "check",
+                "--python",
+                sys.executable,
+                "--error-on-warning",
+                "examples/websockets/generated_clients/python",
+                "examples/websockets/socket_protocol/python",
+                "examples/websockets/typed_socket/python",
+                "examples/sse/agent_runs/generated_python",
+                "tests/fixtures/sse/generated_python",
+            )
             cli = ("-m", "fastapi_canon.integrations.webrtc.codegen.cli")
             contract = "examples/webrtc/practice/contract.json"
             runner(

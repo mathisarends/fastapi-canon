@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Any, Generic, Literal, Protocol, Self
+from typing import Any, Generic, Literal, Protocol, Self, cast
 
 from pydantic import TypeAdapter, ValidationError
 from pydantic_core import PydanticSerializationError
@@ -122,7 +122,7 @@ class Socket(Generic[_IncomingT, _OutgoingT]):
         message = await self._transport.receive()
         adapter = _RECEIVE_ADAPTERS.get(self.endpoint.name)
         if adapter is None:
-            return message  # type: ignore[return-value]
+            return cast(_IncomingT, message)
         try:
             if not isinstance(message, str):
                 raise ValueError("Typed sockets require text messages")

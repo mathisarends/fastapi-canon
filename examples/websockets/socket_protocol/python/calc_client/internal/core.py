@@ -40,9 +40,11 @@ _CLIENT_CLOSED = object()
 
 class _RequestState:
     def __init__(self) -> None:
-        self.task = asyncio.current_task()
-        assert self.task is not None
-        self.cancelling = self.task.cancelling()
+        task = asyncio.current_task()
+        if task is None:
+            raise RuntimeError("RPC requests must run inside an asyncio task")
+        self.task: asyncio.Task[Any] = task
+        self.cancelling = task.cancelling()
         self.sent = False
         self.cleanup = False
 
@@ -483,7 +485,9 @@ class RpcClientCore:
                     call.transport = live
                 state.sent = True
                 raw = await live.request(
-                    route.method, params, metadata=metadata or None
+                    route.method,
+                    cast("dict[str, Any] | None", params),
+                    metadata=metadata or None,
                 )
         except TimeoutError:
             if waiting is None or not waiting.expired():
@@ -727,7 +731,7 @@ class RpcClientCore:
         notification: RpcNotificationInfo[PayloadT],
     ) -> AsyncIterator[PayloadT]:
         async with aclosing(
-            self.notifications(notification.method, server=notification.server)
+            self._notifications(notification.method, notification.server)
         ) as stream:
             async for message in stream:
                 try:
@@ -742,7 +746,7 @@ class RpcClientCore:
         self,
         method: str | None,
         server: str | None,
-    ) -> AsyncIterator[dict[str, Any]]:
+    ) -> AsyncGenerator[dict[str, Any], None]:
         subscriber = _Subscriber(method, self._notification_queue_size)
         while not self._closed:
             transport = await self._notification_transport(server)
