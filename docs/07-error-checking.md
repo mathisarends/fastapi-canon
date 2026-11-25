@@ -147,7 +147,9 @@ class TaskProvider(Provider):
 Several bindings of one port, including `override=True` and test providers,
 contribute the union of their errors.
 
-### RPC channel subclasses
+### RPC channels
+
+Methods on `channel.child(...)` inherit the parent channel's `raises=` declarations.
 
 Methods of statically resolved `RpcChannel` subclasses are checked like methods of
 `RpcChannel` itself. A supported subclass has one base, no type arguments, class

@@ -234,13 +234,12 @@ class CheckContracts:
     ) -> _CheckOperation | None:
         # `method` is a common attribute name: only resolved RpcChannels count.
         self.source.reset_usage({function.module})
-        module, channel = self.source.value(owner, function.module)
-        if not isinstance(channel, ast.Call):
+        contract = self.source.rpc_channel_contract(owner, function.module)
+        if contract is None:
             return None
-        declaration = self.source.rpc_channel(self.source.resolve(channel.func, module))
-        if declaration is None:
-            return None
-        declaration_modules = frozenset(self.source.touched)
+        declaration, channels = contract
+        module, channel = channels[-1]
+        declaration_modules = self.source.touched
         operation = _CheckOperation(
             function.name,
             str(self.source.paths[function.module]),
@@ -265,6 +264,7 @@ class CheckContracts:
             call,
             module=module,
             router=channel,
+            channel_ancestors=channels[:-1],
             declaration_modules=declaration_modules,
         )
         return operation
@@ -277,12 +277,13 @@ class CheckContracts:
         *,
         module: str,
         router: ast.Call,
+        channel_ancestors: Sequence[tuple[str, ast.Call]] = (),
         declaration_modules: frozenset[str] = frozenset(),
     ) -> None:
         self.source.reset_usage({function.module, module, *declaration_modules})
         ancestors, unresolved = self.source.router_ancestors(router)
         layers = []
-        for owner, declaration in [*ancestors, (module, router)]:
+        for owner, declaration in [*ancestors, *channel_ancestors, (module, router)]:
             policy_node = _keyword(declaration, "policy")
             if policy_node is None or operation.transport == "rpc":
                 layers.append((owner, declaration))
