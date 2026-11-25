@@ -1,11 +1,13 @@
 import re
+from collections import Counter
 from collections.abc import Iterable
 from enum import Enum
+from hashlib import sha256
 from itertools import chain
 from types import UnionType
 from typing import Any, NamedTuple, TypeAliasType, get_args, get_origin
 
-from pydantic import BaseModel, TypeAdapter
+from pydantic import BaseModel, TypeAdapter, create_model
 from pydantic.json_schema import JsonSchemaMode
 
 from fastapi_canon.integrations.websockets.errors import ProtocolDefinitionError
@@ -23,9 +25,17 @@ EMPTY_PARAMS_SCHEMA: dict[str, Any] = {
 """What a method without params accepts: an omitted or empty ``params`` member."""
 
 
-def components(protocol: RpcProtocol) -> dict[str, Any]:
+class SchemaComponents(NamedTuple):
+    schemas: dict[str, Any]
+    params: dict[str, str]
+
+
+def components(protocol: RpcProtocol) -> SchemaComponents:
     """Build the JSON Schema components referenced by the OpenRPC document."""
     annotations = _annotations(protocol)
+    params_models = _params_models(protocol, reserved_names=set(annotations))
+    for model in params_models.values():
+        _add(annotations, model)
     _assert_unique_wire_names(annotations.values())
     adapters: list[_SchemaInput] = [
         _SchemaInput(name, "serialization", TypeAdapter(annotation))
@@ -49,9 +59,15 @@ def components(protocol: RpcProtocol) -> dict[str, Any]:
             )
     roots, root = TypeAdapter.json_schemas(adapters, by_alias=True)
     definitions: dict[str, Any] = root.get("$defs", {})
+    params_names = {
+        operation: roots[(type_name(model), "serialization")]["$ref"].removeprefix(
+            "#/$defs/"
+        )
+        for operation, model in params_models.items()
+    }
     for method in protocol.methods:
         definitions[method.request_name] = _request_schema(
-            method.name, method.request_name, method.params, summary=method.summary
+            method, params_names.get(method.name), definitions
         )
     for notification in protocol.notifications:
         name = notification_schema_name(notification.name)
@@ -69,7 +85,7 @@ def components(protocol: RpcProtocol) -> dict[str, Any]:
                         f"Duplicate socket schema name: {name}"
                     )
                 definitions[name] = roots[(name, mode)]
-    return definitions
+    return SchemaComponents(definitions, params_names)
 
 
 def socket_message_schema_name(name: str, direction: str) -> str:
@@ -101,24 +117,57 @@ def notification_schema_name(name: str) -> str:
 def _annotations(protocol: RpcProtocol) -> dict[str, Any]:
     annotations: dict[str, Any] = {}
     for method in protocol.methods:
-        if method.params is not None:
-            _add(annotations, method.params)
         _add_result_types(annotations, method.result)
     for notification in protocol.notifications:
         _add(annotations, notification.payload)
     for subscription in protocol.subscriptions:
-        if subscription.params is not None:
-            _add(annotations, subscription.params)
         _add_result_types(annotations, subscription.payload)
     for notification_type in protocol.notification_types:
         _add(annotations, notification_type.payload)
     for operation in chain[
         RpcMethodDefinition | RpcNotificationDefinition | RpcSubscriptionDefinition
     ](protocol.methods, protocol.notifications, protocol.subscriptions):
+        if (
+            isinstance(operation, (RpcMethodDefinition, RpcSubscriptionDefinition))
+            and operation.params is not None
+            and not operation.params_fields
+        ):
+            _add(annotations, operation.params)
         for error in operation.raises:
             if error.details_type is not None:
                 _add(annotations, error.details_type)
     return annotations
+
+
+def _params_models(
+    protocol: RpcProtocol, *, reserved_names: set[str]
+) -> dict[str, type[BaseModel]]:
+    params: dict[str, type[BaseModel]] = {}
+    generated: dict[str, type[BaseModel]] = {}
+    for operation in chain[RpcMethodDefinition | RpcSubscriptionDefinition](
+        protocol.methods, protocol.subscriptions
+    ):
+        if operation.params is None:
+            continue
+        params[operation.name] = operation.params
+        if operation.params_fields:
+            generated[operation.name] = operation.params
+
+    counts = Counter(type_name(model) for model in generated.values())
+    used = reserved_names.union(counts)
+    for operation_name, model in sorted(generated.items()):
+        name = type_name(model)
+        if counts[name] == 1 and name not in reserved_names:
+            continue
+        # A channel can reuse the same params class under multiple wire names.
+        # Use separate schema models without modifying that runtime class.
+        digest = sha256(operation_name.encode()).hexdigest()[:12]
+        candidate = f"{name}For{digest}"
+        while candidate in used:
+            candidate += "X"
+        params[operation_name] = create_model(candidate, __base__=model)
+        used.add(candidate)
+    return params
 
 
 def _add_result_types(annotations: dict[str, Any], annotation: Any) -> None:
@@ -140,25 +189,21 @@ def _add(annotations: dict[str, Any], annotation: Any) -> None:
 
 
 def _request_schema(
-    name: str,
-    title: str,
-    params_model: type[BaseModel] | None,
-    *,
-    summary: str | None,
+    method: RpcMethodDefinition,
+    params_name: str | None,
+    definitions: dict[str, Any],
 ) -> dict[str, Any]:
     required = ["jsonrpc", "method"]
-    if params_model is None:
+    if params_name is None:
         params = EMPTY_PARAMS_SCHEMA
     else:
-        params = _ref(type_name(params_model))
-        if params_model.model_json_schema(by_alias=True, mode="serialization").get(
-            "required"
-        ):
+        params = _ref(params_name)
+        if definitions[params_name].get("required"):
             required.append("params")
     schema: dict[str, Any] = {
         "additionalProperties": False,
         "type": "object",
-        "title": title,
+        "title": method.request_name,
         "properties": {
             "jsonrpc": {"const": "2.0", "type": "string"},
             "id": {
@@ -169,7 +214,7 @@ def _request_schema(
                 ],
                 "default": None,
             },
-            "method": {"const": name, "type": "string"},
+            "method": {"const": method.name, "type": "string"},
             "params": params,
             "meta": {
                 "type": "object",
@@ -181,8 +226,8 @@ def _request_schema(
         },
         "required": required,
     }
-    if summary is not None:
-        schema["description"] = summary
+    if method.summary is not None:
+        schema["description"] = method.summary
     return schema
 
 

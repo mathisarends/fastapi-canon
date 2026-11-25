@@ -781,11 +781,19 @@ async def _receive(outgoing: asyncio.Queue[Message]) -> Any:
     return json.loads(message["text"])
 
 
-def test_channel_path_parameters_are_validated_before_accepting() -> None:
+async def test_channel_path_parameters_are_validated_before_accepting() -> None:
     channel = RpcChannel(namespace="projects")
 
     @channel.method()
-    async def read(project_id: Annotated[int, Path()]) -> int:
+    async def read(project_id: Annotated[int, Path(gt=0)]) -> int:
+        return project_id
+
+    @channel.method()
+    async def write(
+        project_id: Annotated[
+            int, Path(alias="id", validation_alias="project_id", gt=0)
+        ],
+    ) -> int:
         return project_id
 
     router = APIRouter(prefix="/projects")
@@ -793,13 +801,27 @@ def test_channel_path_parameters_are_validated_before_accepting() -> None:
     app = FastAPI()
     app.include_router(router)
 
-    with (
-        TestClient(app) as client,
-        pytest.raises(WebSocketDenialResponse) as denied,
-        client.websocket_connect("/projects/not-a-number/session"),
+    with TestClient(app) as client:
+        for value in ("not-a-number", "0"):
+            with (
+                pytest.raises(WebSocketDenialResponse) as denied,
+                client.websocket_connect(f"/projects/{value}/session"),
+            ):
+                pass
+            assert denied.value.status_code == 404
+
+    async with (
+        app.router.lifespan_context(app),
+        _connection(app, "/projects/1/session") as (incoming, outgoing),
     ):
-        pass
-    assert denied.value.status_code == 404
+        await _send(incoming, 1, "projects.read")
+        await _send(incoming, 2, "projects.write")
+        first = await _receive(outgoing)
+        second = await _receive(outgoing)
+        assert {first["id"]: first["result"], second["id"]: second["result"]} == {
+            1: 1,
+            2: 1,
+        }
 
 
 @pytest.mark.parametrize(
@@ -825,6 +847,49 @@ def test_channel_path_parameters_must_match_the_endpoint(
     router = APIRouter()
     with pytest.raises(ConfigurationError, match=message):
         router.include_channel(channel, path=path)
+    assert router.routes == []
+
+
+@pytest.mark.parametrize(("first_alias", "second_alias"), [(None, "id"), ("id", None)])
+def test_channel_rejects_conflicting_path_validation_aliases(
+    first_alias: str | None, second_alias: str | None
+) -> None:
+    channel = RpcChannel(namespace="projects")
+
+    @channel.method()
+    async def read(
+        project_id: Annotated[int, Path(validation_alias=first_alias)],
+    ) -> int:
+        return project_id
+
+    @channel.method()
+    async def write(project_id: Annotated[int, Path(alias=second_alias)]) -> int:
+        return project_id
+
+    router = APIRouter()
+    with pytest.raises(
+        ConfigurationError,
+        match=r"projects\.read and projects\.write declare path parameter "
+        r"'project_id' with different input aliases",
+    ):
+        router.include_channel(channel, path="/{project_id}/rpc")
+    assert router.routes == []
+
+
+def test_channel_rejects_conflicting_path_constraints() -> None:
+    channel = RpcChannel(namespace="projects")
+
+    @channel.method()
+    async def read(project_id: Annotated[int, Path()]) -> int:
+        return project_id
+
+    @channel.method()
+    async def write(project_id: Annotated[int, Path(gt=0)]) -> int:
+        return project_id
+
+    router = APIRouter()
+    with pytest.raises(ConfigurationError, match="different constraints"):
+        router.include_channel(channel, path="/{project_id}/rpc")
     assert router.routes == []
 
 

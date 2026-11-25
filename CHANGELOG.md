@@ -39,6 +39,10 @@ See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0290).
   `@router.socket()`. Included channels keep their namespace under the parent's.
   Read path variables with `Annotated[T, Path()]` parameters; invalid values
   reject the handshake with 404.
+- **`CANON-029-RPC-PATH-DECLARATIONS`** — Operations that share a WebSocket
+  path variable must agree on its input alias and constraints. Use the URL
+  placeholder as the input name and align the `Path()` declarations
+  ([#247](https://github.com/mathisarends/fastapi-canon/issues/247)).
 - **`CANON-029-RPC-CHANNEL-NAMESPACE`** — `RpcChannel` takes the namespace only as
   a keyword: `RpcChannel(namespace="tasks")`.
 - **`CANON-029-WEBSOCKETS-FACADE`** — `fastapi_canon.integrations.websockets` no
@@ -76,6 +80,9 @@ See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0290).
 
 ### Fixed
 
+- OpenRPC exports distinct generated params schemas for RPC operations whose
+  names would otherwise produce the same component
+  ([#248](https://github.com/mathisarends/fastapi-canon/issues/248)).
 - Generated Python RPC clients pass `ty check` without rule overrides.
   Regenerate clients to remove consumer `[[tool.ty.overrides]]` for generated
   files ([#233](https://github.com/mathisarends/fastapi-canon/issues/233)).

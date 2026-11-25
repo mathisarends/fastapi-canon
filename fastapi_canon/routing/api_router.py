@@ -476,6 +476,23 @@ def _channel_path_model(protocol: RpcProtocol, path: str) -> type[BaseModel] | N
                     f"declare path parameter {field_name!r} with different types"
                 )
                 raise ConfigurationError(msg)
+            previous_alias = previous[1].validation_alias
+            alias = field.validation_alias
+            previous_input = field_name if previous_alias is None else previous_alias
+            field_input = field_name if alias is None else alias
+            if previous_input != field_input:
+                first, second = sorted((owners[field_name], operation))
+                msg = (
+                    f"RPC operations {first} and {second} declare path parameter "
+                    f"{field_name!r} with different input aliases"
+                )
+                raise ConfigurationError(msg)
+            if previous[1].metadata != field.metadata:
+                msg = (
+                    f"RPC operations {owners[field_name]} and {operation} "
+                    f"declare path parameter {field_name!r} with different constraints"
+                )
+                raise ConfigurationError(msg)
             owners.setdefault(field_name, operation)
     if not fields:
         return None
