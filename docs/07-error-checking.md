@@ -151,6 +151,8 @@ contribute the union of their errors.
 
 Methods on `channel.child(...)` inherit the parent channel's `raises=` declarations.
 
+<a name="rpc-channel-subclasses"></a>
+
 Methods of statically resolved `RpcChannel` subclasses are checked like methods of
 `RpcChannel` itself. A supported subclass has one base, no type arguments, class
 decorators or metaclass keywords, and a body of only `pass` or a docstring.

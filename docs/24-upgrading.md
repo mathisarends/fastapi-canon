@@ -13,8 +13,7 @@ PyPI project or add further Python import changes.
 
 ## Upgrade to 0.29.0
 
-Version 0.29.0 is not released yet. See the
-[changelog](../CHANGELOG.md#0290---unreleased).
+Version 0.29.0 is unreleased. See the [changelog](../CHANGELOG.md).
 
 - Regenerate strict SSE clients. If generation reports a stale allowance,
   delete that entry from `allow-diagnostics`: the `uri-reference` diagnostics on
@@ -24,8 +23,7 @@ Version 0.29.0 is not released yet. See the
   Canon. Review FastAPI's request-parameter changes from 0.145 through 0.162 in
   its [release notes](https://fastapi.tiangolo.com/release-notes/), especially
   form defaults, JSON `null` bodies and parameter-model `extra` handling.
-- Replace `@router.sse(path, ...)` with FastAPI's response class; generated
-  clients stay the same:
+- Replace `@router.sse(path, ...)` with FastAPI's response class on the HTTP route.
 
   ```python
   from fastapi.sse import EventSourceResponse
@@ -33,11 +31,11 @@ Version 0.29.0 is not released yet. See the
   @router.get(path, response_class=EventSourceResponse, raises=[...])
   ```
 
-  Use `@router.post(...)` for `methods=[HTTPMethod.POST]` and
-  `@router.api_route(path, methods=["GET", "POST"], ...)` for both. Replace
-  `StreamOptions` annotations with `APIRouteOptions`. A Canon route that yields
-  `ServerSentEvent` must yield its event model instead, wrapped as
-  `ServerSentEvent(data=event)` when it sets SSE fields.
+  Use `@router.post(...)` for `methods=[HTTPMethod.POST]`. When serving GET and
+  POST at the same path, declare them separately with distinct operation IDs.
+  Replace `StreamOptions` annotations with `APIRouteOptions`. Annotate the generator
+  with its concrete event type. Use `ServerSentEvent(data=event)` to set SSE
+  fields. For native FastAPI SSE, register the route on `fastapi.APIRouter`.
 - Mount WebSocket RPC channels on the router, and read path variables from the
   signature:
 
@@ -61,14 +59,39 @@ Version 0.29.0 is not released yet. See the
 
   Replace `router.channel(path, namespace=...)` with this form,
   `RpcChannel("tasks")` with `RpcChannel(namespace="tasks")`, and
-  `@channel.socket(...)` with `@router.socket(path, ...)`. Remove
-  `namespace=` and `path_model=` from `include_channel()`. For a shared path
-  variable, use the URL placeholder as the input name and give every operation
-  the same `Path()` constraints.
-- Replace `RpcModel` with `BaseModel`. To keep camel-case wire names, use your
-  own base model with `alias_generator=to_camel` and `populate_by_name=True`.
-- Params models may be replaced with named parameters. Regenerate clients to
-  pick up operation-based params names and validation aliases on requests.
+  `@channel.socket(...)` with `@router.socket(path, ...)`. To keep a socket's
+  operation name, match its namespace on the router and its local name in the
+  handler's function name. Move `namespace=` from either `include_channel()`
+  API to the channel, including namespaces previously inherited from the
+  router. An included channel with an empty namespace adds its operations
+  directly under the parent. Register handlers before mounting the snapshot.
+- Replace the router mount's `path_model=` and `Inject[YourPathModel]` handler
+  parameters with individual `Annotated[T, Path()]` parameters. For each
+  shared path variable, use the URL placeholder as the input name and give
+  every operation the same type and constraints.
+- Replace `RpcModel` with `BaseModel`. To preserve camel-case wire names and
+  validation, use this base for RPC payloads.
+
+  ```python
+  from pydantic import BaseModel, ConfigDict
+  from pydantic.alias_generators import to_camel
+
+
+  class RpcPayload(BaseModel):
+      model_config = ConfigDict(
+          alias_generator=to_camel,
+          validate_by_alias=True,
+          validate_by_name=True,
+          serialize_by_alias=True,
+          extra="forbid",
+      )
+  ```
+
+- Keep a single Pydantic params model or switch to named parameters. Regenerate
+  clients to pick up operation-based params names, request validation aliases
+  and distinct default endpoint names for colliding router paths.
+- Handle body-limit rejections as 413 `application/problem+json` responses.
+  This includes rejections based on an oversized `Content-Length` header.
 - Import `Inject` from `fastapi_canon`, and `CanonWebSocketRouter`,
   `FastApiSocket` and `serve_websocket` from
   `fastapi_canon.integrations.websockets.adapters.fastapi`.
@@ -91,7 +114,7 @@ Version 0.28.0 was published on 2026-11-25. See the
 - To adopt streamed uploads on a Canon router, replace a buffered `bytes`
   parameter with `Annotated[AsyncIterator[bytes], BinaryBody(media_type)]` and
   consume it with `async for` during the request. Keep content-type and size
-  validation in the application. See [raw uploads](08-file-transfers.md#downloads).
+  validation in the application. See [raw uploads](08-file-transfers.md#streaming-uploads).
 - To move OpenTelemetry SDK setup into Canon, pass `Telemetry(sdk=...)` with
   a factory that yields `SdkProviders` from a context manager and shuts them
   down on exit. Remove the explicit provider arguments and `shutdown=` when

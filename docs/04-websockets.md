@@ -30,6 +30,7 @@ task = await client.tasks.complete(task_id=1)
 ```
 
 Request IDs, correlation, timeouts and typed errors are handled for you.
+Register any streams and events before `include_channel()` captures the channel.
 
 ## Streams
 
