@@ -425,3 +425,90 @@ def test_cli_reports_automatic_http_sse_id_collisions(
         assert "GET /projects/current" in result.stdout
         assert "GET /v1/archive/events" in result.stdout
         assert "operation_id" in result.stdout
+
+
+def test_cli_checks_configured_applications_in_separate_processes(
+    application_module: Path, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    (application_module / "fastapi-canon.toml").write_text(
+        dedent("""
+        name = "warned"
+        [checks.composition]
+        app = "diagnostic_app:create_app"
+        fail-on = "warning"
+        """),
+        encoding="utf-8",
+    )
+    clean = tmp_path_factory.mktemp("clean")
+    (clean / "diagnostic_app.py").write_text(
+        dedent("""
+        from fastapi import FastAPI
+        from fastapi_canon import Composition
+
+        def create_app():
+            return Composition().build(FastAPI())
+        """),
+        encoding="utf-8",
+    )
+    (clean / "fastapi-canon.toml").write_text(
+        '[codegen]\napp = "diagnostic_app:create_app"\n', encoding="utf-8"
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "fastapi_canon",
+            "check",
+            "composition",
+            "--config",
+            str(application_module / "fastapi-canon.toml"),
+            "--config",
+            str(clean / "fastapi-canon.toml"),
+            "--format",
+            "json",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode == 1, result.stderr
+    document = json.loads(result.stdout)
+    assert document["schema_version"] == 1
+    reports = {item["name"]: item["report"] for item in document["applications"]}
+    assert list(reports) == ["warned", clean.name]
+    assert [issue["code"] for issue in reports["warned"]["issues"]] == ["projects.W001"]
+    assert reports[clean.name]["issues"] == []
+    assert reports[clean.name]["complete"] is True
+
+
+def test_cli_rejects_a_configuration_with_an_explicit_application(
+    application_module: Path,
+) -> None:
+    (application_module / "fastapi-canon.toml").write_text(
+        '[checks.composition]\napp = "diagnostic_app:app"\n', encoding="utf-8"
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "fastapi_canon",
+            "check",
+            "composition",
+            "--config",
+            "fastapi-canon.toml",
+            "--app",
+            "diagnostic_app:app",
+        ],
+        cwd=application_module,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "--config cannot be combined" in result.stderr

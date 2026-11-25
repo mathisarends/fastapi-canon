@@ -67,6 +67,12 @@ See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0290).
   finite event socket once its sources finish.
 - The `[contract]` source of `rpcgen.toml` accepts a FastAPI application,
   with `base_url` and `[contract.variables]` for its server URL.
+- `check errors` and `check composition` accept repeatable `--config` files,
+  one application each, with settings under `[checks.errors]` and
+  `[checks.composition]`. `check errors --reference-root` resolves shared
+  definitions without adding their routes, catalog entries or providers. See
+  [several applications](docs/07-error-checking.md#several-applications)
+  ([#231](https://github.com/mathisarends/fastapi-canon/issues/231)).
 
 ### Fixed
 

@@ -45,6 +45,7 @@ check-command = ["pnpm", "--dir", "frontend", "run", "api:check"]
 
 Point your HTTP generator at `contracts/openapi.json`. External commands run
 without a shell; Canon does not manage their output.
+The same file can hold the application's [check settings](07-error-checking.md#several-applications).
 
 ## Run
 

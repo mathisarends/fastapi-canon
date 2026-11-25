@@ -3,7 +3,7 @@ import builtins
 import importlib.util
 import sys
 from collections import deque
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -310,6 +310,7 @@ class SourceIndex:
         self._feature_routers: set[ast.expr] = set()
         self._error_declarations: list[tuple[str, ast.expr]] = []
         self._roots: list[Path] = []
+        self._references: set[str] = set()
         self._externals: dict[str, bool] = {}
         self._members: dict[str, list[str]] | None = None
         self._keys: dict[ast.expr, str] = {}
@@ -364,6 +365,10 @@ class SourceIndex:
                         unresolved.append((mount.module, mount.line))
         layers.reverse()
         return layers, unresolved
+
+    def referenced(self, module: str) -> bool:
+        """Whether *module* comes from a reference root."""
+        return module in self._references
 
     @property
     def error_declarations(self) -> tuple[tuple[str, ast.expr], ...]:
@@ -431,10 +436,18 @@ class SourceIndex:
             self._touched = previous
 
     @classmethod
-    def read(cls, roots: list[Path]) -> Self:
+    def read(cls, roots: list[Path], references: Sequence[Path] = ()) -> Self:
+        """Index *roots* and the definitions of *references*.
+
+        Reference modules resolve and are followed, but declare no operations,
+        catalog entries, router mounts or provider bindings.
+        """
         source = cls()
         calls: list[tuple[str, ast.Call, bool | None]] = []
-        for root in roots:
+        for root, reference in [
+            *((item, False) for item in roots),
+            *((item, True) for item in references),
+        ]:
             root = root.resolve()
             if not root.is_dir():
                 raise ValueError(f"source root is not a directory: {root}")
@@ -454,10 +467,14 @@ class SourceIndex:
                     package = filename == "__init__.py"
                     module = ".".join(parts[:-1] if package else parts)
                     if module in source._paths:
-                        if source._paths[module] == path:
+                        if source._paths[module] == path and reference == (
+                            module in source._references
+                        ):
                             continue
                         raise ValueError(f"duplicate module {module!r}: {path}")
                     source._paths[module] = path
+                    if reference:
+                        source._references.add(module)
                     tree = ast.parse(path.read_text("utf-8-sig"), filename=str(path))
                     source._trees[module] = tree
                     names: set[str] = set()
@@ -467,6 +484,8 @@ class SourceIndex:
                         stmt.value for stmt in tree.body if isinstance(stmt, ast.Expr)
                     }
                     for node, module_scope in _walk_scopes(tree):
+                        if reference and isinstance(node, ast.Call):
+                            continue
                         if isinstance(node, ast.Call):
                             source._error_declarations.extend(
                                 (module, item.value)
@@ -600,6 +619,7 @@ class SourceIndex:
             node = factory.node
             if (
                 factory.owner
+                or factory.module in self._references
                 or not isinstance(node, ast.FunctionDef)
                 or node.decorator_list
                 or node.args.posonlyargs
@@ -1334,8 +1354,10 @@ class SourceIndex:
             self._ports = {}
             try:
                 for definition in list(self._definitions.values()):
-                    if isinstance(definition.node, ast.ClassDef) and self._provider(
-                        definition.name
+                    if (
+                        isinstance(definition.node, ast.ClassDef)
+                        and definition.module not in self._references
+                        and self._provider(definition.name)
                     ):
                         self._bind(definition.module, definition.node)
             finally:
@@ -1383,8 +1405,10 @@ class SourceIndex:
             self._provided_values = {}
             try:
                 for definition in list(self._definitions.values()):
-                    if isinstance(definition.node, ast.ClassDef) and self._provider(
-                        definition.name
+                    if (
+                        isinstance(definition.node, ast.ClassDef)
+                        and definition.module not in self._references
+                        and self._provider(definition.name)
                     ):
                         self._index_provided(definition)
             finally:

@@ -156,7 +156,7 @@ def test_error_check_help_distinguishes_independent_source_policies(
     assert "can003 incomplete analysis or no supported operations" in text
     assert "independent of --strict" in text
     assert "not proof of all runtime exception paths" in text
-    assert "2 invalid roots, source or arguments" in text
+    assert "2 invalid roots, configuration, source or arguments" in text
 
 
 def test_source_read_failure_uses_the_installed_command_name(
