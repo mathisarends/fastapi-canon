@@ -229,7 +229,7 @@ completeness, rather than asserting machine-dependent wall-clock thresholds.
 | Declaration | Compared with |
 | --- | --- |
 | `@router.get(...)` and other HTTP methods | Endpoint and dependency failures against policy, router and operation `raises=`. |
-| `@router.sse(...)` | Dependency and stream body failures, including iterated service generators, against router and stream `raises=`. |
+| `@router.get(..., response_class=EventSourceResponse)` | Dependency and stream body failures, including iterated service generators, against router and stream `raises=`. |
 | `@rtc.session(...)` on a `WebRtcRouter` | Session factory and dependency failures against router and session `raises=`. |
 | `@channel.method` on an `RpcChannel` | Method failures against the channel and method `raises=`. |
 

@@ -10,7 +10,8 @@ clients in one application. For an authenticated runnable stream, use the
 
 ## Define the contract
 
-Declare an `AsyncIterator[EventModel]` with `@router.sse(...)`. Use `raises=`
+Declare an `AsyncIterator[EventModel]` route with
+`response_class=EventSourceResponse`. Use `raises=`
 for public failures and dependencies for admission checks. A generator body
 runs after the response has started, so checks inside it cannot reject the
 initial HTTP request.

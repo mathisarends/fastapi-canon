@@ -4,6 +4,7 @@ from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.sse import EventSourceResponse
 from fastapi_canon import APIRouter, Composition, Feature
 from pydantic import BaseModel, Field
 
@@ -48,7 +49,11 @@ router = APIRouter(prefix="/v1/runs", tags=["agentRuns"])
 health_router = APIRouter(tags=["health"])
 
 
-@router.sse("/{run_id}/events", operation_id="stream_run_events")
+@router.get(
+    "/{run_id}/events",
+    response_class=EventSourceResponse,
+    operation_id="stream_run_events",
+)
 async def stream_run_events(
     run_id: str,
     delay: Annotated[float, Query(ge=0, le=1)] = 0.01,
@@ -60,9 +65,9 @@ async def stream_run_events(
     yield RunCompleted(type="run.completed", run_id=run_id)
 
 
-@router.sse(
+@router.post(
     "/{run_id}/events",
-    methods=["POST"],
+    response_class=EventSourceResponse,
     operation_id="stream_prompt",
     dependencies=[Depends(authorize)],
 )

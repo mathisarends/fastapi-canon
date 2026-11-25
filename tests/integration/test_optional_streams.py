@@ -5,7 +5,7 @@ import sys
 import textwrap
 
 
-def test_core_import_runtime_and_missing_extra_diagnostic() -> None:
+def test_core_runtime_and_cli_help_work_without_optional_tools() -> None:
     script = textwrap.dedent("""\
         import sys
         from importlib.abc import MetaPathFinder
@@ -13,13 +13,11 @@ def test_core_import_runtime_and_missing_extra_diagnostic() -> None:
         class NoOptionalTools(MetaPathFinder):
             def find_spec(self, fullname, path=None, target=None):
                 if any(fullname == name or fullname.startswith(name + ".")
-                       for name in ("jinja2", "jsonschema", "aiortc", "opentelemetry", "fastapi.sse")):
+                       for name in ("jinja2", "jsonschema", "aiortc", "opentelemetry")):
                     raise ModuleNotFoundError("Extension deliberately unavailable", name=fullname)
 
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
-        # FastAPI itself may import native SSE and telemetry support at startup.
-        sys.modules.pop("fastapi.sse", None)
         sys.meta_path.insert(0, NoOptionalTools())
         from fastapi_canon import APIRouter, Composition, Feature
         from http import HTTPMethod
@@ -36,13 +34,6 @@ def test_core_import_runtime_and_missing_extra_diagnostic() -> None:
         assert "/health" in app.openapi()["paths"]
         assert not any(name.startswith("fastapi_canon.integrations.sse") for name in sys.modules)
         assert not any(name.startswith("fastapi_canon.integrations.webrtc") for name in sys.modules)
-        try:
-            router.sse("/events")
-        except ModuleNotFoundError as exc:
-            assert exc.name == "fastapi.sse"
-            assert "fastapi-canon[sse]" in str(exc)
-        else:
-            raise AssertionError("The integration must require the optional dependency")
         from fastapi_canon.integrations.webrtc import SessionCapacity
         from fastapi_canon.integrations.webrtc.engines import Engine
         from fastapi_canon.integrations.websockets import RpcChannel

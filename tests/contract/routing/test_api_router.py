@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
 
 from fastapi import FastAPI
+from fastapi.sse import EventSourceResponse
 
 from fastapi_canon import APIRouter, Composition, Feature, export_contracts
 from fastapi_canon.integrations.webrtc import Session, WebRtcRouter
@@ -16,7 +17,11 @@ def test_one_router_exports_http_sse_rpc_and_webrtc_with_effective_paths() -> No
         called.append("http")
         return project_id
 
-    @router.sse("/{project_id}/events", operation_id="project_events")
+    @router.get(
+        "/{project_id}/events",
+        response_class=EventSourceResponse,
+        operation_id="project_events",
+    )
     async def events(project_id: str) -> AsyncIterator[str]:
         called.append("sse")
         yield project_id

@@ -57,8 +57,27 @@ pass independently owned data or storage identifiers to background work.
 
 Missing required parts and invalid form values use Canon's validation problems.
 Declare application failures with `raises=[error]`, as for other HTTP routes.
-Storage, authorization, content inspection and upload limits belong to the
-application. A declared MIME type does not validate the file's contents.
+Storage, authorization and content inspection belong to the application.
+A declared MIME type does not validate the file's contents.
+
+## Request limits
+
+FastAPI's `max_body_size` (bytes) and `form_limits` work on Canon routers,
+operations and `include_router()`:
+
+```python
+@router.post(
+    "/reports",
+    max_body_size=10_000_000,
+    form_limits={"max_files": 5},
+    http_statuses=[413],
+)
+```
+
+Exceeded form limits return an `http_400` problem. A body that grows past the
+limit returns an `http_413` problem; a request whose `Content-Length` already
+exceeds it receives Starlette's plain-text 413. `http_statuses=[413]` documents
+the response in OpenAPI.
 
 ## HTTP clients
 
@@ -105,8 +124,8 @@ async def upload(
 ```
 
 Consume the iterator once, during the request. The media type declares a
-required raw binary body in OpenAPI. Verify content type and enforce limits in
-application code. Use one body consumer per operation, including dependencies.
+required raw binary body in OpenAPI. Verify the content type in application code.
+Use one body consumer per operation, including dependencies.
 
 ## Run the example
 

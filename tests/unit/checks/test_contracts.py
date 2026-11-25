@@ -13,6 +13,7 @@ from fastapi_canon.checks.contracts import analyze_error_contracts
 PRELUDE = """
 from collections.abc import AsyncIterator
 from fastapi import Depends
+from fastapi.sse import EventSourceResponse
 from fastapi_canon import APIRouter, Error, Feature, Inject
 from fastapi_canon.integrations.websockets import RpcChannel
 
@@ -84,7 +85,12 @@ class Denied(Missing):
 def authenticate() -> str:
     raise Denied()
 
-@router.sse('/events', dependencies=[Depends(authenticate)], {declaration})
+@router.get(
+    '/events',
+    response_class=EventSourceResponse,
+    dependencies=[Depends(authenticate)],
+    {declaration}
+)
 async def events() -> AsyncIterator[int]:
     yield 1
     raise Missing()
@@ -105,7 +111,7 @@ class Service:
         yield 1
         raise Missing()
 
-@router.sse('/events')
+@router.get('/events', response_class=EventSourceResponse)
 async def events(service: Inject[Service]) -> AsyncIterator[int]:
     async for item in service.items():
         yield item

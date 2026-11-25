@@ -23,7 +23,6 @@ APPLICATION_NAMES = {
     "RouterPolicy",
     "Scoped",
     "ServiceScope",
-    "StreamOptions",
     "__version__",
     "check_app",
     "export_contracts",

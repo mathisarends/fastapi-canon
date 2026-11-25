@@ -5,6 +5,7 @@ from dishka import Provider, Scope, provide
 from fastapi import APIRouter as FastAPIRouter
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
+from fastapi.sse import EventSourceResponse
 
 from fastapi_canon import APIRouter, Composition, Feature, inspect_app
 from fastapi_canon.errors import FeatureConfigurationError
@@ -54,7 +55,11 @@ def test_http_and_sse_ids_follow_the_declaring_namespace(namespace: str | None) 
     def get_project(project_id: int) -> int:
         return project_id
 
-    @router.sse("/{project_id}/events", name="route_subscription")
+    @router.get(
+        "/{project_id}/events",
+        response_class=EventSourceResponse,
+        name="route_subscription",
+    )
     async def events(project_id: int) -> AsyncIterator[int]:
         yield project_id
 
@@ -82,7 +87,9 @@ def test_explicit_operation_ids_override_automatic_http_and_sse_names() -> None:
     def renamed_read() -> str:
         return "current"
 
-    @router.sse("/updates", operation_id="stable.events")
+    @router.get(
+        "/updates", response_class=EventSourceResponse, operation_id="stable.events"
+    )
     async def renamed_events() -> AsyncIterator[str]:
         yield "updated"
 
@@ -115,7 +122,7 @@ def test_custom_id_generator_is_shared_with_the_sse_adapter() -> None:
     def current() -> str:
         return "current"
 
-    @router.sse("/updates", name="watch")
+    @router.get("/updates", response_class=EventSourceResponse, name="watch")
     async def updates() -> AsyncIterator[str]:
         yield "updated"
 
@@ -203,7 +210,9 @@ def test_explicit_and_automatic_operation_ids_share_the_collision_check() -> Non
     def events() -> str:
         return "updated"
 
-    @router.sse("/events", operation_id="projects.events")
+    @router.get(
+        "/events", response_class=EventSourceResponse, operation_id="projects.events"
+    )
     async def subscription() -> AsyncIterator[str]:
         yield "updated"
 
