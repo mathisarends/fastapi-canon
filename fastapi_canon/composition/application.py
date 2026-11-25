@@ -57,6 +57,7 @@ class Composition:
     request_logging: bool
     overrides: tuple[Provider | Callable[[], Provider], ...]
     middleware: tuple[Middleware, ...]
+    outer_middleware: tuple[Middleware, ...]
 
     def __init__(
         self,
@@ -68,6 +69,7 @@ class Composition:
         request_logging: bool = False,
         overrides: Sequence[Provider | Callable[[], Provider]] = (),
         middleware: Sequence[Middleware] = (),
+        outer_middleware: Sequence[Middleware] = (),
     ) -> None:
         normalized_integrations = unique_instances(
             integrations, Integration, "integrations"
@@ -106,6 +108,11 @@ class Composition:
         )
         object.__setattr__(
             self, "middleware", unique_instances(middleware, Middleware, "middleware")
+        )
+        object.__setattr__(
+            self,
+            "outer_middleware",
+            unique_instances(outer_middleware, Middleware, "outer_middleware"),
         )
 
     def build(self, app: FastAPI) -> FastAPI:

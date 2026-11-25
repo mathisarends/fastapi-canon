@@ -36,20 +36,42 @@ def middleware_dependencies(declared: Middleware) -> tuple[tuple[str, Any], ...]
 
 
 def install_middleware(
-    app: FastAPI, declared: tuple[Middleware, ...]
+    app: FastAPI,
+    declared: tuple[Middleware, ...],
+    *,
+    outer: tuple[Middleware, ...],
 ) -> tuple[ApplicationLifespan, ...]:
-    """Add *declared* outside the current stack, first entry outermost.
+    """Install ASGI middleware inside or around the framework stack.
 
     Return a lifespan that reports an injected middleware's startup failure, so the
     composed lifespan can unwind and close the container.
     """
     startup = _StartupFailure()
     bound = tuple(_bind(app, entry, startup) for entry in declared)
+    bound_outer = tuple(_bind(app, entry, startup) for entry in outer)
     app.user_middleware[:0] = bound
+    if bound_outer:
+        _wrap_middleware_stack(app, bound_outer)
     injected = any(
-        entry is not original for entry, original in zip(bound, declared, strict=True)
+        entry is not original
+        for entry, original in zip(
+            (*bound, *bound_outer), (*declared, *outer), strict=True
+        )
     )
     return (startup,) if injected else ()
+
+
+def _wrap_middleware_stack(app: FastAPI, declared: tuple[Middleware, ...]) -> None:
+    build = app.build_middleware_stack
+
+    def build_with_outer_middleware() -> ASGIApp:
+        stack = build()
+        for entry in reversed(declared):
+            stack = entry.cls(stack, *entry.args, **entry.kwargs)
+        return stack
+
+    # Keep FastAPI's lazy build so later app.add_middleware() calls still work.
+    app.build_middleware_stack = build_with_outer_middleware  # type: ignore[method-assign]
 
 
 def _bind(app: FastAPI, declared: Middleware, startup: _StartupFailure) -> Middleware:

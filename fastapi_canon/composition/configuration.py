@@ -32,3 +32,6 @@ class CompositionSource(Protocol):
 
     @property
     def middleware(self) -> tuple[Middleware, ...]: ...
+
+    @property
+    def outer_middleware(self) -> tuple[Middleware, ...]: ...

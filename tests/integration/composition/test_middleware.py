@@ -9,6 +9,7 @@ from fastapi import FastAPI, WebSocket
 from fastapi.testclient import TestClient
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp, Message, Receive, Send
@@ -130,18 +131,80 @@ def test_declared_order_is_outermost_first_around_earlier_middleware() -> None:
     log: list[str] = []
     app = FastAPI()
     app.add_middleware(Recording, name="before", log=log)
-    Composition(
+    composition = Composition(
         features=[_feature(RoutesProvider)],
         middleware=[
             Middleware(Recording, name="first", log=log),
             Middleware(Recording, name="second", log=log),
         ],
-    ).build(app)
+        outer_middleware=[
+            Middleware(Recording, name="outer-first", log=log),
+            Middleware(Recording, name="outer-second", log=log),
+        ],
+    )
+    composition.build(app)
+    composition.build(app)
     app.add_middleware(Recording, name="after", log=log)
 
     assert TestClient(app).get("/ping").status_code == 200
 
-    assert log == ["http:after", "http:first", "http:second", "http:before"]
+    assert log == [
+        "http:outer-first",
+        "http:outer-second",
+        "http:after",
+        "http:first",
+        "http:second",
+        "http:before",
+    ]
+
+
+def test_outer_cors_applies_to_application_body_limit_problems() -> None:
+    origin = "https://app.example.test"
+    app = FastAPI(max_body_size=8)
+
+    @app.post("/upload")
+    async def upload(body: dict[str, str]) -> dict[str, str]:
+        return body
+
+    composed = Composition(
+        outer_middleware=[
+            Middleware(CORSMiddleware, allow_origins=[origin], allow_methods=["POST"]),
+        ]
+    ).build(app)
+
+    assert composed is app
+    with TestClient(composed) as client:
+        preflight = client.options(
+            "/upload",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+        rejected = client.post(
+            "/upload", headers={"Origin": origin}, json={"name": "Ada"}
+        )
+
+    assert preflight.status_code == 200
+    assert preflight.headers["access-control-allow-origin"] == origin
+    assert rejected.status_code == 413
+    assert rejected.headers["access-control-allow-origin"] == origin
+    assert rejected.headers["content-type"] == "application/problem+json"
+    assert rejected.json()["code"] == "http_413"
+
+
+def test_outer_middleware_is_part_of_the_installed_composition() -> None:
+    entry = Middleware(Recording, name="outer", log=[])
+    composition = Composition(outer_middleware=[entry])
+    app = composition.build(FastAPI())
+    changed = replace(composition, outer_middleware=())
+
+    assert [issue.code for issue in changed.check(app).issues] == [
+        "canon.composition.E001"
+    ]
+    with pytest.raises(FeatureConfigurationError, match="different composition"):
+        changed.build(app)
 
 
 def test_injected_service_is_shared_by_one_instance_without_lifespan() -> None:
@@ -160,11 +223,12 @@ def test_injected_service_is_shared_by_one_instance_without_lifespan() -> None:
     assert seen[0] is seen[1]
 
 
-async def test_concurrent_first_calls_create_one_instance() -> None:
+@pytest.mark.parametrize("placement", ["middleware", "outer_middleware"])
+async def test_concurrent_first_calls_create_one_instance(placement: str) -> None:
     seen: list[Routes] = []
     app = Composition(
         features=[_feature(RoutesProvider)],
-        middleware=[_declared(InjectedRecording, seen=seen)],
+        **{placement: [_declared(InjectedRecording, seen=seen)]},
     ).build(FastAPI())
 
     async def request() -> None:
@@ -191,7 +255,8 @@ async def test_concurrent_first_calls_create_one_instance() -> None:
 
         await app(scope, receive, send)
 
-    await asyncio.gather(*(request() for _ in range(5)))
+    async with asyncio.timeout(5):
+        await asyncio.gather(*(request() for _ in range(5)))
 
     assert len(InjectedRecording.created) == 1
     assert len(seen) == 5
@@ -222,10 +287,11 @@ def test_websocket_and_lifespan_scopes_pass_through() -> None:
     assert log == ["lifespan:outer", "websocket:outer"]
 
 
-def test_missing_binding_is_a_preflight_issue_and_fails_build() -> None:
+@pytest.mark.parametrize("placement", ["middleware", "outer_middleware"])
+def test_missing_binding_is_a_preflight_issue_and_fails_build(placement: str) -> None:
     composition = Composition(
         features=[_feature(RoutesProvider)],
-        middleware=[_declared(NeedsUnbound)],
+        **{placement: [_declared(NeedsUnbound)]},
     )
 
     report = composition.check(FastAPI())
@@ -252,7 +318,8 @@ def test_explicit_argument_for_an_injected_parameter_is_rejected() -> None:
         composition.build(FastAPI())
 
 
-def test_startup_failure_unwinds_the_composed_lifespan() -> None:
+@pytest.mark.parametrize("placement", ["middleware", "outer_middleware"])
+def test_startup_failure_unwinds_the_composed_lifespan(placement: str) -> None:
     events: list[str] = []
 
     async def resource() -> AsyncIterator[Resource]:
@@ -270,7 +337,7 @@ def test_startup_failure_unwinds_the_composed_lifespan() -> None:
         integrations=[
             replace(Telemetry.disabled(), shutdown=lambda: events.append("shutdown"))
         ],
-        middleware=[_declared(NeedsBroken)],
+        **{placement: [_declared(NeedsBroken)]},
     ).build(FastAPI())
 
     with pytest.raises(RuntimeError, match="cannot create service"), TestClient(app):
@@ -290,9 +357,14 @@ def test_constructor_rejects_invalid_entries(entries: object) -> None:
 
 def test_override_and_replace_keep_declared_middleware() -> None:
     entry = Middleware(Recording, name="kept", log=[])
+    outer = Middleware(Recording, name="outer", log=[])
     composition = Composition(
-        features=[_feature(RoutesProvider)], middleware=[entry]
+        features=[_feature(RoutesProvider)],
+        middleware=[entry],
+        outer_middleware=[outer],
     ).override(RoutesProvider)
 
     assert composition.middleware == (entry,)
+    assert composition.outer_middleware == (outer,)
     assert replace(composition, request_logging=True).middleware == (entry,)
+    assert replace(composition, request_logging=True).outer_middleware == (outer,)

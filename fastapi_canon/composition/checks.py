@@ -1322,7 +1322,7 @@ class _CheckComposition:
     def _middleware_dependencies(self) -> None:
         check_middleware_dependencies(
             self.app,
-            self.composition.middleware,
+            (*self.composition.outer_middleware, *self.composition.middleware),
             container=self.container,
             issues=self.issues,
             checks=self.checks,
