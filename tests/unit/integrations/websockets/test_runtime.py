@@ -997,7 +997,7 @@ async def test_documented_shared_capacity_releases_worker_permits(ending):
         from fastapi_canon.integrations.websockets import RpcInvalidParamsError
 
         guide = (
-            Path(__file__).parents[4] / "docs/integrations/websockets/services.md"
+            Path(__file__).parents[4] / "docs/integrations/websockets/01-services.md"
         ).read_text(encoding="utf-8")
         snippet = guide.split("## Capacity across connections", 1)[1].split(
             "```python", 1

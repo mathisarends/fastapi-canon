@@ -1,19 +1,24 @@
-# Generate and check separate clients
+# 6. Client generation
 
-Version 2 is available in Canon 0.17.0 and later.
+Generate typed clients from your app and fail CI when they drift. Install
+`fastapi-canon[codegen]` as a dev dependency.
 
-Canon exports application contracts and coordinates specialized generators.
-Use an external OpenAPI generator such as Orval with your framework's query
-integration for HTTP. Canon generates SSE, WebSocket and WebRTC clients.
-There is no Canon HTTP client generator or cross-protocol client facade.
+## What gets generated
 
-The [typed Python export API](contracts.md#export-an-installed-feature), available
-in Canon 0.20.0 and later, supports feature references and exact paths. Version-2
-TOML targets still use the application-wide export below.
+| Transport | Generator | Languages |
+| --- | --- | --- |
+| SSE streams | `sse` | Python, TypeScript |
+| WebSocket RPC | `websockets` | Python, TypeScript |
+| WebRTC sessions | `webrtc` | TypeScript |
+| Plain HTTP | your OpenAPI tool (Orval, openapi-ts, …) | any |
 
-## Configuration
+Each transport gets its own client, so HTTP tools keep their query and mutation
+helpers while stream clients keep their own cancellation rules. Your Python
+models and `Error` declarations are the single source.
 
-Save `fastapi-canon.toml` in the consumer repository:
+## Configure
+
+`fastapi-canon.toml` (or `[tool.fastapi-canon.codegen]` in `pyproject.toml`):
 
 ```toml
 [codegen]
@@ -24,184 +29,53 @@ contracts = "contracts"
 [codegen.targets.streams]
 generator = "sse"
 language = "typescript"
-output = "frontend/src/api/generated-streams"
+output = "frontend/src/api/streams"
 
 [codegen.targets.rpc]
 generator = "websockets"
-language = "typescript"
-client-name = "BackendClient"
-output = "frontend/src/api/generated-rpc"
+language = "python"
+package = "backend_client"
+output = "clients/rpc"
 
 [codegen.targets.http]
 generator = "external"
 generate-command = ["pnpm", "--dir", "frontend", "run", "api:generate"]
 check-command = ["pnpm", "--dir", "frontend", "run", "api:check"]
-timeout-seconds = 120
 ```
 
-In `pyproject.toml`, prefix tables with `tool.fastapi-canon`, for example
-`[tool.fastapi-canon.codegen.targets.streams]`. Paths and external command working
-directories are relative to the configuration file. Unknown settings fail.
+Point your HTTP generator at `contracts/openapi.json`. External commands run
+without a shell; Canon does not manage their output.
 The same file can hold the application's [check settings](07-error-checking.md#several-applications).
-An app reference names an importable module and an application or synchronous
-zero-argument factory, such as `my-app:create_app`. App and schema imports can
-use modules in the configuration directory during export. Export never starts
-the app's lifespan or resolves application dependencies.
 
-Point Orval's input at `contracts/openapi.json`. Keep its HTTP runtime, query keys,
-mutation factories and framework options in its own configuration. External
-commands are argument arrays executed without shell interpolation; Canon neither
-imports Orval nor manages its output directory. Install Node tooling separately
-and pin all generator dependencies in the consumer's lockfiles.
-
-Native targets accept `language` and `output`. RPC and WebRTC targets accept
-`client-name`; Python RPC targets also accept `package`. Python SSE targets can set
-`python-http-client = "httpx2"`; the default is `httpx`. WebRTC targets support
-TypeScript only. Every native output must be a dedicated directory outside the
-contracts directory and other native outputs. For additional transport-specific
-options or bindings, configure an external command pair
-that invokes the existing standalone transport CLI.
-
-In Canon 0.18.0 and later, native SSE targets also accept `strict`,
-`diagnostics`, `allow-diagnostics` and `include-operations`:
-
-```toml
-[codegen.targets.streams]
-generator = "sse"
-language = "typescript"
-output = "frontend/src/api/generated-streams"
-include-operations = ["follow_conversation_turn"]
-strict = true
-diagnostics = "reports/streams.json"
-allow-diagnostics = "streams-allowances.json"
-```
-
-Omit `include-operations` to generate every SSE operation. An explicit list must
-contain unique, existing SSE operation IDs. Only selected operations' reachable
-models and diagnostics are emitted; live contract export and comparison still
-cover the whole application. This option does not rename methods or merge models.
-Review exact diagnostic IDs and reasons using the
-[SSE diagnostics guide](integrations/sse/codegen.md#source-diagnostics-and-ci-policy).
-Strict failures occur before writing contracts or clients. An explicitly requested
-diagnostic report is written even on failure or in check mode. Keep reports outside
-the contracts and native output directories and distinct from configuration and
-allowance inputs. Check mode otherwise preserves contracts and generated clients.
-
-### Generator registration
-
-`generator` names an entry point in the `fastapi_canon.generators` group
-(Canon 0.21.0 and later). Canon registers `sse`, `websockets` and `webrtc`; register
-your own `fastapi_canon.codegen.generators.Generator` with:
-
-```toml
-[project.entry-points."fastapi_canon.generators"]
-graphql = "my_package.codegen:GENERATOR"
-```
-
-Import `Generator`, `TargetConfig` and `Rendering` from that public module.
-In Canon 0.23.0 and later, construct values with named fields, for example
-`Rendering(files=files, write=writer)`; see the
-[migration](package-migration.md#upgrade-to-0230).
-Declare accepted target keys per language in `settings`; unsupported keys now
-fail configuration validation, including keys intended for another language.
-For example, `package` is a Python RPC setting, not a TypeScript RPC setting.
-
-## Developer commands
+## Run
 
 ```console
-fastapi-canon generate
-fastapi-canon generate --check --diff
-fastapi-canon generate --target rpc --check
-fastapi-canon generate --native --check  # every target except external ones
-fastapi-canon generate --offline --check
-fastapi-canon generate --format json
+fastapi-canon generate                  # export contracts, write clients
+fastapi-canon generate --check --diff   # CI: fail on drift, show the diff
+fastapi-canon generate --target rpc     # one target
+fastapi-canon generate --offline        # from saved contracts, without importing the app
 ```
 
-Generation loads the app once, exports OpenAPI/OpenRPC/WebRTC contracts for its
-registered routes, and preflights all selected native clients before writing.
-Each specialized generator retains its own API and ownership manifest. The
-workflow does not merge models, rename operations across protocols or rewrite
-generated bindings. It preserves handwritten files and removes stale files only
-when the specialized generator's manifest owns them.
+Exit codes: `0` clean, `1` drift, `2` error. Add `--format json` for a machine
+report. Commit contracts and clients together.
 
-Native writers validate all new and stale paths before changing output and replace
-changed files atomically. Corrupt ownership manifests fail generation and check
-mode. Restore the manifest from version control or review the old owned output
-before regenerating into a clean directory. Custom generated paths must use
-relative POSIX syntax without backslashes, colons or parent traversal. See the
-[0.21.0 migration](package-migration.md#upgrade-to-0210).
+Generated files are tracked in an ownership manifest: handwritten files next to
+them are never touched, and stale generated files are removed.
 
-Check mode first compares freshly exported contracts with the saved documents.
-If they differ, clients are reported as `blocked`: checking them against a stale
-saved contract could give a misleading result. Regenerate, review and commit the
-contracts and client files together. Absent transports remove stale exported
-contract files; remove corresponding targets when removing a transport.
+## Errors in clients
 
-`--diff` implies `--check` and shows native contract/client file differences.
-External check commands print their own differences. Canon does not append flags
-to those commands. Their check command must be read-only and return 0 when clean,
-1 for drift and another nonzero code for an execution/configuration error.
-Commands have a configurable finite timeout. External tools own their effects;
-generation is not a transaction and does not roll back their partial writes.
+Every client raises `ProblemError` with a subclass per declared error. Classes
+from different clients are distinct, so normalize them in an adapter if your app
+uses several clients.
 
-`--offline` reads saved contracts without importing the app. It cannot establish
-that those contracts still match current server code. Target selection limits
-client generation; live contract export remains an application-wide check.
+## Go deeper
 
-## Reports and exit codes
-
-Exit codes are 0 for success, 1 for drift and 2 for an error. Errors take precedence
-over drift. The JSON report has `schema_version = 2`, overall `status`, `check`,
-`offline`, `steps` and captured generator diagnostics. Each step names its target,
-status, changed paths, native diff and tool output. Contract drift blocks dependent
-checks. Invalid configuration or native preflight errors fail before writing;
-external failures do not hide completed targets' results.
-
-Application import/factory stdout is excluded from the report. Diagnostic/tool
-output is captured separately; external tools remain responsible for their logs.
-
-## Shared types and errors
-
-Reuse Pydantic models and `Error` declarations in Python. The exported schemas
-carry the public shapes into each generator. Repeated generated types are
-acceptable: the maintained source is the Python contract. Contract tests verify
-that the separate generators represent it correctly.
-
-The problem `type` URI identifies an error; `code` and declared public extensions
-are available across HTTP, SSE and WebSocket RPC. Separate generated clients have
-separate error classes. Use each client's exports or normalize problem payloads
-in an application adapter. Do not rely on cross-client `instanceof` identity.
-See [shared problems](02-problems.md) and [the design rationale](sdk-design.md).
-
-## Migration from version 1
-
-Version-1 domain SDK generation is removed. There is no compatibility facade.
-Replace `sources`, `identities`, `names`, operation mappings and combined language
-targets with the version-2 app/target configuration. Use fresh, separate native
-output directories and an external HTTP generator. Review old SDK-owned files
-before deleting them; version 2 does not interpret `.canon-codegen.json`.
-
-Update call sites to the specialized client APIs and your HTTP tool's generated
-functions/query helpers. Replace facade-specific `.safe()`, connection options,
-model imports and error-class checks. RPC/SSE/media connection lifetimes remain
-explicit. No wire-protocol migration is required solely for this workflow change.
-The server no longer adds SDK-only `x-canon-model-id`/`x-canon-model-name` hints;
-standard JSON Schema IDs supplied by applications remain untouched. Update JSON
-report consumers from the old SDK-oriented schema to the per-step version 2.
-
-The [shared-error example](../examples/canonical_errors/README.md) demonstrates
-separate native clients. Standalone [SSE](integrations/sse/codegen.md),
-[WebSocket](integrations/websockets/clients.md) and
-[WebRTC](integrations/webrtc/README.md) workflows remain available.
-
-For an executable consumer migration, follow the example's
-[Python and TypeScript adapters](../examples/canonical_errors/README.md#replace-a-version-1-sdk-consumer).
-It covers a borrowed HTTPX2 pool, SSE admission and terminal problems, error
-normalization across generated classes, and separately owned RPC connections with
-session renewal. Supply your application's authentication policy; the public demo
-does not implement session management. Keep connection cancellation, reconnect and
-pool ownership explicit when replacing version-1 bindings.
+- [SSE options](integrations/sse/02-codegen.md): selecting operations, strict diagnostics
+- [WebSocket clients](integrations/websockets/08-clients.md)
+- Custom generators: register a `fastapi_canon.codegen.generators.Generator`
+  under the `fastapi_canon.generators` entry-point group
+- [Contract export API](22-contracts.md)
 
 ---
 
-Previous: [Application composition](05-composition.md) · [Learning path](README.md) · Next: [Static error checks](07-error-checking.md)
+Previous: [5. Composition](05-composition.md) · [Learning path](README.md) · Next: [7. Error checking](07-error-checking.md)

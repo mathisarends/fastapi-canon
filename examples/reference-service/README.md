@@ -43,7 +43,7 @@ in `Feature.integrations`. The application always enables `Telemetry`, using
 `Telemetry.disabled()` by default, so Composition adds their Dishka decorators
 only when telemetry records; TaskProvider remains usable in direct Dishka containers.
 `create_app(telemetry=Telemetry(...))` accepts application-owned
-providers. See the [developer API](../../docs/10-telemetry.md).
+providers. See the [developer API](../../docs/10-observability.md).
 
 For the opt-in demo, run from the repository root:
 

@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=.smelt.schema.json
-# Canon package guardrails; rationale: docs/architecture-guardrails.md.
+# Canon package guardrails; rationale: docs/92-architecture-guardrails.md.
 # Run: uv run --locked smelt check --fail-on warning
 version: 2
 project:

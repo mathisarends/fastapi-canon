@@ -1,0 +1,939 @@
+# 24. Upgrading
+
+The 0.10.0 release includes composition, HTTP contracts, SSE, WebSocket
+RPC/sockets, WebRTC and their client generators in one `fastapi-canon` wheel.
+Earlier independent distributions remain available at their existing published
+versions.
+
+Development and future releases now use
+[`mathisarends/fastapi-canon`](https://github.com/mathisarends/fastapi-canon).
+The [repository migration](94-repository-migration.md) records the
+source history and publishing setup. The repository move does not rename the
+PyPI project or add further Python import changes.
+
+## Upgrade to 0.29.0
+
+Version 0.29.0 is not released yet. See the
+[changelog](../CHANGELOG.md#0290---unreleased).
+
+- Regenerate strict SSE clients. If generation reports a stale allowance,
+  delete that entry from `allow-diagnostics`: the `uri-reference` diagnostics on
+  Canon problem `type` and `instance` fields are no longer reported. Remove an
+  allowance file that becomes empty together with its `allow-diagnostics` setting.
+- Upgrade FastAPI to 0.165 or newer (Starlette 1.6 or newer) before upgrading
+  Canon. Review FastAPI's request-parameter changes from 0.145 through 0.162 in
+  its [release notes](https://fastapi.tiangolo.com/release-notes/), especially
+  form defaults, JSON `null` bodies and parameter-model `extra` handling.
+- Replace `@router.sse(path, ...)` with FastAPI's response class; generated
+  clients stay the same:
+
+  ```python
+  from fastapi.sse import EventSourceResponse
+
+  @router.get(path, response_class=EventSourceResponse, raises=[...])
+  ```
+
+  Use `@router.post(...)` for `methods=[HTTPMethod.POST]` and
+  `@router.api_route(path, methods=["GET", "POST"], ...)` for both. Replace
+  `StreamOptions` annotations with `APIRouteOptions`. A Canon route that yields
+  `ServerSentEvent` must yield its event model instead, wrapped as
+  `ServerSentEvent(data=event)` when it sets SSE fields.
+- Mount WebSocket RPC channels on the router, and read path variables from the
+  signature:
+
+  ```python
+  from typing import Annotated
+
+  from fastapi import Path
+  from fastapi_canon import APIRouter
+  from fastapi_canon.integrations.websockets import RpcChannel
+
+  tasks = RpcChannel(namespace="tasks")
+
+
+  @tasks.method()
+  async def rename(project_id: Annotated[int, Path()], title: str) -> None: ...
+
+
+  router = APIRouter(prefix="/projects")
+  router.include_channel(tasks, path="/{project_id}/rpc")
+  ```
+
+  Replace `router.channel(path, namespace=...)` with this form,
+  `RpcChannel("tasks")` with `RpcChannel(namespace="tasks")`, and
+  `@channel.socket(...)` with `@router.socket(path, ...)`. Remove
+  `namespace=` and `path_model=` from `include_channel()`.
+- Replace `RpcModel` with `BaseModel`. To keep camel-case wire names, use your
+  own base model with `alias_generator=to_camel` and `populate_by_name=True`.
+- Params models may be replaced with named parameters. Regenerate clients:
+  params models are named after the operation, such as `TasksRenameParams`.
+- Import `Inject` from `fastapi_canon`, and `CanonWebSocketRouter`,
+  `FastApiSocket` and `serve_websocket` from
+  `fastapi_canon.integrations.websockets.adapters.fastapi`.
+- Run `fastapi-canon check errors src --strict` over all application roots,
+  then declare or map the newly reported errors. For a remaining `CAN003`,
+  annotate the receiver it names or fix the top entries under "Root causes".
+  See [error checking](07-error-checking.md#analysis-boundaries).
+
+## Upgrade to 0.28.0
+
+Version 0.28.0 was published on 2026-11-25. See the
+[changelog](../CHANGELOG.md#0280---2026-11-25).
+
+- Rerun `fastapi-canon check composition --app module:app --fail-on warning`.
+  If it reports `canon.contracts.W001`, declare the GET response with
+  `response=CanonResponse.binary("application/pdf")` using its actual media type,
+  or `response=CanonResponse.empty(status=200)` for an intentionally empty 200.
+  For a native FastAPI router, pass the declaration's `responses()` result
+  as `responses=`. See [binary responses](08-file-transfers.md#downloads).
+- To adopt streamed uploads on a Canon router, replace a buffered `bytes`
+  parameter with `Annotated[AsyncIterator[bytes], BinaryBody(media_type)]` and
+  consume it with `async for` during the request. Keep content-type and size
+  validation in the application. See [raw uploads](08-file-transfers.md#downloads).
+- To move OpenTelemetry SDK setup into Canon, pass `Telemetry(sdk=...)` with
+  a factory that yields `SdkProviders` from a context manager and shuts them
+  down on exit. Remove the explicit provider arguments and `shutdown=` when
+  switching. Keep explicit providers if you use `telemetry.websocket_middleware()`.
+  See [application-owned SDK](10-observability.md#tracing).
+
+## Upgrade to 0.27.0
+
+Version 0.27.0 was published on 2026-11-24. See the
+[changelog](../CHANGELOG.md#0270---2026-11-24).
+
+- Pass a fresh app factory to `fastapi-canon check composition --app`. The CLI
+  releases its Canon resources even if checks fail. For a shared app, pass
+  `--app module:app` or call `check_app(app)` in Python.
+- Rerun `fastapi-canon check errors src --strict --require-complete`. Handle
+  newly reported exceptions or declare them with `raises=` on the affected
+  route or router, including errors from inherited dependencies.
+- Regenerate TypeScript WebSocket clients to opt into
+  [credential renewal](integrations/websockets/08-clients.md#lazy-connections-and-multiple-servers)
+  with `onCredentialsExpired`.
+
+## Upgrade to 0.26.0
+
+Version 0.26.0 was published on 2026-11-23. See the
+[changelog](../CHANGELOG.md#0260---2026-11-23).
+
+### Read merged feature errors from the registry
+
+`Feature.errors` now holds only `Feature(errors=[...])`. Read the catalog merged
+with router declarations from `error_registry`:
+
+```python
+# Before
+errors = feature.errors
+# After
+registry = feature.error_registry
+errors = registry.errors if registry is not None else ()
+```
+
+### Resolve duplicate provider bindings
+
+If a feature or another integration provides the same Dishka binding as an
+integration, preflight can report `canon.providers.E006`. Remove the duplicate
+contribution and apply a replacement with `Composition.override()`:
+
+```python
+# Before
+Composition(
+    features=[Feature(name="test-db", providers=[EngineOverride])],
+    integrations=[database],
+)
+# After
+Composition(integrations=[database]).override(EngineOverride)
+```
+
+Telemetry resource instrumentation now follows the effective binding regardless
+of integration order. If you previously overrode the reserved `Telemetry`
+binding, pass those settings to `Telemetry(...)` in `integrations`.
+Custom integrations that decorate bindings can use
+[`Integration.final_providers`](05-composition.md#integrations) to see overrides.
+
+### Move SDK shutdown after container cleanup
+
+If your application owns its telemetry SDK providers, pass their existing
+synchronous shutdown callback to `Telemetry` and remove the old shutdown call
+from the application lifespan or build error handler. Keep unrelated lifespan
+work in place.
+
+```python
+from fastapi_canon.integrations.opentelemetry import Telemetry
+
+telemetry = Telemetry(tracer_provider=tracer_provider, shutdown=shutdown_sdk)
+app = Composition(features=features, integrations=[telemetry]).build(FastAPI())
+```
+
+See [telemetry ownership](10-observability.md#useful-options) for when
+Canon calls the callback.
+
+### Simplify composition variants and standalone commands
+
+Use `dataclasses.replace(composition, features=selected_features)` to keep the
+composition's settings and overrides. The selected features and integrations
+still need to supply the bindings being overridden.
+
+For commands and test fixtures, `Composition.container()` includes integration
+bindings and overrides. Keep setup that normally runs in an application
+lifespan, such as database startup checks, explicit in the command.
+
+```python
+async with composition.container() as container:
+    await run(container)
+```
+
+### Check native code generation in CI
+
+Use `--native` to check all configured Canon generators while skipping external
+toolchains. Use `--target` by itself to select specific targets.
+
+```console
+fastapi-canon generate --native --check
+```
+
+### Declare middleware in stack order
+
+To move existing `app.add_middleware()` calls onto the composition, reverse
+their order so the list starts with the outermost middleware.
+
+```python
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
+
+# Before
+app = Composition(features=features).build(FastAPI())
+app.add_middleware(LogContextMiddleware)
+app.add_middleware(CORSMiddleware, allow_origins=origins)
+# After
+composition = Composition(
+    features=features,
+    middleware=[
+        Middleware(CORSMiddleware, allow_origins=origins),
+        Middleware(LogContextMiddleware),
+    ],
+)
+app = composition.build(FastAPI())
+```
+
+With `request_logging=True`, keep middleware that must wrap request logging
+in `app.add_middleware()` after `build()`. See
+[middleware](05-composition.md#middleware) for APP-scoped constructor injection.
+
+## Upgrade to 0.25.0
+
+Version 0.25.0 was published on 2026-11-23.
+
+### Register the database as an integration
+
+```python
+# Before
+Composition(features=[database.feature, orders_feature])
+# After
+Composition(features=[orders_feature], integrations=[database])
+```
+
+Drop the `name=` argument from `Database`. List `database` before `Telemetry`
+to keep its engine instrumented. Keep your existing Alembic directory, revisions
+and `AlembicMigrations(metadata=...)` declaration. To move metadata ownership to
+features, give each feature its [`Tables`](09-database.md#configuration-and-ownership),
+remove `metadata=` and set the [database CLI target](09-database.md#migrations)
+to the composed app or factory. Standalone migration targets still need
+explicit metadata.
+
+Run `fastapi-canon db upgrade head` against the database used by the application
+before starting it. Canon now checks that engine before entering any feature
+lifespan, including when `Composition.override()` supplies the engine. Move any
+upgrade previously performed in a feature lifespan to a deployment step. If
+your application owns startup validation, set
+`Database(check_migrations_on_startup=False, ...)`.
+
+When using PostgreSQL schemas, review `db check` and autogenerated revisions
+against the schemas your metadata owns. Custom Alembic environments can call
+[`run_alembic_environment()`](09-database.md#migrations) to use Canon's schema
+filter.
+
+### Regenerate clients for GET and POST streams
+
+A stream with `operation_id="feed"` and `methods=["GET", "POST"]` now publishes
+`feed_get` and `feed_post`. Refresh the OpenAPI export, regenerate the clients
+and update callers to the operation for their HTTP method. Single-method streams
+retain their operation IDs. Review contract snapshots that include corrected
+WebSocket response-model serialization or HTTP problem fields.
+
+### Check custom integrations that inspect providers
+
+`ProviderContext.providers` now includes providers from earlier integrations
+as well as feature providers. Check filtering and order when your integration
+inspects or wraps them. See [composition](05-composition.md#integrations).
+
+## Upgrade to 0.24.0
+
+Version 0.24.0 was published on 2026-11-21.
+
+`Error` now derives `title` from `code` when omitted or passed as `None`:
+`project_missing` becomes `Project missing`. Keep `title="Project not found"`
+to preserve custom wording. Empty and multiline titles remain invalid.
+
+Use the root facade for application-building names and HTTP option types:
+
+```python
+from fastapi_canon import APIRouter, Composition, Feature, RouteOptions
+```
+
+Root implementation modules such as `feature`, `router`, `policy`, `injection`
+and `api_router` have moved into focused packages. Replace direct imports from
+them with documented public imports. The `fastapi_canon.contracts` and
+`fastapi_canon.diagnostics` namespaces retain their names.
+
+Replace `python -m fastapi_canon.check_error_contracts src` with
+`python -m fastapi_canon check errors src`; the command accepts the same flags.
+
+Import configuration errors from `fastapi_canon.errors` instead of
+`fastapi_canon.exceptions`:
+
+```python
+from fastapi_canon.errors import ConfigurationError, FeatureConfigurationError
+```
+
+Use named imports from public namespaces. Explicit `__all__` lists belong to
+package facades; ordinary modules no longer expose them.
+
+### Duration and RPC names
+
+| Previous Python usage | 0.24.0 usage |
+| --- | --- |
+| `RpcLimits(send_timeout=10, request_timeout=30)` | `RpcLimits(send_timeout_seconds=10, request_timeout_seconds=30)` |
+| `channel.method(timeout=5)` | `channel.method(timeout_seconds=5)` |
+| `method.timeout` on an RPC declaration | `method.timeout_seconds` |
+| `drain.drain(timeout=30)`, `client.next_notification(timeout=1)`, `rtc.aclose(timeout=5)` | Pass `timeout_seconds=` to each |
+| `outcome.duration`, `outcome.accepted_duration` on server WebSocket middleware | `outcome.duration_seconds`, `outcome.accepted_duration_seconds` |
+| `TargetConfig(timeout=120, ...)` | `TargetConfig(timeout_seconds=120, ...)` |
+
+Set `timeout-seconds` for an external generator in TOML. Configure generated SDK
+connections with Python `request_timeout` or TypeScript `requestTimeoutMs`.
+
+If you imported `RpcRoute` directly, use `RpcChannelMethod` from
+`fastapi_canon.integrations.websockets.channel` for a channel declaration or
+`RegisteredRpcRoute` from `fastapi_canon.integrations.websockets.routes` for a
+mounted route. Supply `protocol`, `message_contract`, `limits`, `activity`,
+`request_close` and `disconnected` by name to `RpcSocket.create()`. Pass the
+optional `contract=` by name to `bind_sockets()`.
+
+Call an injected `AcquireTransactionLock` with `await lock(key)`.
+
+## Upgrade to 0.23.0
+
+Version 0.23.0 was published on 2026-11-16.
+
+Pass generator value fields by name:
+
+```python
+from fastapi_canon.codegen.generators import Rendering
+
+rendering = Rendering(files=files, write=writer)
+```
+
+Use `dataclasses.fields()` or `asdict()` to inspect dataclass values and
+`dataclasses.replace()` to derive changed values. Slotted values do not expose
+`__dict__`; records with cached properties retain it. Source-analysis reports
+now expose tuples; their `as_dict()` output remains JSON-compatible and mutable.
+
+Build `SessionEvent.attributes` before creating the event. It is copied and
+read-only; use `dict(event.attributes)` for a writable copy. Event serialization
+with `dataclasses.asdict()` remains supported.
+
+Middleware scopes and `RouteContext` represent a live operation and use object
+identity. Inspect their attributes and the immutable outcome values instead of
+using dataclass equality, `asdict()` or `replace()` on a scope. `RpcTestError` is
+an ordinary exception whose string form is the error message; its error
+attributes remain available. Pass its `details=` and `problem=` by name, and
+use keyword arguments when constructing `RouteContext`.
+
+## Upgrade to 0.22.0
+
+Version 0.22.0 was published on 2026-11-15. Replace removed aliases with their targets:
+
+```python
+# Before
+from fastapi_canon.integrations.database import TransactionLocks
+from fastapi_canon.integrations.websockets.codegen.bindings import BindingLanguage
+
+# After
+from fastapi_canon.integrations.database import AcquireTransactionLock
+from fastapi_canon.codegen.generators import ClientLanguage
+```
+
+When using `websocket_policy=`, declare connections with `channel()`, `socket()`
+or `binary_stream()` on a router with that policy or an extension. Native
+WebSocket registrations, including later additions on included routers, cannot
+bypass it. Put public WebSockets on a separate router without the policy.
+
+## Upgrade to 0.21.0
+
+Version 0.21.0 was published on 2026-11-14. Follow the 0.20.0 migration below
+for the FastAPI minimum, SSE naming and source-check changes when upgrading from
+an earlier release. Where APIs differ, the 0.21.0 instructions take precedence;
+older sections describe the API at that version. The changelog's
+[`CANON-021-*` markers](../CHANGELOG.md#0210---2026-11-14) identify the individual
+breaking migrations for coding agents.
+
+WebSocket generators now fail on corrupt `.rpcgen/manifest.json`
+files and unsafe output paths. Restore the manifest from version control; if it
+cannot be recovered, review the old generated files and regenerate into a clean
+directory. Never delete handwritten files to repair generator ownership.
+
+Use relative POSIX paths in custom generated-file mappings. Replace backslashes
+with `/`, and remove drive prefixes, colons and parent traversal. SSE, WebSocket
+and WebRTC generators share path validation and atomic per-file replacement;
+their manifest filenames and wire contracts stay the same.
+
+New compositions execute feature checks once during `build()`. Repeated builds
+still validate installed routes and rerun feature checks. Checks must be
+synchronous and free of side effects; remove code that depended on duplicate
+execution during the first build.
+
+Optional integrations move to `integrations=`:
+
+```python
+from fastapi import FastAPI
+from fastapi_canon import Composition, Feature
+from fastapi_canon.integrations.mcp import Mcp, McpMount, McpServer
+from fastapi_canon.integrations.opentelemetry import Telemetry
+
+tasks_mcp = McpServer("tasks")
+feature = Feature(
+    name="tasks",
+    integrations=[
+        McpMount(server=tasks_mcp, namespace="tasks"),
+    ],
+)
+app = Composition(features=[feature], integrations=[Mcp(), Telemetry()]).build(
+    FastAPI()
+)
+```
+
+Rename `McpOptions` to `Mcp` and drop `*` before `instrument(...)`. Enable
+`Composition(integrations=[Telemetry.disabled()])` when retaining
+`Feature(integrations=[instrument(Port)])` or providers that inject `Telemetry`
+without recording signals. Otherwise omit telemetry. Replace
+`@router.webrtc(...)` with `@rtc.session(...)` on a `WebRtcRouter` passed to
+`Feature(routers=[...])`; move engine, ICE-server, event-hook and origin options to
+that router. See the [WebRTC example](11-webrtc.md).
+
+Replace `ContractKind` values with strings, such as `kinds=("openapi", "openrpc")`.
+Replace `Contracts(openapi=doc)` with `Contracts(documents={"openapi": doc})`.
+The `documents` mapping is read-only; use `contracts.documents.get("webrtc")`
+instead of `contracts.webrtc`. Omitted `kinds` exports all available contract kinds.
+
+Replace `engine_context=SqlAlchemyInstrumentation(...)` with telemetry resource
+options, such as `Telemetry(resources=[HttpxClients(), SqlAlchemyEngines(pool_name="db")])`.
+An explicit `resources` list replaces the defaults; `resources=[]` opts out of
+resource instrumentation. Manual `instrument_httpx` / `instrument_sqlalchemy`
+contexts remain supported for per-instance options and resources outside Dishka;
+automatic instrumentation skips those instances. Keep other `engine_context`
+listeners. See [resource telemetry](10-observability.md#useful-options).
+
+Regenerate contracts and clients, review the diff, and run your application's
+checks. Refresh an installed agent skill with `fastapi-canon skill install --force`
+after upgrading Canon; this replaces its destination directories, including local edits.
+
+## Upgrade to 0.20.0
+
+Version 0.20.0 was published on 2026-11-13. Upgrade FastAPI to >=0.143.1,<1
+before installing it. Earlier FastAPI versions are no longer supported; versions
+0.138.0 through 0.143.0 can omit included WebSocket routes from contract exports.
+The `otel` extra uses the same FastAPI minimum as core.
+
+Replace string arguments to Python contract export with enum members:
+
+```python
+from fastapi_canon import export_contracts
+from fastapi_canon.contracts import ContractKind
+
+contracts = export_contracts(app, kinds=(ContractKind.OPENAPI, ContractKind.OPENRPC))
+```
+
+CLI `--kind` names remain unchanged. To narrow a Python export, use
+`ContractSelection` with the actual installed `Feature` objects or exact registered
+paths; see [contract selection](22-contracts.md#export-an-installed-feature).
+CLI and version-2 generation exports remain application-wide.
+
+Regenerate SSE clients and update calls for dotted operation IDs. For example,
+`projects.events` now produces `client.projects.events(...)` in both languages,
+replacing TypeScript `client.<tag>.projectsEvents(...)` and Python
+`client.<tag>.projects_events(...)`. Deeper namespaces produce nested groups.
+Undotted operation IDs retain their first-tag or `streams` group. Resolve any
+reported reserved group or group/method name collision before regenerating.
+Operation IDs, generated type names and wire contracts stay unchanged. See
+[SSE client naming](integrations/sse/02-codegen.md).
+
+Before upgrading CI, re-run `fastapi-canon check errors src --strict --require-complete`
+over all application import roots. Package re-exports such as
+`from .router import router` no longer hide same-named source modules, so newly
+visible HTTP, SSE, WebRTC and RPC paths can produce CAN001/CAN002. Review their
+error mappings and `raises` declarations. CAN003 remains a separate completeness
+signal; the checker does not prove that every runtime exception is handled.
+
+## Upgrade to 0.19.0
+
+Canon 0.19.0 includes source checking for methods declared on
+statically resolved `RpcChannel` subclasses. Existing application declarations,
+`Error` mappings and channel/method `raises=` remain the developer-facing API.
+
+Before upgrading CI, run `fastapi-canon check errors src --strict --require-complete`
+over all relevant import roots. Map and declare newly discovered escaping
+application errors. Simple subclass chains use their existing contracts;
+customized subclass declarations remain visible with CAN003. Review those paths
+without excluding operations, dependencies or ORM calls to restore a passing check.
+See the [supported subclass forms](07-error-checking.md#rpc-channel-subclasses).
+
+This stricter check requires a minor release. Server wire behavior and generated
+client APIs are unchanged. Regenerate committed clients with the chosen version
+to update generator provenance, and retain runtime tests for dynamic providers,
+branch feasibility and persisted invariants.
+
+## Upgrade to 0.18.0
+
+Published on 2026-11-10. The public SSE generator and
+WebSocket testing signatures expand, so this release follows the pre-1.0 minor
+version policy. Existing call defaults remain unchanged.
+
+For native v2 SSE targets, optionally add `include-operations`, `strict`,
+`diagnostics` and `allow-diagnostics`. Review new diagnostic IDs before adding
+exact allowances. Regenerate and review contracts and clients together; selecting
+operations does not narrow live contract checks. See [generation](06-codegen.md).
+
+Tests may pass the public `APIRouter` or composed application directly to
+`RpcTestClient` and `RpcTestStream`. Configure authentication and DI on that
+application and enter its lifespan explicitly. Remove duplicated specialized
+test-router wiring when moving those scenarios; ASGI targets reject the
+specialized client's dependency/connection overrides. `RpcTestError` now allows
+normal traceback updates and is mutable/unhashable; use problem identities or
+immutable field tuples instead of exceptions as hash keys. See
+[router testing](integrations/websockets/13-transports.md#test-the-application-router).
+
+The checker recognizes statically resolved `contextlib.suppress` exception types.
+Keep `--strict` and `--require-complete` independent; unresolved paths remain
+visible and stored aggregate validity is not assumed.
+
+When upgrading from 0.16 or earlier, also apply the 0.17 SDK migration below.
+The [executable consumer example](../examples/canonical_errors/README.md#replace-a-version-1-sdk-consumer)
+shows separate clients, problem normalization and resource ownership.
+
+## Upgrade to 0.17.0
+
+Canon 0.17.0 replaces domain SDK generation with a version-2 workflow.
+Use external HTTP tooling and specialized clients; see [migration](24-upgrading.md#codegen-version-1-to-2).
+The error checker also follows additional call paths and can report previously
+missed CAN001/CAN002 findings. Run it against all application import roots,
+map escaping application exceptions with `Error` and declare them on operations
+or router policies before updating CI. See the
+[breaking changes](../CHANGELOG.md#0170---2026-11-10).
+Older sections below describe previous release transitions.
+
+## Upgrade to 0.16.0
+
+Version 0.16.0 was published on 2026-11-07. It contains
+breaking server APIs, generated-client interfaces and stricter preflight/static
+checks. Upgrade servers and regenerated Python/TypeScript SDKs together. The
+[complete breaking-change notes](../CHANGELOG.md#0160---2026-11-07) include the
+individual signatures and diagnostic coverage boundaries.
+
+### Composition and public imports
+
+`Composition.build(app)` replaces `apply(app)` and `validate(app)`:
+
+```python
+# Before
+app = composition.apply(FastAPI())
+composition.validate(app)
+
+# After
+app = composition.build(FastAPI())
+```
+
+Register plain FastAPI routes before `build`, or call `build` again after adding
+them; rebuilding the same composition only repeats validation.
+
+Move a shared `Composition(router_policy=policy)` to the application router:
+
+```python
+composition = Composition(
+    features=[projects],
+    router_factory=lambda: APIRouter(prefix="/api", policy=policy),
+)
+```
+
+Parent router contracts now extend included HTTP/SSE operations. Move errors
+that should stay local onto individual routes or a sibling router. Use unique
+effective HTTP method/path combinations, WebSocket paths and operation IDs;
+composition rejects ambiguous registrations before installation.
+
+Import `APIRouter`, `Error`, `RouterPolicy` and `Inject` from `fastapi_canon`.
+Integration-specific declarations such as `RpcChannel` come from their
+`fastapi_canon.integrations.*` facade; see [public imports](21-public-api.md).
+Replace `ExceptionHandlerSpec` sequences with
+`Feature(exception_handlers={DomainError: handler})` and iterate the mapping's
+`.items()` when inspecting handlers.
+
+### Error declarations
+
+Replace SSE `stream_raises=` with `raises=`.
+When both arguments were present, combine their definitions in one sequence:
+
+```python
+@router.sse(
+    "/events",
+    raises=[authentication_required, task_not_found],
+)
+async def events(...) -> AsyncIterator[TaskEvent]: ...
+```
+
+`raises` now registers canonical errors automatically on HTTP routers, policies,
+SSE routes, WebRTC admission and RPC channels/operations. Remove explicit registry
+entries that only repeat these declarations. List additional errors that are
+not declared anywhere with `Feature(errors=[...])`.
+Set the common URI prefix with `Composition(errors=ErrorOptions(type_base=...))`.
+
+For SSE, the combined effective declaration describes both HTTP admission
+responses and terminal `canon.problem` frames. Dependencies run admission checks
+before response start; generator code, even before its first `yield`, runs after
+the response begins. Regenerate SDKs to include both representations of the
+combined error contract. Existing explicit `Error.type` URIs remain authoritative.
+
+`Feature.errors` is now a tuple of `Error` instances: replace
+`feature.errors.errors` with `feature.errors`, and `.contains(error)` with
+`error in feature.errors`. Dependencies use explicit router/policy/operation
+contracts; there is no `@raises` dependency decorator.
+
+### Routes, transports and dependency lifetimes
+
+Replace facade imports of `CanonStreamRouter`/`StreamRouter` with `APIRouter` and
+`@router.sse(...)`. Replace `CanonWebRtcRouter`/`WebRtcRouter` with
+`@router.webrtc(...)`; move engine, ICE, origin and limit settings to each
+declaration. Use a shared `SessionCapacity` for a budget spanning declarations.
+Engine adapter types are exported from `fastapi_canon.integrations.webrtc.engines`.
+
+HTTP/SSE operation IDs now default to the function name, optionally prefixed by
+the router's `namespace`. Preserve an existing SDK name with an explicit
+`operation_id`, or retain FastAPI's old policy through
+`generate_unique_id_function=fastapi.utils.generate_unique_id`. OpenAPI tags no
+longer determine common SDK groups. See [operation naming](20-routers.md#automatic-http-and-sse-operation-names).
+
+`APIRouter` resolves endpoint `Inject[T]` and `FromDishka[T]` automatically;
+ordinary dependency functions support `Inject[T]` without `@inject`. Keep
+`@inject` for dependency functions using `FromDishka[T]`. Register missing
+bindings reported by composition preflight before adopting the release.
+HTTP REQUEST resources close before response transmission. SSE bodies need APP
+services or independent short `ServiceScope` calls; WebSocket/WebRTC resources
+retained through disconnect belong to SESSION providers. Admission hooks return
+independently usable context values. See [dependency coverage](23-checks-and-diagnostics.md).
+
+### RPC models and generated SDKs
+
+RPC now preserves plain Pydantic models' own aliases, validation and extra-field
+policy. Inherit from `RpcModel`, or explicitly configure the previous camel-case
+and `extra="forbid"` policy, when retaining the old RPC convention. Regenerate
+clients for the declared wire shape. Shared DTOs need compatible schemas and one
+semantic identity; see [shared models](06-codegen.md).
+
+Regenerate both SDK languages through `fastapi-canon generate`. Existing source
+tables stay supported; `[codegen] app = "module:app"` can now export the app's
+contracts and select the supported sources for each target automatically.
+
+- Import canonical error classes from the SDK root. Common HTTP, SSE and RPC
+  calls share those classes; replace binding-private error imports. Problem
+  `title` is public text rather than a literal discriminator: branch on error
+  class or problem `type`.
+- Replace TypeScript `RequestOptions` with `CallOptions`, `HttpOptions` or
+  `StreamOptions`. SSE deadlines use `openTimeoutMs`/`idleTimeoutMs`. Methods
+  without parameters take options directly, without an initial `{}`. Deadlines
+  raise native `TimeoutError` DOMExceptions; cancellation preserves its reason.
+- An omitted Python `RequestOptions.timeout` inherits the injected HTTP client's
+  configuration. Pass `timeout=None` to disable it. Use the generated `Bindings`,
+  `Clients` and per-source connection option types for wrapper dictionaries.
+- Remove consumer imports of protocol envelopes and implementation aliases from
+  the common TypeScript root. Use its reachable domain/problem models. Node ESM
+  imports use `.js`; explicit resource management requires `ESNext.Disposable`
+  types. See [SDK scope](06-codegen.md).
+- Preserve the optional initialization `signal` in TypeScript RPC connection
+  wrappers. Rename a server URL variable named `signal` before generation.
+  Closing a common SDK cancels pending eager handshakes while individual call
+  cancellation leaves shared initialization available to sibling calls.
+
+### Static checks and CLI integrations
+
+Run source checks before enabling strict CI on the upgraded application. Newly
+followed provider implementations, local router factories, context managers,
+loops and comprehensions can expose existing CAN001/CAN002 gaps. Declare/map
+those errors explicitly; CAN003 still reports incomplete analysis.
+
+Use synchronous, inspectable zero-argument application factories. CLI import and
+factory failures omit arbitrary exception text; automation should consume the
+documented JSON diagnostic codes and location fields. Review unsupported callable
+forms and the per-check coverage report before enforcing `--require-complete`.
+
+## Upgrade to 0.15.0
+
+The new MCP integration is opt-in: install `fastapi-canon[mcp]`, contribute
+`McpMount` declarations through `Feature(mcp=[...])`, and activate them with
+`Composition(mcp=McpOptions())`. These are the 0.15.0 names; for 0.21.0 use
+`integrations=` and `Mcp` as described above. Core installations do not require FastMCP.
+Mounted routes use FastMCP authentication configured on `McpOptions`, independently
+of FastAPI router dependencies. See the [MCP guide](12-mcp.md)
+for `Inject[T]`, lifecycle ownership and supported handlers.
+
+Replace `@channel.subscription()` with `@channel.stream()`. Bare `bytes` items
+select binary frames; other supported item types select JSON messages. Uploads
+and duplex binary handlers retain `RpcBinaryInput` and `RpcBinaryOutput`.
+Replace `RpcLimits(max_subscriptions=...)` with `RpcLimits(max_streams=...)`.
+
+Regenerate contracts and both SDKs together with the server upgrade. The new
+wire controls are `.open` / `.cancel`, their identity field is `streamId`, and
+OpenRPC uses `x-rpc-streams`. There are no aliases for the old decorator,
+control names or contract extension. Generated TypeScript stream methods must
+now be awaited; prefer `await using stream = await client.jobs.progress(...)`.
+Python supports `async with client.jobs.progress(...) as stream` and iteration
+inside the block. The common domain SDK uses the same managed resource pattern
+for JSON-RPC message streams. See the [full stream guide](integrations/websockets/02-message-streams.md).
+
+Reconnect remains opt-in and reopens the source with a fresh ID. It does not
+replay missed data or resume a computation automatically. Existing credential
+refresh, recovery limits, middleware, graceful drain and binary upload/duplex
+APIs remain available. Message-stream overflow now fails explicitly; passive
+notification overflow policies and counters remain configurable.
+
+## Upgrade to 0.14.0
+
+The database integration remains opt-in. Select the dependencies used by your
+application explicitly:
+
+| Install | Dependencies added |
+| --- | --- |
+| `fastapi-canon` | Dishka, FastAPI and Pydantic |
+| `fastapi-canon[database]` | Async SQLAlchemy and AnyIO |
+| `fastapi-canon[sqlite]` | Database dependencies and aiosqlite |
+| `fastapi-canon[postgres]` | Database dependencies and asyncpg |
+| Extra `sqlmodel` | Database dependencies and SQLModel |
+| Extra `migrations` | Database dependencies and Alembic |
+
+These dependencies were already optional in 0.13.0. Existing compatible explicit
+dependencies also work; extras provide the corresponding dependency selection.
+All integration code ships in Canon's wheel. PostgreSQL itself is operated
+separately. `ServiceScope` has no database dependency. Keep custom engine/session
+providers and migration lifespans when your application owns those resources.
+
+When adopting the database integration:
+
+1. Keep startup migration validation enabled by default. If deployment owns these
+   checks, set `Database(..., migrations=migrations,
+   check_migrations_on_startup=False)` and retain `fastapi-canon db check` in that
+   deployment. One declaration now serves both runtime and CLI.
+2. An engine instrumentation Dishka decorator can become
+   `engine_context=SqlAlchemyInstrumentation(telemetry=telemetry,
+   pool_name="backend")`. Import the declaration from
+   `fastapi_canon.integrations.opentelemetry.sqlalchemy` and select
+   `otel-sqlalchemy` for that adapter. Any synchronous context-manager factory can
+   use the hook without coupling database ownership to telemetry.
+3. Replace direct Alembic rollback adapters with
+   `await migrations.downgrade(engine, revision)` or
+   `fastapi-canon db downgrade <revision>`. Supply an explicit target. Current
+   application startup and checks still expect its heads; an older schema needs
+   compatible application code and an explicit deployment validation policy.
+
+See the [database guide](09-database.md) and
+[breaking changes](../CHANGELOG.md#0140---2026-11-03) for lifecycle and validation
+semantics.
+
+## Upgrade to 0.13.0
+
+Upgrade from 0.12.0 to 0.13.0 with these application changes:
+
+1. Replace positional composition arguments with `Composition(features=[first,
+   second])`. All constructor options are keyword-only.
+2. Replace `RpcService`, `RpcRoutes`, `create_router()` and `dishka_router()` with
+   `CanonWebSocketRouter`. Include it directly in `Feature(routers=[router])`,
+   and pass `resolver=Dishka()` for Dishka injection. Replace
+   `Telemetry.rpc_middleware()` with `Telemetry.websocket_middleware()`.
+   Earlier development snapshots named the new router `RpcRouter`; that name
+   is also removed. See the [WebSocket migration guide](integrations/websockets/11-migration.md).
+3. Require FastAPI >=0.121. HTTP dependency scopes now close after response
+   validation and before sending the response. Open an independent
+   `ServiceScope` for streams, workers and background tasks instead of retaining
+   request-owned resources. See [scope ownership](09-database.md).
+4. Keep the ASGI server's exception logger enabled for unhandled HTTP failures;
+   Canon no longer emits a second traceback for the same failure. Configure
+   [request logging](10-observability.md) explicitly if completion records are needed.
+5. Update telemetry queries that assumed every call on a WebSocket shared one
+   trace. Calls without message context now start independent traces linked to
+   the connection. Explicit message context still supplies the parent.
+
+The JSON-RPC wire format and generated-client contracts remain unchanged by the
+router and tracing changes. Database integration and request logging are opt-in;
+follow the [database guide](09-database.md) when adding engines, transactions or
+Alembic migrations. See the [full changelog](../CHANGELOG.md#0130---2026-11-02)
+for the release's migration details.
+
+## Installation
+
+```console
+uv add "fastapi-canon[sse,websockets,webrtc]"
+uv add --dev "fastapi-canon[codegen]"
+```
+
+For the reference WebRTC engine, also select `aiortc`:
+
+```console
+uv add "fastapi-canon[webrtc,aiortc]"
+```
+
+Every install contains all Python feature modules and generator templates.
+Extras install the dependency versions needed by a feature; they do not install
+another Canon distribution. SSE selects FastAPI >=0.143.3 and Pydantic >=2.11.2,
+while base composition requires FastAPI >=0.121 and Pydantic >=2.9 in 0.13.0.
+The published 0.12.0 base requires FastAPI >=0.115. WebSockets
+selects its Pydantic and typing requirements. WebRTC selects its AnyIO, Starlette
+and typing requirements. `codegen` selects the template/schema tooling and model
+dependencies needed to generate clients from saved contracts. It does not
+require an application import or the aiortc engine.
+
+Dishka is a base dependency. Python server WebSockets use FastAPI/Starlette;
+the `websockets` Python client package is only needed by generated client
+applications that select that transport. Generated SSE consumers install their
+selected HTTP backend (`httpx` or `httpx2`) separately. From 0.20.0, core and
+`otel` require FastAPI >=0.143.1; `otel` adds OpenTelemetry API >=1.40,<2
+for native HTTP telemetry, Dishka port observations and WebSocket middleware. Application
+providers/exporters remain application-owned. See the [telemetry guide](10-observability.md).
+
+Remove the old `fastapi-streams`, `fastapi-rpckit` and `fastapi-webrtc` direct
+dependencies from your application. Replace Canon's former `streams` extra with
+`sse`. There are no imports forwarded to the earlier distributions.
+
+## Agent skill
+
+From your application project, install the bundled backend-building skill:
+
+```console
+uv run fastapi-canon skill install
+```
+
+This copies the skill and its references to `.agents/skills/build-canon-backend`
+and `.claude/skills/build-canon-backend`. To update both from your installed Canon
+version:
+
+```console
+uv sync --upgrade-package fastapi-canon
+uv run fastapi-canon skill install --force
+```
+
+`--force` replaces the complete destination directories, including local edits.
+Keep custom guidance elsewhere. Use `--destination <skill-directory>` for a
+single custom destination. Installation uses the installed Canon bundle and
+does not download another skill version.
+
+## Python imports
+
+| Earlier import | Canon import |
+| --- | --- |
+| `fastapi_streams` | `fastapi_canon.integrations.sse` |
+| `fastapi_rpckit` | `fastapi_canon.integrations.websockets` |
+| `fastapi_webrtc` | `fastapi_canon.integrations.webrtc` |
+| `fastapi_canon.integrations.streams` | `APIRouter.sse()` |
+
+Declare SSE streams with `APIRouter.sse()`. In 0.21.0, declare WebRTC sessions
+with `WebRtcRouter.session()` and contribute that router through `Feature.routers`.
+Versions 0.16.0–0.20.0 used `APIRouter.webrtc()` instead.
+WebRTC value types such as `Session` and `SessionCapacity` remain in
+`fastapi_canon.integrations.webrtc`, and engine adapter types live in
+`fastapi_canon.integrations.webrtc.engines`.
+In 0.13.0, use `CanonWebSocketRouter` instead of the earlier service and adapter
+factories; follow the [WebSocket migration guide](integrations/websockets/11-migration.md).
+Use `fastapi_canon.__version__` for the single Canon version.
+
+WebSocket framework adapters live under
+`fastapi_canon.integrations.websockets.adapters`, for example `.adapters.dishka`.
+Replace the former `fastapi_rpckit.integrations` prefix with that path.
+Import the optional media adapter from
+`fastapi_canon.integrations.webrtc.engines.aiortc`. WebSocket logger filters
+should use `fastapi_canon.integrations.websockets`.
+
+Earlier prepared snapshots used `fastapi_canon.sse`, `.websockets` and `.webrtc`.
+Replace those short paths with `fastapi_canon.integrations.sse`, `.websockets`
+and `.webrtc`. There are no parallel short namespace aliases. See the
+[canonical API](21-public-api.md) for the public namespace map.
+
+## Commands
+
+In 0.10.0, replace the previous `canon` executable with `fastapi-canon` in scripts
+and CI. Subcommand options stay the same.
+
+```console
+uv run fastapi-canon --help
+uv run fastapi-canon --version
+uv run fastapi-canon check errors src --strict
+
+uv run fastapi-canon sse schema --app app.main:app --output contracts/openapi.json
+uv run fastapi-canon sse generate --schema contracts/openapi.json --language typescript --output frontend/generated/sse
+uv run fastapi-canon sse sync --config pyproject.toml --check --diff
+
+uv run fastapi-canon websockets schema app.contracts:contract --output contracts/openrpc.json
+uv run fastapi-canon websockets generate --config rpcgen.toml --check
+
+uv run fastapi-canon webrtc contract --app app.main:app --output contracts/webrtc.json
+uv run fastapi-canon webrtc generate --contract contracts/webrtc.json --output frontend/generated/webrtc --check
+```
+
+`python -m fastapi_canon` accepts the same arguments as `fastapi-canon`. Each transport
+retains its existing command options, strict diagnostics, configuration format
+and owned output directory. SSE uses `[tool.fastapi-canon.sse]`; its former
+`[tool.fastapi-streams]` table remains accepted for one transition release with
+a deprecation warning. WebSocket `rpcgen.toml` is retained. Update command names
+and application imports, then regenerate all clients to update their manifests.
+Binding plugins must declare `fastapi_canon.integrations.websockets.socket_bindings` entry
+points and import the Canon binding APIs.
+
+The packaging migration retains WebRTC signaling identifiers and existing
+output ownership manifests. Canon 0.10.0 adds the shared application-error
+bindings and generated-client changes described in [canonical errors](02-errors.md).
+Regenerate clients and follow that guide when adopting the new stream profile.
+
+## Common codegen workflow
+
+Canon 0.10.0 added version-1 `fastapi-canon generate` configuration, shared model/error
+identity and a domain SDK facade. JSON HTTP calls, SSE, JSON-RPC and sessions can
+contribute to one output per language. Put generation settings in `[codegen]` in
+`fastapi-canon.toml`, or `[tool.fastapi-canon.codegen]` in `pyproject.toml`. Follow the
+[codegen guide](06-codegen.md) and choose a fresh output
+when adopting the common workflow. Specialized generator commands remain
+available with their own configuration and ownership; never point multiple
+generators at the same SDK directory.
+
+## Codegen version 1 to 2
+
+Version-1 domain SDK generation is removed. There is no compatibility facade.
+Replace `sources`, `identities`, `names`, operation mappings and combined language
+targets with the version-2 app/target configuration. Use fresh, separate native
+output directories and an external HTTP generator. Review old SDK-owned files
+before deleting them; version 2 does not interpret `.canon-codegen.json`.
+
+Update call sites to the specialized client APIs and your HTTP tool's generated
+functions/query helpers. Replace facade-specific `.safe()`, connection options,
+model imports and error-class checks. RPC/SSE/media connection lifetimes remain
+explicit. No wire-protocol migration is required solely for this workflow change.
+The server no longer adds SDK-only `x-canon-model-id`/`x-canon-model-name` hints;
+standard JSON Schema IDs supplied by applications remain untouched. Update JSON
+report consumers from the old SDK-oriented schema to the per-step version 2.
+
+The [shared-error example](../examples/canonical_errors/README.md) demonstrates
+separate native clients. Standalone [SSE](integrations/sse/02-codegen.md),
+[WebSocket](integrations/websockets/08-clients.md) and
+[WebRTC](11-webrtc.md) workflows remain available.
+
+For an executable consumer migration, follow the example's
+[Python and TypeScript adapters](../examples/canonical_errors/README.md#replace-a-version-1-sdk-consumer).
+It covers a borrowed HTTPX2 pool, SSE admission and terminal problems, error
+normalization across generated classes, and separately owned RPC connections with
+session renewal. Supply your application's authentication policy; the public demo
+does not implement session management. Keep connection cancellation, reconnect and
+pool ownership explicit when replacing version-1 bindings.

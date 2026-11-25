@@ -1,67 +1,86 @@
-# WebSocket APIs
+# 4. WebSockets
 
-Use a channel to group typed RPC methods and message streams under a namespace.
-Mount it on Canon's `APIRouter` alongside HTTP routes and SSE streams.
-Install `fastapi-canon[websockets]`; add `codegen` to generate clients.
+Group typed methods, streams and events in a channel and mount it next to your
+HTTP routes. Install `fastapi-canon[websockets]`.
+
+## Methods
 
 ```python
-from fastapi import FastAPI
-
-from fastapi_canon import APIRouter, Composition, Feature
+from fastapi_canon import APIRouter, Inject
 from fastapi_canon.integrations.websockets import RpcChannel
 
-hello = RpcChannel(namespace="hello")
+tasks = RpcChannel(namespace="tasks")
 
 
-@hello.method()
-async def greet(name: str) -> str:
-    return f"Hello, {name}"
+@tasks.method(raises=[task_missing])
+async def complete(task_id: int, service: Inject[TaskService]) -> Task:
+    return await service.complete(task_id)
 
 
 router = APIRouter()
-router.include_channel(hello, path="/ws")
-app = Composition(
-    features=(Feature(name="hello", routers=[router]),),
-).build(FastAPI())
+router.include_channel(tasks, path="/ws")
 ```
 
-The public operation is `hello.greet`, called with `{"name": "Ada"}`. As in
-FastAPI, parameters and return annotations drive the contract: named parameters
-form `params`, a single Pydantic model parameter is the whole `params` object,
-and `Annotated[T, Path()]` reads a URL variable. Add `raises=[public_error]` for declared domain failures; request
-application services through `Inject[T]` and feature-owned Dishka providers.
+Parameters work like FastAPI: named parameters form the request, a single
+Pydantic model is the whole request, `Inject[T]` resolves services. The client
+calls `tasks.complete`:
 
-The [quickstart](01-quickstart.md) combines an RPC method with HTTP and SSE,
-then generates one Python and TypeScript SDK. Clients handle request IDs,
-serialization, correlation and connection cleanup.
+```python
+task = await client.tasks.complete(task_id=1)
+```
 
-## Choose the interaction
+Request IDs, correlation, timeouts and typed errors are handled for you.
 
-| Need | Use |
-| --- | --- |
-| One typed result | [Channel method](integrations/websockets/services.md) |
-| A sequence of typed results | [Message stream](integrations/websockets/message-streams.md) |
-| Push notifications and connection hooks | [Connections and events](integrations/websockets/connections-and-events.md) |
-| Upload or download bytes | [Binary stream](integrations/websockets/streams.md) |
-| An existing WebSocket protocol | [Typed or raw socket](integrations/websockets/sockets.md) |
+## Streams
 
-Message streams support explicit completion, failure and cancellation. A stream's
-cleanup ends that delivery; cancelling an independently running business job
-requires an application operation. Use managed stream resources when leaving
-early, and close owned clients on shutdown.
+Return an `AsyncIterator` to send many results for one call, such as LLM tokens
+or job progress:
 
-## Application concerns
+```python
+@tasks.stream()
+async def progress(task_id: int) -> AsyncIterator[Progress]:
+    yield Progress(percent=0)
+    yield Progress(percent=100)
+```
 
-- [Dependencies and authentication](integrations/websockets/dependencies.md)
-- [Public errors](integrations/websockets/errors.md)
-- [Generated clients](integrations/websockets/clients.md) and [generation workflow](06-codegen.md)
-- [Telemetry](integrations/websockets/observability.md)
-- [Upgrade guide](integrations/websockets/migration.md) and [resilience options](integrations/websockets/hardening-overview.md)
+```python
+async with client.tasks.progress(task_id=1) as updates:
+    async for update in updates:
+        print(update.percent)
+```
 
-For custom implementations, consult the [wire protocol](integrations/websockets/protocol.md) and
-[transport adapters](integrations/websockets/transports.md). These references are optional for normal
-application development.
+## Events
+
+Push notifications to every connected client:
+
+```python
+@tasks.event()
+async def updated(events: Inject[TaskEvents]) -> AsyncIterator[TaskUpdated]:
+    async for update in events.subscribe():
+        yield update
+```
+
+## Which one?
+
+| Need | Use | Guide |
+| --- | --- | --- |
+| One result | `@channel.method()` | [Methods](integrations/websockets/01-services.md) |
+| Many results for one call | `@channel.stream()` | [Message streams](integrations/websockets/02-message-streams.md) |
+| Server-initiated updates | `@channel.event()` | [Connections and events](integrations/websockets/03-connections-and-events.md) |
+| Raw bytes | `@router.binary_stream()` | [Binary streams](integrations/websockets/04-streams.md) |
+| An existing protocol | typed or raw socket | [Sockets](integrations/websockets/05-sockets.md) |
+
+## Go deeper
+
+[Authentication](integrations/websockets/06-dependencies.md) ·
+[errors](integrations/websockets/07-errors.md) ·
+[clients](integrations/websockets/08-clients.md) ·
+[telemetry](integrations/websockets/09-observability.md) ·
+[hardening](integrations/websockets/10-hardening-overview.md) ·
+[migration](integrations/websockets/11-migration.md) ·
+[wire protocol](integrations/websockets/12-protocol.md) ·
+[transport adapters](integrations/websockets/13-transports.md)
 
 ---
 
-Previous: [Streaming](03-streaming.md) · [Learning path](README.md) · Next: [Application composition](05-composition.md)
+Previous: [3. Streaming](03-streaming.md) · [Learning path](README.md) · Next: [5. Composition](05-composition.md)

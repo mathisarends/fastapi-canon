@@ -1,14 +1,14 @@
 # Working on fastapi-canon
 
-Read `smelt.yml` and `docs/architecture.md` before changing package boundaries or
+Read `smelt.yml` and `docs/91-architecture.md` before changing package boundaries or
 test structure. They describe this checkout's implemented library. Verify an API exists in this checkout before using it. Write repository Markdown in English.
 
-Use `README.md` for the library overview, `docs/canon.md` for public namespaces,
-`docs/contributing.md` for commands and `docs/compatibility.md` for tested scope.
-Shared errors and common generation are documented in `docs/02-problems.md` and
+Use `README.md` for the library overview, `docs/21-public-api.md` for public namespaces,
+`docs/90-contributing.md` for commands and `docs/25-compatibility.md` for tested scope.
+Shared errors and common generation are documented in `docs/02-errors.md` and
 `docs/06-codegen.md`. The canonical repository is
 `mathisarends/fastapi-canon`; preserve historical release evidence in
-`mathisarends/canon` as described in `docs/repository-migration.md`.
+`mathisarends/canon` as described in `docs/94-repository-migration.md`.
 
 ## Layout and boundaries
 
@@ -72,8 +72,10 @@ Shared errors and common generation are documented in `docs/02-problems.md` and
   edge cases a reader does not need to act. Agents tend to over-explain here.
 - Write for people who need to choose, install or use Canon. Lead with the task,
   show one small working example, then explain only the behavior needed to use it.
-- Keep the README to an overview, installation and one example. Put walkthroughs
-  in task guides and link to them instead of repeating their content.
+- The README explains the idea: one comparison, installation and links into the
+  docs. The docs teach: `01`–`19` form the learning path, `20`–`89` reference
+  pages and `90`+ contributor pages; `integrations/` pages are numbered in reading
+  order. Each learning-path guide links to the previous and next guide.
 - Document public contracts, ownership, limitations and migration steps. Read
   implementation details from code and executable policy; do not narrate modules,
   internal call graphs, test inventories or completed development work in guides.
@@ -133,9 +135,9 @@ Use the Canon version; do not classify a breaking change as a patch merely
 because its implementation is small. Release validation checks declared breaking
 changelog sections against this policy.
 
-Read `docs/releases.md` for prepared versions, publication order, publisher setup
-and the release workflow. `docs/compatibility.md` records tested dependency
-combinations; `docs/rpc-parity.md` records the predecessor comparison and consumer
+Read `docs/93-releases.md` for prepared versions, publication order, publisher setup
+and the release workflow. `docs/25-compatibility.md` records tested dependency
+combinations; `docs/95-rpc-parity.md` records the predecessor comparison and consumer
 migration limits. Do not treat prepared source versions as published releases.
 
 Run the standalone minimum-dependency smoke matrix with

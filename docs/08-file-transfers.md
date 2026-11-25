@@ -1,24 +1,9 @@
-# File uploads and downloads
+# 8. File transfers
 
-Declare file operations on the same Canon `APIRouter` as other HTTP operations.
-Their OpenAPI contracts are inputs for your chosen HTTP client generator, including
-canonical problem schemas. This guide covers Canon 0.17.0 and later.
+Upload files, stream raw bodies and serve downloads on the same `APIRouter`.
+Install `fastapi-canon[uploads]` for multipart forms.
 
-## Install
-
-```console
-uv add "fastapi-canon[uploads]"
-```
-
-The `uploads` extra installs `python-multipart`, which FastAPI needs to parse
-uploaded files and form fields. Upload declarations remain ordinary HTTP routes;
-there is no separate router or integration runtime. JSON-only applications do
-not need this extra. Raw binary bodies and downloads do not need a multipart parser.
-
-## Developer-facing API
-
-Use `UploadFile` for one file and `list[UploadFile]` for multiple files under the
-same multipart field name. FastAPI infers file inputs from these types:
+## Uploads
 
 ```python
 from typing import Annotated
@@ -34,87 +19,34 @@ async def upload(
     project_id: str,
     files: list[UploadFile],
     title: Annotated[str, Form()],
-    description: Annotated[str | None, Form()] = None,
 ) -> list[str]:
     return [file.filename or "unnamed" for file in files]
 ```
 
-The example exports its file/form contract in OpenAPI and returns
-filenames; the [runnable application](../examples/uploads/app.py) stores file
-contents through an application-owned service resolved with `Inject[FileStore]`.
-It also provides single-file upload and download operations.
+This is plain FastAPI; Canon adds problem responses for invalid forms and the
+OpenAPI contract for your HTTP client generator. Read large files in chunks and
+finish with them before the handler returns.
 
-Use `Annotated[UploadFile, File(alias="document", description="Report file")]`
-when a file needs a wire alias or documentation, importing `File` from `fastapi`.
-`file: UploadFile | None = None` declares an optional file. Separate named
-`UploadFile` parameters declare separate file parts. Scalar form fields use
-`Annotated[T, Form()]`; arrays of scalars become repeated fields.
-
-`UploadFile` exposes the filename, declared content type and a spooled file with
-async `read`, `seek` and `close` methods. Read in chunks when processing large
-files. Consume or copy request-owned files before returning from the handler;
-pass independently owned data or storage identifiers to background work.
-
-Missing required parts and invalid form values use Canon's validation problems.
-Declare application failures with `raises=[error]`, as for other HTTP routes.
-Storage, authorization and content inspection belong to the application.
-A declared MIME type does not validate the file's contents.
-
-## Request limits
-
-FastAPI's `max_body_size` (bytes) and `form_limits` work on Canon routers,
-operations and `include_router()`:
+## Limits
 
 ```python
-@router.post(
-    "/reports",
-    max_body_size=10_000_000,
-    form_limits={"max_files": 5},
-    http_statuses=[413],
-)
+@router.post("/reports", max_body_size=10_000_000, form_limits={"max_files": 5}, http_statuses=[413])
 ```
 
-Exceeded form limits return an `http_400` problem. A body that grows past the
-limit returns an `http_413` problem; a request whose `Content-Length` already
-exceeds it receives Starlette's plain-text 413. `http_statuses=[413]` documents
-the response in OpenAPI.
+Oversized bodies return a 413 problem, too many files a 400 problem.
 
-## HTTP clients
+## Streaming uploads
 
-Use your OpenAPI generator's multipart and binary support. Canon does not generate
-HTTP clients or impose a client-side upload representation. Configure Orval or
-another tool against OpenAPI and include its generate/check commands in the
-[workflow](06-codegen.md).
-
-## Binary responses and raw uploads
-
-Declare downloads with `response=CanonResponse.binary("application/pdf")` and
-return a matching FastAPI `Response`, `FileResponse` or `StreamingResponse`.
-`CanonResponse` describes the HTTP contract; the returned response supplies the
-body and headers. See the [binary response example](05-composition.md#binary-and-pdf-streams).
-The runnable application uses `application/octet-stream` for its general download
-operation and returns an encoded `Content-Disposition` filename.
-
-Since 0.28.0, `fastapi-canon check composition` warns when a raw GET success
-response has no documented content. Use a concrete media type, a range like
-`image/*` for dynamic images, or `CanonResponse.empty(status=200)` for an
-intentionally bodyless success.
-
-Use FastAPI's `Annotated[bytes, Body(media_type="application/octet-stream")]`
-for buffered raw uploads. To consume the body as it arrives, declare
-`BinaryBody` on an async Canon `APIRouter` handler (0.28.0 or later).
+Consume a raw body as it arrives:
 
 ```python
 from collections.abc import AsyncIterator
-from typing import Annotated
 
-from fastapi_canon import APIRouter, BinaryBody
-
-router = APIRouter()
+from fastapi_canon import BinaryBody
 
 
 @router.put("/files")
-async def upload(
+async def upload_raw(
     chunks: Annotated[AsyncIterator[bytes], BinaryBody("application/octet-stream")],
 ) -> int:
     size = 0
@@ -123,38 +55,31 @@ async def upload(
     return size
 ```
 
-Consume the iterator once, during the request. The media type declares a
-required raw binary body in OpenAPI. Verify the content type in application code.
-Use one body consumer per operation, including dependencies.
+## Downloads
 
-## Run the example
+Declare the media type with `CanonResponse` and return any FastAPI response:
 
-From the repository root after [development setup](contributing.md):
+```python
+from fastapi.responses import FileResponse
+from fastapi_canon import CanonResponse
 
-```console
-uv run --frozen uvicorn examples.uploads.app:app --reload
+
+@router.get(
+    "/documents/{document_id}",
+    raises=[document_missing],
+    response=CanonResponse.binary("application/pdf", headers=["Content-Disposition"]),
+)
+async def document(document_id: UUID) -> FileResponse:
+    return FileResponse(storage.path(document_id), media_type="application/pdf")
 ```
 
-Upload one file, then several files under the same field name:
+Check access before returning: once a download has started, an error can only
+cut it short. More response contracts are in the
+[router reference](20-routers.md#success-response-contracts).
 
-```console
-curl --form "file=@report.pdf" --form "title=Report" http://localhost:8000/projects/demo/file
-curl --form "files=@report.pdf" --form "files=@notes.txt" --form "title=Attachments" http://localhost:8000/projects/demo/files
-```
-
-Use an ID from the response at
-`GET /projects/demo/files/{file_id}/content`. The demo stores files in memory and
-loses them when the process restarts; it buffers uploads to keep the example small.
-
-Export the contract for your HTTP generator:
-
-```console
-uv run fastapi-canon contracts export --app examples.uploads.app:app --output-dir dist/uploads/contracts --kind openapi
-```
-
-Server file/form declarations remain ordinary FastAPI operations. Client-side
-multipart limitations are determined by the external HTTP generator.
+Runnable: [`examples/uploads`](../examples/uploads/app.py)
+(`uv run --frozen uvicorn examples.uploads.app:app --reload`).
 
 ---
 
-Previous: [Static error checks](07-error-checking.md) · [Learning path](README.md) · Next: [Database resources](09-database.md)
+Previous: [7. Error checking](07-error-checking.md) · [Learning path](README.md) · Next: [9. Database](09-database.md)

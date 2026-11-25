@@ -14,7 +14,7 @@ class _Explanation:
 
 
 _DOCS = "https://github.com/mathisarends/fastapi-canon/blob/main/docs/"
-_CHECKS = _DOCS + "system-checks.md#findings-and-coverage"
+_CHECKS = _DOCS + "23-checks-and-diagnostics.md#findings-and-coverage"
 _EXPLANATIONS = {
     "CAN001": _Explanation(
         "A reachable application exception has a known Error mapping but is missing from the operation's raises declaration.",
@@ -116,19 +116,20 @@ _EXPLANATIONS = {
         "A mounted RPC method has an unavailable injected root or unreadable declarations in the supported automatic-resolver profile.",
         "A channel method accepts store: Inject[Store], but the prepared graph cannot supply Store through REQUEST scope.",
         "Register the default-component service at APP/SESSION/REQUEST scope or use an explicit application-owned resolver. Review skipped coverage for unsupported resolver/context cases.",
-        _DOCS + "system-checks.md#rpc-method-dependency-preflight",
+        _DOCS + "23-checks-and-diagnostics.md#rpc-method-dependency-preflight",
     ),
     "canon.providers.E003": _Explanation(
         "An HTTP/SSE injected endpoint root is unavailable at its execution scope, or its declarations cannot be inspected.",
         "An HTTP handler injects an unbound Store, or a typed SSE generator injects a REQUEST-only resource after HTTP cleanup.",
         "Bind HTTP services through REQUEST scope. SSE bodies need APP services or APP-scoped ServiceScope factories for short child-scope work; inspect service/component locations.",
-        _DOCS + "system-checks.md#http-and-sse-endpoint-dependency-preflight",
+        _DOCS
+        + "23-checks-and-diagnostics.md#http-and-sse-endpoint-dependency-preflight",
     ),
     "canon.providers.E004": _Explanation(
         "A WebRTC factory injects a service unavailable through its WebSocket APP/SESSION lifetime.",
         "@rtc.session('/media') uses Inject[Store], while Store is bound only at REQUEST scope.",
         "Register factory services at APP or SESSION scope and use explicit child REQUEST scopes for per-message work. Review external-container and nested-dependency limits.",
-        _DOCS + "system-checks.md#webrtc-factory-dependency-preflight",
+        _DOCS + "23-checks-and-diagnostics.md#webrtc-factory-dependency-preflight",
     ),
     "canon.providers.E005": _Explanation(
         "A feature lifespan injects a service that the prepared container cannot supply at APP scope.",
@@ -164,13 +165,13 @@ _EXPLANATIONS = {
         "A raw GET success response has no OpenAPI content declaration, so HTTP clients may treat it as bodyless.",
         "@router.get('/files/report', response_class=Response) returns PDF bytes without documenting its media type.",
         "Declare response=CanonResponse.binary('application/pdf') or use CanonResponse.empty(status=200) for an intentionally bodyless response.",
-        _DOCS + "08-file-transfers.md#binary-responses-and-raw-uploads",
+        _DOCS + "08-file-transfers.md#downloads",
     ),
     "canon.checks.E001": _Explanation(
         "A synchronous feature check raised an exception or returned invalid findings, leaving its result incomplete.",
         "def check(context):\n    return None  # A list/tuple of CheckIssue values is required.",
         "Return a finite list or tuple of CheckIssue values from a deterministic synchronous check. Keep resource probes and runtime work outside this profile.",
-        _DOCS + "system-checks.md#add-a-feature-check",
+        _DOCS + "23-checks-and-diagnostics.md#add-a-feature-check",
     ),
 }
 

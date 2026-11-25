@@ -1,4 +1,4 @@
-# Optional error-contract checking
+# 7. Error checking
 
 Run the source checker to find application exceptions missing from the
 `raises=` declarations of `APIRouter` operations, SSE streams, WebRTC sessions
@@ -17,6 +17,10 @@ Pass code shared with another application, such as its `Error` definitions, with
 `--reference-root`. Its definitions resolve and its calls are followed, but its
 routes, `raises=`/`errors=` references and Dishka providers do not belong to the
 checked application.
+
+A `raises` declaration documents an operation's allowed errors; it does not catch
+anything. Runtime mapping still requires the `Error` to be registered, so keep
+HTTP tests for important Problem Details responses.
 
 ## Several applications
 
@@ -45,10 +49,6 @@ text output has one section per application and JSON output is
 exit status is the highest of any application. A single file keeps the usual
 report, plus `name`. `--config` cannot be combined with positional roots.
 
-A `raises` declaration documents an operation's allowed errors; it does not catch
-anything. Runtime mapping still requires the `Error` to be registered, so keep
-HTTP tests for important Problem Details responses.
-
 ## Findings and CI
 
 ```text
@@ -68,7 +68,7 @@ scanned source. Policy, router and operation `raises` combine.
 Default mode reports and exits zero. `--strict` exits one for CAN001/CAN002;
 `--require-complete` independently exits one for CAN003 or a scan without
 supported operations. Invalid roots, duplicate modules and syntax errors exit two.
-The [quickstart](01-quickstart.md#check-the-contract-in-ci) shows a minimal CI setup.
+The [quickstart](01-quickstart.md#step-6-keep-it-honest-in-ci) shows a minimal CI setup.
 
 Text output ends with the root causes of incomplete analysis, ranked by the number
 of affected operations; fix the top entries first. `--format json` reports each

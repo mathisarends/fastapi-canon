@@ -230,7 +230,7 @@ def _pnpm() -> str:
     pnpm = shutil.which("pnpm.cmd") or shutil.which("pnpm")
     if pnpm is None:
         raise SystemExit(
-            "pnpm is required for TypeScript client checks; see docs/contributing.md"
+            "pnpm is required for TypeScript client checks; see docs/90-contributing.md"
         )
     return pnpm
 
