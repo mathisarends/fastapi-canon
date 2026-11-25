@@ -19,5 +19,5 @@ revision heads and model/schema drift. To change the model, review the revision
 from `uv run fastapi-canon db revision --autogenerate -m "describe change"`,
 then apply it with `db upgrade head`.
 
-The [database guide](../../docs/database.md) covers SQLModel sessions,
+The [database guide](../../docs/09-database.md) covers SQLModel sessions,
 short-lived worker scopes and deployment ownership.

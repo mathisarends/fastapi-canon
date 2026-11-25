@@ -60,19 +60,16 @@ async def reply(chat_id: str) -> AsyncIterator[Token]:
 uv add fastapi-canon
 ```
 
-Python 3.12–3.14 is supported. Add extras for the features you use, for example
-`fastapi-canon[sse,websockets]` or `fastapi-canon[codegen]`. Read the
-[changelog](CHANGELOG.md) and [migration guide](docs/package-migration.md)
-before upgrading.
+Python 3.12–3.14. Extras: `sse`, `websockets`, `webrtc`, `mcp`, `codegen`.
+Upgrading? See the [changelog](CHANGELOG.md) and [migration guide](docs/package-migration.md).
 
 ## Examples
 
-Each step builds on the previous one.
+Five steps, each building on the last.
 
 ### 1. Map a domain error
 
-A complete application. The exception stays ordinary Python; `Error` declares
-its public representation:
+Raise a plain exception; `Error` decides what the client sees.
 
 ```python
 from fastapi import FastAPI
@@ -106,12 +103,11 @@ app = Composition(
 ).build(FastAPI())
 ```
 
-`GET /projects/0` returns a 404 Problem Details response, and OpenAPI documents
-it. Exception messages stay private by default.
+`GET /projects/0` → 404 Problem Details, documented in OpenAPI.
 
 ### 2. Stream agent events
 
-A discriminated union becomes an exhaustively typed event in the clients:
+Yield models; clients get typed events.
 
 ```python
 class TokenDelta(BaseModel):
@@ -138,13 +134,9 @@ async def run_events(run_id: str) -> AsyncIterator[RunEvent]:
     yield TokenDelta(text="Sunny")
 ```
 
-A declared error raised before the first event returns an HTTP problem; raised
-later, it ends the stream with a typed problem frame.
-
 ### 3. Call methods over WebSockets
 
-Group RPC methods and message streams in a channel and mount it on the same
-router:
+Methods and streams in one channel, on the same router.
 
 ```python
 from fastapi_canon.integrations.websockets import RpcChannel
@@ -166,13 +158,11 @@ async def answer(params: Prompt) -> AsyncIterator[TokenDelta]:
 router.include_channel(runs, path="/ws")
 ```
 
-Clients call `runs.cancel` as a typed method and iterate `runs.answer`. The same
-`run_missing` error arrives as a problem on HTTP, SSE and RPC.
+`run_missing` works the same on HTTP, SSE and RPC.
 
 ### 4. Inject services and compose features
 
-Features bundle routers with Dishka providers; handlers request services with
-`Inject[T]`:
+Request services with `Inject[T]`; features bring their providers.
 
 ```python
 from dishka import Provider, Scope, provide
@@ -193,8 +183,6 @@ runs_feature = Feature(name="runs", routers=[router], providers=[RunProvider()])
 app = Composition(features=(runs_feature,)).build(FastAPI())
 ```
 
-`build` checks every contract and provider before the application starts.
-
 ### 5. Generate and check clients
 
 ```console
@@ -203,8 +191,7 @@ uv run fastapi-canon generate --check --diff
 uv run fastapi-canon check errors src --strict --require-complete
 ```
 
-The [quickstart](docs/quickstart.md) walks through all five steps with generated
-Python and TypeScript clients.
+The [quickstart](docs/01-quickstart.md) runs all five steps end to end.
 
 ### Runnable applications
 
@@ -219,16 +206,21 @@ Python and TypeScript clients.
 
 ## Documentation
 
-| Task | Guide |
-| --- | --- |
-| HTTP routes, dependencies and feature lifecycles | [Composition](docs/composition.md) |
-| Shared public errors and typed extensions | [Problems](docs/problems.md) |
-| File uploads and binary downloads | [File transfers](docs/integrations/uploads.md) |
-| Typed event streams | [SSE](docs/integrations/sse/README.md) |
-| RPC, sockets and binary streams | [WebSockets](docs/integrations/websockets/README.md) |
-| Media sessions, tools or database resources | [WebRTC](docs/integrations/webrtc/README.md), [MCP](docs/integrations/mcp/README.md), [database](docs/database.md) |
-| Client generation and drift checks | [Generation](docs/codegen.md), [error checking](docs/error-checking.md) |
-| Service tracing and request logs | [Telemetry](docs/telemetry.md), [logging](docs/request-logging.md) |
+The guides form a learning path; each level builds on the previous one.
+
+| Level | Guide | You learn |
+| --- | --- | --- |
+| 1 | [From Python to typed clients](docs/01-quickstart.md) | HTTP, SSE and RPC with one error and generated clients |
+| 2 | [Shared problems](docs/02-problems.md) | Public errors, extensions and headers |
+| 3 | [Streaming](docs/03-streaming.md) | Event unions, admission checks and POST streams |
+| 4 | [WebSockets](docs/04-websockets.md) | RPC methods, message streams and notifications |
+| 5 | [Application composition](docs/05-composition.md) | Features, Dishka services, lifecycles and router policies |
+| 6 | [Client generation](docs/06-codegen.md) | Generator configuration and drift checks in CI |
+| 7 | [Static error checks](docs/07-error-checking.md) | Finding undeclared errors before runtime |
+| 8 | [File transfers](docs/08-file-transfers.md) | Uploads, multipart forms and binary downloads |
+| 9 | [Database resources](docs/09-database.md) | Sessions, transactions and migrations |
+| 10 | [Instrumentation](docs/10-telemetry.md) | Tracing services and correlating [request logs](docs/request-logging.md) |
+| ★ | [WebRTC](docs/integrations/webrtc/README.md), [MCP](docs/integrations/mcp/README.md) | Media sessions; tools for agents |
 
 Browse the [task guides](docs/README.md), [examples](examples/README.md) or
 [contributor commands](docs/contributing.md). Coding agents can install the

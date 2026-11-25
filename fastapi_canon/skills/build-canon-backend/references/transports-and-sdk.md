@@ -96,7 +96,7 @@ endpoints, framing and close rules. Mount them with
 `@router.binary_stream(path, ...)` and `@router.socket(path, ...)`. Declare a
 single JSON-RPC endpoint with `session = router.channel(path)`. See
 [integrations/websockets/services.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/integrations/websockets/services.md) and
-[problems.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/problems.md).
+[problems.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/02-problems.md).
 
 ## WebRTC
 
@@ -116,7 +116,7 @@ do not define SDK namespaces. Preserve existing public operation IDs with
 an existing naming contract.
 Reuse server Pydantic models and `Error` definitions. Generated client types may
 be repeated across transport outputs. Use the version-2 workflow documented in
-[codegen.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/codegen.md).
+[codegen.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/06-codegen.md).
 Configure specialized SSE/RPC/WebRTC targets and explicit external HTTP commands.
 HTTP runtime and query/mutation helpers belong to established OpenAPI tooling.
 Run `fastapi-canon generate --check --diff` after changing contract sources.
@@ -133,7 +133,7 @@ Telemetry is opt-in at composition. Import `Telemetry` and `instrument` from
 `fastapi_canon.integrations.opentelemetry`; declare
 `Feature(..., integrations=[instrument(ProjectRepository, ProjectService)])` and
 enable `Composition(integrations=[Telemetry(...)])`. Pass application-owned providers to `Telemetry` as documented in
-[telemetry.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/telemetry.md). Instrument declarations leave ordinary Dishka providers
+[telemetry.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/10-telemetry.md). Instrument declarations leave ordinary Dishka providers
 usable on their own. Enabled telemetry automatically instruments Dishka-provided
 clients and engines through installed resource adapters; `resources=[]` opts out.
 Explicit resource contexts remain available for per-instance settings. Use

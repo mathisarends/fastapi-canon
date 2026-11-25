@@ -34,7 +34,7 @@ schemas:
 uv run --locked fastapi-canon contracts export --app examples.streams.app:app --output-dir contracts
 ```
 
-Use [`fastapi-canon generate`](../../docs/codegen.md) to coordinate separate
+Use [`fastapi-canon generate`](../../docs/06-codegen.md) to coordinate separate
 Python or TypeScript stream clients. HTTP generation uses external tooling.
 
 ## Tests

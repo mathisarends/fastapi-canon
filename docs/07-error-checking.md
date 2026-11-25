@@ -131,7 +131,7 @@ dependency-lifecycle coverage is implied by this fix.
 
 ## Findings and CI
 
-The [quickstart](quickstart.md#check-the-contract-in-ci)
+The [quickstart](01-quickstart.md#check-the-contract-in-ci)
 provides a minimal example: `get_project` calls `require_project`, which raises
 `ProjectMissing`. Remove the operation's `raises=[project_missing]` and run
 `fastapi-canon check errors src --strict --require-complete`: it reports `CAN002`
@@ -586,3 +586,7 @@ declarations are described above. Analysis follows supported explicit generator
 paths; failures after response start still use their transport's terminal
 problem/protocol handling. Source completeness does not validate that runtime
 error phase or guarantee that every possible exception is declared.
+
+---
+
+Previous: [Client generation](06-codegen.md) · [Learning path](README.md) · Next: [File transfers](08-file-transfers.md)

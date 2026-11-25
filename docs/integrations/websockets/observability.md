@@ -85,7 +85,7 @@ continues to inherit its caller's active context.
 
 For application-owned providers, `Telemetry.websocket_middleware()` creates this
 middleware with the same tracing and metrics configuration as composition. See
-the [controller tracing example](../../telemetry.md#third-party-instrumentation-and-rpc).
+the [controller tracing example](../../10-telemetry.md#third-party-instrumentation-and-rpc).
 Server-side tracing needs no changes to generated clients or controller signatures.
 
 `exclude` receives `RpcConnectionScope` or `RpcRequestScope`. Return `True` to
@@ -208,7 +208,7 @@ instance with both signals disabled still enters middleware scopes.
 Generated-client instrumentation and OTEL log exporting are configured by the
 application. Per-request trace propagation is described below.
 
-[Back to documentation](README.md)
+[Back to documentation](../../04-websockets.md)
 ## Observe generated-client calls
 
 Generated clients use `middleware` for instrumentation. Wrap

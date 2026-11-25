@@ -24,7 +24,7 @@ def release_repo(tmp_path: Path) -> Path:
         "examples/reference-service/pyproject.toml",
         "docs/streams.md",
         "examples/streams/README.md",
-        "docs/integrations/sse/README.md",
+        "docs/03-streaming.md",
         "fastapi_canon/_version.py",
         "fastapi_canon/__init__.py",
     ]

@@ -207,7 +207,7 @@ documented by `Composition` by default.
 
 ## Export and client generation
 
-Use the [generation workflow](codegen.md) to coordinate specialized SSE clients
+Use the [generation workflow](06-codegen.md) to coordinate specialized SSE clients
 and external HTTP tooling. HTTP and SSE share an OpenAPI source. Specialized
 stream clients expose async iteration, completion and public problem handling.
 Their naming and transport options are documented in [SSE generation](integrations/sse/codegen.md).
@@ -240,7 +240,7 @@ processing; it does not move generator execution before response start. The
 failure phase determines the wire representation. Generated iterators yield only
 business events, raise `ProblemError` for terminal problems, and distinguish
 completion from unexpected EOF (`TransportError`). Undeclared processing errors
-produce a safe internal problem. See [canonical error bindings](problems.md).
+produce a safe internal problem. See [canonical error bindings](02-problems.md).
 
 ## Compatibility regression checks
 

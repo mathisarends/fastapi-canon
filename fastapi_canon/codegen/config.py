@@ -28,7 +28,7 @@ def load_config(path: Path) -> Configuration:
     _keys(raw, {"version", "app", "contracts", "targets"}, "codegen")
     if raw.get("version") != 2:
         raise ValueError(
-            "Use codegen version = 2; version 1 domain SDK generation was removed. See docs/codegen.md for migration."
+            "Use codegen version = 2; version 1 domain SDK generation was removed. See docs/06-codegen.md for migration."
         )
     app = raw.get("app")
     if not isinstance(app, str) or not app:

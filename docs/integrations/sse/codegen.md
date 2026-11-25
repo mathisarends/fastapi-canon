@@ -1,8 +1,8 @@
 # Contracts and client generation
 
-[Documentation](README.md) · [Project](README.md)
+[Documentation](../../03-streaming.md) · [Project](../../03-streaming.md)
 
-Use the [generation workflow](../../codegen.md) to coordinate specialized
+Use the [generation workflow](../../06-codegen.md) to coordinate specialized
 clients and external HTTP tooling. This guide documents standalone generation
 and transport-specific options.
 

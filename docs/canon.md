@@ -31,32 +31,32 @@ scope.
 | Responsibility | Public imports | Guide |
 | --- | --- | --- |
 | Shared application router and composable channels | `fastapi_canon.APIRouter`, `fastapi_canon.integrations.websockets.RpcChannel` | [One feature router](routers.md) |
-| Application composition and Dishka lifecycle | `fastapi_canon.Composition`, `Feature` | [Composition](composition.md#feature-composition) |
+| Application composition and Dishka lifecycle | `fastapi_canon.Composition`, `Feature` | [Composition](05-composition.md#feature-composition) |
 | Typed transport dependencies and context hooks | `fastapi_canon.Inject` | [Dependency injection](integrations/websockets/dependencies.md) |
 | Composition checks and installed HTTP descriptions | `Composition.check(app)`, `fastapi_canon.check_app(app)`, `fastapi_canon.inspect_app(app)`; values `fastapi_canon.diagnostics.CheckReport`, `CheckIssue`, `CheckContext`, `CompositionInfo`, `FeatureInfo`, `OperationInfo` | [System checks](system-checks.md) |
-| Database ownership, feature tables, migrations and locks | `fastapi_canon.integrations.database.Database`, `Tables`, `AlembicMigrations`, `AcquireTransactionLock` | [Databases](database.md) |
-| Short service scopes | `fastapi_canon.Scoped`, `ServiceScope` | [Databases](database.md) |
-| HTTP routes and contracts | `fastapi_canon.APIRouter`, `RouterPolicy`, `Error`, `ErrorOptions`, `CanonResponse`; `Problem`; `fastapi_canon.error.ErrorRegistry` for manual assembly without `Composition` | [HTTP contracts](composition.md#error-contracts) |
-| Streaming HTTP request bodies | `fastapi_canon.BinaryBody` (0.28.0) | [File uploads](integrations/uploads.md#binary-responses-and-raw-uploads) |
+| Database ownership, feature tables, migrations and locks | `fastapi_canon.integrations.database.Database`, `Tables`, `AlembicMigrations`, `AcquireTransactionLock` | [Databases](09-database.md) |
+| Short service scopes | `fastapi_canon.Scoped`, `ServiceScope` | [Databases](09-database.md) |
+| HTTP routes and contracts | `fastapi_canon.APIRouter`, `RouterPolicy`, `Error`, `ErrorOptions`, `CanonResponse`; `Problem`; `fastapi_canon.error.ErrorRegistry` for manual assembly without `Composition` | [HTTP contracts](05-composition.md#error-contracts) |
+| Streaming HTTP request bodies | `fastapi_canon.BinaryBody` (0.28.0) | [File uploads](08-file-transfers.md#binary-responses-and-raw-uploads) |
 | Typed SSE | `APIRouter.get(..., response_class=EventSourceResponse)` | [SSE contracts](streams.md) |
-| WebSocket JSON-RPC | `APIRouter.channel()`; `APIRouter.include_channel()` with `fastapi_canon.integrations.websockets.RpcChannel` for shared channels | [WebSockets](integrations/websockets/README.md) |
+| WebSocket JSON-RPC | `APIRouter.channel()`; `APIRouter.include_channel()` with `fastapi_canon.integrations.websockets.RpcChannel` for shared channels | [WebSockets](04-websockets.md) |
 | Typed or raw WebSocket messages and binary streams | `@APIRouter.socket()`, `@APIRouter.binary_stream()`; `RpcSocket` | [Sockets](integrations/websockets/sockets.md), [binary streams](integrations/websockets/streams.md) |
 | Shared WebSocket connection options | `APIRouter(websocket_policy=...)` with `fastapi_canon.integrations.websockets.WebSocketPolicy` | [Connection policy](routers.md#share-websocket-connection-policy) |
 | WebRTC with Canon admission errors | `fastapi_canon.integrations.webrtc.WebRtcRouter` and `@rtc.session()`, `Session`, `SessionCapacity`; engine adapters in `.webrtc.engines` | [WebRTC admission](webrtc.md) |
 | Contract export | `fastapi_canon.export_contracts`; `fastapi_canon.contracts.Contracts`, `ContractSelection`; `fastapi-canon contracts export` | [Application export](contracts.md) |
-| OpenAPI contracts without `Composition` | `fastapi_canon.openapi.install_openapi_contracts`, `validate_openapi_contracts` | [Composition](composition.md) |
-| Startup configuration errors | `fastapi_canon.errors.ConfigurationError` and its subclasses | [Problems](problems.md) |
-| Telemetry declarations | `fastapi_canon.integrations.opentelemetry.Telemetry`, `instrument`, `ResourceInstrumentation`, `SdkProviders`, `SdkFactory`, `console` | [Telemetry](telemetry.md) |
-| HTTP client and engine instrumentation | `HttpxClients`, `instrument_httpx` in `.opentelemetry.httpx`; `SqlAlchemyEngines`, `instrument_sqlalchemy` in `.opentelemetry.sqlalchemy` | [Resources](telemetry.md#http-clients-and-database-engines) |
+| OpenAPI contracts without `Composition` | `fastapi_canon.openapi.install_openapi_contracts`, `validate_openapi_contracts` | [Composition](05-composition.md) |
+| Startup configuration errors | `fastapi_canon.errors.ConfigurationError` and its subclasses | [Problems](02-problems.md) |
+| Telemetry declarations | `fastapi_canon.integrations.opentelemetry.Telemetry`, `instrument`, `ResourceInstrumentation`, `SdkProviders`, `SdkFactory`, `console` | [Telemetry](10-telemetry.md) |
+| HTTP client and engine instrumentation | `HttpxClients`, `instrument_httpx` in `.opentelemetry.httpx`; `SqlAlchemyEngines`, `instrument_sqlalchemy` in `.opentelemetry.sqlalchemy` | [Resources](10-telemetry.md#http-clients-and-database-engines) |
 | MCP features | `fastapi_canon.integrations.mcp.McpServer`, `McpMount`, `McpScope`, `Mcp`, `Inject` | [MCP](integrations/mcp/README.md) |
-| Custom integrations | `fastapi_canon.integration.Integration`, `IntegrationPart`, `IntegrationContext`, `Installer`, `IntegrationError`, `IntegrationRoute`, `RouteContext`, `ContractExporter`, `attach_route` | [Integrations](composition.md#integrations) |
-| Generator extensions | `fastapi_canon.codegen.generators.Generator`, `TargetConfig`, `Rendering` | [Generator registration](codegen.md#generator-registration) |
+| Custom integrations | `fastapi_canon.integration.Integration`, `IntegrationPart`, `IntegrationContext`, `Installer`, `IntegrationError`, `IntegrationRoute`, `RouteContext`, `ContractExporter`, `attach_route` | [Integrations](05-composition.md#integrations) |
+| Generator extensions | `fastapi_canon.codegen.generators.Generator`, `TargetConfig`, `Rendering` | [Generator registration](06-codegen.md#generator-registration) |
 
 Import application-building names from `fastapi_canon` and optional types from
 their integration facade. Other implementation modules are internal, even without
 a leading underscore, and may change in any release. Run the source checker with
 `python -m fastapi_canon check errors`; see
-[error checking](error-checking.md).
+[error checking](07-error-checking.md).
 
 ```python
 from fastapi_canon import APIRouter, Composition, Feature, Inject
@@ -66,7 +66,7 @@ from fastapi_canon.integrations.websockets import RpcChannel
 
 Composition owns the application Dishka container and feature installation.
 Applications own authentication, business resources and telemetry providers.
-See [composition](composition.md) and the integration guides for lifecycle rules.
+See [composition](05-composition.md) and the integration guides for lifecycle rules.
 
 In Canon 0.21.0 and later, optional arguments select their default only for
 `None`. Explicit empty values and callable objects with false truthiness retain
@@ -85,7 +85,7 @@ an empty path-parameter mapping overrides the handshake parameters.
 
 The 0.17.0 workflow uses separate transport clients and external HTTP
 tooling. Use `generate --check --diff` for drift, `--target NAME` to select a
-client and `--offline` for saved contracts. See [configuration and migration](codegen.md).
+client and `--offline` for saved contracts. See [configuration and migration](06-codegen.md).
 
 Use [contributing](contributing.md) for development commands and
 [architecture](architecture.md) for repository boundaries.

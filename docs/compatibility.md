@@ -367,7 +367,7 @@ in one wheel. Feature extras select third-party dependencies; no extra requires 
 earlier distribution. Base composition retains its lower dependency bounds.
 
 Canon 0.10.0 adds the [canonical error bindings and generated-client
-handling](../docs/problems.md). The expanded implementation
+handling](02-problems.md). The expanded implementation
 passed the current-dependency wheel matrix on Python 3.14 and the minimum matrix
 on Python 3.12 on 2026-10-31: eleven independent installations per matrix, with
 core Pydantic 2.9 support retained. The final release artifacts passed those
@@ -454,7 +454,7 @@ versions have their own OpenTelemetry API dependency. The installed-wheel matrix
 covers API-only `fastapi-canon[otel]` and the reference trace tests with an application
 SDK. Runtime telemetry is exercised with the versions selected in `uv.lock`;
 minimum dependencies are checked separately. See the
-[telemetry guide](telemetry.md) for native FastAPI
+[telemetry guide](10-telemetry.md) for native FastAPI
 bridging, instrumentation ownership, and operation-span limits.
 
 CI runs the root Python suite and reference-service suite on Linux with Python
@@ -530,4 +530,4 @@ application-side validation.
 Canon 0.17.0 verifies separate SSE/RPC clients and the version-2
 generation/check workflow. HTTP client generation belongs to external OpenAPI
 tooling. Prior common-SDK checks describe older release evidence and do not
-establish the removed facade as a current API. See [generation](codegen.md).
+establish the removed facade as a current API. See [generation](06-codegen.md).

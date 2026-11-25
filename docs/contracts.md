@@ -202,6 +202,6 @@ Do not inject placeholder secrets or silently disable authentication for export.
 
 The configured version-2 workflow still exports application-wide contracts;
 Python `ContractSelection` does not add selectors to its TOML targets. Use the
-[current generation workflow](codegen.md) for separate clients and external HTTP
+[current generation workflow](06-codegen.md) for separate clients and external HTTP
 tools. The remaining target-selection and staging proposal is tracked in
 [issue #154](https://github.com/mathisarends/fastapi-canon/issues/154).

@@ -163,7 +163,7 @@ public failures. Keep arbitrary exception text out of public details. For shared
 auth use `RouterPolicy` with real dependencies; declarations do not authorize
 requests. For empty/binary success use `CanonResponse.empty()` /
 `CanonResponse.binary(...)` and return the matching response. Details:
-[problems.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/problems.md) and [composition.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/composition.md).
+[problems.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/02-problems.md) and [composition.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/05-composition.md).
 
 ## Operation IDs
 

@@ -1,7 +1,7 @@
 # Projects: Python contracts to clients
 
 This small application is the runnable counterpart to the
-[quickstart](../../docs/quickstart.md). It demonstrates contracts, not a
+[quickstart](../../docs/01-quickstart.md). It demonstrates contracts, not a
 background task scheduler:
 
 - `GET /projects/1` returns a typed project; project `0` raises a public problem.
@@ -27,7 +27,7 @@ The local `fastapi-canon.toml` exports OpenAPI and OpenRPC, then produces
 separate TypeScript SSE/RPC clients under `dist/streams/typescript` and
 `dist/rpc/typescript`, plus Python clients under `dist/streams/python` and
 `dist/rpc/python/projects_client`. Use an external OpenAPI generator for HTTP.
-See the [workflow](../../docs/codegen.md) and
+See the [workflow](../../docs/06-codegen.md) and
 [design rationale](../../docs/sdk-design.md). Shared errors come from the same
 Python declarations; separate generated classes have separate runtime identities.
 Do not edit generated files; change the Python declarations and regenerate.
@@ -77,5 +77,5 @@ Keep terminal, speech and browser-control sessions separately owned when replay
 or reconnection would be incorrect. Close and replace shared connections when the
 signed-in user changes; credentials do not change an existing connection's identity.
 
-See [version-1 migration](../../docs/codegen.md#migration-from-version-1) for the
+See [version-1 migration](../../docs/06-codegen.md#migration-from-version-1) for the
 configuration and file-ownership changes.

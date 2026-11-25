@@ -26,7 +26,7 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0290).
 
 - Canon routers, operations and `include_router()` accept FastAPI's
   `max_body_size` and `form_limits`. Form limits and bodies that grow past the
-  limit return Canon problems. See [request limits](docs/integrations/uploads.md#request-limits).
+  limit return Canon problems. See [request limits](docs/08-file-transfers.md#request-limits).
 
 ### Fixed
 
@@ -50,11 +50,11 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0280).
 
 - `BinaryBody(media_type)` streams raw uploads into an async handler's
   `AsyncIterator[bytes]` parameter and declares a required binary request body
-  in OpenAPI. See [raw uploads](docs/integrations/uploads.md#binary-responses-and-raw-uploads)
+  in OpenAPI. See [raw uploads](docs/08-file-transfers.md#binary-responses-and-raw-uploads)
   ([#226](https://github.com/mathisarends/fastapi-canon/issues/226)).
 - `Telemetry(sdk=...)` lets each application own its OpenTelemetry SDK
   providers from startup to shutdown. `console(service_name=...)` prints spans
-  to standard output. See [application-owned SDK](docs/telemetry.md#application-owned-sdk)
+  to standard output. See [application-owned SDK](docs/10-telemetry.md#application-owned-sdk)
   ([#225](https://github.com/mathisarends/fastapi-canon/issues/225)).
 
 ## 0.27.0 - 2026-11-24
@@ -115,7 +115,7 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0260).
   FastAPI application or application lifespans (#206).
 - `Composition(middleware=[...])` declares ASGI middleware outermost first, with
   support for APP-scoped `Inject[T]` constructor parameters. See
-  [middleware](docs/composition.md#middleware) (#207).
+  [middleware](docs/05-composition.md#middleware) (#207).
 
 ### Fixed
 
@@ -155,7 +155,7 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0250).
 
 - Feature lifespans accept `Inject[T]` parameters, resolved from the application
   container at startup. Preflight reports a service without an APP-scope binding
-  as `canon.providers.E005`. See [feature lifespans](docs/composition.md#feature-lifespans).
+  as `canon.providers.E005`. See [feature lifespans](docs/05-composition.md#feature-lifespans).
 - WebSocket `rejects=` and socket `closes=` accept a declared `Error`. Its status
   (401, 403, 404 or 503) names the rejection and its title is the reason. See
   [rejections](docs/integrations/websockets/connections-and-events.md#map-failures-to-rejections).
@@ -514,7 +514,7 @@ superseded here. See the [upgrade guide](docs/package-migration.md#upgrade-to-02
   visible with CAN003. Existing `--strict` or `--require-complete` checks can now
   exit 1. Before upgrading, scan all application roots, map and declare newly
   discovered errors, and review incomplete subclass declarations without
-  excluding them. See the [subclass guide](docs/error-checking.md#rpc-channel-subclasses).
+  excluding them. See the [subclass guide](docs/07-error-checking.md#rpc-channel-subclasses).
 
 ## 0.18.0 - 2026-11-10
 
@@ -555,7 +555,7 @@ superseded here. See the [upgrade guide](docs/package-migration.md#upgrade-to-02
 
 - Remove the Python/TypeScript HTTP generator and unified domain SDK. Replace
   version-1 `[codegen]` sources/targets with the version-2 workflow in the
-  [generation guide](docs/codegen.md). Use external OpenAPI tooling for HTTP
+  [generation guide](docs/06-codegen.md). Use external OpenAPI tooling for HTTP
   and specialized SSE/RPC/WebRTC client APIs. Replace facade-specific `.safe()`, binding options
   and model identity/name mappings. Shared Python `Error` declarations and
   public problem contracts remain. JSON generation reports use schema version 2
@@ -821,7 +821,7 @@ Python/TypeScript SDKs together. See the [upgrade guide](docs/package-migration.
   `ServiceScope` signatures, provider lifetimes, transport injection markers,
   routing defaults and dependency requirements are unchanged. Existing
   applications require no migration to continue using their current APIs.
-  See [short use-case calls](docs/database.md#short-use-case-calls).
+  See [short use-case calls](docs/09-database.md#short-use-case-calls).
 
 - The bundled `build-canon-backend` skill explains Canon's components and
   Composition/Dishka wiring through focused references and small examples.
@@ -1028,7 +1028,7 @@ Python/TypeScript SDKs together. See the [upgrade guide](docs/package-migration.
   CAN003, and their operation names become `module.factory.<locals>.endpoint`.
   Before adopting 0.16.0, update report-name filters and map/declare newly exposed
   escaping errors. Path and decorator line remain separate report fields; see
-  [factory coverage](docs/error-checking.md#direct-local-route-factories).
+  [factory coverage](docs/07-error-checking.md#direct-local-route-factories).
 - `StreamRouter`, `CanonStreamRouter`, `WebRtcRouter` and `CanonWebRtcRouter`
   are no longer exported from `fastapi_canon.integrations.sse` or
   `fastapi_canon.integrations.webrtc`. Declare streams on an `APIRouter`: migrate
@@ -1065,14 +1065,14 @@ Python/TypeScript SDKs together. See the [upgrade guide](docs/package-migration.
   hidden behind unsupported `with`/`async with` statements. Before enabling strict
   checking on 0.16.0, map these escaping errors and declare them in `raises`.
   Keep CAN003 for managers whose suppression/protocol remains unknown; see
-  [context-manager coverage](docs/error-checking.md#local-context-managers).
+  [context-manager coverage](docs/07-error-checking.md#local-context-managers).
 
 - Source checking can now report CAN001/CAN002 for newly followed comprehension
   paths that previously retained incomplete analysis. Before adopting 0.16.0,
   review new findings and declare their existing Error mappings in `raises`, or
   add missing mappings, before enforcing strict CI. Unresolved protocols and
   consumers still retain CAN003; do not treat those reports as full coverage.
-  See [comprehension coverage](docs/error-checking.md#comprehensions-and-deferred-generators).
+  See [comprehension coverage](docs/07-error-checking.md#comprehensions-and-deferred-generators).
 
 - Unexpected common-generation failures now omit raw exception contents in
   text/JSON diagnostics. Before adopting 0.16.0, update parsers that depended on
@@ -1800,7 +1800,7 @@ remain available. See `docs/problems.md` and the root codegen guide.
   FastAPI's endpoint spans for propagated domain exceptions.
 - Explicit WebSocket middleware helper forwarding application providers, isolated
   `SpanCapture` testing helpers, reference endpoint trace contracts, and an opt-in
-  two-service OTLP demo. See the [telemetry guide](docs/telemetry.md).
+  two-service OTLP demo. See the [telemetry guide](docs/10-telemetry.md).
 
 ## 0.8.1 - 2026-10-25
 

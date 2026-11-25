@@ -354,9 +354,9 @@ them or install its own alias generator. For example, `project_id: int` stays
 When migrating from automatic adaptation, use `RpcModel` to retain camel-case
 names and rejection of unknown fields, or configure that policy explicitly on
 the Pydantic model. Regenerate clients after choosing the wire contract. See
-[shared DTOs](../../codegen.md).
+[shared DTOs](../../06-codegen.md).
 
-[Back to documentation](README.md)
+[Back to documentation](../../04-websockets.md)
 ## Idempotent methods
 
 Declare `@channel.method(idempotent=True)` only when concurrent or repeated

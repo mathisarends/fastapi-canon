@@ -5,8 +5,8 @@ test structure. They describe this checkout's implemented library. Verify an API
 
 Use `README.md` for the library overview, `docs/canon.md` for public namespaces,
 `docs/contributing.md` for commands and `docs/compatibility.md` for tested scope.
-Shared errors and common generation are documented in `docs/problems.md` and
-`docs/codegen.md`. The canonical repository is
+Shared errors and common generation are documented in `docs/02-problems.md` and
+`docs/06-codegen.md`. The canonical repository is
 `mathisarends/fastapi-canon`; preserve historical release evidence in
 `mathisarends/canon` as described in `docs/repository-migration.md`.
 
@@ -58,8 +58,9 @@ Shared errors and common generation are documented in `docs/problems.md` and
 - Put source/style policies in Smelt or Ruff, not AST-based pytest tests. Do not
   weaken rules, add broad exclusions or record a debt baseline to pass checks.
   Necessary inline exceptions need a concrete reason; unused suppressions fail.
-- Runnable demos live in `examples/`, transport guides in `docs/integrations/`,
-  development scripts in `scripts/` and scoped analyzer settings alongside the code they check.
+- Runnable demos live in `examples/`, the numbered learning path in `docs/`,
+  transport details in `docs/integrations/`, development scripts in `scripts/`
+  and scoped analyzer settings alongside the code they check.
   The reference service is an editable example dependency, not a release target.
   Application code uses feature slices, inward dependencies, framework-free domain
   and Dishka for application dependencies.
