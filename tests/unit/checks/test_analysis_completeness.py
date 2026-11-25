@@ -229,3 +229,87 @@ def test_library_handlers_catch_application_subclasses(
 
     assert operation["diagnostics"] == []
     assert operation["complete"]
+
+
+PORTS = """
+from abc import ABC, abstractmethod
+
+class Wrapper:
+    @property
+    def session(self) -> Session[str]:
+        return Session()
+
+class Port(ABC):
+    @property
+    @abstractmethod
+    def session(self) -> Session[str]: ...
+
+class Failing(Port):
+    @property
+    def session(self) -> Session[str]:
+        fail()
+        return Session()
+
+class Stored(ABC):
+    @property
+    @abstractmethod
+    def session(self) -> Session[str]: ...
+
+class StoredImplementation(Stored):
+    def __init__(self) -> None:
+        self.session = Session()
+
+class Guarded:
+    def __init__(self, strict: bool) -> None:
+        try:
+            self._session = Session()
+        except ValueError:
+            raise
+        if strict:
+            self._mixed = Session()
+        else:
+            self._mixed = Wrapper()
+"""
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param("await Wrapper().session.current()", id="property-type"),
+        pytest.param("port: Port = Failing()\nport.session", id="abstract-property"),
+        pytest.param(
+            "await getattr(Wrapper(), 'session').current()", id="getattr-literal"
+        ),
+        pytest.param(
+            "await Guarded(True)._session.current()", id="field-assigned-in-try"
+        ),
+    ],
+)
+def test_attribute_reads_follow_their_declared_types(
+    analyze: Callable[..., dict[str, Any]], body: str
+) -> None:
+    operation = analyze(body, PORTS)
+
+    [finding] = operation["diagnostics"]
+    assert finding["code"] == "CAN001"
+    assert finding["trace"][-1] == "api.fail"
+    assert operation["complete"]
+
+
+def test_abstract_properties_implemented_by_fields_are_complete(
+    analyze: Callable[..., dict[str, Any]],
+) -> None:
+    operation = analyze("store: Stored = StoredImplementation()\nstore.session", PORTS)
+
+    assert operation["diagnostics"] == []
+    assert operation["complete"]
+
+
+def test_fields_assigned_different_types_stay_ambiguous(
+    analyze: Callable[..., dict[str, Any]],
+) -> None:
+    operation = analyze("await Guarded(True)._mixed.current()", PORTS)
+
+    assert [item["code"] for item in operation["diagnostics"]] == ["CAN003"]
+    assert "candidates api.Session.current" in operation["diagnostics"][0]["message"]
+    assert not operation["complete"]

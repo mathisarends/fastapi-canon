@@ -234,7 +234,10 @@ def test_library_dependencies_are_external(
     ("body", "message"),
     [
         ("missing_package.run()", "unresolved call: missing_package.run"),
-        ("getattr(Service(), 'run')()", "unresolved call: getattr(Service(), 'run')"),
+        (
+            "getattr(Service(), 'r' + 'un')()",
+            "unresolved call: getattr(Service(), 'r' + 'un')",
+        ),
         (
             "json.loads('{}').run()",
             "ambiguous call json.loads('{}').run: candidates api.Service.run; "

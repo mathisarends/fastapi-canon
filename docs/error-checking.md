@@ -75,8 +75,13 @@ It relies on these closed-world assumptions:
   methods (such as Pydantic validators) of classes with library bases.
   Decorators from libraries are transparent.
 - **The roots contain every application class.** An untyped receiver whose method
-  name no application class defines is a library value. An abstract method or
-  `Protocol` member without a Dishka binding follows every scanned implementation.
+  name no application class defines is a library value. An abstract method,
+  property or `Protocol` member without a Dishka binding follows every scanned
+  implementation.
+- **Annotations are true.** Parameters, fields, properties and return values have
+  their annotated types; iterating a `list[T]`, `tuple[T, ...]` or `dict[T, V]`
+  yields `T`. An `HTTPConnection` injected into an HTTP operation is a `Request`,
+  also in the helpers it is passed to.
 - **Handlers catch by inheritance.** `except LibraryError` catches application
   exceptions that subclass it and nothing else.
 - **Deferred bodies run later.** Errors of generator expressions and unawaited
@@ -123,13 +128,13 @@ These cases stay `CAN003`; the message names what to fix:
 
 - **Ambiguous calls:** a method that application classes define, called on a
   receiver of unknown type. The message lists candidates; annotate the receiver.
-- **Dynamic dispatch:** calling the result of `getattr`, `eval`, `exec`,
-  `compile` or `__import__`, unresolved `super()` calls, and raising a value of
-  unknown type.
+- **Dynamic dispatch:** `getattr` with a computed name, calling the result of
+  `eval`, `exec`, `compile` or `__import__`, unresolved `super()` calls, and
+  raising a value of unknown type.
 - **Application decorators:** a decorator defined in the roots can wrap a call
   arbitrarily.
 - **Transport narrowing:** a `WebSocketException` that may escape an HTTP
-  operation.
+  operation through a connection of unknown origin.
 - **Unlocated code:** imports that are neither scanned nor installed, or packages
   that contain a scanned root during a partial scan.
 - **Ports without implementations:** an abstract method that no scanned class

@@ -14,6 +14,7 @@ type _FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 type SymbolEnvironment = dict[str, SymbolValue]
 type _FactoryEnvironment = dict[str, tuple[str | None, ...]]
 
+_PROPERTIES = frozenset({"builtins.property", "functools.cached_property"})
 # Builtins that dispatch by computed names or code rather than protocol methods.
 _DYNAMIC = frozenset(
     f"builtins.{name}"
@@ -66,6 +67,57 @@ _TRANSPARENT_ANNOTATIONS = frozenset(
     }
 )
 _UNIONS = frozenset({"typing.Union", "typing.Optional"})
+_ITERABLES = frozenset(
+    f"{module}.{name}"
+    for module, names in {
+        "builtins": ("list", "set", "frozenset"),
+        "collections": ("deque",),
+        "collections.abc": (
+            "AsyncGenerator",
+            "AsyncIterable",
+            "AsyncIterator",
+            "Collection",
+            "Generator",
+            "Iterable",
+            "Iterator",
+            "MutableSequence",
+            "MutableSet",
+            "Sequence",
+            "Set",
+        ),
+        "typing": (
+            "AbstractSet",
+            "AsyncGenerator",
+            "AsyncIterable",
+            "AsyncIterator",
+            "Collection",
+            "Deque",
+            "FrozenSet",
+            "Generator",
+            "Iterable",
+            "Iterator",
+            "List",
+            "MutableSequence",
+            "MutableSet",
+            "Sequence",
+            "Set",
+        ),
+    }.items()
+    for name in names
+)
+_MAPPINGS = frozenset(
+    {
+        "builtins.dict",
+        "collections.OrderedDict",
+        "collections.defaultdict",
+        "collections.abc.Mapping",
+        "collections.abc.MutableMapping",
+        "typing.Dict",
+        "typing.Mapping",
+        "typing.MutableMapping",
+    }
+)
+_TUPLES = frozenset({"builtins.tuple", "typing.Tuple"})
 _PROVIDERS = frozenset({"dishka.Provider", "dishka.provider.Provider"})
 _PROVIDE = frozenset(
     {
@@ -179,6 +231,8 @@ class SymbolValue:
     name: str = ""
     instance: bool = False
     receiver: str | None = None
+    # The element type when iterating the value, from its container annotation.
+    element: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -997,7 +1051,11 @@ class SourceIndex:
                         "webrtc",
                     }:
                         resolved = "starlette.requests.Request"
-                    env[arg.arg] = SymbolValue(resolved, instance=True)
+                    env[arg.arg] = SymbolValue(
+                        resolved,
+                        instance=True,
+                        element=self.element(arg.annotation, function.module),
+                    )
         if function.owner:
             owner_type = receiver if receiver is not None else function.owner
             positional = [*arguments.posonlyargs, *arguments.args]
@@ -1024,7 +1082,11 @@ class SourceIndex:
             cached, modules = self._fields[owner]
             self._touched.update(modules)
             return cached
-        if owner in self._building or owner not in self._definitions:
+        definition = self._definitions.get(owner)
+        if owner in self._building or definition is None:
+            return {}
+        if not isinstance(definition.node, ast.ClassDef):
+            # Attributes of functions and properties are not instance fields.
             return {}
         self._building.add(owner)
         previous = self._touched
@@ -1034,7 +1096,8 @@ class SourceIndex:
             lineage = self.lineage(owner)
             for name in reversed(lineage[0] if lineage else [owner]):
                 definition = self._definitions[name]
-                assert isinstance(definition.node, ast.ClassDef)
+                if not isinstance(definition.node, ast.ClassDef):
+                    continue
                 for statement in definition.node.body:
                     self._field(
                         statement, definition.module, {}, receiver=None, result=result
@@ -1060,16 +1123,32 @@ class SourceIndex:
                         resolved = self.annotation(arg.annotation, constructor.module)
                         if resolved:
                             constructor_env[arg.arg] = SymbolValue(
-                                resolved, instance=True
+                                resolved,
+                                instance=True,
+                                element=self.element(
+                                    arg.annotation, constructor.module
+                                ),
                             )
-                for statement in constructor.node.body:
+                assigned: dict[str, SymbolValue] = {}
+                conflicting: set[str] = set()
+                for statement in _nested_statements(constructor.node.body):
+                    single: dict[str, SymbolValue] = {}
                     self._field(
                         statement,
                         constructor.module,
                         constructor_env,
                         receiver=receiver,
-                        result=result,
+                        result=single,
                     )
+                    for attribute, value in single.items():
+                        if assigned.get(attribute, value) != value:
+                            conflicting.add(attribute)
+                        assigned[attribute] = value
+                for attribute in conflicting:
+                    # Branches assign different types: keep a declared class
+                    # annotation, otherwise the type is unknown.
+                    assigned[attribute] = result.get(attribute, SymbolValue())
+                result.update(assigned)
         finally:
             self._building.discard(owner)
             modules = frozenset(self._touched)
@@ -1184,13 +1263,54 @@ class SourceIndex:
             and owner in (self.mro(name) or ())
         ]
 
-    def classmethod(self, function: SourceDefinition) -> bool:
-        return isinstance(
-            function.node, ast.FunctionDef | ast.AsyncFunctionDef
-        ) and any(
-            self.resolve(decorator, function.module) == "builtins.classmethod"
-            for decorator in function.node.decorator_list
+    def http_connection(
+        self, definition: SourceDefinition, node: ast.Call, argument: ast.expr
+    ) -> bool:
+        """Whether *argument* fills a connection parameter of *definition*."""
+        callee = definition.node
+        if not isinstance(callee, ast.FunctionDef | ast.AsyncFunctionDef):
+            return False
+        positional = [*callee.args.posonlyargs, *callee.args.args]
+        if definition.owner and positional and isinstance(node.func, ast.Attribute):
+            positional = positional[1:]
+        parameters = {
+            id(value): parameter
+            for parameter, value in zip(positional, node.args, strict=False)
+        }
+        named = {item.arg: item for item in [*positional, *callee.args.kwonlyargs]}
+        for keyword in node.keywords:
+            if keyword.arg in named:
+                parameters[id(keyword.value)] = named[keyword.arg]
+        parameter = parameters.get(id(argument))
+        return (
+            parameter is not None
+            and parameter.annotation is not None
+            and self.annotation(parameter.annotation, definition.module) in _CONNECTIONS
         )
+
+    def literal_getattr(
+        self, node: ast.Call, module: str, env: SymbolEnvironment
+    ) -> ast.Attribute | None:
+        """``getattr(obj, "name"[, default])`` as the attribute read ``obj.name``."""
+        if (
+            self.resolve(node.func, module, env) != "builtins.getattr"
+            or node.keywords
+            or len(node.args) not in {2, 3}
+        ):
+            return None
+        owner, name = node.args[:2]
+        if not (
+            isinstance(name, ast.Constant)
+            and isinstance(name.value, str)
+            and name.value.isidentifier()
+        ):
+            return None
+        return ast.copy_location(
+            ast.Attribute(value=owner, attr=name.value, ctx=ast.Load()), node
+        )
+
+    def http_request(self, value: SymbolValue) -> bool:
+        return value.instance and value.name in _REQUESTS
 
     def resolve(
         self,
@@ -1216,68 +1336,18 @@ class SourceIndex:
             parent = self.resolve(node.value, module, env, seen=seen)
             if parent is None and isinstance(node.value, ast.Call | ast.Await):
                 parent = self.infer(node.value, module, env).name
+            getter = self._definitions.get(parent or "")
+            if getter is not None and self.getter(getter):
+                # Attributes of a property are attributes of its value.
+                assert isinstance(getter.node, ast.FunctionDef)
+                returns = getter.node.returns
+                parent = self.annotation(returns, getter.module) if returns else None
             if parent:
                 candidate = self._canonical(f"{parent}.{node.attr}", seen)
                 if candidate in self._definitions or parent not in self._definitions:
                     return candidate
                 method = self.method(parent, node.attr)
                 return method.name if method else candidate
-        return None
-
-    def value(self, node: ast.expr, module: str) -> tuple[str, ast.expr]:
-        seen: set[str] = set()
-        while name := self.resolve(node, module):
-            if name in seen:
-                break
-            seen.add(name)
-            binding = self._bindings.get(name)
-            if binding is None or isinstance(binding, str):
-                break
-            module, node = binding
-        return module, node
-
-    def annotation(
-        self, node: ast.expr, module: str, seen: frozenset[int] = frozenset()
-    ) -> str | None:
-        if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            try:
-                node = ast.parse(node.value, mode="eval").body
-            except SyntaxError:
-                return None
-        module, node = self.value(node, module)
-        if id(node) in seen:
-            return None
-        seen = seen | {id(node)}
-        if isinstance(node, ast.Subscript):
-            wrapper = self.resolve(node.value, module)
-            arguments = (
-                node.slice.elts if isinstance(node.slice, ast.Tuple) else [node.slice]
-            )
-            if wrapper in _TRANSPARENT_ANNOTATIONS:
-                return self.annotation(arguments[0], module, seen)
-            if wrapper in _UNIONS:
-                return self._union(arguments, module, seen)
-            # A parametrized class has the methods of its origin class.
-            return None if wrapper in _OPAQUE_ANNOTATIONS else wrapper
-        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
-            return self._union(_union_members(node), module, seen)
-        resolved = self.resolve(node, module)
-        return None if resolved in _OPAQUE_ANNOTATIONS else resolved
-
-    def _union(
-        self, members: list[ast.expr], module: str, seen: frozenset[int]
-    ) -> str | None:
-        # Optional[T] after a guard still has T's methods; absence adds no
-        # application-defined explicit exceptions.
-        names = [
-            self.annotation(member, module, seen)
-            for member in members
-            if not (isinstance(member, ast.Constant) and member.value is None)
-        ]
-        if len(set(names)) == 1:
-            return names[0]
-        if names and all(name and self.library(name) for name in names):
-            return LIBRARY_VALUE
         return None
 
     def infer(
@@ -1296,6 +1366,9 @@ class SourceIndex:
             case ast.Await():
                 return self.infer(node.value, module, env, seen=seen, awaited=True)
             case ast.Call():
+                attribute = self.literal_getattr(node, module, env)
+                if attribute is not None:
+                    return self.infer(attribute, module, env, seen=seen)
                 target = self.infer(node.func, module, env, seen=seen)
                 receiver_type = target.receiver
                 definition = self._definitions.get(target.name)
@@ -1315,7 +1388,13 @@ class SourceIndex:
                         )
                         if name in {"typing.Self", "typing_extensions.Self"}:
                             name = receiver_type
-                        return SymbolValue(name or "", instance=True)
+                        return SymbolValue(
+                            name or "",
+                            instance=True,
+                            element=self.element(
+                                definition.node.returns, definition.module
+                            ),
+                        )
                 returned = _EXTERNAL_RETURNS.get(target.name)
                 if returned and returned[1] == awaited and self.external(target.name):
                     return SymbolValue(returned[0], instance=True)
@@ -1383,12 +1462,150 @@ class SourceIndex:
                     return self.infer(binding[1], binding[0], {}, seen=seen | {name})
                 if isinstance(node, ast.Attribute):
                     receiver = self.infer(node.value, module, env, seen=seen)
+                    getter = self._definitions.get(name)
+                    if getter is not None and self.getter(getter):
+                        assert isinstance(getter.node, ast.FunctionDef)
+                        annotation = getter.node.returns
+                        value = (
+                            self.annotation(annotation, getter.module)
+                            if annotation
+                            else None
+                        )
+                        if value in {"typing.Self", "typing_extensions.Self"}:
+                            value = receiver.name
+                        return SymbolValue(
+                            value or "",
+                            instance=bool(value),
+                            element=(
+                                self.element(annotation, getter.module)
+                                if annotation
+                                else ""
+                            ),
+                        )
                     field = self.fields(receiver.name).get(node.attr)
                     if field is not None:
                         return field
                     return SymbolValue(name, receiver=receiver.name or None)
                 return SymbolValue(name)
         return SymbolValue()
+
+    def getter(self, function: SourceDefinition) -> bool:
+        """Whether *function* is a property getter, including cached ones."""
+        return isinstance(function.node, ast.FunctionDef) and any(
+            self.resolve(decorator, function.module) in _PROPERTIES
+            for decorator in function.node.decorator_list
+        )
+
+    def classmethod(self, function: SourceDefinition) -> bool:
+        return isinstance(
+            function.node, ast.FunctionDef | ast.AsyncFunctionDef
+        ) and any(
+            self.resolve(decorator, function.module) == "builtins.classmethod"
+            for decorator in function.node.decorator_list
+        )
+
+    def value(self, node: ast.expr, module: str) -> tuple[str, ast.expr]:
+        seen: set[str] = set()
+        while name := self.resolve(node, module):
+            if name in seen:
+                break
+            seen.add(name)
+            binding = self._bindings.get(name)
+            if binding is None or isinstance(binding, str):
+                break
+            module, node = binding
+        return module, node
+
+    def annotation(
+        self, node: ast.expr, module: str, seen: frozenset[int] = frozenset()
+    ) -> str | None:
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            try:
+                node = ast.parse(node.value, mode="eval").body
+            except SyntaxError:
+                return None
+        module, node = self.value(node, module)
+        if id(node) in seen:
+            return None
+        seen = seen | {id(node)}
+        if isinstance(node, ast.Subscript):
+            wrapper = self.resolve(node.value, module)
+            arguments = (
+                node.slice.elts if isinstance(node.slice, ast.Tuple) else [node.slice]
+            )
+            if wrapper in _TRANSPARENT_ANNOTATIONS:
+                return self.annotation(arguments[0], module, seen)
+            if wrapper in _UNIONS:
+                return self._union(arguments, module, seen)
+            # A parametrized class has the methods of its origin class.
+            return None if wrapper in _OPAQUE_ANNOTATIONS else wrapper
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+            return self._union(_union_members(node), module, seen)
+        resolved = self.resolve(node, module)
+        return None if resolved in _OPAQUE_ANNOTATIONS else resolved
+
+    def _union(
+        self, members: list[ast.expr], module: str, seen: frozenset[int]
+    ) -> str | None:
+        # Optional[T] after a guard still has T's methods; absence adds no
+        # application-defined explicit exceptions.
+        names = [
+            self.annotation(member, module, seen)
+            for member in members
+            if not (isinstance(member, ast.Constant) and member.value is None)
+        ]
+        if len(set(names)) == 1:
+            return names[0]
+        if names and all(name and self.library(name) for name in names):
+            return LIBRARY_VALUE
+        return None
+
+    def element(
+        self, node: ast.expr, module: str, seen: frozenset[int] = frozenset()
+    ) -> str:
+        """The type that iterating a value annotated with *node* yields.
+
+        Sequences and iterators yield their item type, mappings their key
+        type and homogeneous tuples their shared type.
+        """
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            try:
+                node = ast.parse(node.value, mode="eval").body
+            except SyntaxError:
+                return ""
+        module, node = self.value(node, module)
+        if id(node) in seen:
+            return ""
+        seen = seen | {id(node)}
+        members = (
+            _union_members(node)
+            if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr)
+            else None
+        )
+        if isinstance(node, ast.Subscript):
+            wrapper = self.resolve(node.value, module)
+            arguments = (
+                node.slice.elts if isinstance(node.slice, ast.Tuple) else [node.slice]
+            )
+            if wrapper in _TRANSPARENT_ANNOTATIONS:
+                return self.element(arguments[0], module, seen)
+            if wrapper in _UNIONS:
+                members = arguments
+            elif wrapper in _ITERABLES or wrapper in _MAPPINGS:
+                return self.annotation(arguments[0], module) or ""
+            elif wrapper in _TUPLES:
+                shared = {ast.unparse(item) for item in arguments} - {"..."}
+                if len(shared) == 1:
+                    return self.annotation(arguments[0], module) or ""
+                return ""
+        if members is None:
+            return ""
+        elements = {
+            self.element(member, module, seen)
+            for member in members
+            if not (isinstance(member, ast.Constant) and member.value is None)
+        }
+        return elements.pop() if len(elements) == 1 else ""
 
     def _library_value(
         self,
@@ -1738,7 +1955,11 @@ class SourceIndex:
         if isinstance(statement, ast.AnnAssign):
             annotated = self.annotation(statement.annotation, module)
             if annotated:
-                value = SymbolValue(annotated, instance=True)
+                value = SymbolValue(
+                    annotated,
+                    instance=True,
+                    element=self.element(statement.annotation, module),
+                )
         if not value.name and statement.value is not None:
             value = self.infer(statement.value, module, env)
         if value.name:
@@ -1768,6 +1989,20 @@ class SourceIndex:
 
 def _keyword(node: ast.Call, name: str) -> ast.expr | None:
     return next((item.value for item in node.keywords if item.arg == name), None)
+
+
+def _nested_statements(body: list[ast.stmt]) -> Iterator[ast.stmt]:
+    # Statements of *body* and its blocks, without nested scopes.
+    for statement in body:
+        yield statement
+        if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            continue
+        for field in ("body", "orelse", "finalbody", "handlers", "cases"):
+            for child in getattr(statement, field, ()):
+                if isinstance(child, ast.stmt):
+                    yield from _nested_statements([child])
+                else:
+                    yield from _nested_statements(child.body)
 
 
 def _assigned_names(statement: ast.stmt, receiver: str | None) -> list[str]:

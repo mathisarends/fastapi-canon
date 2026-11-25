@@ -416,15 +416,54 @@ def endpoint(box: Box, item_ids: list[int]):
     assert status == 0 and operation["complete"]
 
 
-def test_unresolved_element_method_dispatch_stays_incomplete(
+@pytest.mark.parametrize(
+    ("parameter", "body"),
+    [
+        ("items: list[Item]", "return [item.validate() for item in items]"),
+        (
+            "items: list[Item] | None",
+            "return [item.validate() for item in items or []]",
+        ),
+        ("store: Store", "for item in await store.items():\n        item.validate()"),
+        ("index: dict[Item, int]", "for item in index:\n        item.validate()"),
+    ],
+    ids=["list", "optional-list", "awaited-tuple", "mapping-keys"],
+)
+def test_annotated_element_types_resolve_method_dispatch(
+    analyze: Callable[..., tuple[int, dict[str, Any]]], parameter: str, body: str
+) -> None:
+    _, report = analyze(f"""
+class Item:
+    def validate(self) -> int:
+        raise Missing()
+
+class Store:
+    async def items(self) -> tuple[Item, ...]:
+        return ()
+
+@router.get('/')
+async def endpoint({parameter}):
+    {body}
+""")
+    (operation,) = report["operations"]
+    [finding] = operation["diagnostics"]
+    assert finding["code"] == "CAN002"
+    assert finding["trace"][-1] == "api.Item.validate"
+    assert operation["complete"]
+
+
+def test_heterogeneous_tuple_elements_stay_incomplete(
     analyze: Callable[..., tuple[int, dict[str, Any]]],
 ) -> None:
     status, report = analyze("""
 class Item:
     def validate(self) -> int:
         raise Missing()
+class Other:
+    def validate(self) -> int:
+        return 0
 @router.get('/')
-def endpoint(items: list[Item]):
+def endpoint(items: tuple[Item, Other]):
     return [item.validate() for item in items]
 """)
     (operation,) = report["operations"]

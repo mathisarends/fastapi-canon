@@ -195,17 +195,7 @@ class ContractAnalyzer:
         if isinstance(node, ast.NamedExpr):
             env[node.target.id] = self.source.infer(node.value, function.module, env)
         if isinstance(node, ast.Attribute):
-            name = self.source.resolve(node, function.module, env)
-            member = self.source.definition(name or "")
-            if (
-                member
-                and isinstance(member.node, ast.FunctionDef)
-                and any(
-                    self.source.resolve(decorator, member.module) == "builtins.property"
-                    for decorator in member.node.decorator_list
-                )
-            ):
-                flow.extend(self.function(member, stack))
+            flow.extend(self._property(node, function, env, stack=stack))
         return flow
 
     def block(
@@ -363,6 +353,7 @@ class ContractAnalyzer:
                     asynchronous=isinstance(node, ast.AsyncFor),
                 )
                 self._invalidate(node.target, env)
+                self._bind_element(node.target, node.iter, function, env=env, local=env)
             flow.extend(self._branch(node.body, function, env, scope=scope))
             flow.extend(self._branch(node.orelse, function, env, scope=scope))
             self._invalidate(node, env)
@@ -574,6 +565,7 @@ class ContractAnalyzer:
             inferred = SymbolValue(
                 self.source.annotation(node.annotation, function.module) or "",
                 instance=True,
+                element=self.source.element(node.annotation, function.module),
             )
         if not inferred.name and node.value is not None:
             inferred = self.source.infer(node.value, function.module, env)
@@ -664,6 +656,11 @@ class ContractAnalyzer:
                     iterated=isinstance(argument, ast.GeneratorExp),
                 )
             )
+        attribute = self.source.literal_getattr(node, function.module, env)
+        if attribute is not None:
+            # getattr with a literal name reads that attribute.
+            flow.extend(self._property(attribute, function, env, stack=stack))
+            return flow
         if isinstance(node.func, ast.Attribute) and _super(node.func.value):
             flow.extend(
                 self._super_call(
@@ -731,6 +728,7 @@ class ContractAnalyzer:
                         awaited=awaited,
                         iterated=iterated,
                         receiver=receiver_type,
+                        transport=self._transport(node, candidate, function, env=env),
                     )
                 )
         else:
@@ -814,6 +812,28 @@ class ContractAnalyzer:
         if not library and not unlocated and isinstance(func, ast.Attribute):
             owner = self._receiver_class(func.value, function, env)
             receiver = self.source.infer(func.value, function.module, env)
+            method = self.source.method(owner, func.attr) if owner else None
+            if (
+                owner is not None
+                and method is not None
+                and isinstance(method.node, ast.FunctionDef | ast.AsyncFunctionDef)
+                and not self.source.getter(method)
+            ):
+                # A receiver typed through a field, property or element: the
+                # scanned method or an override in a subclass runs.
+                flow.extend(
+                    self._method_call(
+                        node,
+                        method,
+                        owner,
+                        function=function,
+                        env=env,
+                        stack=stack,
+                        awaited=awaited,
+                        iterated=iterated,
+                    )
+                )
+                return flow
             if owner is not None:
                 # No scanned class in the receiver's lineage defines the
                 # method: a library base does, unless a subclass overrides it.
@@ -862,6 +882,40 @@ class ContractAnalyzer:
             flow.extend(self._callback(argument, function, env, stack=stack))
         return flow
 
+    def _method_call(
+        self,
+        node: ast.Call,
+        method: SourceDefinition,
+        owner: str,
+        *,
+        function: SourceDefinition,
+        env: SymbolEnvironment,
+        stack: tuple[str, ...],
+        awaited: bool,
+        iterated: bool,
+    ) -> ExceptionFlow:
+        if self.source.abstract(method):
+            return self._dispatch(
+                node, method, function, stack=stack, awaited=awaited, iterated=iterated
+            )
+        assert isinstance(node.func, ast.Attribute)
+        flow = ExceptionFlow()
+        candidates = [(method, owner), *self._overrides(owner, node.func.attr)]
+        for candidate, receiver_type in dict(candidates).items():
+            flow.extend(
+                self._call(
+                    node,
+                    candidate,
+                    function,
+                    stack=stack,
+                    awaited=awaited,
+                    iterated=iterated,
+                    receiver=receiver_type,
+                    transport=self._transport(node, candidate, function, env=env),
+                )
+            )
+        return flow
+
     def _receiver_class(
         self, node: ast.expr, function: SourceDefinition, env: SymbolEnvironment
     ) -> str | None:
@@ -872,6 +926,46 @@ class ContractAnalyzer:
             if definition is not None and isinstance(definition.node, ast.ClassDef):
                 return definition.name
         return None
+
+    def _property(
+        self,
+        node: ast.Attribute,
+        function: SourceDefinition,
+        env: SymbolEnvironment,
+        *,
+        stack: tuple[str, ...],
+    ) -> ExceptionFlow:
+        # Reading a property runs its getter, or an implementation's getter
+        # when the property is abstract.
+        name = self.source.resolve(node, function.module, env)
+        member = self.source.definition(name or "")
+        if member is None or not self.source.getter(member):
+            return ExceptionFlow()
+        flow = ExceptionFlow()
+        if member.owner and self.source.abstract(member):
+            candidates = self._implementations(member)
+            fields = any(
+                node.attr in self.source.fields(implementation)
+                for implementation in self._implementing_classes(member.owner)
+            )
+            if not candidates and not fields:
+                flow.add_unknown(
+                    UnknownValue(
+                        f"abstract method without scanned implementation: {member.name}",
+                        function.name,
+                        node.lineno,
+                    )
+                )
+            for candidate, implementation in candidates.items():
+                flow.extend(self.function(candidate, stack, receiver=implementation))
+            return flow
+        flow.extend(self.function(member, stack))
+        receiver = self.source.resolve(node.value, function.module, env)
+        if receiver and receiver != member.owner:
+            # The receiver may be a subclass that overrides the property.
+            for candidate, receiver_type in self._overrides(receiver, node.attr):
+                flow.extend(self.function(candidate, stack, receiver=receiver_type))
+        return flow
 
     def _overrides(
         self, owner: str, name: str
@@ -967,14 +1061,18 @@ class ContractAnalyzer:
         for generator in node.generators:
             self._invalidate(generator.target, local)
         for index, generator in enumerate(node.generators):
+            scope = env if index == 0 else local
             flow.extend(
                 self._iteration(
                     generator.iter,
                     function,
-                    env if index == 0 else local,
+                    scope,
                     stack=stack,
                     asynchronous=bool(generator.is_async),
                 )
+            )
+            self._bind_element(
+                generator.target, generator.iter, function, env=scope, local=local
             )
             for condition in generator.ifs:
                 flow.extend(self.expression(condition, function, local, stack=stack))
@@ -984,6 +1082,22 @@ class ContractAnalyzer:
         for value in values:
             flow.extend(self.expression(value, function, local, stack=stack))
         return flow
+
+    def _bind_element(
+        self,
+        target: ast.expr,
+        iterable: ast.expr,
+        function: SourceDefinition,
+        *,
+        env: SymbolEnvironment,
+        local: SymbolEnvironment,
+    ) -> None:
+        # A loop target takes the element type of its annotated container.
+        if not isinstance(target, ast.Name):
+            return
+        element = self.source.infer(iterable, function.module, env).element
+        if element:
+            local[target.id] = SymbolValue(element, instance=True)
 
     def _iteration(
         self,
@@ -1177,6 +1291,7 @@ class ContractAnalyzer:
         awaited: bool,
         iterated: bool,
         receiver: str | None = None,
+        transport: str | None = None,
     ) -> ExceptionFlow:
         # A generator-based context manager runs its body around the with block.
         iterated_generator = (iterated or self._managed(definition)) and _generator(
@@ -1185,7 +1300,11 @@ class ContractAnalyzer:
         called = self._traced(
             function,
             self.function(
-                definition, stack, iterated=iterated_generator, receiver=receiver
+                definition,
+                stack,
+                iterated=iterated_generator,
+                receiver=receiver,
+                dependency_transport=transport,
             ),
         )
         if (
@@ -1439,18 +1558,8 @@ class ContractAnalyzer:
         a statically known binding, every concrete scanned implementation of
         the port can receive the call; the call contributes their union.
         """
-        assert port.owner is not None
-        assert isinstance(port.node, ast.FunctionDef | ast.AsyncFunctionDef)
         flow = ExceptionFlow()
-        bound = self.source.implementations(port.owner)
-        classes = [item for item in bound if item is not None]
-        if len(classes) != len(bound) or not bound:
-            classes.extend(self.source.implementers(port.owner))
-        candidates: dict[SourceDefinition, str] = {}
-        for implementation in dict.fromkeys(classes):
-            method = self.source.method(implementation, port.node.name)
-            if method is not None and not self.source.abstract(method):
-                candidates.setdefault(method, implementation)
+        candidates = self._implementations(port)
         if not candidates:
             flow.add_unknown(
                 UnknownValue(
@@ -1472,6 +1581,44 @@ class ContractAnalyzer:
                 )
             )
         return flow
+
+    def _transport(
+        self,
+        node: ast.Call,
+        callee: SourceDefinition,
+        function: SourceDefinition,
+        *,
+        env: SymbolEnvironment,
+    ) -> str | None:
+        # An HTTP request passed to a connection parameter keeps the callee
+        # on the HTTP transport, so its WebSocket branches are unreachable.
+        for argument in [*node.args, *(item.value for item in node.keywords)]:
+            value = self.source.infer(argument, function.module, env)
+            if self.source.http_request(value) and self.source.http_connection(
+                callee, node, argument
+            ):
+                return "http"
+        return None
+
+    def _implementations(self, port: SourceDefinition) -> dict[SourceDefinition, str]:
+        # Concrete members that implement *port*, keyed to their class.
+        assert port.owner is not None
+        assert isinstance(port.node, ast.FunctionDef | ast.AsyncFunctionDef)
+        candidates: dict[SourceDefinition, str] = {}
+        for implementation in self._implementing_classes(port.owner):
+            method = self.source.method(implementation, port.node.name)
+            if method is not None and not self.source.abstract(method):
+                candidates.setdefault(method, implementation)
+        return candidates
+
+    def _implementing_classes(self, owner: str) -> list[str]:
+        # Dishka bindings in the source, or every scanned implementation
+        # when a binding is missing or not statically known.
+        bound = self.source.implementations(owner)
+        classes = [item for item in bound if item is not None]
+        if len(classes) != len(bound) or not bound:
+            classes.extend(self.source.implementers(owner))
+        return list(dict.fromkeys(classes))
 
     def _invalidate(self, node: ast.AST, env: SymbolEnvironment) -> None:
         for child in ast.walk(node):
