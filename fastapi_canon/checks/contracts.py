@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -143,7 +144,9 @@ class CheckContracts:
         operations: list[_CheckOperation] = []
         nested = {id(function.node) for function in self.source.nested}
         for function in [*self.source.iter_definitions(), *self.source.nested]:
-            if not isinstance(function.node, ast.FunctionDef | ast.AsyncFunctionDef):
+            if not isinstance(
+                function.node, ast.FunctionDef | ast.AsyncFunctionDef
+            ) or self.source.referenced(function.module):
                 continue
             for decorator in function.node.decorator_list:
                 if isinstance(decorator, ast.Call) and isinstance(
@@ -666,8 +669,10 @@ class CheckContracts:
                 operation.report(diagnostic)
 
 
-def analyze_error_contracts(roots: list[Path]) -> ContractReport:
-    return CheckContracts(SourceIndex.read(roots))()
+def analyze_error_contracts(
+    roots: list[Path], references: Sequence[Path] = ()
+) -> ContractReport:
+    return CheckContracts(SourceIndex.read(roots, references))()
 
 
 class _ErrorMapping(NamedTuple):

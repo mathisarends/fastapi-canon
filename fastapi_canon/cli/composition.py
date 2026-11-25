@@ -1,13 +1,16 @@
 import argparse
 import json
+import subprocess
 import sys
 from collections.abc import Sequence
 from contextlib import nullcontext
 from dataclasses import asdict
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI
 
+from fastapi_canon.checks.configuration import load_applications
 from fastapi_canon.cli.application import load_reference, open_application
 from fastapi_canon.composition import Composition, check_app, inspect_app
 from fastapi_canon.composition.installation import close_installed_app
@@ -70,8 +73,91 @@ def main(arguments: Sequence[str], *, inspect: bool = False) -> int:
             default="error",
             help="Finding threshold for exit 1: error (default), or warning to include warnings",
         )
+        parser.add_argument(
+            "--config",
+            action="append",
+            default=[],
+            type=Path,
+            dest="configs",
+            help="fastapi-canon.toml or pyproject.toml naming the app in [checks.composition] or [codegen]; "
+            "one application each, checked in its own process when repeated; not combined with a target or --app",
+        )
     args = parser.parse_args(arguments)
-    root = Path.cwd()
+    if not inspect and args.configs:
+        if args.target is not None or args.app:
+            return _fail(
+                args.format, "--config cannot be combined with a target or --app"
+            )
+        return _check_configured(args)
+    return _run(args, inspect=inspect, root=Path.cwd())
+
+
+def _check_configured(args: argparse.Namespace) -> int:
+    try:
+        applications = load_applications(args.configs)
+        for item in applications:
+            if item.composition is None:
+                raise ValueError(
+                    f"{item.path}: name the app in [checks.composition] or [codegen]"
+                )
+    except (OSError, ValueError) as error:
+        return _fail(args.format, str(error))
+    if len(applications) == 1:
+        (application,) = applications
+        settings = application.composition
+        assert settings is not None
+        args.app = settings.app
+        args.require_complete = args.require_complete or settings.require_complete
+        if settings.fail_on == "warning":
+            args.fail_on = "warning"
+        return _run(
+            args, inspect=False, root=application.path.parent, name=application.name
+        )
+    # Application imports and factories have process-wide effects; isolate each.
+    status = 0
+    reports: list[dict[str, Any]] = []
+    for application in applications:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "fastapi_canon",
+                "check",
+                "composition",
+                "--config",
+                str(application.path),
+                "--format",
+                args.format,
+                "--fail-on",
+                args.fail_on,
+                *(["--require-complete"] if args.require_complete else []),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        status = max(status, result.returncode)
+        print(result.stderr, file=sys.stderr, end="")
+        if args.format == "text":
+            print(f"== {application.name} ({application.path})")
+            print(result.stdout, end="")
+            continue
+        try:
+            report = json.loads(result.stdout)
+        except ValueError:
+            status = 2
+            report = {"error": "missing JSON report"}
+        report.pop("name", None)
+        report.pop("schema_version", None)
+        reports.append({"name": application.name, "report": report})
+    if args.format == "json":
+        print(json.dumps({"schema_version": 1, "applications": reports}, indent=2))
+    return status
+
+
+def _run(
+    args: argparse.Namespace, *, inspect: bool, root: Path, name: str | None = None
+) -> int:
     result: CompositionInfo | CheckReport
     try:
         if inspect:
@@ -93,13 +179,10 @@ def main(arguments: Sequence[str], *, inspect: bool = False) -> int:
         else:
             raise ValueError("Supply a composition target or --app module:app")
     except (ImportError, AttributeError, ValueError, TypeError) as error:
-        if args.format == "json":
-            print(json.dumps({"error": str(error)}))
-        else:
-            print(str(error), file=sys.stderr)
-        return 2
+        return _fail(args.format, str(error))
     if args.format == "json":
-        payload = asdict(result)
+        payload: dict[str, Any] = {} if name is None else {"name": name}
+        payload.update(asdict(result))
         payload["schema_version"] = 1
         if isinstance(result, CheckReport):
             payload.update(has_errors=result.has_errors, complete=result.complete)
@@ -135,3 +218,11 @@ def main(arguments: Sequence[str], *, inspect: bool = False) -> int:
             result.has_errors or (args.fail_on == "warning" and bool(result.issues))
         )
     return 0
+
+
+def _fail(output: str, message: str) -> int:
+    if output == "json":
+        print(json.dumps({"error": message}))
+    else:
+        print(message, file=sys.stderr)
+    return 2

@@ -334,6 +334,12 @@ See the shared [target loading rules](contracts.md#application-target-rules).
 Imports and
 user factories execute application code; this is not an import-free mode.
 
+`check composition --config fastapi-canon.toml` checks the app named by
+`[checks.composition] app` (default: `[codegen] app`), imported from the file's
+directory. The table also accepts `require-complete` and `fail-on`, which add to
+the command-line policy. Repeated `--config` files run in separate processes and
+report like [several source checks](07-error-checking.md#several-applications).
+
 Use `fastapi-canon inspect --help` or
 `fastapi-canon check composition --help` for target syntax and policy defaults.
 Composition defaults to `--fail-on error`; choose `warning` to include warning

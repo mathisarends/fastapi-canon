@@ -42,6 +42,7 @@ timeout-seconds = 120
 In `pyproject.toml`, prefix tables with `tool.fastapi-canon`, for example
 `[tool.fastapi-canon.codegen.targets.streams]`. Paths and external command working
 directories are relative to the configuration file. Unknown settings fail.
+The same file can hold the application's [check settings](07-error-checking.md#several-applications).
 An app reference names an importable module and an application or synchronous
 zero-argument factory, such as `my-app:create_app`. App and schema imports can
 use modules in the configuration directory during export. Export never starts

@@ -9,10 +9,41 @@ fastapi-canon check errors src --strict
 ```
 
 Pass Python import roots: for `src/app/features/...`, use `src`, not `src/app`.
-Pass shared application libraries as additional roots. The checker parses source
-without importing the application, so it needs no annotations or running services.
-Run it in the application's environment so that installed dependencies can be
-located as libraries.
+The checker parses source without importing the application, so it needs no
+annotations or running services. Run it in the application's environment so that
+installed dependencies can be located as libraries.
+
+Pass code shared with another application, such as its `Error` definitions, with
+`--reference-root`. Its definitions resolve and its calls are followed, but its
+routes, `raises=`/`errors=` references and Dishka providers do not belong to the
+checked application.
+
+## Several applications
+
+Each `--config` file describes one application and is analyzed separately, so
+provider bindings never mix. Paths are relative to the file:
+
+```toml
+# e2e/fastapi-canon.toml
+name = "e2e"  # default: the file's directory name
+
+[checks.errors]
+roots = ["src"]
+reference-roots = ["../backend/src"]
+strict = true
+require-complete = false
+```
+
+```console
+fastapi-canon check errors --config backend/fastapi-canon.toml --config e2e/fastapi-canon.toml
+```
+
+Command-line `--strict` and `--require-complete` add to the configured policy.
+In `pyproject.toml`, use `[tool.fastapi-canon.checks.errors]`. With several files,
+text output has one section per application and JSON output is
+`{"schema_version": 1, "applications": [{"name": ..., "report": {...}}]}`; the
+exit status is the highest of any application. A single file keeps the usual
+report, plus `name`. `--config` cannot be combined with positional roots.
 
 A `raises` declaration documents an operation's allowed errors; it does not catch
 anything. Runtime mapping still requires the `Error` to be registered, so keep
