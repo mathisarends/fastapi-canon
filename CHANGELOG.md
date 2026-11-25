@@ -92,6 +92,9 @@ See the [upgrade guide](docs/24-upgrading.md#upgrade-to-0290).
 
 ### Fixed
 
+- Regenerate WebSocket clients to preserve dictionary entries and explicitly
+  allowed extra fields. Python clients now accept parameters named `values`
+  or `self` and read unions with aliased discriminator fields.
 - RPC methods and message streams honor whole-model signature defaults when
   clients omit params. Explicit objects use model validation.
 - Typed sockets and binary streams accept aliased URL placeholders.

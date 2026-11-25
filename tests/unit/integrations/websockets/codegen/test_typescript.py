@@ -19,7 +19,7 @@ from fastapi_canon.integrations.websockets.codegen.typescript import (
 )
 from fastapi_canon.integrations.websockets.codegen.writer import MANIFEST
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, RootModel
 
 
 def options() -> TypeScriptClientOptions:
@@ -587,6 +587,13 @@ def test_default_model_and_directional_aliases_compile_for_both_rpc_calls(
     channel = RpcChannel(namespace="tasks")
     default_page = Page(limit=10)
 
+    class Counts(RootModel[dict[str, int]]):
+        pass
+
+    @channel.method()
+    async def totals(counts: Counts) -> Counts:
+        return counts
+
     @channel.method()
     async def search(page: Page = default_page) -> Page:
         return page
@@ -613,6 +620,8 @@ def test_default_model_and_directional_aliases_compile_for_both_rpc_calls(
         declare const tasks: TasksClient;
         declare const rpc: RpcClientCore;
         async function consume() {
+            const counts = await tasks.tasks.totals({apples: 2});
+            const apples: number = counts.apples;
             const page = await tasks.tasks.search();
             await rpc.request(routes.tasksSearch);
             await rpc.request(routes.tasksSearch, {limit: 1});

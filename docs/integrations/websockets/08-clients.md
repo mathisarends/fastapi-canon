@@ -105,6 +105,8 @@ stream extensions.
 The generated package root exports the client, models, namespace classes,
 declared error classes, endpoint metadata, routes, and transport building
 blocks. Applications normally need only the client and their domain models.
+If a params model allows extra fields, pass them as Python keyword arguments
+or TypeScript object properties. Both SDKs preserve those keys in responses.
 
 With the generated WebSocket transport, Python exposes an async connection
 context:

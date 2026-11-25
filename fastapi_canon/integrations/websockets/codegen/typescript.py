@@ -597,9 +597,11 @@ class _Renderer:
 
     def _operation_signature(self, route: RouteDecl) -> str:
         parameters = []
-        if route.params:
+        if route.params_model is not None and (
+            route.params or route.accepts_extra_params
+        ):
             default = " = {}" if all(not p.required for p in route.params) else ""
-            model = _schema_name(route.params_model) if route.params_model else "never"
+            model = _schema_name(route.params_model)
             if route.params_optional:
                 parameters.append(f"params?: {model}")
             else:
@@ -617,9 +619,14 @@ class _Renderer:
     def _operation_call(self, route: RouteDecl, root: bool) -> str:
         rpc = "this.#rpc"
         prefix = "await" if _is_null(route.result) else "return"
+        params = "undefined"
+        if route.params or route.accepts_extra_params:
+            params = "params"
+        elif route.params_model is not None and not route.params_optional:
+            params = "{}"
         arguments = [
             f"routes.{_route_key(route)}",
-            "params" if route.params else "undefined",
+            params,
             "options",
         ]
         statement = f"    {prefix} {rpc}.request"
@@ -840,7 +847,9 @@ def _api_file(node: NamespaceViewNode) -> str:
 def _route_model_names(routes: Iterable[RouteDecl]) -> set[str]:
     names: set[str] = set()
     for route in routes:
-        if route.params and route.params_model is not None:
+        if route.params_model is not None and (
+            route.params or route.accepts_extra_params
+        ):
             names.add(_schema_name(route.params_model))
         names.update(_model_names(route.result))
     return names
