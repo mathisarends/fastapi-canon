@@ -904,3 +904,7 @@ uv run --locked python scripts/check_distributions.py
 See [`examples/showcase`](../examples/showcase) for a runnable two-feature FastAPI
 application. It keeps error contracts alongside their feature routes and merges
 them once at the composition root.
+
+---
+
+Previous: [WebSockets](integrations/websockets/README.md) · [Learning path](README.md) · Next: [Client generation](codegen.md)

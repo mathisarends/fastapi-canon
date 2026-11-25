@@ -32,3 +32,7 @@ Canon does not add application replay or reconnection semantics.
 - [Generation options](codegen.md): export, validation and CI checks.
 - [Existing SSE endpoints](native-transports.md): contract-first generation and proxies.
 - [Generation workflow](../../codegen.md): coordinate separate clients.
+
+---
+
+Previous: [Shared problems](../../problems.md) · [Learning path](../../README.md) · Next: [WebSockets](../websockets/README.md)

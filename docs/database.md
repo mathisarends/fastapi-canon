@@ -428,3 +428,7 @@ Existing repositories keep `get`, `merge`, `flush`, `exec`/`execute`, eager-load
 options and native SQL. Existing migration environments keep the borrowed-
 connection protocol. No Canon entity base class, generic repository, lock-key
 convention, settings prefix or deployment platform is imposed.
+
+---
+
+Previous: [File transfers](integrations/uploads.md) · [Learning path](README.md) · Next: [Instrumentation](telemetry.md)

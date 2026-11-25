@@ -422,3 +422,7 @@ adds no telemetry log pipeline. FastAPI's exception logs can include messages an
 stack traces; set `logs=False` or apply application log redaction when needed.
 `ParentBased(TraceIdRatioBased(ratio))` lets downstream services follow the
 caller's sampling decision. Tail sampling belongs in the collector.
+
+---
+
+Previous: [Database resources](database.md) · [Learning path](README.md)

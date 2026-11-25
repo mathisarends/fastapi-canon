@@ -586,3 +586,7 @@ declarations are described above. Analysis follows supported explicit generator
 paths; failures after response start still use their transport's terminal
 problem/protocol handling. Source completeness does not validate that runtime
 error phase or guarantee that every possible exception is declared.
+
+---
+
+Previous: [Client generation](codegen.md) · [Learning path](README.md) · Next: [File transfers](integrations/uploads.md)

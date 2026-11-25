@@ -1,26 +1,20 @@
 # Build with Canon
 
-Start with [From Python to typed clients](quickstart.md). It builds HTTP, SSE
-and WebSocket declarations with shared errors and separate client generators.
+Each level builds on the previous one. Optional integrations come last.
 
-| I want to… | Guide |
-| --- | --- |
-| Define public errors | [Shared problems](problems.md) |
-| Check error declarations in CI | [Static error checks](error-checking.md) |
-| Upload files, send multipart forms and download binary content | [File transfers](integrations/uploads.md) |
-| Send and consume typed SSE events | [Streaming](integrations/sse/README.md) |
-| Build WebSocket RPC and message streams | [WebSockets](integrations/websockets/README.md) |
-| Generate and configure clients | [Client generation](codegen.md) |
-| Wire features, dependencies and lifecycles | [Application composition](composition.md) |
-| Trace application services | [Instrumentation](telemetry.md) |
-| Correlate HTTP logs and traces | [Request logging](request-logging.md) |
-| Manage database sessions and migrations | [Database resources](database.md) |
-
-## Optional integrations
-
-[WebRTC](integrations/webrtc/README.md) adds media sessions and typed browser
-contracts. [MCP](integrations/mcp/README.md) mounts FastMCP features with Dishka.
-Choose these when your application needs them.
+| Level | Guide | You learn |
+| --- | --- | --- |
+| 1 | [From Python to typed clients](quickstart.md) | HTTP, SSE and RPC with one error and generated clients |
+| 2 | [Shared problems](problems.md) | Public errors, extensions and headers |
+| 3 | [Streaming](integrations/sse/README.md) | Event unions, admission checks and POST streams |
+| 4 | [WebSockets](integrations/websockets/README.md) | RPC methods, message streams and notifications |
+| 5 | [Application composition](composition.md) | Features, Dishka services, lifecycles and router policies |
+| 6 | [Client generation](codegen.md) | Generator configuration and drift checks in CI |
+| 7 | [Static error checks](error-checking.md) | Finding undeclared errors before runtime |
+| 8 | [File transfers](integrations/uploads.md) | Uploads, multipart forms and binary downloads |
+| 9 | [Database resources](database.md) | Sessions, transactions and migrations |
+| 10 | [Instrumentation](telemetry.md) | Tracing services and correlating [request logs](request-logging.md) |
+| ★ | [WebRTC](integrations/webrtc/README.md), [MCP](integrations/mcp/README.md) | Media sessions; tools for agents |
 
 ## Reference and upgrades
 

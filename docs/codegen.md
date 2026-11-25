@@ -200,3 +200,7 @@ normalization across generated classes, and separately owned RPC connections wit
 session renewal. Supply your application's authentication policy; the public demo
 does not implement session management. Keep connection cancellation, reconnect and
 pool ownership explicit when replacing version-1 bindings.
+
+---
+
+Previous: [Application composition](composition.md) · [Learning path](README.md) · Next: [Static error checks](error-checking.md)

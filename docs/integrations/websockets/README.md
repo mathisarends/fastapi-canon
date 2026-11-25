@@ -65,3 +65,7 @@ early, and close owned clients on shutdown.
 For custom implementations, consult the [wire protocol](protocol.md) and
 [transport adapters](transports.md). These references are optional for normal
 application development.
+
+---
+
+Previous: [Streaming](../sse/README.md) · [Learning path](../../README.md) · Next: [Application composition](../../composition.md)

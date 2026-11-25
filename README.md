@@ -218,16 +218,21 @@ Python and TypeScript clients.
 
 ## Documentation
 
-| Task | Guide |
-| --- | --- |
-| HTTP routes, dependencies and feature lifecycles | [Composition](docs/composition.md) |
-| Shared public errors and typed extensions | [Problems](docs/problems.md) |
-| File uploads and binary downloads | [File transfers](docs/integrations/uploads.md) |
-| Typed event streams | [SSE](docs/integrations/sse/README.md) |
-| RPC, sockets and binary streams | [WebSockets](docs/integrations/websockets/README.md) |
-| Media sessions, tools or database resources | [WebRTC](docs/integrations/webrtc/README.md), [MCP](docs/integrations/mcp/README.md), [database](docs/database.md) |
-| Client generation and drift checks | [Generation](docs/codegen.md), [error checking](docs/error-checking.md) |
-| Service tracing and request logs | [Telemetry](docs/telemetry.md), [logging](docs/request-logging.md) |
+The guides form a learning path; each level builds on the previous one.
+
+| Level | Guide | You learn |
+| --- | --- | --- |
+| 1 | [From Python to typed clients](docs/quickstart.md) | HTTP, SSE and RPC with one error and generated clients |
+| 2 | [Shared problems](docs/problems.md) | Public errors, extensions and headers |
+| 3 | [Streaming](docs/integrations/sse/README.md) | Event unions, admission checks and POST streams |
+| 4 | [WebSockets](docs/integrations/websockets/README.md) | RPC methods, message streams and notifications |
+| 5 | [Application composition](docs/composition.md) | Features, Dishka services, lifecycles and router policies |
+| 6 | [Client generation](docs/codegen.md) | Generator configuration and drift checks in CI |
+| 7 | [Static error checks](docs/error-checking.md) | Finding undeclared errors before runtime |
+| 8 | [File transfers](docs/integrations/uploads.md) | Uploads, multipart forms and binary downloads |
+| 9 | [Database resources](docs/database.md) | Sessions, transactions and migrations |
+| 10 | [Instrumentation](docs/telemetry.md) | Tracing services and correlating [request logs](docs/request-logging.md) |
+| ★ | [WebRTC](docs/integrations/webrtc/README.md), [MCP](docs/integrations/mcp/README.md) | Media sessions; tools for agents |
 
 Browse the [task guides](docs/README.md), [examples](examples/README.md) or
 [contributor commands](docs/contributing.md). Coding agents can install the

@@ -135,3 +135,7 @@ uv run fastapi-canon contracts export --app examples.uploads.app:app --output-di
 
 Server file/form declarations remain ordinary FastAPI operations. Client-side
 multipart limitations are determined by the external HTTP generator.
+
+---
+
+Previous: [Static error checks](../error-checking.md) · [Learning path](../README.md) · Next: [Database resources](../database.md)

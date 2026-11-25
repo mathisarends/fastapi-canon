@@ -226,5 +226,6 @@ The error checker reports missing mappings, missing declarations and paths it
 cannot resolve. It analyzes supported source paths; keep behavioral tests for
 runtime behavior. See [error checking](error-checking.md) for analysis limits.
 
-Next: [application structure](composition.md), [stream behavior](streams.md),
-[WebSockets](integrations/websockets/README.md) and [instrumentation](telemetry.md).
+---
+
+[Learning path](README.md) · Next: [Shared problems](problems.md)

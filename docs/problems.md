@@ -260,3 +260,7 @@ for HTTP problem responses instead of inspecting `HttpError.details`;
 consumers to handle the two terminal events. Update HTTP schema consumers that
 used the old `code` discriminator to use `type`. Give business-specific problems
 distinct stable type URIs; ambiguous `about:blank` unions fail compilation.
+
+---
+
+Previous: [From Python to typed clients](quickstart.md) · [Learning path](README.md) · Next: [Streaming](integrations/sse/README.md)
