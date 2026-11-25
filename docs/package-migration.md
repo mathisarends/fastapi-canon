@@ -20,6 +20,10 @@ Version 0.29.0 is not released yet. See the
   delete that entry from `allow-diagnostics`: the `uri-reference` diagnostics on
   Canon problem `type` and `instance` fields are no longer reported. Remove an
   allowance file that becomes empty together with its `allow-diagnostics` setting.
+- Run `fastapi-canon check errors src --strict` over all application roots,
+  then declare or map the newly reported errors. For a remaining `CAN003`,
+  annotate the receiver it names or fix the top entries under "Root causes".
+  See [error checking](error-checking.md#analysis-boundaries).
 
 ## Upgrade to 0.28.0
 

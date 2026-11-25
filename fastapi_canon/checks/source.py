@@ -14,28 +14,58 @@ type _FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 type SymbolEnvironment = dict[str, SymbolValue]
 type _FactoryEnvironment = dict[str, tuple[str | None, ...]]
 
-# Builtins whose result or effect depends on application objects at runtime.
+# Builtins that dispatch by computed names or code rather than protocol methods.
 _DYNAMIC = frozenset(
     f"builtins.{name}"
     for name in (
         "__import__",
-        "aiter",
-        "anext",
         "compile",
         "delattr",
         "eval",
         "exec",
         "getattr",
-        "globals",
-        "iter",
-        "locals",
-        "next",
         "setattr",
         "super",
-        "type",
-        "vars",
     )
 )
+LIBRARY_VALUE = "builtins.object"
+"""Type of a value that is known not to be an application object."""
+_OPAQUE_ANNOTATIONS = frozenset(
+    {
+        "builtins.object",
+        "builtins.type",
+        "typing.Any",
+        "typing.Type",
+        "typing.Callable",
+        "typing.Awaitable",
+        "typing.Coroutine",
+        "collections.abc.Callable",
+        "collections.abc.Awaitable",
+        "collections.abc.Coroutine",
+    }
+)
+_TRANSPARENT_ANNOTATIONS = frozenset(
+    {
+        "typing.Annotated",
+        "typing_extensions.Annotated",
+        "typing.ClassVar",
+        "typing.Final",
+        "typing.Required",
+        "typing.NotRequired",
+        "typing.ReadOnly",
+        "typing_extensions.Required",
+        "typing_extensions.NotRequired",
+        "typing_extensions.ReadOnly",
+        "dishka.FromDishka",
+        "dishka.integrations.fastapi.FromDishka",
+        "fastapi_canon.Inject",
+        "fastapi_canon.routing.injection.Inject",
+        "fastapi_canon.integrations.websockets.Inject",
+        "sqlalchemy.orm.Mapped",
+        "sqlalchemy.orm.base.Mapped",
+    }
+)
+_UNIONS = frozenset({"typing.Union", "typing.Optional"})
 _PROVIDERS = frozenset({"dishka.Provider", "dishka.provider.Provider"})
 _PROVIDE = frozenset(
     {
@@ -177,10 +207,14 @@ class SourceIndex:
         self._error_declarations: list[tuple[str, ast.expr]] = []
         self._roots: list[Path] = []
         self._externals: dict[str, bool] = {}
-        self._methods: frozenset[str] | None = None
+        self._members: dict[str, list[str]] | None = None
         self._keys: dict[ast.expr, str] = {}
         self._mros: dict[str, tuple[tuple[str, ...] | None, frozenset[str]]] = {}
         self._ports: dict[str, list[tuple[str | None, str]]] | None = None
+        self._fields: dict[str, tuple[dict[str, SymbolValue], frozenset[str]]] = {}
+        self._building: set[str] = set()
+        self._local_definitions: dict[int, SourceDefinition] | None = None
+        self._packages: frozenset[str] | None = None
 
     @property
     def paths(self) -> Mapping[str, Path]:
@@ -237,7 +271,39 @@ class SourceIndex:
         self._touched.update(modules)
 
     def definition(self, name: str) -> SourceDefinition | None:
-        return self._definitions.get(name)
+        found = self._definitions.get(name)
+        if found is None and ".<local>." in name:
+            return next((item for item in self._nested if item.name == name), None)
+        return found
+
+    def local_definition(self, node: ast.AST) -> SourceDefinition | None:
+        """The indexed definition of a function nested in another function."""
+        if self._local_definitions is None:
+            self._local_definitions = {id(item.node): item for item in self._nested}
+        return self._local_definitions.get(id(node))
+
+    def imports(self, node: ast.Import | ast.ImportFrom, module: str) -> dict[str, str]:
+        """Local names that a function-level import binds, with their targets."""
+        if isinstance(node, ast.Import):
+            return {
+                alias.asname or alias.name.split(".")[0]: self._canonical(
+                    alias.name if alias.asname else alias.name.split(".")[0]
+                )
+                for alias in node.names
+            }
+        path = self._paths.get(module)
+        package = path is not None and path.name == "__init__.py"
+        prefix = module.split(".") if package else module.split(".")[:-1]
+        if node.level:
+            prefix = prefix[: len(prefix) - node.level + 1]
+            target = ".".join([*prefix, *([node.module] if node.module else [])])
+        else:
+            target = node.module or ""
+        return {
+            alias.asname or alias.name: self._canonical(f"{target}.{alias.name}")
+            for alias in node.names
+            if alias.name != "*"
+        }
 
     def iter_definitions(self) -> Iterator[SourceDefinition]:
         return iter(self._definitions.values())
@@ -746,13 +812,98 @@ class SourceIndex:
         return "supported" if supported else "incomplete"
 
     def exception(self, name: str) -> bool:
-        return "builtins.Exception" in (self.mro(name) or [])
+        """Whether *name* is an exception class.
+
+        A scanned class with a library base is assumed to be an exception: the
+        library hierarchy is not imported, and such a class is only checked
+        where it is raised, caught or mapped.
+        """
+        order = self.mro(name) or ()
+        return "builtins.Exception" in order or (
+            name in self._definitions and any(self._opaque(item) for item in order)
+        )
+
+    def origin(
+        self,
+        node: ast.expr,
+        module: str,
+        env: SymbolEnvironment | None = None,
+        *,
+        seen: frozenset[str] = frozenset(),
+    ) -> str | None:
+        """The external callable or value that *node* evaluates or derives from."""
+        name = self.resolve(node, module, env)
+        if name is not None:
+            if name in _DYNAMIC or name in self._definitions or name in seen:
+                return None
+            if self.external(name):
+                return name
+            binding = self._bindings.get(name)
+            if isinstance(binding, tuple):
+                return self.origin(binding[1], binding[0], seen=seen | {name})
+            owner, _, attribute = name.rpartition(".")
+            field = (
+                self.fields(owner).get(attribute)
+                if owner in self._definitions
+                else None
+            )
+            if field is not None:
+                return (
+                    field.name if field.instance and self.library(field.name) else None
+                )
+        match node:
+            case ast.Constant() if node.value is not None:
+                return f"builtins.{type(node.value).__name__}"
+            case ast.JoinedStr():
+                return "builtins.str"
+            case ast.List() | ast.Tuple() | ast.Set() | ast.Dict():
+                return f"builtins.{type(node).__name__.lower()}"
+            case ast.ListComp() | ast.SetComp() | ast.DictComp():
+                return f"builtins.{type(node).__name__[:-4].lower()}"
+            case ast.Await():
+                return self.origin(node.value, module, env, seen=seen)
+            case ast.Call():
+                return self.origin(node.func, module, env, seen=seen)
+            case ast.Subscript():
+                return self.origin(node.value, module, env, seen=seen)
+            case ast.Attribute():
+                receiver = self.origin(node.value, module, env, seen=seen)
+                # An untyped call result may be an application object returned
+                # by the library; application method names stay unresolved.
+                if receiver is None or (
+                    isinstance(node.value, ast.Call | ast.Await | ast.Subscript)
+                    and node.attr in self.members
+                ):
+                    return None
+                return f"{receiver}.{node.attr}"
+        return None
+
+    def library(self, name: str) -> bool:
+        """Whether *name* lies outside the scanned roots in a locatable package."""
+        return name not in self._definitions and self.external(name)
+
+    def unlocated(self, name: str) -> bool:
+        """Whether *name* comes from a package that is neither scanned nor locatable."""
+        if self._packages is None:
+            self._packages = frozenset(
+                module.partition(".")[0] for module in self._paths
+            )
+        return name.partition(".")[0] not in self._packages and not self.external(name)
 
     def framework_exception(self, name: str) -> bool:
         return name in _FRAMEWORK_EXCEPTIONS
 
     def websocket_exception(self, name: str) -> bool:
         return "starlette.exceptions.WebSocketException" in (self.mro(name) or [])
+
+    def _opaque(self, name: str) -> bool:
+        # A library class whose own bases are not read.
+        return (
+            name not in self._definitions
+            and not name.startswith("builtins.")
+            and name not in _MARKER_BASES
+            and name not in _FRAMEWORK_EXCEPTIONS
+        )
 
     def condition(
         self, node: ast.expr, module: str, env: SymbolEnvironment
@@ -775,59 +926,12 @@ class SourceIndex:
                     return value.name in _REQUESTS
         return None
 
-    def origin(
-        self,
-        node: ast.expr,
-        module: str,
-        env: SymbolEnvironment | None = None,
-        *,
-        seen: frozenset[str] = frozenset(),
-    ) -> str | None:
-        """The external callable or value that *node* evaluates or derives from."""
-        name = self.resolve(node, module, env)
-        if name is not None:
-            if name in _DYNAMIC or name in self._definitions or name in seen:
-                return None
-            if self.external(name):
-                return name
-            binding = self._bindings.get(name)
-            if isinstance(binding, tuple):
-                return self.origin(binding[1], binding[0], seen=seen | {name})
-            owner, _, attribute = name.rpartition(".")
-            annotation = self._field(owner, attribute)
-            if annotation is not None:
-                return annotation if self.external(annotation) else None
-        match node:
-            case ast.Constant() if node.value is not None:
-                return f"builtins.{type(node.value).__name__}"
-            case ast.JoinedStr():
-                return "builtins.str"
-            case ast.List() | ast.Tuple() | ast.Set() | ast.Dict():
-                return f"builtins.{type(node).__name__.lower()}"
-            case ast.Await():
-                return self.origin(node.value, module, env, seen=seen)
-            case ast.Call():
-                return self.origin(node.func, module, env, seen=seen)
-            case ast.Subscript():
-                return self.origin(node.value, module, env, seen=seen)
-            case ast.Attribute():
-                receiver = self.origin(node.value, module, env, seen=seen)
-                # An untyped call result may be an application object returned
-                # by the library; application method names stay unresolved.
-                if receiver is None or (
-                    isinstance(node.value, ast.Call | ast.Await | ast.Subscript)
-                    and node.attr in self.methods
-                ):
-                    return None
-                return f"{receiver}.{node.attr}"
-        return None
-
     def _mro(self, name: str, seen: frozenset[str]) -> list[str] | None:
         if name in _FRAMEWORK_EXCEPTIONS:
             framework_base = _FRAMEWORK_EXCEPTIONS[name]
             order = self.mro(framework_base, seen | {name})
             return [name, *order] if order else None
-        if name.startswith("builtins."):
+        if name.startswith("builtins.") and name.count(".") == 1:
             value = getattr(builtins, name.split(".")[1], None)
             if isinstance(value, type):
                 return [f"builtins.{base.__name__}" for base in value.__mro__]
@@ -835,7 +939,8 @@ class SourceIndex:
             return [name, "builtins.object"]
         definition = self._definitions.get(name)
         if definition is None or not isinstance(definition.node, ast.ClassDef):
-            return None
+            # Library bases are opaque: their own ancestors are not read.
+            return [name, "builtins.object"] if self.library(name) else None
         bases = [
             # A parametrized generic base has the methods of its origin class.
             self.resolve(
@@ -872,6 +977,107 @@ class SourceIndex:
                     sequence.pop(0)
         return result
 
+    def environment(
+        self,
+        function: SourceDefinition,
+        receiver: str | None = None,
+        dependency_transport: str | None = None,
+    ) -> SymbolEnvironment:
+        assert isinstance(function.node, ast.FunctionDef | ast.AsyncFunctionDef)
+        env: SymbolEnvironment = {}
+        arguments = function.node.args
+        for arg in [*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs]:
+            env[arg.arg] = SymbolValue()
+            if arg.annotation is not None:
+                resolved = self.annotation(arg.annotation, function.module)
+                if resolved:
+                    if resolved in _CONNECTIONS and dependency_transport in {
+                        "http",
+                        "sse",
+                        "webrtc",
+                    }:
+                        resolved = "starlette.requests.Request"
+                    env[arg.arg] = SymbolValue(resolved, instance=True)
+        if function.owner:
+            owner_type = receiver if receiver is not None else function.owner
+            positional = [*arguments.posonlyargs, *arguments.args]
+            if positional:
+                if self.classmethod(function) or function.node.name == "__new__":
+                    env[positional[0].arg] = SymbolValue(owner_type)
+                elif not any(
+                    self.resolve(decorator, function.module) == "builtins.staticmethod"
+                    for decorator in function.node.decorator_list
+                ):
+                    receiver_name = positional[0].arg
+                    env[receiver_name] = SymbolValue(owner_type, instance=True)
+                    for attribute, value in self.fields(owner_type).items():
+                        env[f"{receiver_name}.{attribute}"] = value
+        return env
+
+    def fields(self, owner: str) -> Mapping[str, SymbolValue]:
+        """Known attribute types of instances of the scanned class *owner*.
+
+        Class-body annotations and assignments come first; assignments in
+        ``__init__`` override them, and subclasses override their bases.
+        """
+        if owner in self._fields:
+            cached, modules = self._fields[owner]
+            self._touched.update(modules)
+            return cached
+        if owner in self._building or owner not in self._definitions:
+            return {}
+        self._building.add(owner)
+        previous = self._touched
+        self._touched = set()
+        result: dict[str, SymbolValue] = {}
+        try:
+            lineage = self.lineage(owner)
+            for name in reversed(lineage[0] if lineage else [owner]):
+                definition = self._definitions[name]
+                assert isinstance(definition.node, ast.ClassDef)
+                for statement in definition.node.body:
+                    self._field(
+                        statement, definition.module, {}, receiver=None, result=result
+                    )
+                constructor = self._definitions.get(f"{name}.__init__")
+                if constructor is None or not isinstance(
+                    constructor.node, ast.FunctionDef
+                ):
+                    continue
+                parameters = [
+                    *constructor.node.args.posonlyargs,
+                    *constructor.node.args.args,
+                    *constructor.node.args.kwonlyargs,
+                ]
+                if not parameters:
+                    continue
+                receiver = parameters[0].arg
+                constructor_env: SymbolEnvironment = {
+                    receiver: SymbolValue(owner, instance=True)
+                }
+                for arg in parameters[1:]:
+                    if arg.annotation:
+                        resolved = self.annotation(arg.annotation, constructor.module)
+                        if resolved:
+                            constructor_env[arg.arg] = SymbolValue(
+                                resolved, instance=True
+                            )
+                for statement in constructor.node.body:
+                    self._field(
+                        statement,
+                        constructor.module,
+                        constructor_env,
+                        receiver=receiver,
+                        result=result,
+                    )
+        finally:
+            self._building.discard(owner)
+            modules = frozenset(self._touched)
+            previous.update(self._touched)
+            self._touched = previous
+        self._fields[owner] = result, modules
+        return result
+
     def lineage(self, name: str) -> tuple[list[str], bool] | None:
         """Scanned classes of *name*'s hierarchy and whether an external base joins.
 
@@ -879,30 +1085,11 @@ class SourceIndex:
         an external package.
         """
         order = self.mro(name)
-        if order is not None:
-            return [item for item in order if item in self._definitions], False
-        classes: list[str] = []
-        external = False
-        pending = [name]
-        while pending:
-            current = pending.pop(0)
-            if current in classes:
-                continue
-            definition = self._definitions.get(current)
-            if definition is None or not isinstance(definition.node, ast.ClassDef):
-                return None
-            classes.append(current)
-            for base in definition.node.bases:
-                if isinstance(base, ast.Subscript):
-                    base = base.value
-                resolved = self.resolve(base, definition.module)
-                if resolved in self._definitions:
-                    pending.append(resolved)
-                elif resolved and self.external(resolved):
-                    external = True
-                else:
-                    return None
-        return (classes, True) if external else None
+        if order is None:
+            return None
+        return [item for item in order if item in self._definitions], any(
+            self._opaque(item) for item in order
+        )
 
     def abstract(self, function: SourceDefinition) -> bool:
         """Whether *function* is an abstract method or a Protocol member."""
@@ -948,6 +1135,45 @@ class SourceIndex:
         self._touched.update(module for _, module in bound)
         return tuple(dict.fromkeys(implementation for implementation, _ in bound))
 
+    def implementers(self, port: str) -> list[str]:
+        """Scanned classes that can stand in for *port*.
+
+        These are its subclasses and, for a ``Protocol``, classes that define
+        every method the protocol declares.
+        """
+        result = self.subclasses(port)
+        definition = self._definitions.get(port)
+        if definition is None or not isinstance(definition.node, ast.ClassDef):
+            return result
+        if not any(
+            self.resolve(
+                base.value if isinstance(base, ast.Subscript) else base,
+                definition.module,
+            )
+            in _PROTOCOLS
+            for base in definition.node.bases
+        ):
+            return result
+        required = [
+            member.name
+            for member in definition.node.body
+            if isinstance(member, ast.FunctionDef | ast.AsyncFunctionDef)
+        ]
+        for name, candidate in self._definitions.items():
+            if (
+                name == port
+                or name in result
+                or not isinstance(candidate.node, ast.ClassDef)
+                or not required
+            ):
+                continue
+            methods = [self.method(name, item) for item in required]
+            if all(
+                method is not None and not self.abstract(method) for method in methods
+            ):
+                result.append(name)
+        return result
+
     def subclasses(self, owner: str) -> list[str]:
         """Classes in the source that inherit from *owner*."""
         return [
@@ -957,71 +1183,6 @@ class SourceIndex:
             and isinstance(definition.node, ast.ClassDef)
             and owner in (self.mro(name) or ())
         ]
-
-    def environment(
-        self,
-        function: SourceDefinition,
-        receiver: str | None = None,
-        dependency_transport: str | None = None,
-    ) -> SymbolEnvironment:
-        assert isinstance(function.node, ast.FunctionDef | ast.AsyncFunctionDef)
-        env: SymbolEnvironment = {}
-        arguments = function.node.args
-        for arg in [*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs]:
-            env[arg.arg] = SymbolValue()
-            if arg.annotation is not None:
-                resolved = self.annotation(arg.annotation, function.module)
-                if resolved:
-                    if resolved in _CONNECTIONS and dependency_transport in {
-                        "http",
-                        "sse",
-                        "webrtc",
-                    }:
-                        resolved = "starlette.requests.Request"
-                    env[arg.arg] = SymbolValue(resolved, instance=True)
-        if function.owner:
-            owner_type = receiver if receiver is not None else function.owner
-            positional = [*arguments.posonlyargs, *arguments.args]
-            if positional:
-                if self.classmethod(function) or function.node.name == "__new__":
-                    env[positional[0].arg] = SymbolValue(owner_type)
-                elif not any(
-                    self.resolve(decorator, function.module) == "builtins.staticmethod"
-                    for decorator in function.node.decorator_list
-                ):
-                    env[positional[0].arg] = SymbolValue(owner_type, instance=True)
-            # Base class constructors assign inherited attributes; subclass
-            # assignments override them.
-            for owner in reversed(self.mro(owner_type) or [owner_type]):
-                constructor = self._definitions.get(f"{owner}.__init__")
-                if constructor is None or not isinstance(
-                    constructor.node, ast.FunctionDef
-                ):
-                    continue
-                constructor_env: SymbolEnvironment = {
-                    "self": SymbolValue(owner_type, instance=True)
-                }
-                for arg in (
-                    constructor.node.args.posonlyargs
-                    + constructor.node.args.args
-                    + constructor.node.args.kwonlyargs
-                ):
-                    if arg.annotation:
-                        resolved = self.annotation(arg.annotation, constructor.module)
-                        if resolved:
-                            constructor_env[arg.arg] = SymbolValue(
-                                resolved, instance=True
-                            )
-                for statement in constructor.node.body:
-                    if isinstance(statement, ast.Assign):
-                        inferred = self.infer(
-                            statement.value, constructor.module, constructor_env
-                        )
-                        if inferred.name:
-                            for target in statement.targets:
-                                if isinstance(target, ast.Attribute):
-                                    env[self.key(target)] = inferred
-        return env
 
     def classmethod(self, function: SourceDefinition) -> bool:
         return isinstance(
@@ -1089,30 +1250,35 @@ class SourceIndex:
         seen = seen | {id(node)}
         if isinstance(node, ast.Subscript):
             wrapper = self.resolve(node.value, module)
-            if wrapper in {
-                "typing.Annotated",
-                "typing_extensions.Annotated",
-                "dishka.FromDishka",
-                "dishka.integrations.fastapi.FromDishka",
-                "fastapi_canon.Inject",
-                "fastapi_canon.routing.injection.Inject",
-                "fastapi_canon.integrations.websockets.Inject",
-            }:
-                first = (
-                    node.slice.elts[0]
-                    if isinstance(node.slice, ast.Tuple)
-                    else node.slice
-                )
-                return self.annotation(first, module, seen)
-            return wrapper if wrapper in _RESULT_TYPES else None
+            arguments = (
+                node.slice.elts if isinstance(node.slice, ast.Tuple) else [node.slice]
+            )
+            if wrapper in _TRANSPARENT_ANNOTATIONS:
+                return self.annotation(arguments[0], module, seen)
+            if wrapper in _UNIONS:
+                return self._union(arguments, module, seen)
+            # A parametrized class has the methods of its origin class.
+            return None if wrapper in _OPAQUE_ANNOTATIONS else wrapper
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
-            # Optional[T] after a guard still has T's methods; absence adds no
-            # application-defined explicit exceptions to the supported subset.
-            if isinstance(node.right, ast.Constant) and node.right.value is None:
-                return self.annotation(node.left, module, seen)
-            if isinstance(node.left, ast.Constant) and node.left.value is None:
-                return self.annotation(node.right, module, seen)
-        return self.resolve(node, module)
+            return self._union(_union_members(node), module, seen)
+        resolved = self.resolve(node, module)
+        return None if resolved in _OPAQUE_ANNOTATIONS else resolved
+
+    def _union(
+        self, members: list[ast.expr], module: str, seen: frozenset[int]
+    ) -> str | None:
+        # Optional[T] after a guard still has T's methods; absence adds no
+        # application-defined explicit exceptions.
+        names = [
+            self.annotation(member, module, seen)
+            for member in members
+            if not (isinstance(member, ast.Constant) and member.value is None)
+        ]
+        if len(set(names)) == 1:
+            return names[0]
+        if names and all(name and self.library(name) for name in names):
+            return LIBRARY_VALUE
+        return None
 
     def infer(
         self,
@@ -1168,7 +1334,37 @@ class SourceIndex:
                             return SymbolValue(f"{prefix}ScalarResult", instance=True)
                         if node.func.attr == "mappings":
                             return SymbolValue(f"{prefix}MappingResult", instance=True)
+                if not target.instance and self._library_class(target.name):
+                    return SymbolValue(target.name, instance=True)
                 return SymbolValue()
+            case ast.Constant() if node.value is not None:
+                return SymbolValue(
+                    f"builtins.{type(node.value).__name__}", instance=True
+                )
+            case ast.JoinedStr():
+                return SymbolValue("builtins.str", instance=True)
+            case ast.List() | ast.Tuple() | ast.Set() | ast.Dict():
+                return SymbolValue(
+                    f"builtins.{type(node).__name__.lower()}", instance=True
+                )
+            case ast.ListComp() | ast.SetComp() | ast.DictComp():
+                return SymbolValue(
+                    f"builtins.{type(node).__name__[:-4].lower()}", instance=True
+                )
+            case ast.GeneratorExp():
+                return SymbolValue(LIBRARY_VALUE, instance=True)
+            case ast.Compare() | ast.UnaryOp(op=ast.Not()):
+                return SymbolValue("builtins.bool", instance=True)
+            case ast.UnaryOp(operand=operand):
+                return self._library_value([operand], module, env, seen=seen)
+            case ast.BinOp(left=left, right=right):
+                return self._library_value([left, right], module, env, seen=seen)
+            case ast.BoolOp(values=values):
+                return self._library_value(values, module, env, seen=seen, either=True)
+            case ast.IfExp(body=body, orelse=orelse):
+                return self._library_value(
+                    [body, orelse], module, env, seen=seen, either=True
+                )
             case ast.Name() | ast.Attribute():
                 if isinstance(node, ast.Name):
                     local = f"{module}.{node.id}"
@@ -1187,23 +1383,105 @@ class SourceIndex:
                     return self.infer(binding[1], binding[0], {}, seen=seen | {name})
                 if isinstance(node, ast.Attribute):
                     receiver = self.infer(node.value, module, env, seen=seen)
-                    field_type = self._field(receiver.name, node.attr)
-                    if field_type:
-                        return SymbolValue(field_type, instance=True)
+                    field = self.fields(receiver.name).get(node.attr)
+                    if field is not None:
+                        return field
                     return SymbolValue(name, receiver=receiver.name or None)
                 return SymbolValue(name)
         return SymbolValue()
 
+    def _library_value(
+        self,
+        operands: list[ast.expr],
+        module: str,
+        env: SymbolEnvironment,
+        *,
+        seen: frozenset[str],
+        either: bool = False,
+    ) -> SymbolValue:
+        # Operators on library values return library values. An expression
+        # that selects one of its operands keeps their shared type.
+        values = [self.infer(item, module, env, seen=seen) for item in operands]
+        names = {value.name for value in values}
+        if (
+            len(names) == 1
+            and all(value.instance for value in values)
+            and (either or self.library(values[0].name))
+        ):
+            return values[0]
+        if all(value.instance and self.library(value.name) for value in values):
+            return SymbolValue(LIBRARY_VALUE, instance=True)
+        return SymbolValue()
+
+    def _library_class(self, name: str) -> bool:
+        # Calling a library class constructs a library value. Library
+        # functions can return application objects and stay unknown.
+        if not name or name in _DYNAMIC or not self.library(name):
+            return False
+        if name.startswith("builtins.") and name.count(".") == 1:
+            value = getattr(builtins, name.split(".")[1], None)
+            return isinstance(value, type) and value not in {object, type, super}
+        return name.rpartition(".")[2][:1].isupper()
+
     @property
-    def methods(self) -> frozenset[str]:
-        """Names of all methods defined by scanned classes."""
-        if self._methods is None:
-            self._methods = frozenset(
-                definition.node.name
-                for definition in self._definitions.values()
-                if definition.owner
+    def members(self) -> frozenset[str]:
+        """Attribute names through which a call can reach application code."""
+        return frozenset(self._member_owners())
+
+    def candidates(self, name: str) -> tuple[str, ...]:
+        """Scanned methods and attributes that an attribute call *name* can reach."""
+        return tuple(sorted(self._member_owners().get(name, ())))
+
+    def _member_owners(self) -> dict[str, list[str]]:
+        if self._members is None:
+            previous = self._touched
+            members: dict[str, list[str]] = {}
+            try:
+                for definition in list(self._definitions.values()):
+                    if definition.owner:
+                        members.setdefault(definition.node.name, []).append(
+                            definition.name
+                        )
+                    elif isinstance(definition.node, ast.ClassDef):
+                        for attribute in self._callable_attributes(definition):
+                            members.setdefault(attribute, []).append(
+                                f"{definition.name}.{attribute}"
+                            )
+            finally:
+                self._touched = previous
+            self._members = {
+                name: list(dict.fromkeys(owners)) for name, owners in members.items()
+            }
+        return self._members
+
+    def _callable_attributes(self, definition: SourceDefinition) -> list[str]:
+        # Class and instance attributes that may hold application callables.
+        node = definition.node
+        assert isinstance(node, ast.ClassDef)
+        result: list[str] = []
+        statements: list[tuple[ast.stmt, str | None]] = [
+            (statement, None) for statement in node.body
+        ]
+        for member in node.body:
+            if isinstance(member, ast.FunctionDef | ast.AsyncFunctionDef) and (
+                member.args.posonlyargs or member.args.args
+            ):
+                instance = [*member.args.posonlyargs, *member.args.args][0].arg
+                statements.extend(
+                    (statement, instance)
+                    for statement in ast.walk(member)
+                    if isinstance(statement, ast.Assign | ast.AnnAssign)
+                )
+        for statement, receiver in statements:
+            fields: dict[str, SymbolValue] = {}
+            self._field(
+                statement, definition.module, {}, receiver=receiver, result=fields
             )
-        return self._methods
+            for name in _assigned_names(statement, receiver):
+                known = fields.get(name)
+                if known is None or not (known.instance and self.library(known.name)):
+                    result.append(name)
+        return result
 
     def key(self, node: ast.expr) -> str:
         if isinstance(node, ast.Name):
@@ -1320,8 +1598,9 @@ class SourceIndex:
                 break
             pending.extend(ast.iter_child_nodes(node))
         arguments = factory.args
+        # A factory that returns a parameter binds the parameter's class.
         assigned: _FactoryEnvironment = {
-            arg.arg: (None,)
+            arg.arg: (self._class_name(arg.annotation, module),)
             for arg in [*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs]
         }
         result, remaining = self._factory_block(factory.body, module, assigned)
@@ -1418,6 +1697,13 @@ class SourceIndex:
             case _:
                 return (None,)
 
+    def _class_name(self, annotation: ast.expr | None, module: str) -> str | None:
+        name = self.annotation(annotation, module) if annotation else None
+        definition = self._definitions.get(name or "")
+        if definition is not None and isinstance(definition.node, ast.ClassDef):
+            return definition.name
+        return None
+
     def _class(self, node: ast.expr, module: str) -> str | None:
         definition = self._definitions.get(self.resolve(node, module) or "")
         if definition is not None and isinstance(definition.node, ast.ClassDef):
@@ -1436,19 +1722,27 @@ class SourceIndex:
             self._externals[package] = self._locate(package)
         return self._externals[package]
 
-    def _field(self, owner: str, attribute: str) -> str | None:
-        lineage = self.lineage(owner) if owner in self._definitions else None
-        for name in lineage[0] if lineage else []:
-            definition = self._definitions[name]
-            assert isinstance(definition.node, ast.ClassDef)
-            for statement in definition.node.body:
-                if (
-                    isinstance(statement, ast.AnnAssign)
-                    and isinstance(statement.target, ast.Name)
-                    and statement.target.id == attribute
-                ):
-                    return self.annotation(statement.annotation, definition.module)
-        return None
+    def _field(
+        self,
+        statement: ast.stmt,
+        module: str,
+        env: SymbolEnvironment,
+        *,
+        receiver: str | None,
+        result: dict[str, SymbolValue],
+    ) -> None:
+        names = _assigned_names(statement, receiver)
+        if not names or not isinstance(statement, ast.Assign | ast.AnnAssign):
+            return
+        value = SymbolValue()
+        if isinstance(statement, ast.AnnAssign):
+            annotated = self.annotation(statement.annotation, module)
+            if annotated:
+                value = SymbolValue(annotated, instance=True)
+        if not value.name and statement.value is not None:
+            value = self.infer(statement.value, module, env)
+        if value.name:
+            result.update(dict.fromkeys(names, value))
 
     def _locate(self, package: str) -> bool:
         if not package.isidentifier() or package in self._paths:
@@ -1474,6 +1768,32 @@ class SourceIndex:
 
 def _keyword(node: ast.Call, name: str) -> ast.expr | None:
     return next((item.value for item in node.keywords if item.arg == name), None)
+
+
+def _assigned_names(statement: ast.stmt, receiver: str | None) -> list[str]:
+    # Class-body names without a receiver; `receiver.name` inside a method.
+    if isinstance(statement, ast.AnnAssign):
+        targets: list[ast.expr] = [statement.target]
+    elif isinstance(statement, ast.Assign):
+        targets = statement.targets
+    else:
+        return []
+    names: list[str] = []
+    for target in targets:
+        match target:
+            case ast.Name(id=name) if receiver is None:
+                names.append(name)
+            case ast.Attribute(value=ast.Name(id=owner), attr=name) if (
+                owner == receiver
+            ):
+                names.append(name)
+    return names
+
+
+def _union_members(node: ast.expr) -> list[ast.expr]:
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+        return [*_union_members(node.left), *_union_members(node.right)]
+    return [node]
 
 
 def _walk_scopes(tree: ast.Module) -> Iterator[tuple[ast.AST, bool]]:

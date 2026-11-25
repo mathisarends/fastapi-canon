@@ -5,6 +5,8 @@ from pathlib import Path
 
 from fastapi_canon.checks.contracts import analyze_error_contracts
 
+_ROOT_CAUSES = 10
+
 
 def main(
     arguments: Sequence[str] | None = None,
@@ -55,6 +57,15 @@ def main(
                 )
                 if diagnostic.trace:
                     print(f"  {' -> '.join(diagnostic.trace)}")
+        causes = report.root_causes
+        if causes:
+            print("Root causes of incomplete analysis:")
+        for cause in causes[:_ROOT_CAUSES]:
+            print(
+                f"  {cause.path}:{cause.line}: {cause.message} ({cause.operations} operations)"
+            )
+        if len(causes) > _ROOT_CAUSES:
+            print(f"  ... and {len(causes) - _ROOT_CAUSES} more; use --format json")
         print(
             f"Analyzed {len(report.operations)} operations; {report.gaps} contract gaps; {report.incomplete} incomplete operations."
         )

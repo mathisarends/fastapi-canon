@@ -232,3 +232,33 @@ def items(values: list[int]) -> None:
 
     assert findings(report) == [("http", "CAN001", "raises")]
     assert report["operations"][0]["complete"]
+
+
+def test_root_causes_rank_shared_gaps_by_affected_operations(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = """
+def lookup(name: str) -> None:
+    getattr(router, name)()
+
+@router.get("/a")
+def first() -> None:
+    lookup("a")
+
+@router.get("/b")
+def second() -> None:
+    lookup("b")
+
+@router.get("/c")
+def third() -> None:
+    getattr(router, "c")()
+"""
+    (tmp_path / "api.py").write_text(dedent(PRELUDE + source), encoding="utf-8")
+
+    canon_cli.main(["check", "errors", str(tmp_path), "--format", "json"])
+    causes = json.loads(capsys.readouterr().out)["root_causes"]
+    canon_cli.main(["check", "errors", str(tmp_path)])
+    text = capsys.readouterr().out
+
+    assert [(item["line"], item["operations"]) for item in causes] == [(19, 2), (31, 1)]
+    assert "api.py:19: unresolved call: getattr(router, name) (2 operations)" in text

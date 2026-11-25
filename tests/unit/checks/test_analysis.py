@@ -192,7 +192,7 @@ async def endpoint(service: Service) -> None:
     )
     assert set(codes(report)) == {"CAN001", "CAN003"}
     assert any(
-        item.message.startswith("abstract implementation without Dishka binding")
+        item.message.startswith("abstract method without scanned implementation")
         for item in report.operations[0].diagnostics
     )
 
@@ -347,7 +347,12 @@ def endpoint() -> None:
 
 @pytest.mark.parametrize(
     "body",
-    ["external()", "raise make_exception()", "while ready():\n        pass", "yield 1"],
+    [
+        "external()",
+        "raise make_exception()",
+        "while ready():\n        pass",
+        "getattr(router, 'name')()",
+    ],
 )
 def test_incomplete_analysis_is_explicit(tmp_path: Path, body: str) -> None:
     report = analyze(
@@ -363,20 +368,23 @@ def endpoint():
     assert report.incomplete == 1
 
 
-def test_recursion_is_not_reported_as_complete(tmp_path: Path) -> None:
+def test_recursion_reaches_a_fixed_point(tmp_path: Path) -> None:
     report = analyze(
         tmp_path,
         PRELUDE
         + """
-def helper():
-    helper()
+def helper(depth: int):
+    if depth:
+        helper(depth - 1)
+    raise Missing()
 
 @router.get('/')
 def endpoint():
-    helper()
+    helper(1)
 """,
     )
-    assert codes(report) == ["CAN003"]
+    assert codes(report) == ["CAN001"]
+    assert report.operations[0].diagnostics[0].trace == ("api.endpoint", "api.helper")
 
 
 def test_nested_function_body_is_not_executed(tmp_path: Path) -> None:
@@ -547,7 +555,7 @@ def create_router():
     ]
 
 
-def test_unawaited_coroutine_is_not_an_http_error(tmp_path: Path) -> None:
+def test_unawaited_coroutine_escapes_are_reported(tmp_path: Path) -> None:
     report = analyze(
         tmp_path,
         PRELUDE
@@ -557,10 +565,13 @@ async def later():
 
 @router.get('/')
 def endpoint():
-    return later()
+    try:
+        return later()
+    except Missing:
+        return None
 """,
     )
-    assert codes(report) == ["CAN003"]
+    assert codes(report) == ["CAN001"]
 
 
 def test_shadowed_helper_does_not_use_global_binding(tmp_path: Path) -> None:
@@ -578,7 +589,7 @@ def endpoint(callback):
     assert codes(report) == ["CAN003"]
 
 
-def test_inherited_method_dispatch_is_incomplete(tmp_path: Path) -> None:
+def test_inherited_method_follows_receiver_overrides(tmp_path: Path) -> None:
     report = analyze(
         tmp_path,
         PRELUDE
@@ -595,7 +606,12 @@ def endpoint(service: Specific):
     service.run()
 """,
     )
-    assert report.incomplete == 1
+    assert codes(report) == ["CAN001"]
+    assert report.operations[0].diagnostics[0].trace == (
+        "api.endpoint",
+        "api.Base.run",
+        "api.Specific.fail",
+    )
 
 
 def test_constructor_and_property_exceptions(tmp_path: Path) -> None:
@@ -663,6 +679,8 @@ def test_recursive_type_alias_is_incomplete(tmp_path: Path) -> None:
         + """
 from typing import Annotated
 type Service = Annotated[Service, 'metadata']
+class Worker:
+    def run(self): raise Missing()
 @router.get('/')
 def endpoint(service: Service): service.run()
 """,
@@ -1033,7 +1051,8 @@ def first(): a()
 def second(): b()
 """,
     )
-    assert report.incomplete == report.gaps == 2
+    assert report.incomplete == 0
+    assert report.gaps == 2
     paths = [
         next(item.trace for item in operation.diagnostics if item.code == "CAN001")
         for operation in report.operations

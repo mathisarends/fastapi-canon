@@ -181,8 +181,11 @@ def test_application_code_called_by_libraries_is_followed(
     assert finding["trace"][-1] == "api.fail"
 
 
-def test_decorated_hooks_of_library_bases_stay_incomplete(
-    analyze: Callable[..., dict[str, dict[str, Any]]],
+@pytest.mark.parametrize(
+    "body", ["Request(title='x')", "Request.model_validate({'title': 'x'})"]
+)
+def test_decorated_hooks_of_library_bases_are_followed(
+    analyze: Callable[..., dict[str, dict[str, Any]]], body: str
 ) -> None:
     source = """
     from pydantic import BaseModel, field_validator
@@ -193,17 +196,16 @@ def test_decorated_hooks_of_library_bases_stay_incomplete(
         @field_validator("title")
         @classmethod
         def strip(cls, value: str) -> str:
+            if not value:
+                fail()
             return value.strip()
     """
 
-    operation = analyze("Request(title='x')", source)["api.endpoint"]
+    operation = analyze(body, source)["api.endpoint"]
 
-    assert _messages(operation) == [
-        (
-            "CAN003",
-            "library construction may call decorated hook: api.Request.strip",
-        )
-    ]
+    [finding] = operation["diagnostics"]
+    assert finding["code"] == "CAN001"
+    assert finding["trace"][-2:] == ["api.Request.strip", "api.fail"]
 
 
 def test_library_dependencies_are_external(
@@ -233,7 +235,11 @@ def test_library_dependencies_are_external(
     [
         ("missing_package.run()", "unresolved call: missing_package.run"),
         ("getattr(Service(), 'run')()", "unresolved call: getattr(Service(), 'run')"),
-        ("json.loads('{}').run()", "unresolved call: json.loads('{}').run"),
+        (
+            "json.loads('{}').run()",
+            "ambiguous call json.loads('{}').run: candidates api.Service.run; "
+            "annotate the receiver",
+        ),
     ],
     ids=["not-importable", "dynamic-builtin", "application-method-on-result"],
 )

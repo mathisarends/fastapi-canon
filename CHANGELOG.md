@@ -13,6 +13,15 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0290).
   problem schemas, which now carry `x-canon-problem: true`. Remove the
   allowances for those diagnostics; they now fail as stale
   ([#234](https://github.com/mathisarends/fastapi-canon/issues/234)).
+- **`CANON-029-COMPLETE-ERROR-CHECK`** — `check errors` follows ordinary Python
+  instead of reporting it as `CAN003`: library handlers and context managers,
+  generic and union annotations, `super()`, validators, raised factories,
+  deferred generators and coroutines, recursion, and every scanned implementation
+  of an unbound port. Run `fastapi-canon check errors src --strict`, then declare
+  or map the newly reported errors. Remaining `CAN003` findings name their
+  candidates; text and JSON reports rank their root causes. See
+  [error checking](docs/error-checking.md)
+  ([#232](https://github.com/mathisarends/fastapi-canon/issues/232)).
 
 ### Fixed
 

@@ -355,7 +355,7 @@ async def endpoint(session: AsyncSession, strategy: Strategy) -> None:
     "expression",
     [
         "result = await session.execute(select(1)); item = result.scalar_one_or_none(); item.validate()",
-        "result = await session.unknown(select(1)); result.scalar_one_or_none()",
+        "result = await session.unknown(select(1)); result.validate()",
     ],
 )
 def test_unknown_external_returns_stay_incomplete(
@@ -438,7 +438,7 @@ def test_chained_factory_construction_errors_are_followed(
         + """
 @router.get("/user")
 def endpoint() -> None:
-    User.restore("example").validate()
+    User.restore("example").name.strip()
 """
     )
 

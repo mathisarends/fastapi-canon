@@ -63,6 +63,14 @@ class _Operation:
 
 
 @dataclass(frozen=True, slots=True)
+class RootCause:
+    path: str
+    line: int
+    message: str
+    operations: int
+
+
+@dataclass(frozen=True, slots=True)
 class ContractReport:
     operations: tuple[_Operation, ...]
 
@@ -77,6 +85,22 @@ class ContractReport:
     @property
     def incomplete(self) -> int:
         return sum(not operation.complete for operation in self.operations)
+
+    @property
+    def root_causes(self) -> tuple[RootCause, ...]:
+        affected: dict[tuple[str, int, str], set[str]] = {}
+        for operation in self.operations:
+            for item in operation.diagnostics:
+                if item.code == "CAN003":
+                    key = (item.path, item.line, item.message)
+                    affected.setdefault(key, set()).add(operation.function)
+        causes = (
+            RootCause(path, line, message, len(functions))
+            for (path, line, message), functions in affected.items()
+        )
+        return tuple(
+            sorted(causes, key=lambda item: (-item.operations, item.path, item.line))
+        )
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -93,6 +117,7 @@ class ContractReport:
             ],
             "contract_gaps": self.gaps,
             "incomplete_operations": self.incomplete,
+            "root_causes": [asdict(item) for item in self.root_causes],
         }
 
 
@@ -100,7 +125,7 @@ def _keyword(node: ast.Call, name: str) -> ast.expr | None:
     return next((item.value for item in node.keywords if item.arg == name), None)
 
 
-class _CheckContracts:
+class CheckContracts:
     def __init__(self, source: SourceIndex) -> None:
         self.source = source
         self._catalog_cache: dict[str, str] | None = None
@@ -601,7 +626,7 @@ class _CheckContracts:
 
 
 def analyze_error_contracts(roots: list[Path]) -> ContractReport:
-    return _CheckContracts(SourceIndex.read(roots))()
+    return CheckContracts(SourceIndex.read(roots))()
 
 
 class _ErrorMapping(NamedTuple):
