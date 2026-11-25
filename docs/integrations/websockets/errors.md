@@ -240,4 +240,4 @@ through `RpcClientError`. Direct binary
 stream reads use `RpcStreamClosed` for a regular remote close, while async
 iteration treats that condition as normal completion.
 
-[Back to documentation](README.md)
+[Back to documentation](../../04-websockets.md)

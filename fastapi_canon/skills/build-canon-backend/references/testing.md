@@ -92,7 +92,7 @@ a port return annotation, `provide(Impl, provides=Port)`); include the wiring
 modules in the scanned roots. Unbound ports, factories that return no statically
 known class and other dynamic calls leave analysis incomplete. This source analysis is separate from imported composition checks. Inspect
 `CAN001` (missing declaration), `CAN002` (missing mapping) and `CAN003` (unresolved
-analysis) using [error-checking.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/error-checking.md); do not claim complete coverage by
+analysis) using [error-checking.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/07-error-checking.md); do not claim complete coverage by
 dropping the completeness flag or adding broad suppressions.
 
 Run the checker in the application's environment: calls into installed

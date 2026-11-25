@@ -294,4 +294,4 @@ Starting an operation and opening its byte stream remain two explicit actions.
 For example, call a regular `start()` RPC method first and then open its sibling
 stream. The contract does not currently link a stream to a start method.
 
-[Back to documentation](README.md)
+[Back to documentation](../../04-websockets.md)

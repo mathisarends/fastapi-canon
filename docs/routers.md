@@ -371,7 +371,7 @@ A policy holds `context`, `hooks`, `resolver`, `rejects`, `rejections`,
   Changes to native included routers are checked again before route inspection
   or dispatch; unprotected Starlette registrations are also rejected.
 
-See [WebSocket streams](integrations/websockets/README.md) for controls, limits,
+See [WebSocket streams](04-websockets.md) for controls, limits,
 error mappings, dependency lifetimes and generated resource APIs. Operation names
 and endpoint names must be unique within their exported transport contract.
 

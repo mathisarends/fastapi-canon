@@ -45,7 +45,7 @@ help must work without generator dependencies, telemetry runtimes or media
 engines. Composition delegates optional behavior lazily.
 
 See [public imports](canon.md) for supported consumer namespaces and
-[composition](composition.md) for application ownership.
+[composition](05-composition.md) for application ownership.
 
 ## Tests
 

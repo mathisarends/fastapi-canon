@@ -425,4 +425,4 @@ caller's sampling decision. Tail sampling belongs in the collector.
 
 ---
 
-Previous: [Database resources](database.md) · [Learning path](README.md)
+Previous: [Database resources](09-database.md) · [Learning path](README.md)

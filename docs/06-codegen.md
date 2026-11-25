@@ -170,7 +170,7 @@ The problem `type` URI identifies an error; `code` and declared public extension
 are available across HTTP, SSE and WebSocket RPC. Separate generated clients have
 separate error classes. Use each client's exports or normalize problem payloads
 in an application adapter. Do not rely on cross-client `instanceof` identity.
-See [shared problems](problems.md) and [the design rationale](sdk-design.md).
+See [shared problems](02-problems.md) and [the design rationale](sdk-design.md).
 
 ## Migration from version 1
 
@@ -203,4 +203,4 @@ pool ownership explicit when replacing version-1 bindings.
 
 ---
 
-Previous: [Application composition](composition.md) · [Learning path](README.md) · Next: [Static error checks](error-checking.md)
+Previous: [Application composition](05-composition.md) · [Learning path](README.md) · Next: [Static error checks](07-error-checking.md)
