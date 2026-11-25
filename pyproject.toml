@@ -110,6 +110,7 @@ dev = [
     "pytest>=9.1",
     "ruff>=0.15",
     "smelt-cli==0.16.1",
+    "ty==0.0.81",
     "twine>=7,<8",
     "types-jsonschema>=4.26",
     "uvicorn>=0.53",
@@ -180,6 +181,22 @@ venvPath = "."
 venv = ".venv"
 typeCheckingMode = "strict"
 pythonVersion = "3.12"
+
+# Consumers type-check generated Python clients with ty; Canon's own source is out of scope.
+[tool.ty.src]
+include = [
+    "examples/websockets/generated_clients/python",
+    "examples/websockets/socket_protocol/python",
+    "examples/websockets/typed_socket/python",
+    "examples/sse/agent_runs/generated_python",
+    "tests/fixtures/sse/generated_python",
+]
+
+[tool.ty.environment]
+python-version = "3.12"
+
+[tool.ty.terminal]
+error-on-warning = true
 
 [tool.pylint.main]
 py-version = "3.12"

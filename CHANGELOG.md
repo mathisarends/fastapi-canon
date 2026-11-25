@@ -14,6 +14,12 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0290).
   allowances for those diagnostics; they now fail as stale
   ([#234](https://github.com/mathisarends/fastapi-canon/issues/234)).
 
+### Fixed
+
+- Generated Python RPC clients pass `ty check` without rule overrides.
+  Regenerate clients to remove consumer `[[tool.ty.overrides]]` for generated
+  files ([#233](https://github.com/mathisarends/fastapi-canon/issues/233)).
+
 ## 0.28.0 - 2026-11-25
 
 ### Breaking changes

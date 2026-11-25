@@ -161,6 +161,8 @@ def _main() -> None:
                     "--check",
                 )
             runner(_ROOT, "scripts/sse/codegen.py", "--check")
+            # Paths and options live in [tool.ty]; the dev group pins ty.
+            runner(_ROOT, "-m", "ty", "check", "--python", sys.executable)
             cli = ("-m", "fastapi_canon.integrations.webrtc.codegen.cli")
             contract = "examples/webrtc/practice/contract.json"
             runner(

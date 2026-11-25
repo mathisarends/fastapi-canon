@@ -98,7 +98,7 @@ class Socket(Generic[_IncomingT, _OutgoingT]):
         message = await self._transport.receive()
         adapter = _RECEIVE_ADAPTERS.get(self.endpoint.name)
         if adapter is None:
-            return message  # type: ignore[return-value]
+            return cast(_IncomingT, message)
         try:
             if not isinstance(message, str):
                 raise ValueError("Typed sockets require text messages")

@@ -23,9 +23,9 @@ uv run --frozen python scripts/check.py all
 uv run --frozen pre-commit run --config .pre-commit-config.yml --all-files
 ```
 
-The `all` gate runs architecture, lint/format, types, Python tests, client drift
-and TypeScript runtime/coverage checks. Each gate can also run separately:
-`architecture`, `lint`, `types`, `test` or `clients`.
+The `all` gate runs architecture, lint/format, types, Python tests, client drift,
+`ty` on generated Python clients and TypeScript runtime/coverage checks. Each
+gate can also run separately: `architecture`, `lint`, `types`, `test` or `clients`.
 Warnings fail the [architecture policy](architecture-guardrails.md).
 Inspect hook fixes and rerun affected checks.
 
