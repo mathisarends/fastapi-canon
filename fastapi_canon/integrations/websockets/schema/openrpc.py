@@ -47,7 +47,7 @@ def render_openrpc(
     server_documents = tuple(dict(server) for server in servers)
     server_lookup = _server_lookup(server_documents)
     _validate_server_references(protocol, server_lookup)
-    raw_schemas, params_names, raw_outputs = components(protocol)
+    raw_schemas, params_names, raw_outputs, request_names = components(protocol)
     for operation in chain[
         RpcMethodDefinition | RpcNotificationDefinition | RpcSubscriptionDefinition
     ](protocol.methods, protocol.notifications, protocol.subscriptions):
@@ -91,6 +91,7 @@ def render_openrpc(
                 schemas,
                 server_lookup,
                 params_name=params_names.get(method.name),
+                request_name=request_names[method.name],
                 outputs=outputs,
             )
             for method in protocol.methods
@@ -199,6 +200,7 @@ def _method(
     servers: Mapping[str, dict[str, Any]],
     *,
     params_name: str | None,
+    request_name: str,
     outputs: Mapping[SchemaKey, dict[str, Any]],
 ) -> dict[str, Any]:
     document: dict[str, Any] = {"name": method.name}
@@ -212,7 +214,7 @@ def _method(
         "paramStructure": "by-name",
         "params": _params(params_name, components),
         "result": {"name": "result", "schema": outputs[("method", method.name)]},
-        "x-rpc-request-schema": _ref(method.request_name),
+        "x-rpc-request-schema": _ref(request_name),
     }
     if params_name is not None:
         document["x-rpc-params-schema"] = _ref(params_name)

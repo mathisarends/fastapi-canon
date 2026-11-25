@@ -10,6 +10,7 @@ from fastapi.params import Depends
 from fastapi.routing import APIWebSocketRoute
 from fastapi.sse import EventSourceResponse
 from pydantic import BaseModel, create_model
+from pydantic.fields import FieldInfo
 from starlette.routing import BaseRoute, WebSocketRoute
 
 from fastapi_canon.error.contributions import error_registries
@@ -473,10 +474,14 @@ class APIRouter(CanonRouter):
 
 def _channel_path_model(protocol: RpcProtocol) -> type[BaseModel] | None:
     """Combine the operations' ``Path()`` parameters into one handshake model."""
-    from fastapi_canon.integrations.websockets.protocol import ChannelPathParams
+    from fastapi_canon.integrations.websockets.protocol import (
+        ChannelPathParams,
+        path_input_names,
+    )
 
-    fields: dict[str, Any] = {}
+    fields: dict[str, FieldInfo] = {}
     owners: dict[str, str] = {}
+    inputs: dict[str, tuple[FieldInfo, str]] = {}
     operations: list[tuple[str, type[BaseModel] | None]] = [
         *((method.name, method.path_model) for method in protocol.methods),
         *((stream.name, stream.path_model) for stream in protocol.subscriptions),
@@ -485,14 +490,8 @@ def _channel_path_model(protocol: RpcProtocol) -> type[BaseModel] | None:
         if path_model is None:
             continue
         for field_name, field in path_model.model_fields.items():
-            previous = fields.setdefault(field_name, (field.annotation, field))
-            if previous[0] != field.annotation:
-                msg = (
-                    f"RPC operations {owners[field_name]} and {operation} "
-                    f"declare path parameter {field_name!r} with different types"
-                )
-                raise ConfigurationError(msg)
-            previous_alias = previous[1].validation_alias
+            previous = fields.setdefault(field_name, field)
+            previous_alias = previous.validation_alias
             alias = field.validation_alias
             previous_input = field_name if previous_alias is None else previous_alias
             field_input = field_name if alias is None else alias
@@ -503,17 +502,27 @@ def _channel_path_model(protocol: RpcProtocol) -> type[BaseModel] | None:
                     f"{field_name!r} with different input aliases"
                 )
                 raise ConfigurationError(msg)
-            if previous[1].metadata != field.metadata:
+            owners.setdefault(field_name, operation)
+            for input_name in path_input_names(field_name, field):
+                other, owner = inputs.setdefault(input_name, (field, operation))
+                if other.annotation != field.annotation:
+                    difference = "types"
+                elif other.metadata != field.metadata:
+                    difference = "constraints"
+                else:
+                    continue
                 msg = (
-                    f"RPC operations {owners[field_name]} and {operation} "
-                    f"declare path parameter {field_name!r} with different constraints"
+                    f"RPC operations {owner} and {operation} declare path "
+                    f"parameter {input_name!r} with different {difference}"
                 )
                 raise ConfigurationError(msg)
-            owners.setdefault(field_name, operation)
     if not fields:
         return None
+    definitions: dict[str, Any] = {
+        name: (field.annotation, field) for name, field in fields.items()
+    }
     model: type[BaseModel] = create_model(
-        "ChannelPathParams", __base__=ChannelPathParams, **fields
+        "ChannelPathParams", __base__=ChannelPathParams, **definitions
     )
     return model
 

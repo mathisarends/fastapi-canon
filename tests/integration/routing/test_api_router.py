@@ -11,7 +11,7 @@ from fastapi import Depends, FastAPI, Path, WebSocket
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel
 from starlette.testclient import WebSocketDenialResponse
 from starlette.types import Message
 
@@ -826,6 +826,45 @@ async def test_channel_path_parameters_are_validated_before_accepting() -> None:
         }
 
 
+@pytest.mark.parametrize(
+    "validation_alias",
+    [None, AliasChoices("legacy", "projectId")],
+    ids=["alias", "alias-choices"],
+)
+async def test_channel_reads_aliased_path_parameters_from_the_mounted_url(
+    validation_alias: AliasChoices | None,
+) -> None:
+    channel = RpcChannel(namespace="projects")
+    parameter = Path(alias="projectId", validation_alias=validation_alias, gt=0)
+
+    @channel.method()
+    async def read(project_id: Annotated[int, parameter]) -> int:
+        return project_id
+
+    @channel.method()
+    async def count(project_key: Annotated[int, parameter]) -> int:
+        return project_key + 1
+
+    router = APIRouter()
+    router.include_channel(channel, path="/rpc")
+    app = FastAPI()
+    app.include_router(router, prefix="/projects/{projectId}")
+
+    async with _connection(app, "/projects/42/rpc") as (incoming, outgoing):
+        await _send(incoming, 1, "projects.read")
+        await _send(incoming, 2, "projects.count")
+        first = await _receive(outgoing)
+        second = await _receive(outgoing)
+        assert {first["id"]: first["result"], second["id"]: second["result"]} == {
+            1: 42,
+            2: 43,
+        }
+
+    document = export_contracts(app, kinds=["openrpc"]).openrpc
+    assert document is not None
+    assert document["servers"][0]["url"].endswith("/projects/{projectId}/rpc")
+
+
 def test_export_rejects_rpc_path_parameters_missing_from_the_mount() -> None:
     channel = RpcChannel(namespace="projects")
 
@@ -898,6 +937,25 @@ def test_channel_rejects_conflicting_path_constraints() -> None:
     router = APIRouter()
     with pytest.raises(ConfigurationError, match="different constraints"):
         router.include_channel(channel, path="/{project_id}/rpc")
+    assert router.routes == []
+
+
+def test_channel_rejects_conflicting_constraints_for_a_shared_alias() -> None:
+    channel = RpcChannel(namespace="projects")
+
+    @channel.method()
+    async def read(project_id: Annotated[int, Path(alias="projectId")]) -> int:
+        return project_id
+
+    @channel.method()
+    async def write(project_key: Annotated[int, Path(alias="projectId", gt=0)]) -> int:
+        return project_key
+
+    router = APIRouter()
+    with pytest.raises(
+        ConfigurationError, match="'projectId' with different constraints"
+    ):
+        router.include_channel(channel, path="/{projectId}/rpc")
     assert router.routes == []
 
 

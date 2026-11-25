@@ -114,8 +114,9 @@ router.include_channel(
 ```
 
 Read path variables with `Path()`, including variables in router inclusion
-prefixes. Canon validates them before accepting the connection. Use the same
-type, constraints and input alias for shared variables across operations.
+prefixes. Use `Path(alias="projectId")` to read `{projectId}` into an argument
+such as `project_id`. Canon validates the values before accepting the connection.
+Use the same type and constraints wherever operations read the same placeholder.
 
 ```python
 from typing import Annotated
@@ -129,8 +130,8 @@ async def archive(task_id: int, project_id: Annotated[int, Path()]) -> None: ...
 
 Default endpoint names use the router path, such as `rpc_ws` for `/ws`.
 OpenRPC uses the full mounted paths to distinguish colliding defaults.
-OpenRPC disambiguates generated params schema names when they collide across
-operations.
+OpenRPC disambiguates generated params and request envelope schemas when their
+names collide.
 
 Use child channels for nested wire namespaces. Mount only the root; its children
 inherit declared errors and the resolver scope:
