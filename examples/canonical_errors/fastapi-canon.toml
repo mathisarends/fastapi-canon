@@ -10,7 +10,6 @@ output = "dist/streams/typescript"
 include-operations = ["projects.events"]
 diagnostics = "dist/reports/typescript-sse.json"
 strict = true
-allow-diagnostics = "streams-typescript-allowances.json"
 
 [codegen.targets.rpc]
 generator = "websockets"
@@ -26,7 +25,6 @@ python-http-client = "httpx2"
 include-operations = ["projects.events"]
 diagnostics = "dist/reports/python-sse.json"
 strict = true
-allow-diagnostics = "streams-python-allowances.json"
 
 [codegen.targets.python_rpc]
 generator = "websockets"

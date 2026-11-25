@@ -4,12 +4,7 @@ from pathlib import Path
 import pytest
 from fastapi_canon.integrations.sse.codegen.cli import main
 
-# Reviewed acceptances for the Canon problem schemas' URI formats.
-ALLOWED = (
-    Path(__file__).parents[5] / "tests/fixtures/sse/agent_runs.python.diagnostics.json"
-).as_posix()
-
-CONFIG = f"""
+CONFIG = """
 [tool.fastapi-canon.sse]
 app = "examples.sse.agent_runs:app"
 schema = "contract/openapi.json"
@@ -23,7 +18,6 @@ language = "python"
 output = "py/generated"
 python-http-client = "httpx2"
 strict = true
-allow-diagnostics = "{ALLOWED}"
 """
 
 

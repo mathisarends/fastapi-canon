@@ -231,6 +231,15 @@ def test_generator_registry_rejects_targets_before_writing(
 def test_strict_sse_diagnostics_can_be_reviewed_before_any_generation(
     project: Path,
 ) -> None:
+    application = project / "application.py"
+    application.write_text(
+        "from datetime import datetime\n"
+        + application.read_text().replace(
+            "async def events(project_id: int)",
+            "async def events(project_id: int, since: datetime | None = None)",
+        ),
+        encoding="utf-8",
+    )
     config = project / "fastapi-canon.toml"
     config.write_text(
         config.read_text().replace(
@@ -251,7 +260,7 @@ def test_strict_sse_diagnostics_can_be_reviewed_before_any_generation(
                 "allow": [
                     {
                         "id": item["id"],
-                        "reason": "Reviewed URI format; server validation is authoritative.",
+                        "reason": "Reviewed date-time format; the server validates it.",
                     }
                     for item in diagnostics
                 ]

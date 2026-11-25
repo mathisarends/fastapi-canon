@@ -1,12 +1,16 @@
 import json
+from collections.abc import AsyncIterator
 from dataclasses import replace
 
 import pytest
+from fastapi import FastAPI
+from fastapi_canon import APIRouter, Composition, Error, ErrorOptions, Feature
 from fastapi_canon.integrations.sse.codegen.cli import main
 from fastapi_canon.integrations.sse.codegen.diagnostics import accepted_diagnostics
 from fastapi_canon.integrations.sse.codegen.ir import build_ir
 from fastapi_canon.integrations.sse.codegen.openapi import (
     ContractError,
+    export_schema,
     resolve_pointer,
 )
 from tests.unit.integrations.sse.codegen.helpers import event_document
@@ -171,6 +175,68 @@ def test_cli_strict_reports_accepts_reviewed_limits_and_rejects_changed_constrai
         item["value"] == "email"
         for item in json.loads(report.read_text())["diagnostics"]
     )
+
+
+def canon_stream_document():
+    router = APIRouter()
+
+    async def follow(turn_id: str) -> AsyncIterator[int]:
+        yield 1
+
+    router.sse(
+        "/turns/{turn_id}/events",
+        raises=[
+            Error(LookupError, status=404, code="turn_missing", title="Missing"),
+            Error(PermissionError, status=403, code="forbidden", title="Forbidden"),
+        ],
+        operation_id="follow",
+    )(follow)
+    return export_schema(
+        Composition(
+            features=[Feature(name="turns", routers=[router])],
+            errors=ErrorOptions(type_base="urn:example:problem"),
+        ).build(FastAPI())
+    )
+
+
+@pytest.mark.parametrize("language", ["python", "typescript"])
+def test_strict_generation_accepts_canon_problem_uris_without_allowances(
+    tmp_path, language
+):
+    schema, report = tmp_path / "openapi.json", tmp_path / "report.json"
+    schema.write_text(json.dumps(canon_stream_document()), encoding="utf-8")
+    flags = ["--schema", str(schema), "--language", language]
+    flags += ["--output", str(tmp_path / "sdk"), "--strict"]
+    assert main(["generate", *flags, "--diagnostics", str(report)]) == 0
+    assert json.loads(report.read_text())["diagnostics"] == []
+
+
+@pytest.mark.parametrize("language", ["python", "typescript"])
+def test_application_problem_uri_format_keeps_its_diagnostic(language):
+    document = canon_stream_document()
+    schemas = document["components"]["schemas"]
+    schemas["ConflictProblem"] = {
+        "type": "object",
+        "properties": {
+            name: {"type": "string", "format": "uri-reference"}
+            for name in ("type", "instance")
+        },
+    }
+    operation = document["paths"]["/turns/{turn_id}/events"]["get"]
+    operation["responses"]["409"] = {
+        "description": "Conflict",
+        "content": {
+            "application/problem+json": {
+                "schema": {"$ref": "#/components/schemas/ConflictProblem"}
+            }
+        },
+    }
+    found = []
+    build_ir(document, target=language, diagnostics=found)
+    assert {item.pointer for item in found} == {
+        "/components/schemas/ConflictProblem/properties/instance/format",
+        "/components/schemas/ConflictProblem/properties/type/format",
+    }
 
 
 @pytest.mark.parametrize(

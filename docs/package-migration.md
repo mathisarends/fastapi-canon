@@ -11,6 +11,16 @@ The [repository migration](repository-migration.md) records the
 source history and publishing setup. The repository move does not rename the
 PyPI project or add further Python import changes.
 
+## Upgrade to 0.29.0
+
+Version 0.29.0 is not released yet. See the
+[changelog](../CHANGELOG.md#0290---unreleased).
+
+- Regenerate strict SSE clients. If generation reports a stale allowance,
+  delete that entry from `allow-diagnostics`: the `uri-reference` diagnostics on
+  Canon problem `type` and `instance` fields are no longer reported. Remove an
+  allowance file that becomes empty together with its `allow-diagnostics` setting.
+
 ## Upgrade to 0.28.0
 
 Version 0.28.0 was published on 2026-11-25. See the

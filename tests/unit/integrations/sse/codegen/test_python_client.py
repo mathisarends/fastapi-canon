@@ -451,8 +451,6 @@ def test_python_codegen_cli_and_snapshot(tmp_path):
                 "--output",
                 "examples/sse/agent_runs/generated_python",
                 "--strict",
-                "--allow-diagnostics",
-                "tests/fixtures/sse/agent_runs.python.diagnostics.json",
             ]
         )
         == 0
