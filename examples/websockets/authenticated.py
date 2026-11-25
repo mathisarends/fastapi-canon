@@ -1,21 +1,17 @@
 import time
-from collections.abc import AsyncGenerator, Mapping
-from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any
 
 from dishka import Provider, Scope, from_context, provide
-from dishka.integrations.fastapi import FromDishka
 from fastapi import FastAPI, WebSocket
 from fastapi_canon import APIRouter, Composition, Feature, Inject
 from fastapi_canon.integrations.websockets import (
     RpcChannel,
-    RpcConnection,
+    RpcConnectionExpiry,
     RpcErrorBinding,
     RpcRejection,
+    WebSocketPolicy,
 )
-from fastapi_canon.integrations.websockets.adapters.dishka import Dishka, DishkaResolver
-from fastapi_canon.integrations.websockets.dependencies import RpcResolver
+from fastapi_canon.integrations.websockets.adapters.dishka import Dishka
 
 
 @dataclass(frozen=True)
@@ -52,24 +48,7 @@ class Dependencies(Provider):
         return RequestIdentity(login)
 
 
-class AuthenticatedResolver(DishkaResolver):
-    @asynccontextmanager
-    async def enter_connection(
-        self, context: Mapping[type[Any], object]
-    ) -> AsyncGenerator[RpcResolver, None]:
-        login, connection = context[Login], context[RpcConnection]
-        assert isinstance(login, Login) and isinstance(connection, RpcConnection)
-        connection.expire_at(login.expires_at)
-        async with super().enter_connection(context) as resolver:
-            yield resolver
-
-
-class AuthenticatedDishka(Dishka):
-    def for_websocket(self, websocket: WebSocket) -> AuthenticatedResolver:
-        return AuthenticatedResolver(websocket.app.state.dishka_container)
-
-
-async def open_session(websocket: WebSocket, sessions: FromDishka[Sessions]) -> Login:
+async def open_session(websocket: WebSocket, sessions: Inject[Sessions]) -> Login:
     if websocket.headers.get("origin") != "https://app.example.test":
         raise ForbiddenOrigin("Origin is not allowed")
     login = sessions.values.get(websocket.cookies.get("session", ""))
@@ -78,19 +57,15 @@ async def open_session(websocket: WebSocket, sessions: FromDishka[Sessions]) -> 
     return login
 
 
+async def session_expiry(login: Inject[Login]) -> RpcConnectionExpiry:
+    return RpcConnectionExpiry(login.expires_at)
+
+
 def create_app() -> FastAPI:
-    router = APIRouter()
-    channel = RpcChannel(namespace="account")
-
-    @channel.method()
-    async def whoami(identity: Inject[RequestIdentity]) -> str:
-        return identity.login.user
-
-    router.include_channel(
-        channel,
-        path="/rpc",
-        context=open_session,
-        resolver=AuthenticatedDishka(),
+    authenticated = WebSocketPolicy(
+        context=session_expiry,
+        hooks=(open_session,),
+        resolver=Dishka(),
         rejects=(
             RpcErrorBinding(
                 Unauthenticated, message=str, rejection=RpcRejection.UNAUTHORIZED
@@ -100,6 +75,14 @@ def create_app() -> FastAPI:
             ),
         ),
     )
+    router = APIRouter(websocket_policy=authenticated)
+    channel = RpcChannel(namespace="account")
+
+    @channel.method()
+    async def whoami(identity: Inject[RequestIdentity]) -> str:
+        return identity.login.user
+
+    router.include_channel(channel, path="/rpc")
     feature = Feature(name="account", routers=[router], providers=[Dependencies])
     return Composition(features=(feature,)).build(FastAPI())
 

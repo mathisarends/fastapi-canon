@@ -382,10 +382,33 @@ application code. Create a fresh coordinator for a new service lifetime.
 Generated reconnect policies already treat 1001, 1012, and 1013 as transient.
 The request error is a remote error and is not automatically replayed. Client
 operation signatures and defaults are unchanged by server drain support.
+
 ## Authentication and credential expiry
 
-Authentication remains application-owned. Validate credentials in `before_accept`
-and return your identity as a dependency alongside an expiry:
+With a typed connection context, register your authentication function as a
+hook. In the [authenticated example](../../../examples/websockets/authenticated.py),
+`open_session` checks the credentials and returns a `Login`.
+
+```python
+from fastapi_canon import Inject
+from fastapi_canon.integrations.websockets import RpcConnectionExpiry, WebSocketPolicy
+from fastapi_canon.integrations.websockets.adapters.dishka import Dishka
+
+
+async def session_expiry(login: Inject[Login]) -> RpcConnectionExpiry:
+    return RpcConnectionExpiry(login.expires_at)
+
+
+authenticated = WebSocketPolicy(
+    context=session_expiry, hooks=(open_session,), resolver=Dishka()
+)
+```
+
+`Inject[Login]` makes Canon run `open_session` once before acceptance. RPC
+handlers can inject the same login. Keep `session_expiry` as the context
+function because a hook runs only when the context depends on it.
+
+With `before_accept`, return the identity and expiry together.
 
 ```python
 from fastapi_canon.integrations.websockets import RpcConnectionExpiry, RpcHandshake
