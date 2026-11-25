@@ -15,7 +15,7 @@ def test_install_bundled_skill_in_consumer_project(tmp_path: Path, agent: str) -
         timeout=30,
     )
     assert result.returncode == 0, result.stderr
-    skill = tmp_path / agent / "skills/build-canon-backend"
+    skill = tmp_path / agent / "skills/fastapi-canon"
     assert {
         path.relative_to(skill).as_posix()
         for path in skill.rglob("*")
@@ -23,14 +23,13 @@ def test_install_bundled_skill_in_consumer_project(tmp_path: Path, agent: str) -
     } == {
         "SKILL.md",
         "agents/openai.yaml",
-        "references/application-layout.md",
-        "references/components.md",
-        "references/http-feature.md",
+        "references/feature.md",
+        "references/layout.md",
         "references/resources.md",
         "references/testing.md",
-        "references/transports-and-sdk.md",
+        "references/transports.md",
     }
-    assert "name: build-canon-backend" in (skill / "SKILL.md").read_text("utf-8")
+    assert "name: fastapi-canon" in (skill / "SKILL.md").read_text("utf-8")
 
 
 def test_install_refuses_existing_destination_without_changing_it(
@@ -82,7 +81,7 @@ def test_install_skill_at_custom_destination(tmp_path: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     assert (destination / "SKILL.md").is_file()
-    assert (destination / "references/http-feature.md").is_file()
+    assert (destination / "references/feature.md").is_file()
     assert not (tmp_path / ".agents").exists()
     assert not (tmp_path / ".claude").exists()
 
@@ -91,7 +90,7 @@ def test_install_skill_at_custom_destination(tmp_path: Path) -> None:
 def test_default_install_checks_all_destinations_before_writing(
     tmp_path: Path, agent: str
 ) -> None:
-    destination = tmp_path / agent / "skills/build-canon-backend"
+    destination = tmp_path / agent / "skills/fastapi-canon"
     destination.mkdir(parents=True)
     existing = destination / "SKILL.md"
     existing.write_text("User customizations", encoding="utf-8")
@@ -106,8 +105,8 @@ def test_default_install_checks_all_destinations_before_writing(
     ) == [
         agent,
         f"{agent}/skills",
-        f"{agent}/skills/build-canon-backend",
-        f"{agent}/skills/build-canon-backend/SKILL.md",
+        f"{agent}/skills/fastapi-canon",
+        f"{agent}/skills/fastapi-canon/SKILL.md",
     ]
 
 
@@ -115,11 +114,11 @@ def test_force_refreshes_both_copies_and_restores_missing_resources(
     tmp_path: Path,
 ) -> None:
     assert _run_skill(tmp_path).returncode == 0
-    agents = tmp_path / ".agents/skills/build-canon-backend"
-    claude = tmp_path / ".claude/skills/build-canon-backend"
+    agents = tmp_path / ".agents/skills/fastapi-canon"
+    claude = tmp_path / ".claude/skills/fastapi-canon"
     expected = _contents(agents)
     (agents / "SKILL.md").write_text("Old skill", encoding="utf-8")
-    (agents / "references/components.md").unlink()
+    (agents / "references/feature.md").unlink()
     (claude / "references/obsolete.md").write_text("Obsolete", encoding="utf-8")
     unrelated = claude.parent / "another-skill/SKILL.md"
     unrelated.parent.mkdir()
@@ -136,17 +135,15 @@ def test_force_refreshes_both_copies_and_restores_missing_resources(
 
 
 def test_force_installs_a_missing_agent_directory(tmp_path: Path) -> None:
-    agents = tmp_path / ".agents/skills/build-canon-backend"
+    agents = tmp_path / ".agents/skills/fastapi-canon"
     agents.mkdir(parents=True)
     (agents / "SKILL.md").write_text("Old skill", encoding="utf-8")
 
     result = _run_skill(tmp_path, "--force")
 
     assert result.returncode == 0, result.stderr
-    assert _contents(agents) == _contents(
-        tmp_path / ".claude/skills/build-canon-backend"
-    )
-    assert (agents / "references/components.md").is_file()
+    assert _contents(agents) == _contents(tmp_path / ".claude/skills/fastapi-canon")
+    assert (agents / "references/feature.md").is_file()
 
 
 def test_force_refreshes_only_a_custom_destination(tmp_path: Path) -> None:
@@ -158,7 +155,7 @@ def test_force_refreshes_only_a_custom_destination(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert (destination / "SKILL.md").is_file()
-    assert (destination / "references/components.md").is_file()
+    assert (destination / "references/feature.md").is_file()
     assert not (destination / "old.md").exists()
     assert not (tmp_path / ".agents").exists()
     assert not (tmp_path / ".claude").exists()
@@ -167,7 +164,7 @@ def test_force_refreshes_only_a_custom_destination(tmp_path: Path) -> None:
 def test_force_stages_all_resources_before_changing_existing_skills(
     tmp_path: Path,
 ) -> None:
-    agents = tmp_path / ".agents/skills/build-canon-backend"
+    agents = tmp_path / ".agents/skills/fastapi-canon"
     agents.mkdir(parents=True)
     existing = agents / "SKILL.md"
     existing.write_text("Keep on failure", encoding="utf-8")

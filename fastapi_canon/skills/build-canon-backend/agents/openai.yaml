@@ -1,3 +1,0 @@
-interface:
-  display_name: "Build a Canon Backend"
-  short_description: "Clean FastAPI features, contracts and Dishka wiring"

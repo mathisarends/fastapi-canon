@@ -2,6 +2,21 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
+## Unreleased
+
+### Breaking changes
+
+- **`CANON-030-SKILL-NAME`** — The bundled agent skill is renamed from
+  `build-canon-backend` to `fastapi-canon` and installs to
+  `.agents/skills/fastapi-canon` and `.claude/skills/fastapi-canon`. Run
+  `uv run fastapi-canon skill install`, then delete the old
+  `build-canon-backend` directories.
+
+### Changed
+
+- The skill is a short overview that points agents to the installed source
+  for details, and matches the 0.29 API.
+
 ## 0.29.0 - 2026-11-25
 
 ### Breaking changes
