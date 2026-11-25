@@ -181,6 +181,41 @@ async def find(service: Inject[Service]) -> int:
     assert report["operations"][0]["complete"]
 
 
+@pytest.mark.parametrize(
+    ("raises", "raised", "expected"),
+    [
+        pytest.param("(Gone,)", "Gone()", [], id="declared"),
+        pytest.param("()", "Gone()", [("rpc", "CAN001", "raises")], id="undeclared"),
+        pytest.param("(Gone,)", "Expired()", [], id="declared-base"),
+        pytest.param("(RpcErrorBinding(Unmapped),)", "Unmapped()", [], id="binding"),
+    ],
+)
+def test_rpc_errors_are_their_own_contract(
+    analyze: Callable[..., dict[str, Any]],
+    raises: str,
+    raised: str,
+    expected: list[tuple[str, str, str]],
+) -> None:
+    report = analyze(
+        f"""
+from fastapi_canon.integrations.websockets import RpcError, RpcErrorBinding
+
+class Gone(RpcError):
+    code = "gone"
+
+class Expired(Gone):
+    code = "expired"
+
+@channel.method(raises={raises})
+async def find() -> int:
+    raise {raised}
+""",
+    )
+
+    assert findings(report) == expected
+    assert report["operations"][0]["complete"]
+
+
 def test_rpc_unmapped_exception(analyze: Callable[..., dict[str, Any]]) -> None:
     report = analyze(
         """

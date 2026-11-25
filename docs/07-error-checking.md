@@ -53,7 +53,7 @@ modules are private.
 | `@router.get(...)` and other HTTP methods | Endpoint and dependency failures against policy, router and operation `raises=`. |
 | `@router.sse(...)` | Dependency and stream body failures against router and stream `raises=`. |
 | `@rtc.session(...)` on a `WebRtcRouter` | Session factory and dependency failures against router and session `raises=`. |
-| `@channel.method` on an `RpcChannel` | Method failures against the channel and method `raises=`. |
+| `@channel.method` on an `RpcChannel` | Method failures against the channel and method `raises=`; an `RpcError` subclass or `RpcErrorBinding` there covers itself and its subclasses. |
 
 Unconditional module-level `parent.include_router(child)` calls pass a parent's
 `raises`, dependencies and `RouterPolicy` to its children. Plain FastAPI routers
@@ -74,14 +74,21 @@ It relies on these closed-world assumptions:
   overridden methods of library bases, and construction hooks and decorated
   methods (such as Pydantic validators) of classes with library bases.
   Decorators from libraries are transparent.
+- **Scanned code supplies every callable.** Calling a parameter, a stored
+  attribute or a Dishka-provided callable follows what the roots pass to it:
+  arguments, constructor parameters, dataclass fields and the values provider
+  methods return. A class handed to other code, other than through
+  `provide(Class)`, may be built elsewhere, so its stored callables stay unknown.
 - **The roots contain every application class.** An untyped receiver whose method
   name no application class defines is a library value. An abstract method,
   property or `Protocol` member without a Dishka binding follows every scanned
   implementation.
 - **Annotations are true.** Parameters, fields, properties and return values have
   their annotated types; iterating a `list[T]`, `tuple[T, ...]` or `dict[T, V]`
-  yields `T`. An `HTTPConnection` injected into an HTTP operation is a `Request`,
-  also in the helpers it is passed to.
+  yields `T`. `Callable[..., R]` returns `R`, `ServiceScope[T]` enters `T`, an
+  annotated local keeps its type, and `isinstance` narrows its branch. An
+  `HTTPConnection` injected into an HTTP operation is a `Request`, also in the
+  helpers it is passed to.
 - **Handlers catch by inheritance.** `except LibraryError` catches application
   exceptions that subclass it and nothing else.
 - **Deferred bodies run later.** Errors of generator expressions and unawaited
@@ -127,7 +134,11 @@ declarations without calling the factory; nested operations get names such as
 These cases stay `CAN003`; the message names what to fix:
 
 - **Ambiguous calls:** a method that application classes define, called on a
-  receiver of unknown type. The message lists candidates; annotate the receiver.
+  receiver of unknown type, such as the untyped result of a library call. The
+  message lists candidates; annotate the receiver, for example
+  `payload: dict[str, object] = response.json()`.
+- **Unknown callables:** a called parameter, attribute or `ContextVar` value that
+  no scanned code supplies.
 - **Dynamic dispatch:** `getattr` with a computed name, calling the result of
   `eval`, `exec`, `compile` or `__import__`, unresolved `super()` calls, and
   raising a value of unknown type.
@@ -141,7 +152,7 @@ These cases stay `CAN003`; the message names what to fix:
   implements.
 - **Dynamic contracts:** unresolved `raises`/`errors` sequences, reassigned or
   mutated declarations, conditional or repeated mounts with inherited contracts,
-  `RpcError` subclasses, `RpcErrorBinding` and RPC subclasses with custom logic.
+  and RPC subclasses with custom logic.
 - **Unsupported route factories:** parameters, conditional setup, decorators,
   async or generator factories.
 

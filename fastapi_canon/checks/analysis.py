@@ -6,7 +6,9 @@ from dataclasses import dataclass, replace
 from typing import NamedTuple
 
 from fastapi_canon.checks.source import (
+    CONTEXT_MANAGERS,
     LIBRARY_VALUE,
+    SCOPED_CALLS,
     SourceDefinition,
     SourceIndex,
     SymbolEnvironment,
@@ -113,6 +115,9 @@ class ContractAnalyzer:
         self._summaries: dict[_SummaryKey, _Summary] = {}
         self._partial: dict[str, tuple[_Escape, ...]] = {}
         self._pending: list[set[str]] = []
+        self._declarations: dict[int, dict[str, ast.expr]] = {}
+        # Types that nested functions see in their enclosing scope.
+        self._closures: dict[str, SymbolEnvironment] = {}
 
     def function(
         self,
@@ -122,18 +127,20 @@ class ContractAnalyzer:
         iterated: bool = False,
         receiver: str | None = None,
         dependency_transport: str | None = None,
+        callables: _Callables = (),
     ) -> ExceptionFlow:
         """Summarize *function*; iterated generators execute their bodies.
 
-        A recursive call contributes the escapes computed so far for its
-        target, which is analyzed again until its escapes are stable.
+        *callables* bind parameters to the application callables a caller
+        passes. A recursive call contributes the escapes computed so far for
+        its target, which is analyzed again until its escapes are stable.
         """
         if function.name in stack:
             if self._pending:
                 self._pending[-1].add(function.name)
             return ExceptionFlow(self._partial.get(function.name, ()))
         summary_key = _SummaryKey(
-            function.name, iterated, receiver, dependency_transport
+            function.name, iterated, receiver, dependency_transport, callables
         )
         if summary_key in self._summaries:
             escapes, unknowns, modules = self._summaries[summary_key]
@@ -146,6 +153,7 @@ class ContractAnalyzer:
                 iterated=iterated,
                 receiver=receiver,
                 dependency_transport=dependency_transport,
+                callables=callables,
             )
             # A result that used a partial summary of an active caller is
             # recomputed when that caller iterates.
@@ -223,10 +231,19 @@ class ContractAnalyzer:
                 flow.extend(self.expression(node.test, function, env, stack=stack))
                 condition = self.source.condition(node.test, function.module, env)
                 if condition is not False:
-                    flow.extend(self._branch(node.body, function, env, scope=scope))
+                    narrowed = self._narrowed(node.test, function, env)
+                    flow.extend(
+                        self._branch(node.body, function, narrowed, scope=scope)
+                    )
                 if condition is not True:
-                    flow.extend(self._branch(node.orelse, function, env, scope=scope))
+                    narrowed = self._narrowed(node.test, function, env, negated=True)
+                    flow.extend(
+                        self._branch(node.orelse, function, narrowed, scope=scope)
+                    )
                 self._invalidate(node, env)
+                if _exits(node.body) and not node.orelse:
+                    # Only a failed test continues after a guard that exits.
+                    env.update(self._narrowed(node.test, function, env, negated=True))
                 selected = node.body if condition else node.orelse
                 if condition is not None and any(
                     isinstance(statement, ast.Return | ast.Raise)
@@ -245,6 +262,7 @@ class ContractAnalyzer:
         iterated: bool,
         receiver: str | None,
         dependency_transport: str | None,
+        callables: _Callables,
     ) -> tuple[ExceptionFlow, set[str]]:
         # The escape sets are finite and grow monotonically with the partial
         # summary, so iteration stops once a pass adds no exception.
@@ -258,6 +276,7 @@ class ContractAnalyzer:
                 iterated=iterated,
                 receiver=receiver,
                 dependency_transport=dependency_transport,
+                callables=callables,
             )
             previous = self._partial.get(function.name, ())
             flow.add_escapes(previous)
@@ -290,6 +309,7 @@ class ContractAnalyzer:
         iterated: bool,
         receiver: str | None = None,
         dependency_transport: str | None = None,
+        callables: _Callables = (),
     ) -> ExceptionFlow:
         node = function.node
         assert isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
@@ -314,7 +334,11 @@ class ContractAnalyzer:
             flow.add_unknown(
                 UnknownValue("unresolved decorator", function.name, decorator.lineno)
             )
-        env = self.source.environment(function, receiver, dependency_transport)
+        env = {
+            **self._closures.get(function.name, {}),
+            **self.source.environment(function, receiver, dependency_transport),
+            **dict(callables),
+        }
         body = self.block(node.body, function, env, stack=(*stack, function.name))
         if not iterated and _generator(node):
             body.defer()
@@ -333,8 +357,9 @@ class ContractAnalyzer:
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
             return self._definition(node, function, env, scope=scope)
         if isinstance(node, ast.Try | ast.TryStar):
-            flow = self._try(node, function, env, scope=scope)
+            flow, settled = self._try(node, function, env, scope=scope)
             self._invalidate(node, env)
+            env.update(settled)
             return flow
         if isinstance(node, ast.With | ast.AsyncWith):
             flow = self._context_manager(node, function, env, scope=scope)
@@ -386,6 +411,51 @@ class ContractAnalyzer:
         self._invalidate(node, env)
         return flow
 
+    def _narrowed(
+        self,
+        test: ast.expr,
+        function: SourceDefinition,
+        env: SymbolEnvironment,
+        *,
+        negated: bool = False,
+    ) -> SymbolEnvironment:
+        # isinstance(value, Class) holds where its test passed, and where a
+        # failed test of not isinstance(value, Class) continues.
+        combined = ast.Or if negated else ast.And
+        tests = (
+            test.values
+            if isinstance(test, ast.BoolOp) and isinstance(test.op, combined)
+            else [test]
+        )
+        if negated:
+            tests = [
+                item.operand
+                for item in tests
+                if isinstance(item, ast.UnaryOp) and isinstance(item.op, ast.Not)
+            ]
+        narrowed = env
+        for item in tests:
+            if not (
+                isinstance(item, ast.Call)
+                and len(item.args) == 2
+                and not item.keywords
+                and isinstance(item.args[0], ast.Name | ast.Attribute)
+                and self.source.resolve(item.func, function.module, env)
+                == "builtins.isinstance"
+            ):
+                continue
+            name = self.source.resolve(item.args[1], function.module, env)
+            definition = self.source.definition(name or "")
+            if name and (
+                (definition is not None and isinstance(definition.node, ast.ClassDef))
+                or self.source.library(name)
+            ):
+                narrowed = {
+                    **narrowed,
+                    self.source.key(item.args[0]): SymbolValue(name, instance=True),
+                }
+        return narrowed
+
     def _branch(
         self,
         body: list[ast.stmt],
@@ -430,6 +500,8 @@ class ContractAnalyzer:
             flow.extend(self.expression(expression, function, env, stack=scope.stack))
         local = self.source.local_definition(node)
         env[node.name] = SymbolValue(local.name if local else "")
+        if local is not None:
+            self._closures[local.name] = env.copy()
         return flow
 
     def _raise(
@@ -489,9 +561,22 @@ class ContractAnalyzer:
         env: SymbolEnvironment,
         *,
         scope: _Scope,
-    ) -> ExceptionFlow:
+    ) -> tuple[ExceptionFlow, SymbolEnvironment]:
+        """Analyze *node* and return the bindings known after it.
+
+        When every handler exits, only a completed body continues, so the
+        names it binds keep their types unless ``finally`` rebinds them.
+        """
         flow = ExceptionFlow()
-        attempted = self._branch(node.body, function, env, scope=scope)
+        completed = env.copy()
+        attempted = self.block(
+            node.body,
+            function,
+            completed,
+            stack=scope.stack,
+            reraised=scope.reraised,
+            reraised_name=scope.reraised_name,
+        )
         flow.add_unknowns(attempted.unknowns)
         remaining = list(attempted.escapes)
         for handler in node.handlers:
@@ -542,9 +627,18 @@ class ContractAnalyzer:
             )
         flow.add_escapes(remaining)
         # A return in finally can only discard escapes; a raise there adds one.
-        flow.extend(self._branch(node.orelse, function, env, scope=scope))
+        flow.extend(self._branch(node.orelse, function, completed, scope=scope))
         flow.extend(self._branch(node.finalbody, function, env, scope=scope))
-        return flow
+        if not all(_exits(handler.body) for handler in node.handlers):
+            return flow, {}
+        rebound = env.copy()
+        self._invalidate(ast.Module(body=node.finalbody, type_ignores=[]), rebound)
+        settled = {
+            key: value
+            for key, value in completed.items()
+            if env.get(key) != value and rebound.get(key) == env.get(key)
+        }
+        return flow, settled
 
     def _assignment(
         self,
@@ -562,19 +656,59 @@ class ContractAnalyzer:
             flow.extend(self._target(target, function, env, stack=stack))
         inferred = SymbolValue()
         if isinstance(node, ast.AnnAssign):
-            inferred = SymbolValue(
-                self.source.annotation(node.annotation, function.module) or "",
-                instance=True,
-                element=self.source.element(node.annotation, function.module),
-            )
+            inferred = self.source.typed(node.annotation, function.module)
         if not inferred.name and node.value is not None:
             inferred = self.source.infer(node.value, function.module, env)
-        for target in targets:
+        # Every value is inferred before any target is bound.
+        unpacked = [
+            self.source.unpack(target, node.value, function.module, env=env)
+            if isinstance(target, ast.Tuple | ast.List) and node.value is not None
+            else None
+            for target in targets
+        ]
+        for target, values in zip(targets, unpacked, strict=True):
             if isinstance(target, ast.Name | ast.Attribute):
-                env[self.source.key(target)] = inferred
+                self._bind(target, inferred, function, env=env)
+            elif values is not None:
+                assert isinstance(target, ast.Tuple | ast.List)
+                for element, value in zip(target.elts, values, strict=True):
+                    if isinstance(element, ast.Name | ast.Attribute):
+                        self._bind(element, value, function, env=env)
+                    else:
+                        self._invalidate(element, env)
             else:
                 self._invalidate(target, env)
         return flow
+
+    def _bind(
+        self,
+        target: ast.Name | ast.Attribute,
+        value: SymbolValue,
+        function: SourceDefinition,
+        *,
+        env: SymbolEnvironment,
+    ) -> None:
+        # An annotated local keeps its declared type in every assignment.
+        if isinstance(target, ast.Name):
+            declared = self._declared(function).get(target.id)
+            if declared is not None:
+                value = self.source.typed(declared, function.module)
+        env[self.source.key(target)] = value
+
+    def _declared(self, function: SourceDefinition) -> dict[str, ast.expr]:
+        node = function.node
+        if id(node) not in self._declarations:
+            self._declarations[id(node)] = (
+                {
+                    child.target.id: child.annotation
+                    for child in _executed_nodes(node.body)
+                    if isinstance(child, ast.AnnAssign)
+                    and isinstance(child.target, ast.Name)
+                }
+                if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+                else {}
+            )
+        return self._declarations[id(node)]
 
     def _match(
         self,
@@ -661,6 +795,10 @@ class ContractAnalyzer:
             # getattr with a literal name reads that attribute.
             flow.extend(self._property(attribute, function, env, stack=stack))
             return flow
+        read = self._computed_getattr(node, function, env, stack=stack)
+        if read is not None:
+            flow.extend(read)
+            return flow
         if isinstance(node.func, ast.Attribute) and _super(node.func.value):
             flow.extend(
                 self._super_call(
@@ -669,6 +807,9 @@ class ContractAnalyzer:
             )
             return flow
         target = self.source.infer(node.func, function.module, env)
+        if target.instance and target.name in SCOPED_CALLS and target.arguments:
+            # Scoped[UseCase] calls the use case resolved in a fresh scope.
+            target = SymbolValue(target.arguments[0], instance=True)
         name = target.name or self.source.resolve(node.func, function.module, env)
         definition = self.source.definition(name or "")
         if definition and isinstance(node.func, ast.Attribute | ast.Call):
@@ -708,6 +849,7 @@ class ContractAnalyzer:
                 )
             )
         elif definition:
+            flow.extend(self._lambdas(node, function, env, stack=stack))
             candidates = [(definition, target.receiver)]
             if definition.owner and isinstance(node.func, ast.Attribute):
                 receiver = self.source.resolve(node.func.value, function.module, env)
@@ -729,6 +871,7 @@ class ContractAnalyzer:
                         iterated=iterated,
                         receiver=receiver_type,
                         transport=self._transport(node, candidate, function, env=env),
+                        callables=self._callables(node, candidate, function, env=env),
                     )
                 )
         else:
@@ -834,6 +977,27 @@ class ContractAnalyzer:
                     )
                 )
                 return flow
+            if owner is not None and self.source.attribute(owner, func.attr):
+                held = self._held(
+                    node,
+                    owner,
+                    function=function,
+                    stack=stack,
+                    awaited=awaited,
+                    iterated=iterated,
+                )
+                if held is None:
+                    # An attribute that holds a callable of unknown origin.
+                    flow.add_unknown(
+                        UnknownValue(
+                            f"unresolved call: {ast.unparse(func)}",
+                            function.name,
+                            node.lineno,
+                        )
+                    )
+                else:
+                    flow.extend(held)
+                return flow
             if owner is not None:
                 # No scanned class in the receiver's lineage defines the
                 # method: a library base does, unless a subclass overrides it.
@@ -853,17 +1017,14 @@ class ContractAnalyzer:
                 library = True
             elif receiver.instance and self.source.library(receiver.name):
                 library = True
-            elif func.attr not in self.source.members:
-                # No application class defines the name: the call cannot
-                # reach application code, whatever the receiver is.
+            elif not (candidates := self._accepting(node, func.attr)):
+                # No application member with the name accepts these arguments:
+                # the call cannot reach application code, whatever the receiver is.
                 library = True
             else:
                 flow.add_unknown(
                     UnknownValue(
-                        _ambiguous(
-                            f"call {ast.unparse(func)}",
-                            self.source.candidates(func.attr),
-                        ),
+                        _ambiguous(f"call {ast.unparse(func)}", candidates),
                         function.name,
                         node.lineno,
                     )
@@ -880,6 +1041,89 @@ class ContractAnalyzer:
             return flow
         for argument in [*node.args, *(kw.value for kw in node.keywords)]:
             flow.extend(self._callback(argument, function, env, stack=stack))
+        return flow
+
+    def _accepting(self, node: ast.Call, name: str) -> list[str]:
+        # Members named *name* that can be called with the arguments of
+        # *node*; any other target raises TypeError before running.
+        result = []
+        for candidate in self.source.candidates(name):
+            definition = self.source.definition(candidate)
+            if definition is None:
+                owner = candidate.rpartition(".")[0]
+                field = self.source.fields(owner).get(name)
+                held = self.source.definition(field.name) if field else None
+                if (
+                    field is not None
+                    and field.instance
+                    and held is not None
+                    and isinstance(held.node, ast.ClassDef)
+                    and self.source.method(held.name, "__call__") is None
+                ):
+                    continue
+            elif not _accepts(definition, node, bound=not self._unbound(definition)):
+                continue
+            result.append(candidate)
+        return result
+
+    def _unbound(self, definition: SourceDefinition) -> bool:
+        node = definition.node
+        return definition.owner is None or (
+            isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+            and any(
+                self.source.resolve(decorator, definition.module)
+                == "builtins.staticmethod"
+                for decorator in node.decorator_list
+            )
+        )
+
+    def _computed_getattr(
+        self,
+        node: ast.Call,
+        function: SourceDefinition,
+        env: SymbolEnvironment,
+        *,
+        stack: tuple[str, ...],
+    ) -> ExceptionFlow | None:
+        # getattr(instance, name) of a known type can run any of its getters.
+        if (
+            self.source.resolve(node.func, function.module, env) != "builtins.getattr"
+            or node.keywords
+            or len(node.args) not in {2, 3}
+        ):
+            return None
+        receiver = node.args[0]
+        value = self.source.infer(receiver, function.module, env)
+        if value.instance and self.source.library(value.name):
+            return ExceptionFlow()
+        owner = self._receiver_class(receiver, function, env)
+        if owner is None or not value.instance:
+            return None
+        lineage = self.source.lineage(owner)
+        classes = [
+            *(lineage[0] if lineage else [owner]),
+            *self.source.subclasses(owner),
+        ]
+        flow = ExceptionFlow()
+        for name in dict.fromkeys(classes):
+            definition = self.source.definitions[name]
+            assert isinstance(definition.node, ast.ClassDef)
+            for member in definition.node.body:
+                getter = self.source.definitions.get(
+                    f"{name}.{getattr(member, 'name', '')}"
+                )
+                if (
+                    getter is None
+                    or self.source.abstract(getter)
+                    or not (
+                        self.source.getter(getter)
+                        or getter.node.name in {"__getattr__", "__getattribute__"}
+                    )
+                ):
+                    continue
+                flow.extend(
+                    self._traced(function, self.function(getter, stack, receiver=name))
+                )
         return flow
 
     def _method_call(
@@ -899,7 +1143,7 @@ class ContractAnalyzer:
                 node, method, function, stack=stack, awaited=awaited, iterated=iterated
             )
         assert isinstance(node.func, ast.Attribute)
-        flow = ExceptionFlow()
+        flow = self._lambdas(node, function, env, stack=stack)
         candidates = [(method, owner), *self._overrides(owner, node.func.attr)]
         for candidate, receiver_type in dict(candidates).items():
             flow.extend(
@@ -912,6 +1156,7 @@ class ContractAnalyzer:
                     iterated=iterated,
                     receiver=receiver_type,
                     transport=self._transport(node, candidate, function, env=env),
+                    callables=self._callables(node, candidate, function, env=env),
                 )
             )
         return flow
@@ -1157,6 +1402,8 @@ class ContractAnalyzer:
             # The protocol of an application generator manager runs with its
             # call; neither kind is assumed to suppress unresolved types.
             names = suppressed or []
+            if isinstance(item.optional_vars, ast.Name) and suppressed is None:
+                local[item.optional_vars.id] = self._yielded(expression, function, env)
             inner = self._context_manager(
                 node, function, local, scope=scope, index=index + 1
             )
@@ -1175,6 +1422,12 @@ class ContractAnalyzer:
         asynchronous = isinstance(node, ast.AsyncWith)
         if manager is None:
             library = self.source.origin(expression, function.module, env) is not None
+            value = self.source.infer(expression, function.module, env)
+            entered = (
+                value.arguments[0]
+                if value.name in CONTEXT_MANAGERS and value.arguments
+                else ""
+            )
             protocol = (
                 ("__aenter__", "__aexit__")
                 if asynchronous
@@ -1195,8 +1448,10 @@ class ContractAnalyzer:
                         expression.lineno,
                     )
                 )
-            if isinstance(item.optional_vars, ast.Name) and library:
-                value = self.source.infer(expression, function.module, env)
+            if isinstance(item.optional_vars, ast.Name) and entered:
+                # A typed manager enters its type argument.
+                local[item.optional_vars.id] = SymbolValue(entered, instance=True)
+            elif isinstance(item.optional_vars, ast.Name) and library:
                 local[item.optional_vars.id] = (
                     value
                     if value.instance and self.source.library(value.name)
@@ -1228,15 +1483,13 @@ class ContractAnalyzer:
                 enter_node, ast.FunctionDef | ast.AsyncFunctionDef
             ):
                 returned = (
-                    self.source.annotation(enter_node.returns, enter.module)
+                    self.source.typed(enter_node.returns, enter.module)
                     if enter_node.returns
-                    else None
+                    else SymbolValue()
                 )
-                if returned in {"typing.Self", "typing_extensions.Self"}:
-                    returned = manager
-                local[item.optional_vars.id] = SymbolValue(
-                    returned or "", instance=True
-                )
+                if returned.name in {"typing.Self", "typing_extensions.Self"}:
+                    returned = SymbolValue(manager, instance=True)
+                local[item.optional_vars.id] = replace(returned, instance=True)
         inner = self._context_manager(
             node, function, local, scope=scope, index=index + 1
         )
@@ -1271,15 +1524,56 @@ class ContractAnalyzer:
             return []
         return [name for name in names if name is not None]
 
+    def _yielded(
+        self, node: ast.expr, function: SourceDefinition, env: SymbolEnvironment
+    ) -> SymbolValue:
+        # A generator manager enters the value its generator yields; a typed
+        # manager, such as a port's AbstractAsyncContextManager[T], enters T.
+        value = self.source.infer(node, function.module, env)
+        if value.name in CONTEXT_MANAGERS and value.arguments and value.arguments[0]:
+            return SymbolValue(value.arguments[0], instance=True)
+        assert isinstance(node, ast.Call)
+        elements = {
+            self.source.element(definition.node.returns, definition.module)
+            if isinstance(definition.node, ast.FunctionDef | ast.AsyncFunctionDef)
+            and definition.node.returns
+            else ""
+            for definition in self._targets(node, function, env)
+        }
+        element = elements.pop() if len(elements) == 1 else ""
+        return SymbolValue(element, instance=True) if element else SymbolValue()
+
     def _managed_call(
         self, node: ast.expr, function: SourceDefinition, env: SymbolEnvironment
     ) -> bool:
         if not isinstance(node, ast.Call):
             return False
+        targets = self._targets(node, function, env)
+        return bool(targets) and all(self._managed(item) for item in targets)
+
+    def _targets(
+        self, node: ast.Call, function: SourceDefinition, env: SymbolEnvironment
+    ) -> list[SourceDefinition]:
+        # The scanned functions a call runs: a function, or the __call__ of an
+        # instance, dispatched to every implementation when it is abstract.
+        target = self.source.infer(node.func, function.module, env)
         definition = self.source.definition(
-            self.source.resolve(node.func, function.module, env) or ""
+            target.name or self.source.resolve(node.func, function.module, env) or ""
         )
-        return definition is not None and self._managed(definition)
+        if definition is None:
+            return []
+        if isinstance(definition.node, ast.ClassDef):
+            method = (
+                self.source.method(definition.name, "__call__")
+                if target.instance
+                else None
+            )
+            if method is None:
+                return []
+            definition = method
+        if definition.owner and self.source.abstract(definition):
+            return list(self._implementations(definition))
+        return [definition]
 
     def _call(
         self,
@@ -1292,6 +1586,7 @@ class ContractAnalyzer:
         iterated: bool,
         receiver: str | None = None,
         transport: str | None = None,
+        callables: _Callables = (),
     ) -> ExceptionFlow:
         # A generator-based context manager runs its body around the with block.
         iterated_generator = (iterated or self._managed(definition)) and _generator(
@@ -1305,6 +1600,7 @@ class ContractAnalyzer:
                 iterated=iterated_generator,
                 receiver=receiver,
                 dependency_transport=transport,
+                callables=callables,
             ),
         )
         if (
@@ -1338,6 +1634,9 @@ class ContractAnalyzer:
         definition = self.source.definition(resolved or "")
         if isinstance(expression, ast.Call) and definition:
             if isinstance(definition.node, ast.ClassDef):
+                if self.source.infer(target, function.module, env).instance:
+                    # Calling an instance: its __call__ returns the manager.
+                    return None
                 return definition.name if not awaited else None
             if (
                 isinstance(definition.node, ast.FunctionDef | ast.AsyncFunctionDef)
@@ -1524,6 +1823,34 @@ class ContractAnalyzer:
                     else ExceptionFlow()
                 )
             return self._construct(definition, function, stack, line=argument.lineno)
+        if definition.owner and self.source.abstract(definition):
+            # A bound port method runs one of its implementations.
+            implementations = self._implementations(definition)
+            if not implementations:
+                return ExceptionFlow(
+                    unknowns=[
+                        UnknownValue(
+                            "abstract method without scanned implementation: "
+                            f"{definition.name}",
+                            function.name,
+                            argument.lineno,
+                        )
+                    ]
+                )
+            flow = ExceptionFlow()
+            for implementation, owner in implementations.items():
+                flow.extend(
+                    self._traced(
+                        function,
+                        self.function(
+                            implementation,
+                            stack,
+                            iterated=_generator(implementation.node),
+                            receiver=owner,
+                        ),
+                    )
+                )
+            return flow
         return self._traced(
             function,
             self.function(
@@ -1560,6 +1887,26 @@ class ContractAnalyzer:
         """
         flow = ExceptionFlow()
         candidates = self._implementations(port)
+        provided = (
+            self.source.provided(port.owner or "")
+            if not candidates and port.node.name == "__call__"
+            else None
+        )
+        followed = (
+            self._follow(
+                node,
+                provided,
+                function=function,
+                stack=stack,
+                awaited=awaited,
+                iterated=iterated,
+            )
+            if provided is not None
+            else None
+        )
+        if followed is not None:
+            # A callable port that providers satisfy with functions or lambdas.
+            return followed
         if not candidates:
             flow.add_unknown(
                 UnknownValue(
@@ -1599,6 +1946,182 @@ class ContractAnalyzer:
             ):
                 return "http"
         return None
+
+    def _callables(
+        self,
+        node: ast.Call,
+        callee: SourceDefinition,
+        function: SourceDefinition,
+        *,
+        env: SymbolEnvironment,
+    ) -> _Callables:
+        # Application functions and bound methods passed as arguments, so a
+        # callee that calls its parameter follows the callable it received.
+        parameters = self.source.parameters(callee, node)
+        result: dict[str, SymbolValue] = {}
+        for argument in [*node.args, *(item.value for item in node.keywords)]:
+            parameter = parameters.get(id(argument))
+            value = self._callable(argument, function.module, env)
+            if parameter is not None and value is not None:
+                result[parameter.arg] = value
+        return tuple(sorted(result.items(), key=lambda item: item[0]))
+
+    def _held(
+        self,
+        node: ast.Call,
+        owner: str,
+        *,
+        function: SourceDefinition,
+        stack: tuple[str, ...],
+        awaited: bool,
+        iterated: bool,
+    ) -> ExceptionFlow | None:
+        # Calling an attribute runs what each construction stored in it.
+        assert isinstance(node.func, ast.Attribute)
+        sources = self.source.attribute_sources(owner, node.func.attr)
+        if sources is None:
+            return None
+        return self._follow(
+            node,
+            sources,
+            function=function,
+            stack=stack,
+            awaited=awaited,
+            iterated=iterated,
+        )
+
+    def _follow(
+        self,
+        node: ast.Call,
+        sources: Iterable[tuple[SourceDefinition | None, str, ast.expr]],
+        *,
+        function: SourceDefinition,
+        stack: tuple[str, ...],
+        awaited: bool,
+        iterated: bool,
+    ) -> ExceptionFlow | None:
+        # Call every callable that the source expressions evaluate to;
+        # None when one of them is not statically known. A value that no
+        # scanned code supplies comes from elsewhere and stays unknown.
+        flow = ExceptionFlow()
+        pending = list(sources)
+        if not pending:
+            return None
+        seen: set[int] = set()
+        while pending:
+            site, module, expression = pending.pop()
+            if id(expression) in seen:
+                continue
+            seen.add(id(expression))
+            env = self._site_environment(site)
+            if isinstance(expression, ast.Lambda):
+                if site is None:
+                    return None
+                flow.extend(self._callback(expression, site, env, stack=stack))
+                continue
+            if site is not None and isinstance(expression, ast.Name):
+                forwarded = self._forwarded(site, expression.id)
+                if forwarded == []:
+                    return None
+                if forwarded is not None:
+                    pending.extend(forwarded)
+                    continue
+            value = self._callable(expression, module, env)
+            definition = self.source.definition(value.name if value else "")
+            if value is not None and definition is not None:
+                if site is not None and any(
+                    statement is definition.node
+                    for statement in getattr(site.node, "body", [])
+                ):
+                    # A nested function sees the parameters of its definer.
+                    self._closures.setdefault(definition.name, env)
+                flow.extend(
+                    self._call(
+                        node,
+                        definition,
+                        function,
+                        stack=stack,
+                        awaited=awaited,
+                        iterated=iterated,
+                        receiver=value.receiver,
+                    )
+                )
+            elif self.source.origin(expression, module, env) is None:
+                return None
+        return flow
+
+    def _forwarded(
+        self, site: SourceDefinition, name: str
+    ) -> list[tuple[SourceDefinition | None, str, ast.expr]] | None:
+        # A parameter that a constructor stores, or that Dishka fills for a
+        # provider method: follow what constructions pass or providers return.
+        node = site.node
+        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            return None
+        if self.source.provider_method(site):
+            provided = self.source.injected_argument(site, name)
+            return list(provided) if provided is not None else None
+        return self.source.parameter_sources(site, name)
+
+    def _site_environment(self, site: SourceDefinition | None) -> SymbolEnvironment:
+        # Parameters and nested functions visible where a value was passed.
+        if site is None or not isinstance(
+            site.node, ast.FunctionDef | ast.AsyncFunctionDef
+        ):
+            return {}
+        env = {
+            **self._closures.get(site.name, {}),
+            **self.source.environment(site),
+        }
+        for node in site.node.body:
+            local = self.source.local_definition(node)
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and local:
+                env[node.name] = SymbolValue(local.name)
+        return env
+
+    def _lambdas(
+        self,
+        node: ast.Call,
+        function: SourceDefinition,
+        env: SymbolEnvironment,
+        *,
+        stack: tuple[str, ...],
+    ) -> ExceptionFlow:
+        # A lambda passed to application code may run; its body is analyzed
+        # here, and the parameter it binds counts as already followed.
+        flow = ExceptionFlow()
+        for argument in [*node.args, *(item.value for item in node.keywords)]:
+            if isinstance(argument, ast.Lambda):
+                flow.extend(self._callback(argument, function, env, stack=stack))
+        return flow
+
+    def _callable(
+        self, node: ast.expr, module: str, env: SymbolEnvironment
+    ) -> SymbolValue | None:
+        if isinstance(node, ast.Lambda):
+            return SymbolValue(LIBRARY_VALUE, instance=True)
+        if (
+            isinstance(node, ast.Call)
+            and node.args
+            and self.source.resolve(node.func, module, env) == "functools.partial"
+        ):
+            # Calling a partial calls the wrapped callable.
+            return self._callable(node.args[0], module, env)
+        value = self.source.infer(node, module, env)
+        definition = self.source.definition(value.name)
+        if (
+            value.instance
+            or definition is None
+            or not isinstance(definition.node, ast.FunctionDef | ast.AsyncFunctionDef)
+        ):
+            # A library function or method raises no application errors.
+            library = (
+                not value.instance
+                and definition is None
+                and self.source.origin(node, module, env)
+            )
+            return SymbolValue(LIBRARY_VALUE, instance=True) if library else None
+        return value
 
     def _implementations(self, port: SourceDefinition) -> dict[SourceDefinition, str]:
         # Concrete members that implement *port*, keyed to their class.
@@ -1720,6 +2243,53 @@ def _generator(node: ast.AST) -> bool:
     )
 
 
+def _accepts(definition: SourceDefinition, node: ast.Call, *, bound: bool) -> bool:
+    """Whether the arguments of *node* bind to the parameters of *definition*."""
+    callee = definition.node
+    if not isinstance(callee, ast.FunctionDef | ast.AsyncFunctionDef):
+        return True
+    if any(isinstance(item, ast.Starred) for item in node.args) or any(
+        item.arg is None for item in node.keywords
+    ):
+        return True
+    arguments = callee.args
+    positional = [*arguments.posonlyargs, *arguments.args]
+    only = len(arguments.posonlyargs)
+    if bound and positional:
+        positional, only = positional[1:], max(only - 1, 0)
+    if len(node.args) > len(positional) and arguments.vararg is None:
+        return False
+    filled = {item.arg for item in positional[: len(node.args)]}
+    named = {item.arg for item in [*positional[only:], *arguments.kwonlyargs]}
+    for keyword in node.keywords:
+        assert keyword.arg is not None
+        if keyword.arg in filled or (
+            keyword.arg not in named and arguments.kwarg is None
+        ):
+            return False
+        filled.add(keyword.arg)
+    defaults = len(arguments.defaults)
+    required = [
+        *(item.arg for item in positional[: len(positional) - defaults]),
+        *(
+            item.arg
+            for item, default in zip(
+                arguments.kwonlyargs, arguments.kw_defaults, strict=True
+            )
+            if default is None
+        ),
+    ]
+    return all(name in filled for name in required)
+
+
+def _exits(body: list[ast.stmt]) -> bool:
+    """Whether *body* always leaves its block before the next statement."""
+    return any(
+        isinstance(statement, ast.Return | ast.Raise | ast.Continue | ast.Break)
+        for statement in body
+    )
+
+
 def _executed_nodes(body: list[ast.stmt]) -> list[ast.AST]:
     result: list[ast.AST] = []
 
@@ -1743,11 +2313,15 @@ class _Scope(NamedTuple):
     reraised_name: str | None
 
 
+type _Callables = tuple[tuple[str, SymbolValue], ...]
+
+
 class _SummaryKey(NamedTuple):
     function: str
     iterated: bool
     receiver: str | None
     dependency_transport: str | None
+    callables: _Callables
 
 
 class _Summary(NamedTuple):

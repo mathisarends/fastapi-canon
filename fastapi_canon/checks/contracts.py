@@ -32,6 +32,12 @@ _ERROR = "fastapi_canon.Error"
 _ERRORS = frozenset(
     {_ERROR, "fastapi_canon.error.Error", "fastapi_canon.error.error.Error"}
 )
+_RPC_BINDINGS = frozenset(
+    {
+        "fastapi_canon.integrations.websockets.RpcErrorBinding",
+        "fastapi_canon.integrations.websockets.errors.RpcErrorBinding",
+    }
+)
 _DEPENDENCIES = {
     "fastapi.Depends",
     "fastapi.params.Depends",
@@ -374,7 +380,21 @@ class CheckContracts:
         result: dict[str, str] = {}
         for scope, element in self._sequence(node, module, operation):
             identity = self.source.resolve(element, scope)
+            rpc = operation.transport == "rpc"
+            if rpc and identity is not None and self.source.rpc_error(identity):
+                result[identity] = identity
+                continue
             scope, definition = self.source.value(element, scope)
+            if (
+                rpc
+                and isinstance(definition, ast.Call)
+                and definition.args
+                and self.source.resolve(definition.func, scope) in _RPC_BINDINGS
+            ):
+                bound = self.source.resolve(definition.args[0], scope)
+                if bound is not None and self.source.exception(bound):
+                    result[bound] = identity or ast.unparse(element)
+                    continue
             if (
                 not isinstance(definition, ast.Call)
                 or self.source.resolve(definition.func, scope) not in _ERRORS
@@ -589,6 +609,16 @@ class CheckContracts:
                 ),
                 None,
             )
+            if mapped is None and operation.transport == "rpc":
+                # An undeclared RpcError still names its own contract.
+                mapped = next(
+                    (
+                        base
+                        for base in self.source.mro(escape.exception) or []
+                        if self.source.rpc_error(base)
+                    ),
+                    None,
+                )
             code = "CAN001" if mapped else "CAN002"
             if mapped and mapped in declared.values():
                 continue
