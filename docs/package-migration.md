@@ -13,8 +13,7 @@ PyPI project or add further Python import changes.
 
 ## Upgrade to 0.28.0
 
-Version 0.28.0 is prepared for release. See the
-[changelog](../CHANGELOG.md#0280---unreleased).
+See the [changelog](../CHANGELOG.md#0280---2026-11-25).
 
 - Rerun `fastapi-canon check composition --app module:app --fail-on warning`.
   If it reports `canon.contracts.W001`, declare the GET response with
