@@ -47,7 +47,7 @@ guide for removed predecessor modules.
 | Method retry | Zero additional attempts | `retry_attempts` / `retryAttempts`; optional per-attempt budget |
 | TypeScript heartbeat | 30-second idle interval, 10-second timeout for an exact advertised capability | `heartbeatIntervalMs`, `heartbeatTimeoutMs`; null interval disables |
 | TypeScript timeout breaker | Disabled | `consecutiveTimeoutLimit` |
-| Connection expiry | No expiry | Return `RpcConnectionExpiry(unix_seconds)` from `before_accept`; renew with `connection.expire_at()` |
+| Connection expiry | No expiry | Return `RpcConnectionExpiry` from the typed context or include it in the `before_accept` mapping. Renew with `connection.expire_at()`. [Examples](03-connections-and-events.md#authentication-and-credential-expiry) |
 | TypeScript credential refresh | No provider | Async `credentials` provider; when configured, recovery defaults to three attempts unless explicitly overridden |
 | Client middleware | Empty | `middleware` on construction, transport setup, or connect |
 | Trace metadata | Omitted | Middleware `call.metadata` with the advertised contract capability |

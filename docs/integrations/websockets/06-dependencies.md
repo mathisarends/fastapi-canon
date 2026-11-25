@@ -227,10 +227,10 @@ The context return annotation supplies its injection type.
 
 The executable [authenticated example](../../../examples/websockets/authenticated.py) checks an
 Origin allowlist and a session cookie before accepting. Typed rejection bindings
-produce HTTP 401/403. A custom Dishka resolver arms `RpcConnection.expire_at()`
-from the authenticated login, closing an expired connection with
-`1008 / credentials_expired`. The APP session store is shared; the login belongs
-to the RPC SESSION and request identities belong to each call's REQUEST scope.
+produce HTTP 401/403. The context function uses the authenticated login to set
+[connection expiry](03-connections-and-events.md#authentication-and-credential-expiry).
+The APP session store is shared. The login belongs to the RPC SESSION and
+request identities belong to each call's REQUEST scope.
 The example owns and closes its APP container in the FastAPI lifespan.
 
 Run from the repository root with
