@@ -13,17 +13,32 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0290).
   problem schemas, which now carry `x-canon-problem: true`. Remove the
   allowances for those diagnostics; they now fail as stale
   ([#234](https://github.com/mathisarends/fastapi-canon/issues/234)).
+- **`CANON-029-FASTAPI-0165`** — Canon requires FastAPI >=0.165 instead of
+  >=0.143.1, and the `sse` extra no longer selects its own FastAPI minimum.
+  Upgrade FastAPI to 0.165 or newer before upgrading Canon.
+- **`CANON-029-NATIVE-SSE-ROUTES`** — `APIRouter.sse()` and `StreamOptions` are
+  removed. Declare streams with FastAPI's `response_class=EventSourceResponse`
+  on `get()`, `post()` or `api_route()`. Such routes on a Canon `APIRouter` are
+  typed Canon streams and must yield a concrete event model, not
+  `ServerSentEvent`. OpenAPI and generated clients are unchanged.
 - **`CANON-029-COMPLETE-ERROR-CHECK`** — `check errors` follows ordinary Python
   instead of reporting it as `CAN003`: library handlers and context managers,
   generic and union annotations, properties, loop elements, `super()`,
   validators, raised factories, deferred generators and coroutines, recursion,
   HTTP connections passed to helpers, every scanned implementation of an
   unbound port, callables passed, stored or provided by Dishka, `ServiceScope`,
-  `isinstance` narrowing and `RpcError` declarations. Run `fastapi-canon check errors src --strict`, then declare
-  or map the newly reported errors. Remaining `CAN003` findings name their
+  `isinstance` narrowing and `RpcError` declarations. Run
+  `fastapi-canon check errors src --strict`, then declare or map the newly
+  reported errors. Remaining `CAN003` findings name their
   candidates; text and JSON reports rank their root causes. See
   [error checking](docs/07-error-checking.md)
   ([#232](https://github.com/mathisarends/fastapi-canon/issues/232)).
+
+### Added
+
+- Canon routers, operations and `include_router()` accept FastAPI's
+  `max_body_size` and `form_limits`. Form limits and bodies that grow past the
+  limit return Canon problems. See [request limits](docs/08-file-transfers.md#request-limits).
 
 ### Fixed
 

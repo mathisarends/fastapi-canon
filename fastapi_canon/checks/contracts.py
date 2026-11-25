@@ -22,6 +22,7 @@ _API_ROUTERS = frozenset(
     }
 )
 _CANON_ROUTERS = frozenset({"fastapi_canon.routing.http.CanonRouter", *_API_ROUTERS})
+_EVENT_STREAM_RESPONSES = frozenset({"fastapi.sse.EventSourceResponse"})
 _WEBRTC_ROUTERS = frozenset(
     {
         "fastapi_canon.integrations.webrtc.WebRtcRouter",
@@ -164,11 +165,14 @@ class CheckContracts:
                 }:
                     continue
                 module, router = self.source.value(owner, function.module)
+                transport = TRANSPORT_METHODS.get(method) or (
+                    "sse" if self._event_stream(decorator, function.module) else "http"
+                )
                 operation = _CheckOperation(
                     function.name,
                     str(self.source.paths[function.module]),
                     decorator.lineno,
-                    transport=TRANSPORT_METHODS.get(method, "http"),
+                    transport=transport,
                 )
                 if id(function.node) in nested:
                     operations.append(operation)
@@ -184,7 +188,7 @@ class CheckContracts:
                 )
                 if method == "session":
                     supported = _WEBRTC_ROUTERS
-                elif method in TRANSPORT_METHODS:
+                elif transport == "sse":
                     supported = _API_ROUTERS
                 else:
                     supported = _CANON_ROUTERS
@@ -209,6 +213,13 @@ class CheckContracts:
                     operation, function, decorator, module=module, router=router
                 )
         return ContractReport(tuple(operation.snapshot() for operation in operations))
+
+    def _event_stream(self, decorator: ast.Call, module: str) -> bool:
+        response_class = _keyword(decorator, "response_class")
+        return (
+            response_class is not None
+            and self.source.resolve(response_class, module) in _EVENT_STREAM_RESPONSES
+        )
 
     def _rpc_method(
         self,

@@ -17,6 +17,7 @@ from examples.sse.agent_runs.generated_python import (
 from examples.sse.agent_runs.generated_python.models import RunEvent, RunRequest
 from examples.sse.agent_runs.generated_python.runtime import iter_sse
 from fastapi import FastAPI
+from fastapi.sse import EventSourceResponse
 from fastapi_canon import APIRouter, Composition, Feature
 from fastapi_canon.integrations.sse.codegen.cli import main
 from fastapi_canon.integrations.sse.codegen.ir import build_ir
@@ -225,7 +226,9 @@ async def test_python_client_keeps_parameters_named_like_its_locals(tmp_path):
     received = []
     router = APIRouter()
 
-    @router.sse("/search", operation_id="events.search")
+    @router.get(
+        "/search", response_class=EventSourceResponse, operation_id="events.search"
+    )
     async def search(
         query: str, headers: str, content: str, adapter: str
     ) -> AsyncIterator[str]:

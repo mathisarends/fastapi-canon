@@ -25,8 +25,16 @@ from fastapi_canon.response import CanonResponse
 from fastapi_canon.routing.policy import RouterPolicy, normalize_raises, validate_policy
 
 
+class FormLimits(TypedDict, total=False):
+    """Limits FastAPI applies while parsing form and file parameters."""
+
+    max_fields: int
+    max_files: int
+    max_part_size: int
+
+
 class OpenAPIOptions(TypedDict, total=False):
-    """Metadata accepted by both HTTP declarations and router inclusion."""
+    """Options accepted by both HTTP declarations and router inclusion."""
 
     tags: list[str | Enum] | None
     dependencies: Sequence[Depends] | None
@@ -35,6 +43,8 @@ class OpenAPIOptions(TypedDict, total=False):
     deprecated: bool | None
     include_in_schema: bool
     generate_unique_id_function: Callable[[APIRoute], str]
+    max_body_size: int | None
+    form_limits: FormLimits | None
 
 
 class IncludeRouterOptions(OpenAPIOptions, total=False):

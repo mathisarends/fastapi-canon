@@ -73,6 +73,7 @@ not parse either string for control flow.
 from collections.abc import AsyncIterator
 
 from fastapi import Depends
+from fastapi.sse import EventSourceResponse
 from pydantic import BaseModel
 
 from fastapi_canon import APIRouter
@@ -101,8 +102,9 @@ async def get_project(project_id: int) -> dict[str, int]:
     return {"id": project_id}
 
 
-@router.sse(
+@router.get(
     "/projects/{project_id}/events",
+    response_class=EventSourceResponse,
     operation_id="events",
     tags=["projects"],
     raises=[project_missing],

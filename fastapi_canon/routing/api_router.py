@@ -2,18 +2,18 @@ from __future__ import annotations
 
 import re
 from collections.abc import Awaitable, Callable, Sequence
-from enum import Enum
 from typing import TYPE_CHECKING, Any, TypedDict, Unpack
 
 from fastapi import APIRouter as FastAPIRouter
 from fastapi import WebSocket
 from fastapi.params import Depends
 from fastapi.routing import APIWebSocketRoute
+from fastapi.sse import EventSourceResponse
 from pydantic import BaseModel
 from starlette.routing import BaseRoute, WebSocketRoute
 
 from fastapi_canon.error.contributions import error_registries
-from fastapi_canon.errors import ConfigurationError
+from fastapi_canon.errors import ConfigurationError, ResponseConfigurationError
 from fastapi_canon.routing.http import APIRouteOptions as APIRouteOptions
 from fastapi_canon.routing.http import CanonRouter
 from fastapi_canon.routing.http import IncludeRouterOptions as IncludeRouterOptions
@@ -41,31 +41,7 @@ if TYPE_CHECKING:
     from fastapi_canon.integrations.websockets.adapters.fastapi import (
         FastApiResolver,
     )
-
-
-class StreamOptions(TypedDict, total=False):
-    """Operation options accepted by ``APIRouter.sse()``.
-
-    Streams infer their response model and always use ``EventSourceResponse``,
-    so the response options of ``APIRouter.get()`` are not available here.
-    """
-
-    methods: list[str] | None
-    operation_id: str | None
-    summary: str | None
-    description: str | None
-    tags: list[str | Enum] | None
-    dependencies: Sequence[Depends] | None
-    raises: Sequence[AnyError]
-    http_statuses: Sequence[int]
-    status_code: int | None
-    responses: dict[int | str, dict[str, Any]] | None
-    response_description: str
-    deprecated: bool | None
-    include_in_schema: bool
-    name: str | None
-    openapi_extra: dict[str, Any] | None
-    callbacks: list[BaseRoute] | None
+    from fastapi_canon.response import CanonResponse
 
 
 class ChannelOptions(TypedDict, total=False):
@@ -371,10 +347,48 @@ class APIRouter(CanonRouter):
 
         return decorate
 
-    def sse[Endpoint: Callable[..., Any]](
-        self, path: str, **options: Unpack[StreamOptions]
+    def api_route[CallableT: Callable[..., Any]](
+        self,
+        path: str,
+        *,
+        raises: Sequence[AnyError] = (),
+        http_statuses: Sequence[int] = (),
+        response: CanonResponse | None = None,
+        **kwargs: Unpack[APIRouteOptions],
+    ) -> Callable[[CallableT], CallableT]:
+        """Declare a route; ``response_class=EventSourceResponse`` declares typed SSE.
+
+        A stream yields a concrete JSON event type, ends with ``canon.complete``
+        and reports failures as a terminal ``canon.problem`` event.
+        """
+        response_class = kwargs.get("response_class")
+        if not (
+            isinstance(response_class, type)
+            and issubclass(response_class, EventSourceResponse)
+        ):
+            return super().api_route(
+                path,
+                raises=raises,
+                http_statuses=http_statuses,
+                response=response,
+                **kwargs,
+            )
+        if response is not None:
+            raise ResponseConfigurationError(
+                f"stream {path!r} infers its event contract; remove response="
+            )
+        return self._stream(
+            path, raises=raises, http_statuses=http_statuses, options=kwargs
+        )
+
+    def _stream[Endpoint: Callable[..., Any]](
+        self,
+        path: str,
+        *,
+        raises: Sequence[AnyError],
+        http_statuses: Sequence[int],
+        options: APIRouteOptions,
     ) -> Callable[[Endpoint], Endpoint]:
-        """Declare typed SSE with serialization and terminal completion/problems."""
         from fastapi_canon.integrations.sse.canon import CanonStreamRouter
 
         adapter = CanonStreamRouter(
@@ -383,7 +397,9 @@ class APIRouter(CanonRouter):
             raises=self.raises,
             http_statuses=self.http_statuses,
         )
-        register = adapter.stream(path, **options)
+        register = adapter.stream(
+            path, raises=raises, http_statuses=http_statuses, **options
+        )
 
         def decorate(endpoint: Endpoint) -> Endpoint:
             # Inject the generator itself, so resolution failures become

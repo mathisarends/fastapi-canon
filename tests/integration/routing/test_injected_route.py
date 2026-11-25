@@ -6,6 +6,7 @@ import pytest
 from dishka import Provider, Scope, make_async_container, provide
 from dishka.integrations.fastapi import DishkaRoute, FromDishka, inject, setup_dishka
 from fastapi import Depends, FastAPI, Request
+from fastapi.sse import EventSourceResponse
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 
@@ -108,7 +109,7 @@ def test_sse_generators_resolve_injected_parameters_without_inject() -> None:
     lifecycle = Lifecycle()
     router = APIRouter()
 
-    @router.sse("/events")
+    @router.get("/events", response_class=EventSourceResponse)
     async def events(clock: Inject[Clock]) -> AsyncIterator[str]:
         yield clock.now()
 
@@ -170,7 +171,9 @@ def test_sse_reuses_an_annotated_request(injected: bool) -> None:
     ) -> AsyncIterator[str]:
         yield f"{request.url.path} at {clock.now()}"
 
-    router.sse("/events")(with_clock if injected else plain)
+    router.get("/events", response_class=EventSourceResponse)(
+        with_clock if injected else plain
+    )
     app = compose(router, Lifecycle())
     with TestClient(app) as client:
         response = client.get("/events")
@@ -241,14 +244,14 @@ def register_reader(router: APIRouter, kind: str) -> None:
                 return f"{item_id}:{store.identifier}:{store is same}"
         case "sse-async":
 
-            @router.sse("/{item_id}")
+            @router.get("/{item_id}", response_class=EventSourceResponse)
             async def read(
                 item_id: int, store: Inject[Store], same: FromDishka[Store]
             ) -> AsyncIterator[str]:
                 yield f"{item_id}:{store.identifier}:{store is same}"
         case "sse-sync":
 
-            @router.sse("/{item_id}")
+            @router.get("/{item_id}", response_class=EventSourceResponse)
             def read(
                 item_id: int, store: Inject[Store], same: FromDishka[Store]
             ) -> Iterator[str]:

@@ -13,19 +13,16 @@ FastAPI is great at JSON endpoints. Token streams, WebSockets and their errors
 are left to you, and none of it shows up in OpenAPI. Canon makes them typed
 contracts and generates Python and TypeScript clients.
 
-**Plain FastAPI:** hand-written frames, a homemade error event.
+**Plain FastAPI:** untyped events, a homemade error event.
 
 ```python
-@app.post("/chats/{chat_id}/reply")
-async def reply(chat_id: str) -> StreamingResponse:
-    async def frames():
-        try:
-            async for text in model.stream(chat_id):
-                yield f"data: {json.dumps({'text': text})}\n\n"
-        except QuotaExceeded:
-            yield 'event: error\ndata: {"message": "quota"}\n\n'
-
-    return StreamingResponse(frames(), media_type="text/event-stream")
+@app.post("/chats/{chat_id}/reply", response_class=EventSourceResponse)
+async def reply(chat_id: str) -> AsyncIterator[ServerSentEvent]:
+    try:
+        async for text in model.stream(chat_id):
+            yield ServerSentEvent(data={"text": text})
+    except QuotaExceeded:
+        yield ServerSentEvent(event="error", data={"message": "quota"})
 ```
 
 **Canon:** typed events, a declared error.
@@ -38,9 +35,9 @@ class Token(BaseModel):
 quota_exceeded = Error(QuotaExceeded, status=429, code="quota_exceeded")
 
 
-@router.sse(
+@router.post(
     "/chats/{chat_id}/reply",
-    methods=[HTTPMethod.POST],
+    response_class=EventSourceResponse,
     raises=[quota_exceeded],
 )
 async def reply(chat_id: str) -> AsyncIterator[Token]:
@@ -127,7 +124,11 @@ class ToolCall(BaseModel):
 RunEvent = Annotated[TokenDelta | ToolCall, Field(discriminator="type")]
 
 
-@router.sse("/runs/{run_id}/events", raises=[run_missing])
+@router.get(
+    "/runs/{run_id}/events",
+    response_class=EventSourceResponse,
+    raises=[run_missing],
+)
 async def run_events(run_id: str) -> AsyncIterator[RunEvent]:
     yield ToolCall(name="search", arguments={"query": "weather"})
     yield TokenDelta(text="Sunny")

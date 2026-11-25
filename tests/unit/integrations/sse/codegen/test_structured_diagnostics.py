@@ -4,6 +4,7 @@ from dataclasses import replace
 
 import pytest
 from fastapi import FastAPI
+from fastapi.sse import EventSourceResponse
 from fastapi_canon import APIRouter, Composition, Error, ErrorOptions, Feature
 from fastapi_canon.integrations.sse.codegen.cli import main
 from fastapi_canon.integrations.sse.codegen.diagnostics import accepted_diagnostics
@@ -183,8 +184,9 @@ def canon_stream_document():
     async def follow(turn_id: str) -> AsyncIterator[int]:
         yield 1
 
-    router.sse(
+    router.get(
         "/turns/{turn_id}/events",
+        response_class=EventSourceResponse,
         raises=[
             Error(LookupError, status=404, code="turn_missing", title="Missing"),
             Error(PermissionError, status=403, code="forbidden", title="Forbidden"),

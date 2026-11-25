@@ -5,7 +5,7 @@ services and domain classes need no telemetry annotations or imports.
 
 Install `fastapi-canon[otel]`. This extra adds the OpenTelemetry API and
 instrumentation helpers; the SDK and exporters remain application dependencies.
-Canon core, with or without telemetry, requires FastAPI >=0.143.1.
+Canon core, with or without telemetry, requires FastAPI >=0.165.
 Recent FastAPI versions themselves depend on the OpenTelemetry API.
 
 ## Application-owned SDK
@@ -308,7 +308,7 @@ engines or SDK providers. Instrumenting a resource twice concurrently is rejecte
 
 FastAPI currently accepts telemetry configuration only in its constructor.
 Canon bridges that boundary by updating the existing `_telemetry` dictionary,
-guarded by a FastAPI >=0.143 check and integration tests. When problem enrichment
+guarded by a check of its configuration fields and integration tests. When problem enrichment
 is enabled, a local, non-owning tracer-provider adapter preserves problem codes
 when FastAPI finalizes a 5xx span. It does not replace the global provider.
 

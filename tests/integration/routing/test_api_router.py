@@ -1,6 +1,6 @@
 import asyncio
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 from uuid import UUID
@@ -8,6 +8,7 @@ from uuid import UUID
 import pytest
 from dishka import Provider, Scope, provide
 from fastapi import Depends, FastAPI, WebSocket
+from fastapi.sse import EventSourceResponse, ServerSentEvent
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 from pydantic import BaseModel
@@ -15,12 +16,13 @@ from starlette.types import Message
 
 from fastapi_canon import (
     APIRouter,
+    CanonResponse,
     Composition,
     Error,
     Feature,
     export_contracts,
 )
-from fastapi_canon.errors import ConfigurationError
+from fastapi_canon.errors import ConfigurationError, ResponseConfigurationError
 from fastapi_canon.integrations.websockets import (
     Inject,
     ProtocolDefinitionError,
@@ -63,7 +65,7 @@ def test_feature_collects_errors_from_routes_declared_after_it(
 
     elif transport == "sse":
 
-        @router.sse("/project", raises=[missing])
+        @router.get("/project", response_class=EventSourceResponse, raises=[missing])
         async def events() -> AsyncIterator[int]:
             raise MissingProject("Private stream details")
             yield 1  # pragma: no cover
@@ -515,7 +517,11 @@ def test_sse_serializes_events_and_sends_terminal_completion() -> None:
     async def health() -> str:
         return "ok"
 
-    @router.sse("/{project_id}/events", operation_id="project_events")
+    @router.get(
+        "/{project_id}/events",
+        response_class=EventSourceResponse,
+        operation_id="project_events",
+    )
     async def events(project_id: str) -> AsyncIterator[Rename]:
         yield Rename(title=project_id)
 
@@ -542,7 +548,7 @@ def test_sse_raises_registers_terminal_errors() -> None:
     )
     router = APIRouter()
 
-    @router.sse("/events", raises=[missing])
+    @router.get("/events", response_class=EventSourceResponse, raises=[missing])
     async def events() -> AsyncIterator[str]:
         yield "first"
         raise MissingProject("private failure")
@@ -558,6 +564,60 @@ def test_sse_raises_registers_terminal_errors() -> None:
     assert problem["code"] == "project_missing"
     assert "canon.complete" not in response.text
     assert "private failure" not in response.text
+
+
+def test_post_stream_keeps_its_event_source_response_subclass() -> None:
+    class Utf8EventSource(EventSourceResponse):
+        media_type = "text/event-stream; charset=utf-8"
+
+    router = APIRouter()
+
+    @router.post("/renames", response_class=Utf8EventSource)
+    async def renames(request: Rename) -> AsyncIterator[Rename]:
+        yield ServerSentEvent(data=request, event="renamed", id="1")
+
+    app = Composition(features=[Feature(name="projects", routers=[router])]).build(
+        FastAPI()
+    )
+    with TestClient(app) as client:
+        response = client.post("/renames", json={"title": "Roadmap"})
+    assert response.headers["content-type"] == "text/event-stream; charset=utf-8"
+    assert 'event: renamed\ndata: {"title":"Roadmap"}\nid: 1' in response.text
+    assert "event: canon.complete" in response.text
+    assert "x-canon-stream" in app.openapi()["paths"]["/renames"]["post"]
+
+
+async def _raw_events() -> AsyncIterator[ServerSentEvent]:
+    yield ServerSentEvent(data="untyped")
+
+
+async def _titles() -> AsyncIterator[str]:
+    yield "title"
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "options", "error", "message"),
+    [
+        (_raw_events, {}, TypeError, "concrete JSON event type"),
+        (
+            _titles,
+            {"response": CanonResponse.sse()},
+            ResponseConfigurationError,
+            "remove response=",
+        ),
+    ],
+)
+def test_streams_reject_untyped_events_and_response_declarations(
+    endpoint: Callable[..., Any],
+    options: dict[str, Any],
+    error: type[Exception],
+    message: str,
+) -> None:
+    router = APIRouter()
+
+    with pytest.raises(error, match=message):
+        router.get("/events", response_class=EventSourceResponse, **options)(endpoint)
+    assert router.routes == []
 
 
 def test_binary_streams_and_typed_sockets_are_declared_on_the_router() -> None:

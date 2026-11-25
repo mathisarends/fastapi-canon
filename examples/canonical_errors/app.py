@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
 
 from fastapi import Depends, FastAPI
+from fastapi.sse import EventSourceResponse
 from pydantic import BaseModel
 
 from fastapi_canon import (
@@ -57,8 +58,9 @@ async def get(project_id: int) -> Project:
     return Project(id=project_id)
 
 
-@router.sse(
+@router.get(
     "/projects/{project_id}/events",
+    response_class=EventSourceResponse,
     tags=["projects"],
     raises=[project_missing],
     dependencies=[Depends(require_project)],

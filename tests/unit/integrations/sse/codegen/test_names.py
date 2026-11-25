@@ -4,6 +4,7 @@ from collections.abc import AsyncIterator
 import httpx
 import pytest
 from fastapi import FastAPI
+from fastapi.sse import EventSourceResponse
 from fastapi_canon import APIRouter, Composition, Feature
 from fastapi_canon.integrations.sse.codegen.ir import build_ir
 from fastapi_canon.integrations.sse.codegen.openapi import ContractError, export_schema
@@ -25,15 +26,21 @@ def _app() -> FastAPI:
     members = APIRouter(namespace="projects.members")
     agent = APIRouter(tags=["agent"])
 
-    @projects.sse("/projects/{project_id}/events", tags=["projects"])
+    @projects.get(
+        "/projects/{project_id}/events",
+        response_class=EventSourceResponse,
+        tags=["projects"],
+    )
     async def events(project_id: int) -> AsyncIterator[Event]:
         yield Event(source=f"projects.events:{project_id}")
 
-    @members.sse("/projects/{project_id}/members/updates")
+    @members.get(
+        "/projects/{project_id}/members/updates", response_class=EventSourceResponse
+    )
     async def updates(project_id: int) -> AsyncIterator[Event]:
         yield Event(source=f"projects.members.updates:{project_id}")
 
-    @agent.sse("/agent/follow")
+    @agent.get("/agent/follow", response_class=EventSourceResponse)
     async def follow() -> AsyncIterator[Event]:
         yield Event(source="agent.follow")
 

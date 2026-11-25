@@ -20,6 +20,24 @@ Version 0.29.0 is not released yet. See the
   delete that entry from `allow-diagnostics`: the `uri-reference` diagnostics on
   Canon problem `type` and `instance` fields are no longer reported. Remove an
   allowance file that becomes empty together with its `allow-diagnostics` setting.
+- Upgrade FastAPI to 0.165 or newer (Starlette 1.6 or newer) before upgrading
+  Canon. Review FastAPI's request-parameter changes from 0.145 through 0.162 in
+  its [release notes](https://fastapi.tiangolo.com/release-notes/), especially
+  form defaults, JSON `null` bodies and parameter-model `extra` handling.
+- Replace `@router.sse(path, ...)` with FastAPI's response class; generated
+  clients stay the same:
+
+  ```python
+  from fastapi.sse import EventSourceResponse
+
+  @router.get(path, response_class=EventSourceResponse, raises=[...])
+  ```
+
+  Use `@router.post(...)` for `methods=[HTTPMethod.POST]` and
+  `@router.api_route(path, methods=["GET", "POST"], ...)` for both. Replace
+  `StreamOptions` annotations with `APIRouteOptions`. A Canon route that yields
+  `ServerSentEvent` must yield its event model instead, wrapped as
+  `ServerSentEvent(data=event)` when it sets SSE fields.
 - Run `fastapi-canon check errors src --strict` over all application roots,
   then declare or map the newly reported errors. For a remaining `CAN003`,
   annotate the receiver it names or fix the top entries under "Root causes".

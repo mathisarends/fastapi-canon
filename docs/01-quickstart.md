@@ -97,14 +97,16 @@ Add a stream to the same router, reusing the error definition and lookup above:
 from collections.abc import AsyncIterator
 
 from fastapi import Depends
+from fastapi.sse import EventSourceResponse
 
 
 class ProjectEvent(BaseModel):
     sequence: int
 
 
-@router.sse(
+@router.get(
     "/projects/{project_id}/events",
+    response_class=EventSourceResponse,
     operation_id="projects.events",
     dependencies=[Depends(require_project)],
     raises=[project_missing],

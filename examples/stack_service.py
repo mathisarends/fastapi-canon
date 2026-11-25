@@ -4,6 +4,7 @@ from typing import Literal
 
 from dishka import Provider, Scope, provide
 from fastapi import FastAPI
+from fastapi.sse import EventSourceResponse
 from pydantic import BaseModel
 
 from fastapi_canon import APIRouter, Composition, Feature, Inject
@@ -69,7 +70,11 @@ def create_app() -> FastAPI:
     ) -> IncrementResult:
         return IncrementResult(value=increment_counter())
 
-    @router.sse("/counter/events", operation_id="counter_events")
+    @router.get(
+        "/counter/events",
+        response_class=EventSourceResponse,
+        operation_id="counter_events",
+    )
     async def events(counter: Inject[Counter]) -> AsyncIterator[CounterEvent]:
         yield CounterEvent(value=counter.value)
 
