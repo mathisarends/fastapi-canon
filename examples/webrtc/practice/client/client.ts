@@ -49,7 +49,100 @@ export const clockDescriptor: SessionDescriptor = {
       required: false,
     },
   ],
-  admissionErrors: [],
+  admissionErrors: [
+    {
+      status: 404,
+      code: "unknown_lesson",
+      type: "urn:fastapi-canon:problem/unknown_lesson",
+      title: "Unknown lesson",
+      description: "Unknown lesson",
+      media_type: "application/problem+json",
+      schema: {
+        type: "object",
+        title: "UnknownLessonProblem",
+        description: "RFC 9457 Problem Details with a stable application code.",
+        properties: {
+          type: {
+            type: "string",
+            format: "uri-reference",
+            const: "urn:fastapi-canon:problem/unknown_lesson",
+          },
+          title: {
+            type: "string",
+          },
+          status: {
+            type: "integer",
+            const: 404,
+          },
+          code: {
+            type: "string",
+            const: "unknown_lesson",
+          },
+          detail: {
+            type: "string",
+          },
+          instance: {
+            type: "string",
+            format: "uri-reference",
+          },
+        },
+        required: [
+          "type",
+          "title",
+          "status",
+          "code",
+        ],
+        additionalProperties: true,
+        $id: "urn:fastapi-canon:problem/unknown_lesson",
+      },
+    },
+    {
+      status: 403,
+      code: "invalid_token",
+      type: "urn:fastapi-canon:problem/invalid_token",
+      title: "Invalid token",
+      description: "Invalid token",
+      media_type: "application/problem+json",
+      schema: {
+        type: "object",
+        title: "InvalidTokenProblem",
+        description: "RFC 9457 Problem Details with a stable application code.",
+        properties: {
+          type: {
+            type: "string",
+            format: "uri-reference",
+            const: "urn:fastapi-canon:problem/invalid_token",
+          },
+          title: {
+            type: "string",
+          },
+          status: {
+            type: "integer",
+            const: 403,
+          },
+          code: {
+            type: "string",
+            const: "invalid_token",
+          },
+          detail: {
+            type: "string",
+          },
+          instance: {
+            type: "string",
+            format: "uri-reference",
+          },
+        },
+        required: [
+          "type",
+          "title",
+          "status",
+          "code",
+        ],
+        additionalProperties: true,
+        $id: "urn:fastapi-canon:problem/invalid_token",
+      },
+    },
+  ],
 };
 
 /** Data channels of the `practice` session, from the client's point of view. */
@@ -98,7 +191,100 @@ export const practiceDescriptor: SessionDescriptor = {
       required: false,
     },
   ],
-  admissionErrors: [],
+  admissionErrors: [
+    {
+      status: 404,
+      code: "unknown_lesson",
+      type: "urn:fastapi-canon:problem/unknown_lesson",
+      title: "Unknown lesson",
+      description: "Unknown lesson",
+      media_type: "application/problem+json",
+      schema: {
+        type: "object",
+        title: "UnknownLessonProblem",
+        description: "RFC 9457 Problem Details with a stable application code.",
+        properties: {
+          type: {
+            type: "string",
+            format: "uri-reference",
+            const: "urn:fastapi-canon:problem/unknown_lesson",
+          },
+          title: {
+            type: "string",
+          },
+          status: {
+            type: "integer",
+            const: 404,
+          },
+          code: {
+            type: "string",
+            const: "unknown_lesson",
+          },
+          detail: {
+            type: "string",
+          },
+          instance: {
+            type: "string",
+            format: "uri-reference",
+          },
+        },
+        required: [
+          "type",
+          "title",
+          "status",
+          "code",
+        ],
+        additionalProperties: true,
+        $id: "urn:fastapi-canon:problem/unknown_lesson",
+      },
+    },
+    {
+      status: 403,
+      code: "invalid_token",
+      type: "urn:fastapi-canon:problem/invalid_token",
+      title: "Invalid token",
+      description: "Invalid token",
+      media_type: "application/problem+json",
+      schema: {
+        type: "object",
+        title: "InvalidTokenProblem",
+        description: "RFC 9457 Problem Details with a stable application code.",
+        properties: {
+          type: {
+            type: "string",
+            format: "uri-reference",
+            const: "urn:fastapi-canon:problem/invalid_token",
+          },
+          title: {
+            type: "string",
+          },
+          status: {
+            type: "integer",
+            const: 403,
+          },
+          code: {
+            type: "string",
+            const: "invalid_token",
+          },
+          detail: {
+            type: "string",
+          },
+          instance: {
+            type: "string",
+            format: "uri-reference",
+          },
+        },
+        required: [
+          "type",
+          "title",
+          "status",
+          "code",
+        ],
+        additionalProperties: true,
+        $id: "urn:fastapi-canon:problem/invalid_token",
+      },
+    },
+  ],
 };
 
 /** Typed WebRTC sessions of the application. */

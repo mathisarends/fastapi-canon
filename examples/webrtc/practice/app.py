@@ -2,7 +2,8 @@
 
 ``practice`` (the browser offers): the learner's microphone is echoed back and
 typed prompts on the ``messages`` channel receive feedback. Admission runs
-through ordinary FastAPI dependencies before any peer resources exist.
+before any peer resources exist: the factory injects the ``Lessons`` service
+and its declared errors refuse the session with 404 or 403.
 
 ``clock`` (the server offers): a synthetic video track plus a ``ticks``
 channel, for dashboards that only watch.
@@ -10,9 +11,9 @@ channel, for dashboards that only watch.
 Run it with ``uvicorn examples.webrtc.practice.app:app`` from the package directory and
 regenerate the browser client with::
 
-    fastapi-webrtc contract --app examples.webrtc.practice.app:app \
+    fastapi-canon webrtc contract --app examples.webrtc.practice.app:app \
         --output examples/webrtc/practice/contract.json
-    fastapi-webrtc generate --contract examples/webrtc/practice/contract.json \
+    fastapi-canon webrtc generate --contract examples/webrtc/practice/contract.json \
         --output examples/webrtc/practice/client --client-name PracticeRtcClient
 """
 
@@ -23,7 +24,9 @@ from typing import Annotated, Never
 from aiortc import VideoStreamTrack
 from aiortc.contrib.media import MediaRelay
 from aiortc.mediastreams import MediaStreamError
-from fastapi import Depends, FastAPI, HTTPException, Query
+from dishka import Provider, Scope, provide
+from fastapi import FastAPI, Query
+from fastapi_canon import Composition, Error, Feature, Inject
 from fastapi_canon.integrations.webrtc import (
     DataChannelSpec,
     Direction,
@@ -84,23 +87,41 @@ TICKS: DataChannelSpec[Never, Tick] = DataChannelSpec(
 )
 
 
-def lesson_access(
-    lesson_id: str, token: Annotated[str | None, Query()] = None
-) -> Lesson:
-    """Admission: runs before the WebSocket is accepted."""
-    lesson = LESSONS.get(lesson_id)
-    if lesson is None:
-        raise HTTPException(status_code=404, detail="Unknown lesson")
-    if token != DEMO_TOKEN:
-        raise HTTPException(status_code=403, detail="Invalid token")
-    return lesson
+class UnknownLesson(Exception):
+    pass
+
+
+class InvalidToken(Exception):
+    pass
+
+
+unknown_lesson = Error(UnknownLesson, status=404, code="unknown_lesson")
+invalid_token = Error(InvalidToken, status=403, code="invalid_token")
+
+
+class Lessons:
+    """The lesson catalog and its access rule."""
+
+    def admit(self, lesson_id: str, token: str | None) -> Lesson:
+        lesson = LESSONS.get(lesson_id)
+        if lesson is None:
+            raise UnknownLesson()
+        if token != DEMO_TOKEN:
+            raise InvalidToken()
+        return lesson
+
+
+class LessonProvider(Provider):
+    lessons = provide(Lessons, scope=Scope.APP)
 
 
 ENGINE = AiortcEngine()
 LIMITS = SessionLimits(negotiation_timeout_seconds=20)
 # Both sessions draw from one pool of 50 slots.
 CAPACITY = SessionCapacity(max_sessions=50)
-rtc = WebRtcRouter(prefix="/rtc", engine=ENGINE, limits=LIMITS)
+rtc = WebRtcRouter(
+    prefix="/rtc", engine=ENGINE, limits=LIMITS, raises=[unknown_lesson, invalid_token]
+)
 
 
 @rtc.session(
@@ -110,8 +131,13 @@ rtc = WebRtcRouter(prefix="/rtc", engine=ENGINE, limits=LIMITS)
     data_channels=(MESSAGES,),
     capacity=CAPACITY,
 )
-def practice(lesson: Annotated[Lesson, Depends(lesson_access)]) -> Session:
+def practice(
+    lesson_id: str,
+    lessons: Inject[Lessons],
+    token: Annotated[str | None, Query()] = None,
+) -> Session:
     """Speak with the tutor: audio is echoed back and prompts receive feedback."""
+    lesson = lessons.admit(lesson_id, token)  # Runs before the WebSocket is accepted.
     relay = MediaRelay()
     frames = 0
 
@@ -164,5 +190,5 @@ def clock(interval_ms: Annotated[int, Query(ge=50, le=5000)] = 250) -> Session:
     return Session(run=run, tracks=[VideoStreamTrack()])
 
 
-app = FastAPI(title="Practice tutor")
-app.include_router(rtc)
+practice_feature = Feature(name="practice", routers=[rtc], providers=[LessonProvider])
+app = Composition(features=[practice_feature]).build(FastAPI(title="Practice tutor"))
