@@ -13,7 +13,7 @@ PyPI project or add further Python import changes.
 
 ## Upgrade to 0.29.0
 
-Version 0.29.0 is unreleased. See the [changelog](../CHANGELOG.md).
+See the [changelog](../CHANGELOG.md#0290---2026-11-25).
 
 - Regenerate strict SSE clients. If generation reports a stale allowance,
   delete that entry from `allow-diagnostics`: the `uri-reference` diagnostics on
