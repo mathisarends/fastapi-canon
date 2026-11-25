@@ -8,7 +8,7 @@ from enum import IntEnum
 from functools import cache
 from typing import Any, ClassVar, cast, get_type_hints
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from fastapi_canon.error import (
     Error,
@@ -23,7 +23,6 @@ from fastapi_canon.integrations.websockets.connection import (
     RpcRejection,
     RpcRejectionMapper,
 )
-from fastapi_canon.integrations.websockets.models import RpcModel
 
 
 def _error_code(name: str) -> str:
@@ -45,17 +44,23 @@ class ProtocolDefinitionError(ErrorConfigurationError):
     """A handler, notification, or feature is not a valid protocol definition."""
 
 
-class RpcValidationIssue(RpcModel):
+class RpcValidationIssue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     loc: list[str | int]
     message: str
     type: str
 
 
-class RpcMethodNotFound(RpcModel):
+class RpcMethodNotFound(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     method: str
 
 
-class RpcInvalidParams(RpcModel):
+class RpcInvalidParams(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     issues: list[RpcValidationIssue]
 
 

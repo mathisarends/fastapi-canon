@@ -29,7 +29,7 @@ type RpcServerInfo = {
   readonly transport?: RpcTransportDescriptor | undefined;
 };
 
-export type ServerName = "production" | "browser" | "streaming";
+export type ServerName = "browser" | "production" | "streaming";
 
 export type Endpoint = {
   readonly server: ServerName;
@@ -44,15 +44,15 @@ export type EndpointOverrides = Partial<
 >;
 
 const serverNames: readonly ServerName[] = [
-  "production",
   "browser",
+  "production",
   "streaming",
 ];
 
 export const servers = {
-  production: {
-    name: "production",
-    url: "wss://{host}/automation/rpc",
+  browser: {
+    name: "browser",
+    url: "wss://{host}/browser/rpc",
     transport: {
       type: "websocket",
       messageEncoding: "json",
@@ -64,9 +64,9 @@ export const servers = {
       },
     },
   },
-  browser: {
-    name: "browser",
-    url: "wss://{host}/browser/rpc",
+  production: {
+    name: "production",
+    url: "wss://{host}/automation/rpc",
     transport: {
       type: "websocket",
       messageEncoding: "json",
@@ -95,20 +95,20 @@ export const servers = {
   },
 } as const satisfies Record<string, RpcServerInfo>;
 
-function production(
-  variables: {
-    host?: string | undefined;
-  } = {},
-): Endpoint {
-  return endpoint("production", variables);
-}
-
 function browser(
   variables: {
     host?: string | undefined;
   } = {},
 ): Endpoint {
   return endpoint("browser", variables);
+}
+
+function production(
+  variables: {
+    host?: string | undefined;
+  } = {},
+): Endpoint {
+  return endpoint("production", variables);
 }
 
 function streaming(
@@ -120,14 +120,14 @@ function streaming(
 }
 
 export const endpoints = {
-  production,
   browser,
+  production,
   streaming,
 } as const;
 
 const _serversByWireName: Readonly<Record<ServerName, RpcServerInfo>> = {
-  ["production"]: servers.production,
   ["browser"]: servers.browser,
+  ["production"]: servers.production,
   ["streaming"]: servers.streaming,
 };
 

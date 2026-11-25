@@ -32,11 +32,11 @@ import {
   type WebSocketCredentialsProvider,
   resolveWebSocketCredentials,
 } from "./transport.js";
-import { Tasks, Browser } from "./namespaces/index.js";
+import { Browser, Tasks } from "./namespaces/index.js";
 
 export class AutomationClient {
-  readonly tasks: Tasks;
   readonly browser: Browser;
+  readonly tasks: Tasks;
 
   readonly #rpc: RpcClientCore;
 
@@ -76,8 +76,8 @@ export class AutomationClient {
       ...options,
       supportsMetadata: true,
     });
-    this.tasks = new Tasks(this.#rpc);
     this.browser = new Browser(this.#rpc);
+    this.tasks = new Tasks(this.#rpc);
   }
 
   /** Build a client on transports the caller owns, for tests and adapters. */

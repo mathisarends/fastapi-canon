@@ -8,15 +8,13 @@ from typing import Any
 
 import pytest
 from fastapi import FastAPI
-from fastapi_canon import Error
+from fastapi_canon import Error, Inject
 from fastapi_canon.error import ErrorRegistry
 from fastapi_canon.integrations.websockets import (
-    Inject,
     RpcBinaryInput,
     RpcBinaryOutput,
     RpcChannel,
     RpcError,
-    RpcModel,
 )
 from fastapi_canon.integrations.websockets.codegen import (
     UnsupportedSchemaError,
@@ -27,18 +25,19 @@ from fastapi_canon.integrations.websockets.codegen.python import PythonClientOpt
 from fastapi_canon.integrations.websockets.codegen.writer import MANIFEST
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
 
+from tests.fixtures.websockets import CamelModel
 from tests.unit.integrations.websockets.codegen.conftest import PACKAGE
 
 
-class _Params(RpcModel):
+class _Params(CamelModel):
     x: int
 
 
-class _Result(RpcModel):
+class _Result(CamelModel):
     x: int
 
 
-class _Tick(RpcModel):
+class _Tick(CamelModel):
     n: int
 
 
@@ -680,7 +679,7 @@ def test_long_event_models_and_route_annotations_are_ruff_clean(
 
 
 def _methods_only() -> RpcChannel:
-    channel = RpcChannel("demo")
+    channel = RpcChannel(namespace="demo")
 
     @channel.method
     async def echo(params: _Params) -> _Result: ...
@@ -697,7 +696,7 @@ def _error_document(*, with_errors: bool) -> dict[str, Any]:
         missing = Error(
             LookupError, status=404, code="project_missing", title="Missing project"
         )
-        channel = RpcChannel("demo", raises=(UnavailableError, missing))
+        channel = RpcChannel(namespace="demo", raises=(UnavailableError, missing))
         # Manual assembly: an installed catalog resolves problem type URIs.
         app = FastAPI()
         ErrorRegistry(errors=[missing], type_base="urn:example:problems").install(app)
@@ -717,7 +716,7 @@ def _error_document(*, with_errors: bool) -> dict[str, Any]:
 
 
 def _events_only() -> RpcChannel:
-    channel = RpcChannel("demo")
+    channel = RpcChannel(namespace="demo")
 
     @channel.event
     async def ticks() -> AsyncIterator[_Tick]:
@@ -727,7 +726,7 @@ def _events_only() -> RpcChannel:
 
 
 def _methods_and_events() -> RpcChannel:
-    channel = RpcChannel("demo", raises=(_MissingError,))
+    channel = RpcChannel(namespace="demo", raises=(_MissingError,))
 
     @channel.method
     async def echo(params: _Params) -> _Result: ...
@@ -740,7 +739,7 @@ def _methods_and_events() -> RpcChannel:
 
 
 def _all_stream_directions() -> RpcChannel:
-    channel = RpcChannel("media")
+    channel = RpcChannel(namespace="media")
 
     @channel.method
     async def echo(params: _Params) -> _Result: ...

@@ -25,7 +25,7 @@ class Unmapped(Exception):
 
 missing = Error(Missing, status=404, code="missing", title="Missing")
 router = APIRouter()
-channel = RpcChannel("projects")
+channel = RpcChannel(namespace="projects")
 feature = Feature(name="projects", routers=[router], errors=[missing])
 """
 
@@ -164,8 +164,8 @@ def test_rpc_method_errors_need_raises(
 ) -> None:
     prelude = (
         PRELUDE.replace(
-            'RpcChannel("projects")',
-            'RpcChannel("projects", raises=[missing])',
+            'RpcChannel(namespace="projects")',
+            'RpcChannel(namespace="projects", raises=[missing])',
         )
         if shared
         else PRELUDE

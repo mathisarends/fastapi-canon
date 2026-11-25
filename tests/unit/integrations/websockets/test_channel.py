@@ -6,11 +6,12 @@ from fastapi_canon.integrations.websockets import (
     ProtocolDefinitionError,
     RpcChannel,
     RpcError,
-    RpcModel,
     RpcServer,
 )
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from pydantic import Field
+
+from tests.fixtures.websockets import CamelModel
 
 
 class SharedError(RpcError):
@@ -21,18 +22,18 @@ class LocalError(RpcError):
     pass
 
 
-class Event(RpcModel):
+class Event(CamelModel):
     value: str
 
 
 @pytest.mark.parametrize("timeout", [0, -1, True, float("nan"), float("inf"), "5"])
 def test_method_deadline_requires_positive_finite_seconds(timeout):
     with pytest.raises(ProtocolDefinitionError, match="timeout"):
-        RpcChannel("limits").method(timeout_seconds=timeout)
+        RpcChannel(namespace="limits").method(timeout_seconds=timeout)
 
 
 def test_method_deadline_keeps_inheritance_distinct_from_explicit_none():
-    channel = RpcChannel("limits")
+    channel = RpcChannel(namespace="limits")
 
     @channel.method()
     async def inherited() -> None: ...
@@ -51,11 +52,11 @@ def test_method_deadline_keeps_inheritance_distinct_from_explicit_none():
 
 def test_control_method_prefix_is_reserved():
     with pytest.raises(ProtocolDefinitionError):
-        RpcChannel("controls").method("$/cancelRequest")
+        RpcChannel(namespace="controls").method("$/cancelRequest")
 
 
 def test_channel_defaults_and_bare_decorators() -> None:
-    channel = RpcChannel("control", raises=[SharedError])
+    channel = RpcChannel(namespace="control", raises=[SharedError])
 
     @channel.method
     async def ping() -> None: ...
@@ -69,7 +70,7 @@ def test_channel_defaults_and_bare_decorators() -> None:
 
 
 def test_event_and_stream_inference() -> None:
-    channel = RpcChannel("events")
+    channel = RpcChannel(namespace="events")
 
     @channel.event
     async def changed() -> AsyncIterator[Event]:
@@ -86,14 +87,14 @@ def test_event_and_stream_inference() -> None:
 
 
 def test_freeze_prevents_registration() -> None:
-    channel = RpcChannel("control", namespace="")
+    channel = RpcChannel(namespace="")
     channel.freeze()
     with pytest.raises(ProtocolDefinitionError, match="frozen"):
         channel.method()
 
 
 def test_string_stream_is_a_message_stream() -> None:
-    channel = RpcChannel("files")
+    channel = RpcChannel(namespace="files")
 
     @channel.stream()
     async def text() -> AsyncIterator[str]:
@@ -104,7 +105,7 @@ def test_string_stream_is_a_message_stream() -> None:
 
 
 def test_child_channels_inherit_namespace_errors_and_scope() -> None:
-    root = RpcChannel("voice", raises=(SharedError,))
+    root = RpcChannel(namespace="voice", raises=(SharedError,))
     turn = root.child("turn", raises=(LocalError,))
 
     @root.event()
@@ -132,7 +133,7 @@ def test_channel_name_defaults_to_namespace() -> None:
 
 
 def test_dotted_names_are_relative_to_the_channel_namespace() -> None:
-    channel = RpcChannel("input", namespace="browser.input", raises=[SharedError])
+    channel = RpcChannel(namespace="browser.input", raises=[SharedError])
     nested = channel.child("pointer.touch")
 
     @channel.method("text.insert")
@@ -163,14 +164,14 @@ def test_dotted_names_are_relative_to_the_channel_namespace() -> None:
 
 @pytest.mark.parametrize("name", ["text..insert", ".insert", "text.", "text.1st", ""])
 def test_each_segment_of_a_dotted_name_is_validated(name: str) -> None:
-    channel = RpcChannel("input")
+    channel = RpcChannel(namespace="input")
 
     with pytest.raises(ProtocolDefinitionError, match="Invalid RPC method name"):
         channel.method(name)
 
 
 def test_dotted_name_and_child_route_cannot_share_a_wire_name() -> None:
-    channel = RpcChannel("input")
+    channel = RpcChannel(namespace="input")
 
     @channel.method("text.insert")
     async def insert_text() -> None: ...
@@ -183,7 +184,7 @@ def test_dotted_name_and_child_route_cannot_share_a_wire_name() -> None:
 
 
 def test_dotted_name_cannot_turn_an_operation_into_a_namespace() -> None:
-    channel = RpcChannel("input")
+    channel = RpcChannel(namespace="input")
 
     @channel.method
     async def text() -> None: ...
@@ -198,7 +199,7 @@ def test_dotted_name_cannot_turn_an_operation_into_a_namespace() -> None:
 
 
 def test_channel_declarations_are_served_by_its_server() -> None:
-    channel = RpcChannel("room")
+    channel = RpcChannel(namespace="room")
 
     @channel.method
     async def join() -> None: ...
@@ -213,7 +214,7 @@ def test_channel_declarations_are_served_by_its_server() -> None:
 
 
 def test_channel_decorators_declare_server_operations() -> None:
-    channel = RpcChannel("room")
+    channel = RpcChannel(namespace="room")
 
     @channel.method
     async def join() -> None: ...
@@ -241,7 +242,7 @@ def test_channel_decorators_declare_server_operations() -> None:
 
 
 def test_channel_rejects_duplicate_route_names() -> None:
-    channel = RpcChannel("room")
+    channel = RpcChannel(namespace="room")
 
     @channel.method
     async def join() -> None: ...
@@ -253,14 +254,14 @@ def test_channel_rejects_duplicate_route_names() -> None:
 
 
 def test_channel_has_no_client_or_server_side() -> None:
-    channel = RpcChannel("room")
+    channel = RpcChannel(namespace="room")
 
     assert not hasattr(channel, "client")
     assert not hasattr(channel, "server")
 
 
 def test_binary_stream_return_alias_is_inferred() -> None:
-    channel = RpcChannel("files")
+    channel = RpcChannel(namespace="files")
     type Frames = AsyncIterator[bytes]
 
     @channel.stream()
@@ -273,7 +274,7 @@ def test_binary_stream_return_alias_is_inferred() -> None:
 
 @pytest.mark.parametrize("payload", [Any, bytes | Event])
 def test_stream_payload_must_choose_one_framing(payload: Any) -> None:
-    channel = RpcChannel("files")
+    channel = RpcChannel(namespace="files")
 
     async def mixed() -> AsyncIterator[Event]:
         yield Event(value="x")
@@ -286,7 +287,7 @@ def test_stream_payload_must_choose_one_framing(payload: Any) -> None:
 
 
 def test_message_stream_retains_payload_validation_metadata() -> None:
-    channel = RpcChannel("values")
+    channel = RpcChannel(namespace="values")
 
     @channel.stream()
     async def positive() -> AsyncIterator[Annotated[int, Field(gt=0)]]:
@@ -301,7 +302,7 @@ def test_message_stream_retains_payload_validation_metadata() -> None:
 
 
 def test_message_stream_rejects_binary_content_metadata() -> None:
-    channel = RpcChannel("values")
+    channel = RpcChannel(namespace="values")
 
     with pytest.raises(ProtocolDefinitionError, match="Content types"):
 
@@ -313,12 +314,12 @@ def test_message_stream_rejects_binary_content_metadata() -> None:
 
 
 def test_subscription_decorator_is_removed() -> None:
-    assert not hasattr(RpcChannel("values"), "subscription")
+    assert not hasattr(RpcChannel(namespace="values"), "subscription")
 
 
 @pytest.mark.parametrize("suffix", ["open", "cancel"])
 def test_stream_control_names_cannot_be_shadowed(suffix: str) -> None:
-    channel = RpcChannel("jobs")
+    channel = RpcChannel(namespace="jobs")
 
     @channel.stream()
     async def progress() -> AsyncIterator[int]:

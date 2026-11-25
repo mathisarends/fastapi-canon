@@ -10,12 +10,9 @@ from fastapi.testclient import TestClient
 from starlette.testclient import WebSocketDenialResponse
 
 from fastapi_canon import APIRouter, Composition, Feature, Inject
-from fastapi_canon.integrations.websockets import (
-    CanonWebSocketRouter,
-    RpcChannel,
-    RpcRejection,
-)
+from fastapi_canon.integrations.websockets import RpcChannel, RpcRejection
 from fastapi_canon.integrations.websockets.adapters.dishka import Dishka
+from fastapi_canon.integrations.websockets.adapters.fastapi import CanonWebSocketRouter
 
 
 @dataclass
@@ -76,14 +73,14 @@ def test_hooks_share_values_and_close_resources_before_serving(transport: str) -
         assert events[-1] == "close"
         events.append("accept")
 
-    channel = RpcChannel("projects")
+    channel = RpcChannel(namespace="projects")
 
     @channel.method()
     async def identifier(connection: Inject[Connection], access: Inject[Access]) -> int:
         assert connection.access is access
         return access.project_id
 
-    streams = RpcChannel("frames")
+    streams = RpcChannel(namespace="frames")
 
     @streams.stream(content_type="application/octet-stream")
     async def frames(connection: Inject[Connection]) -> AsyncIterator[bytes]:
@@ -196,7 +193,7 @@ def test_failed_preparation_cleans_up_without_di_fallback(failure: str) -> None:
         resolver=Dishka(),
         rejections={Denied: RpcRejection.FORBIDDEN},
     )
-    router.socket("/rpc", channels=(RpcChannel("projects"),))
+    router.socket("/rpc", channels=(RpcChannel(namespace="projects"),))
     app = Composition(
         features=(
             Feature(name="projects", routers=(router,), providers=(Resources(),)),
@@ -238,7 +235,7 @@ async def test_cancelled_preparation_releases_request_resources() -> None:
         return Access(7)
 
     router = CanonWebSocketRouter(context=context, resolver=Dishka())
-    router.socket("/rpc", channels=(RpcChannel("projects"),))
+    router.socket("/rpc", channels=(RpcChannel(namespace="projects"),))
     app = Composition(
         features=(
             Feature(name="projects", routers=(router,), providers=(Resources(),)),

@@ -1,8 +1,8 @@
 # Message streams
 
 `@channel.stream()` declares an operation which delivers a sequence of results.
-`AsyncIterator[T]` selects JSON messages; `AsyncIterator[bytes]` selects binary
-frames on a dedicated endpoint. The signature is inspected at registration;
+`AsyncIterator[T]` selects JSON messages; binary frames use
+`@router.binary_stream()` on a dedicated endpoint. The signature is inspected at registration;
 no generator is executed to discover its transport. Use explicit annotations.
 Unconstrained `Any` and a union mixing raw bytes with messages are rejected.
 Scalar values, models, collections and supported model unions are valid messages.
@@ -10,46 +10,39 @@ Scalar values, models, collections and supported model unions are valid messages
 ```python
 from collections.abc import AsyncIterator
 
-from fastapi_canon.integrations.websockets import (
-    CanonWebSocketRouter,
-    RpcChannel,
-    RpcModel,
-)
+from fastapi_canon import APIRouter
+from fastapi_canon.integrations.websockets import RpcChannel
+from pydantic import BaseModel
 
 
-class JobParams(RpcModel):
-    job_id: str
-
-
-class Progress(RpcModel):
+class Progress(BaseModel):
     percent: int
 
 
-jobs = RpcChannel("jobs")
+jobs = RpcChannel(namespace="jobs")
 
 
 @jobs.stream()
-async def progress(params: JobParams) -> AsyncIterator[Progress]:
+async def progress(job_id: str) -> AsyncIterator[Progress]:
     yield Progress(percent=0)
     yield Progress(percent=100)
 
 
-@jobs.stream(content_type="application/octet-stream")
+router = APIRouter()
+router.include_channel(jobs, path="/rpc")
+
+
+@router.binary_stream("/download", content_type="application/octet-stream")
 async def download() -> AsyncIterator[bytes]:
     yield b"first chunk"
     yield b"second chunk"
-
-
-rpc = CanonWebSocketRouter()
-rpc.socket("/rpc", channels=[jobs])
-rpc.stream("/download", download)
 ```
 
-Include `rpc` in a FastAPI application or a Canon feature. Message operations
-keep `Inject[T]`, parameter validation, channel error declarations, `raises=`,
-request middleware and tracing. Content types apply only to binary streams.
-The [binary guide](streams.md) also covers input-only and duplex handlers using
-`RpcBinaryInput` / `RpcBinaryOutput`, half-close and backpressure.
+Message streams keep `Inject[T]`, parameter validation, channel error
+declarations, `raises=`, request middleware and tracing. Binary streams get
+their own endpoint; the [binary guide](streams.md) also covers input-only and
+duplex handlers using `RpcBinaryInput` / `RpcBinaryOutput`, half-close and
+backpressure.
 
 ## Generated Python
 
@@ -60,7 +53,7 @@ async with client.jobs.progress(job_id="report") as updates:
     async for update in updates:
         print(update.percent)
 
-async with client.jobs.download() as chunks:
+async with client.download() as chunks:
     async for chunk in chunks:
         print(chunk)
 ```
@@ -74,12 +67,12 @@ cannot be entered twice. These lifetimes belong to the specialized RPC client.
 ## Generated TypeScript
 
 ```typescript
-await using updates = await client.jobs.progress({ jobId: "report" });
+await using updates = await client.jobs.progress({ job_id: "report" });
 for await (const update of updates) {
   console.log(update.percent);
 }
 
-await using chunks = await client.jobs.download();
+await using chunks = await client.download();
 for await (const chunk of chunks) {
   console.log(chunk);
 }

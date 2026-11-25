@@ -12,10 +12,8 @@ import pytest
 from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.testclient import TestClient
 from fastapi.websockets import WebSocketState
+from fastapi_canon import Inject
 from fastapi_canon.integrations.websockets import (
-    CanonWebSocketRouter,
-    FastApiSocket,
-    Inject,
     ProtocolDefinitionError,
     RpcBinaryInput,
     RpcBinaryOutput,
@@ -27,13 +25,17 @@ from fastapi_canon.integrations.websockets import (
     RpcRejection,
     RpcRejections,
     RpcSocket,
+)
+from fastapi_canon.integrations.websockets.adapters.fastapi import (
+    CanonWebSocketRouter,
+    FastApiSocket,
     serve_websocket,
 )
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from pydantic import BaseModel
 from starlette.testclient import WebSocketDenialResponse
 
-from tests.fixtures.websockets import router_for
+from tests.fixtures.websockets import router_for, socket_of
 
 
 class EchoParams(BaseModel):
@@ -43,7 +45,7 @@ class EchoParams(BaseModel):
 def create_service(
     *, path: str = "/rpc", connections: list[RpcConnection] | None = None
 ) -> RpcDefinition:
-    channel = RpcChannel("demo")
+    channel = RpcChannel(namespace="demo")
 
     @channel.method()
     async def echo(params: EchoParams, connection: Inject[RpcConnection]) -> EchoParams:
@@ -122,7 +124,7 @@ def test_repeated_test_client_disconnects_do_not_leak_cancellation() -> None:
 
 
 def test_router_serves_binary_stream() -> None:
-    channel = RpcChannel("media")
+    channel = RpcChannel(namespace="media")
 
     @channel.stream()
     async def frames() -> AsyncIterator[bytes]:
@@ -169,7 +171,7 @@ async def test_send_preserves_unexpected_runtime_errors() -> None:
 
 
 def test_router_serves_bidirectional_streams_without_cancellation_leaks() -> None:
-    channel = RpcChannel("voice")
+    channel = RpcChannel(namespace="voice")
 
     @channel.stream()
     async def media(
@@ -195,7 +197,7 @@ def test_router_serves_bidirectional_streams_without_cancellation_leaks() -> Non
 
 
 def test_router_rejects_invalid_stream_path_variables_as_not_found() -> None:
-    channel = RpcChannel("voice")
+    channel = RpcChannel(namespace="voice")
 
     @channel.stream()
     async def media(session_id: int, output: Inject[RpcBinaryOutput]) -> None: ...
@@ -247,7 +249,7 @@ def test_before_accept_supplies_injected_context() -> None:
         def __init__(self, name: str) -> None:
             self.name = name
 
-    channel = RpcChannel("auth")
+    channel = RpcChannel(namespace="auth")
 
     @channel.method()
     async def who(principal: Inject[Principal]) -> str:
@@ -413,13 +415,13 @@ def create_job_service(
     *,
     rejects: tuple[RpcErrorBinding[Any], ...] = (),
 ) -> RpcDefinition:
-    events = RpcChannel("jobs")
+    events = RpcChannel(namespace="jobs")
 
     @events.method()
     async def describe(session: Inject[JobSession]) -> str:
         return f"{session.actor.name}:{session.job.id}"
 
-    output = RpcChannel("output")
+    output = RpcChannel(namespace="output")
 
     @output.stream()
     async def frames(
@@ -433,7 +435,7 @@ def create_job_service(
             if released is not None:
                 released.append(True)
 
-    failing = RpcChannel("failing")
+    failing = RpcChannel(namespace="failing")
 
     @failing.stream()
     async def broken(session: Inject[JobSession]) -> AsyncIterator[bytes]:
@@ -849,7 +851,7 @@ def test_custom_handlers_use_rejection_precedence_after_acceptance(policy: str) 
     route_binding = RpcErrorBinding(
         JobNotFound, message="routes", rejection=RpcRejection.FORBIDDEN
     )
-    channel = RpcChannel("jobs")
+    channel = RpcChannel(namespace="jobs")
     service = RpcDefinition(rejects=(service_binding,))
     endpoint = service.socket(
         "/jobs/{job_id}/events",
@@ -1112,14 +1114,15 @@ class JobDeleted(Exception):
 
 
 def create_socket_app(released: list[bool]) -> FastAPI:
-    shell = RpcChannel("jobs")
+    shell = RpcChannel(namespace="jobs")
 
-    @shell.socket(
+    @socket_of(
+        shell,
         closes=(
             RpcErrorBinding(
                 JobDeleted, rejection=RpcRejection.NOT_FOUND, message="Job deleted"
             ),
-        )
+        ),
     )
     async def terminal(socket: Inject[RpcSocket], session: Inject[JobSession]) -> None:
         try:

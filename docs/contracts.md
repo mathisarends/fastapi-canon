@@ -55,14 +55,18 @@ from fastapi import FastAPI
 
 from fastapi_canon import APIRouter, Composition, Feature, export_contracts
 from fastapi_canon.contracts import ContractSelection
+from fastapi_canon.integrations.websockets import RpcChannel
 
-router = APIRouter()
-control = router.channel("/rpc", namespace="browser")
+control = RpcChannel(namespace="browser")
 
 
 @control.method()
 async def ping() -> str:
     return "pong"
+
+
+router = APIRouter()
+router.include_channel(control, path="/rpc")
 
 
 browser_tunnel = Feature(name="browser_tunnel", routers=(router,))

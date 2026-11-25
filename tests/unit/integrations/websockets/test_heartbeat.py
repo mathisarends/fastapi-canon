@@ -23,7 +23,7 @@ async def test_ping_bypasses_saturated_handlers_and_observation():
                 middleware_calls.append(scope)
                 yield
 
-        channel = RpcChannel("test")
+        channel = RpcChannel(namespace="test")
 
         @channel.method()
         async def work() -> None:

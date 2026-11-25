@@ -6,22 +6,16 @@ Install `fastapi-canon[websockets]`; add `codegen` to generate clients.
 
 ```python
 from fastapi import FastAPI
-from pydantic import BaseModel
 
 from fastapi_canon import APIRouter, Composition, Feature
 from fastapi_canon.integrations.websockets import RpcChannel
 
-
-class Greeting(BaseModel):
-    name: str
-
-
-hello = RpcChannel("hello")
+hello = RpcChannel(namespace="hello")
 
 
 @hello.method()
-async def greet(params: Greeting) -> str:
-    return f"Hello, {params.name}"
+async def greet(name: str) -> str:
+    return f"Hello, {name}"
 
 
 router = APIRouter()
@@ -31,8 +25,10 @@ app = Composition(
 ).build(FastAPI())
 ```
 
-The public operation is `hello.greet`. Parameters and return annotations drive
-the contract. Add `raises=[public_error]` for declared domain failures; request
+The public operation is `hello.greet`, called with `{"name": "Ada"}`. As in
+FastAPI, parameters and return annotations drive the contract: named parameters
+form `params`, a single Pydantic model parameter is the whole `params` object,
+and `Annotated[T, Path()]` reads a URL variable. Add `raises=[public_error]` for declared domain failures; request
 application services through `Inject[T]` and feature-owned Dishka providers.
 
 The [quickstart](01-quickstart.md) combines an RPC method with HTTP and SSE,

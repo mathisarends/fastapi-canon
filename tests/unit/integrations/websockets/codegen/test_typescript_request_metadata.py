@@ -197,7 +197,7 @@ async def test_typescript_middleware_wire_metadata_server_parent_and_controls(
     provider = TracerProvider()
     exporter = InMemorySpanExporter()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
-    channel = RpcChannel("greeting")
+    channel = RpcChannel(namespace="greeting")
 
     @channel.method("greeted")
     async def greeted() -> dict[str, list[str]]:

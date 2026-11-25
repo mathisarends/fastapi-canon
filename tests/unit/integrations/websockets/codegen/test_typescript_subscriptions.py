@@ -8,7 +8,6 @@ import pytest
 from fastapi_canon.integrations.websockets import (
     RpcChannel,
     RpcErrorBinding,
-    RpcModel,
 )
 from fastapi_canon.integrations.websockets.codegen import generate_typescript_client
 from fastapi_canon.integrations.websockets.codegen.typescript import (
@@ -16,12 +15,14 @@ from fastapi_canon.integrations.websockets.codegen.typescript import (
 )
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
 
+from tests.fixtures.websockets import CamelModel
 
-class SessionParams(RpcModel):
+
+class SessionParams(CamelModel):
     session_id: str
 
 
-class SessionEvent(RpcModel):
+class SessionEvent(CamelModel):
     value: str
 
 
@@ -36,7 +37,7 @@ def test_generated_typescript_subscription(tmp_path: Path) -> None:
     if pnpm is None or node is None:
         pytest.skip("Node.js and pnpm are required")
     default = RpcErrorBinding(SessionMissing, code="session_unavailable")
-    channel = RpcChannel("session", raises=[default])
+    channel = RpcChannel(namespace="session", raises=[default])
 
     @channel.stream(raises=[RpcErrorBinding(SessionMissing, details=SessionParams)])
     async def events(params: SessionParams) -> AsyncIterator[SessionEvent]:

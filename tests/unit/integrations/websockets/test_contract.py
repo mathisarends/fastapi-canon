@@ -5,15 +5,16 @@ import pytest
 from fastapi_canon.integrations.websockets import (
     RpcChannel,
     RpcError,
-    RpcModel,
     ServerVariable,
 )
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.schema import render_openrpc
 from fastapi_canon.integrations.websockets.schema.export import render_contract
 
+from tests.fixtures.websockets import CamelModel
 
-class Missing(RpcModel):
+
+class Missing(CamelModel):
     resource_id: str
 
 
@@ -21,7 +22,7 @@ class MissingError(RpcError):
     details: Missing
 
 
-channel = RpcChannel("control")
+channel = RpcChannel(namespace="control")
 
 
 @channel.method(raises=[MissingError])

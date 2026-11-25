@@ -45,7 +45,7 @@ async def test_python_middleware_injects_active_trace_into_real_no_params_call(
     provider = TracerProvider()
     exporter = InMemorySpanExporter()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
-    channel = RpcChannel("trace")
+    channel = RpcChannel(namespace="trace")
 
     @channel.method()
     async def ping() -> str:

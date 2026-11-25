@@ -390,7 +390,7 @@ async def test_abandoned_call_cancels_server_once_and_preserves_local_outcome(
 
         before = asyncio.all_tasks()
         clock = ClientDeadlines(monkeypatch, websocket_runtime)
-        channel = RpcChannel("cancellation")
+        channel = RpcChannel(namespace="cancellation")
         entered, stopped = asyncio.Event(), asyncio.Event()
         controls = []
 
@@ -542,7 +542,7 @@ async def test_late_response_from_a_served_endpoint_keeps_the_client_usable(
         from fastapi_canon.integrations.websockets.testing import InMemorySocketFactory
 
         baseline = asyncio.all_tasks()
-        channel = RpcChannel("resilience")
+        channel = RpcChannel(namespace="resilience")
         entered, release = asyncio.Event(), asyncio.Event()
 
         @channel.method
@@ -804,15 +804,15 @@ async def test_served_close_preserves_code_in_requests_notifications_and_closed(
     websocket_runtime,
 ):
     async with asyncio.timeout(10):
+        from fastapi_canon import Inject
         from fastapi_canon.integrations.websockets import (
-            Inject,
             RpcChannel,
             RpcConnection,
             RpcConnectionClose,
         )
         from fastapi_canon.integrations.websockets.testing import InMemorySocketFactory
 
-        channel = RpcChannel("disconnect")
+        channel = RpcChannel(namespace="disconnect")
 
         @channel.method
         async def fail(connection: Inject[RpcConnection]) -> None:
@@ -854,7 +854,7 @@ async def test_simultaneous_interrupted_sends_keep_their_own_delivery_state(
     )
 
     app = RpcDefinition()
-    app.socket("/rpc", channels=[RpcChannel("pending")])
+    app.socket("/rpc", channels=[RpcChannel(namespace="pending")])
     entered = asyncio.Queue()
 
     class ClientSocket(InMemoryClientSocket):

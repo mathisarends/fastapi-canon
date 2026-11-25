@@ -14,11 +14,8 @@ import pytest
 import uvicorn
 from fastapi import FastAPI
 
-from fastapi_canon.integrations.websockets import (
-    CanonWebSocketRouter,
-    RpcChannel,
-    RpcModel,
-)
+from fastapi_canon.integrations.websockets import RpcChannel
+from fastapi_canon.integrations.websockets.adapters.fastapi import CanonWebSocketRouter
 from fastapi_canon.integrations.websockets.codegen import (
     generate_python_client,
     generate_typescript_client,
@@ -27,9 +24,10 @@ from fastapi_canon.integrations.websockets.codegen.python import PythonClientOpt
 from fastapi_canon.integrations.websockets.codegen.typescript import (
     TypeScriptClientOptions,
 )
+from tests.fixtures.websockets import CamelModel
 
 
-class Params(RpcModel):
+class Params(CamelModel):
     value: int
 
 
@@ -37,7 +35,7 @@ async def test_context_opens_before_first_value_and_closes_its_generator(
     tmp_path: Path,
 ) -> None:
     started, stopped = (asyncio.Event(), asyncio.Event())
-    channel = RpcChannel("jobs")
+    channel = RpcChannel(namespace="jobs")
 
     @channel.stream()
     async def progress(params: Params) -> AsyncIterator[int]:
@@ -60,7 +58,7 @@ async def test_context_opens_before_first_value_and_closes_its_generator(
 async def test_message_and_binary_streams_share_context_iteration(
     tmp_path: Path,
 ) -> None:
-    channel = RpcChannel("results")
+    channel = RpcChannel(namespace="results")
 
     @channel.stream()
     async def numbers(params: Params) -> AsyncIterator[int]:
@@ -86,7 +84,7 @@ async def test_closing_stream_interrupts_a_pending_read_and_cleans_up(
     tmp_path: Path,
 ) -> None:
     stopped = asyncio.Event()
-    channel = RpcChannel("jobs")
+    channel = RpcChannel(namespace="jobs")
 
     @channel.stream()
     async def progress() -> AsyncIterator[int]:
@@ -114,7 +112,7 @@ async def test_client_close_cancels_stream_without_closing_borrowed_transport(
     tmp_path: Path,
 ) -> None:
     started, stopped = (asyncio.Event(), asyncio.Event())
-    channel = RpcChannel("jobs")
+    channel = RpcChannel(namespace="jobs")
 
     @channel.method()
     async def ping() -> str:
@@ -153,7 +151,7 @@ async def test_stream_overflow_reports_failure_and_keeps_diagnostics(
 ) -> None:
     overflow, stopped = (asyncio.Event(), asyncio.Event())
     observations = []
-    channel = RpcChannel("jobs")
+    channel = RpcChannel(namespace="jobs")
 
     @channel.stream()
     async def progress() -> AsyncIterator[int]:
@@ -195,7 +193,7 @@ async def test_typescript_stream_disposal_cleans_up_a_real_server(
     if pnpm is None or node is None:
         pytest.skip("Node.js and pnpm are required")
     stopped = asyncio.Event()
-    channel = RpcChannel("jobs")
+    channel = RpcChannel(namespace="jobs")
 
     @channel.stream()
     async def progress(params: Params) -> AsyncIterator[int]:

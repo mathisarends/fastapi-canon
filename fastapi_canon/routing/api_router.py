@@ -9,7 +9,7 @@ from fastapi import WebSocket
 from fastapi.params import Depends
 from fastapi.routing import APIWebSocketRoute
 from fastapi.sse import EventSourceResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, create_model
 from starlette.routing import BaseRoute, WebSocketRoute
 
 from fastapi_canon.error.contributions import error_registries
@@ -32,6 +32,7 @@ if TYPE_CHECKING:
         RpcLimits,
         RpcMessageType,
         RpcMiddlewareLike,
+        RpcProtocol,
         RpcRejectionDeclaration,
         RpcRejections,
         RpcResolverLike,
@@ -45,7 +46,7 @@ if TYPE_CHECKING:
 
 
 class ChannelOptions(TypedDict, total=False):
-    """Connection options for ``channel``, ``include_channel`` and socket decorators."""
+    """Connection options for ``include_channel`` and the socket decorators."""
 
     version: int
     context: Callable[..., Awaitable[Any]] | None
@@ -68,8 +69,8 @@ class APIRouter(CanonRouter):
     without ``route_class=DishkaRoute`` or ``@inject``. An explicit
     ``route_class`` replaces this behavior.
 
-    ``websocket_policy`` configures the connections of this router's channel,
-    socket and binary stream declarations. Such a router rejects WebSocket
+    ``websocket_policy`` configures the connections of this router's channels,
+    sockets and binary streams. Such a router rejects WebSocket
     routes, also included ones, that were not declared under its policy or an
     extension of it.
     """
@@ -89,21 +90,12 @@ class APIRouter(CanonRouter):
                 raise ConfigurationError(msg)
         kwargs.setdefault("route_class", InjectedRoute)
         self.websocket_policy = websocket_policy
-        self._pending_channels: list[tuple[RpcChannel, dict[str, Any]]] = []
         self._required_websocket_policies: list[WebSocketPolicy] = []
         self._websocket_children: list[APIRouter] = []
         super().__init__(**kwargs)
 
     @property
     def routes(self) -> list[BaseRoute]:
-        """Routes, including channels declared with ``channel()`` (mounted now)."""
-        pending = getattr(self, "_pending_channels", None)
-        if pending:
-            self._pending_channels = []
-            for channel, settings in pending:
-                self._mount_channel(channel, None, settings)
-                # Later registrations would never reach the mounted snapshot.
-                channel.freeze()
         requirements = self._websocket_requirements()
         if requirements:
             # Native included routers stay live and cannot intercept registration.
@@ -183,72 +175,50 @@ class APIRouter(CanonRouter):
         channel: RpcChannel,
         *,
         path: str,
-        namespace: str | None = None,
         name: str | None = None,
         dependencies: Sequence[Depends] = (),
-        path_model: type[BaseModel] | None = None,
         subprotocol: str | None = None,
         summary: str | None = None,
+        close_when_events_complete: bool = False,
         **options: Unpack[ChannelOptions],
     ) -> None:
         """Mount a channel snapshot at one JSON-RPC WebSocket endpoint.
 
-        ``namespace`` optionally replaces the channel's root namespace.
+        Operations keep the channel's namespace. Parameters annotated with
+        ``Path()`` read this endpoint's path variables, validated at handshake.
+        ``close_when_events_complete`` closes the connection once every event
+        source has finished.
         Endpoint names default to the complete local path, including the prefix.
-        Resolver, context, limits and middleware options configure this connection.
         The source channel stays reusable and mutable after registration.
         """
-        self._mount_channel(
-            channel,
-            namespace,
-            {
-                **self._connection_options(options),
-                "path": path,
-                "name": name,
-                "dependencies": dependencies,
-                "path_model": path_model,
-                "subprotocol": subprotocol,
-                "summary": summary,
-            },
-        )
-
-    def channel(
-        self,
-        path: str,
-        *,
-        namespace: str | None = None,
-        name: str | None = None,
-        dependencies: Sequence[Depends] = (),
-        path_model: type[BaseModel] | None = None,
-        subprotocol: str | None = None,
-        summary: str | None = None,
-        **options: Unpack[ChannelOptions],
-    ) -> RpcChannel:
-        """Declare a JSON-RPC WebSocket endpoint and return its channel.
-
-        Register methods, events and message streams on the returned channel.
-        Operation names use the router's ``namespace`` unless ``namespace`` is
-        given. The channel is mounted when the router's routes are first read,
-        for example by ``include_router``. It is frozen afterwards, so later
-        registrations fail instead of being silently ignored. Use
-        ``include_channel`` to mount one channel at several paths.
-        """
         from fastapi_canon.integrations.websockets import RpcChannel
-
-        channel = RpcChannel(
-            namespace=self.namespace if namespace is None else namespace
+        from fastapi_canon.integrations.websockets.adapters.fastapi import (
+            CanonWebSocketRouter,
         )
-        settings: dict[str, Any] = {
-            **self._connection_options(options),
-            "path": path,
-            "name": name,
-            "dependencies": dependencies,
-            "path_model": path_model,
-            "subprotocol": subprotocol,
-            "summary": summary,
-        }
-        self._pending_channels.append((channel, settings))
-        return channel
+
+        if not isinstance(channel, RpcChannel):
+            raise ConfigurationError("include_channel expects an RpcChannel")
+        snapshot = RpcChannel()
+        snapshot.include_channel(channel)
+        protocol = snapshot.freeze()
+        if protocol.streams or protocol.sockets:
+            raise ConfigurationError(
+                "include_channel accepts JSON-RPC methods, events and message streams; "
+                "declare binary streams with @router.binary_stream and sockets with @router.socket"
+            )
+        adapter = CanonWebSocketRouter(
+            prefix=self.prefix, **self._connection_options(options)
+        )
+        adapter.socket(
+            path,
+            channels=[snapshot],
+            name=self._endpoint_name(path, name),
+            path_model=_channel_path_model(protocol, self.prefix + path),
+            subprotocol=subprotocol,
+            summary=summary,
+            close_when_events_complete=close_when_events_complete,
+        )
+        self._include_websocket_adapter(adapter, path, dependencies)
 
     def binary_stream[Stream: Callable[..., Any]](
         self,
@@ -269,15 +239,15 @@ class APIRouter(CanonRouter):
         send them. The operation name is the router's ``namespace`` and the
         function name. Connection options match ``include_channel``.
         """
-        from fastapi_canon.integrations.websockets import (
+        from fastapi_canon.integrations.websockets import RpcChannel
+        from fastapi_canon.integrations.websockets.adapters.fastapi import (
             CanonWebSocketRouter,
-            RpcChannel,
         )
 
         connection = self._connection_options(options)
 
         def decorate(stream: Stream) -> Stream:
-            channel = RpcChannel(namespace=self.namespace)
+            channel = RpcChannel(namespace=self.namespace or "")
             declare: Any = channel.stream(
                 content_type=content_type,
                 input_content_type=input_content_type,
@@ -317,15 +287,16 @@ class APIRouter(CanonRouter):
         unchanged. The operation name is the router's ``namespace`` and the
         function name. Connection options match ``include_channel``.
         """
-        from fastapi_canon.integrations.websockets import (
+        from fastapi_canon.integrations.websockets import RpcChannel
+        from fastapi_canon.integrations.websockets.adapters.fastapi import (
             CanonWebSocketRouter,
-            RpcChannel,
         )
+        from fastapi_canon.integrations.websockets.channel import declare_socket
 
         connection = self._connection_options(options)
 
         def decorate(handler: Handler) -> Handler:
-            channel = RpcChannel(namespace=self.namespace)
+            channel = RpcChannel(namespace=self.namespace or "")
             declaration: dict[str, Any] = {
                 "protocol": protocol,
                 "closes": closes,
@@ -333,8 +304,7 @@ class APIRouter(CanonRouter):
             }
             if messages is not None:
                 declaration["messages"] = messages
-            declare: Any = channel.socket(**declaration)
-            declare(handler)
+            declare_socket(channel, handler, **declaration)
             adapter = CanonWebSocketRouter(prefix=self.prefix, **connection)
             adapter.socket(
                 path,
@@ -413,46 +383,6 @@ class APIRouter(CanonRouter):
 
         return decorate
 
-    def _mount_channel(
-        self, channel: RpcChannel, namespace: str | None, settings: dict[str, Any]
-    ) -> None:
-        """Mount a channel snapshot with already merged connection options."""
-        from fastapi_canon.integrations.websockets import (
-            CanonWebSocketRouter,
-            RpcChannel,
-        )
-
-        if not isinstance(channel, RpcChannel):
-            raise ConfigurationError("include_channel expects an RpcChannel")
-        snapshot = RpcChannel()
-        snapshot.include_channel(
-            channel,
-            namespace=channel.namespace if namespace is None else namespace,
-        )
-        protocol = snapshot.freeze()
-        if protocol.streams or protocol.sockets:
-            raise ConfigurationError(
-                "include_channel accepts JSON-RPC methods, events and message streams; "
-                "declare binary streams with @router.binary_stream and sockets with @router.socket"
-            )
-        options = dict(settings)
-        path = options.pop("path")
-        name = options.pop("name")
-        dependencies = options.pop("dependencies")
-        endpoint = {
-            "path_model": options.pop("path_model"),
-            "subprotocol": options.pop("subprotocol"),
-            "summary": options.pop("summary"),
-        }
-        adapter = CanonWebSocketRouter(prefix=self.prefix, **options)
-        adapter.socket(
-            path,
-            channels=[snapshot],
-            name=self._endpoint_name(path, name),
-            **endpoint,
-        )
-        self._include_websocket_adapter(adapter, path, dependencies)
-
     def _connection_options(self, options: ChannelOptions) -> dict[str, Any]:
         from fastapi_canon.integrations.websockets.policy import (
             apply_websocket_policy,
@@ -518,6 +448,41 @@ class APIRouter(CanonRouter):
             dependencies=[*dependencies, *route.dependencies],
         )
         self._included_error_registries.extend(error_registries(adapter))
+
+
+def _channel_path_model(protocol: RpcProtocol, path: str) -> type[BaseModel] | None:
+    """Combine the operations' ``Path()`` parameters into one handshake model."""
+    variables = re.findall(r"\{([^}:]+)(?::[^}]*)?\}", path)
+    fields: dict[str, Any] = {}
+    owners: dict[str, str] = {}
+    operations: list[tuple[str, type[BaseModel] | None]] = [
+        *((method.name, method.path_model) for method in protocol.methods),
+        *((stream.name, stream.path_model) for stream in protocol.subscriptions),
+    ]
+    for operation, path_model in operations:
+        if path_model is None:
+            continue
+        for field_name, field in path_model.model_fields.items():
+            if field_name not in variables:
+                msg = (
+                    f"RPC operation {operation} reads path parameter "
+                    f"{field_name!r}, which is not a variable of {path!r}"
+                )
+                raise ConfigurationError(msg)
+            previous = fields.setdefault(field_name, (field.annotation, field))
+            if previous[0] != field.annotation:
+                msg = (
+                    f"RPC operations {owners[field_name]} and {operation} "
+                    f"declare path parameter {field_name!r} with different types"
+                )
+                raise ConfigurationError(msg)
+            owners.setdefault(field_name, operation)
+    if not fields:
+        return None
+    for variable in variables:
+        fields.setdefault(variable, (str, ...))
+    model: type[BaseModel] = create_model("ChannelPathParams", **fields)
+    return model
 
 
 def _websocket_path(path: str) -> str:

@@ -142,16 +142,12 @@ channel on the same router:
 ```python
 from fastapi_canon.integrations.websockets import RpcChannel
 
-projects = RpcChannel("projects")
-
-
-class CancelProject(BaseModel):
-    project_id: int
+projects = RpcChannel(namespace="projects")
 
 
 @projects.method(raises=[project_missing])
-async def cancel(params: CancelProject) -> None:
-    require_project(params.project_id)
+async def cancel(project_id: int) -> None:
+    require_project(project_id)
 
 
 router.include_channel(projects, path="/ws")

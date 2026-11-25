@@ -114,36 +114,35 @@ def _main() -> None:
         routers.append(streams)
         _cli("sse")
     if "websockets" in selected:
+        from fastapi_canon import APIRouter, Inject
         from fastapi_canon.integrations.websockets import (
-            CanonWebSocketRouter,
-            Inject,
             RpcChannel,
             RpcMiddleware,
             RpcSocket,
         )
+        from fastapi_canon.integrations.websockets.adapters.fastapi import (
+            CanonWebSocketRouter,
+        )
 
-        channel = RpcChannel("health")
+        channel = RpcChannel(namespace="health")
 
         @channel.method("ping")
         async def ping() -> str:
             return "pong"
 
-        rpc = CanonWebSocketRouter()
-        rpc.socket("/rpc", channels=(channel,))
+        rpc = APIRouter(namespace="health")
+        rpc.include_channel(channel, path="/rpc", name="rpc")
 
-        @channel.socket("messages")
+        @rpc.socket("/messages", name="messages")
         async def messages(message: SocketInput) -> SocketOutput:
             return SocketOutput(value=message.value + 1)
 
-        rpc.socket("/messages", messages)
-
-        @channel.socket("session")
+        @rpc.socket("/session", name="session")
         async def session(socket: Inject[RpcSocket[SocketInput, SocketOutput]]) -> None:
             await socket.send(SocketOutput(value=0))
             async for message in socket:
                 await socket.send(SocketOutput(value=message.value + 1))
 
-        rpc.socket("/session", session)
         routers.append(rpc)
 
         async def connection_label() -> str:
@@ -157,7 +156,9 @@ def _main() -> None:
         custom_rpc = CanonWebSocketRouter(
             context=connection_label, middleware=[RpcMiddleware()]
         )
-        custom_rpc.socket("/custom", channels=[RpcChannel("custom")], serve=custom)
+        custom_rpc.socket(
+            "/custom", channels=[RpcChannel(namespace="custom")], serve=custom
+        )
         routers.append(custom_rpc)
         _cli("websockets")
     if "webrtc" in selected:

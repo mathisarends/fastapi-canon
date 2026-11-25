@@ -15,14 +15,12 @@ import json
 from collections.abc import Callable
 
 from fastapi import FastAPI
+from fastapi_canon import APIRouter, Composition, Feature, Inject
 from fastapi_canon.integrations.websockets import (
-    CanonWebSocketRouter,
-    Inject,
     RpcChannel,
     RpcMessageType,
     RpcSocket,
     RpcSocketProtocol,
-    ServerVariable,
 )
 
 CALC = RpcSocketProtocol(name="calc", version="1")
@@ -32,7 +30,7 @@ OPERATIONS: dict[str, Callable[[float, float], float]] = {
     "multiply": lambda a, b: a * b,
 }
 
-calculator = RpcChannel("calculator")
+calculator = RpcChannel(namespace="calculator")
 
 
 @calculator.method(summary="List the operations the calc protocol supports.")
@@ -40,10 +38,16 @@ async def operations() -> list[str]:
     return sorted(OPERATIONS)
 
 
-@calculator.socket(
+router = APIRouter(prefix="/calculator", namespace="calculator")
+router.include_channel(calculator, path="/rpc", name="rpc")
+
+
+@router.socket(
+    "/session",
     protocol=CALC,
     messages=(RpcMessageType.TEXT,),
     summary="Evaluate calc commands.",
+    name="session",
 )
 async def session(socket: Inject[RpcSocket]) -> None:
     async for message in socket:
@@ -56,15 +60,6 @@ async def session(socket: Inject[RpcSocket]) -> None:
         await socket.send(json.dumps(reply))
 
 
-service = CanonWebSocketRouter()
-service.socket("/calculator/rpc", channels=(calculator,))
-service.socket("/calculator/session", session)
-
-contract = service.contract(
-    title="Calculator",
-    base_url="ws://{host}",
-    variables={"host": ServerVariable(default="localhost:8000")},
+app = Composition(features=[Feature(name="calculator", routers=[router])]).build(
+    FastAPI(title="Calculator")
 )
-
-app = FastAPI()
-app.include_router(service)

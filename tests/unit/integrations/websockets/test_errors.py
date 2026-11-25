@@ -10,14 +10,15 @@ from fastapi_canon.integrations.websockets import (
     RpcErrorCode,
     RpcFailure,
     RpcInvalidParamsError,
-    RpcModel,
     RpcRejection,
 )
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from pydantic import BaseModel, ValidationError
 
+from tests.fixtures.websockets import CamelModel
 
-class MissingDetails(RpcModel):
+
+class MissingDetails(CamelModel):
     project_id: str
 
 
@@ -64,7 +65,7 @@ async def test_a_falsy_error_mapper_overrides_the_endpoint_default() -> None:
         def __call__(self, error: Exception) -> RpcError:
             return HTTPTimeoutError(message="mapped")
 
-    channel = RpcChannel("failures")
+    channel = RpcChannel(namespace="failures")
 
     @channel.method()
     async def fail() -> None:
@@ -156,11 +157,11 @@ class TaskLocked(Exception):
         self.owner = owner
 
 
-class TaskRef(RpcModel):
+class TaskRef(CamelModel):
     task_id: int
 
 
-class LockDetails(RpcModel):
+class LockDetails(CamelModel):
     locked_by: str
 
 
@@ -181,7 +182,7 @@ task_locked = RpcErrorBinding(
 
 
 def _task_service(*, strict_errors: bool = False) -> RpcDefinition:
-    tasks = RpcChannel("tasks", raises=[task_not_found])
+    tasks = RpcChannel(namespace="tasks", raises=[task_not_found])
 
     @tasks.method(raises=[task_locked])
     async def update(params: TaskRef) -> None:
@@ -246,7 +247,7 @@ async def test_a_failing_contract_becomes_an_internal_error(caplog) -> None:
         raise ValueError("bad details")
 
     broken = RpcErrorBinding(TaskLocked, details=broken_details)
-    tasks = RpcChannel("tasks")
+    tasks = RpcChannel(namespace="tasks")
 
     @tasks.method(raises=[broken])
     async def update(params: TaskRef) -> None:
@@ -287,7 +288,7 @@ def test_contracts_are_described_like_rpc_errors() -> None:
 
 
 async def test_an_exception_can_have_different_bindings_per_method() -> None:
-    tasks = RpcChannel("tasks")
+    tasks = RpcChannel(namespace="tasks")
 
     @tasks.method(raises=[task_not_found])
     async def read() -> None:
@@ -309,7 +310,7 @@ async def test_an_exception_can_have_different_bindings_per_method() -> None:
 
 
 async def test_method_binding_overrides_channel_default() -> None:
-    channel = RpcChannel("tasks", raises=[task_not_found])
+    channel = RpcChannel(namespace="tasks", raises=[task_not_found])
     gone = RpcErrorBinding(TaskNotFound, code="gone")
 
     @channel.method(raises=[gone])
@@ -340,7 +341,7 @@ async def test_method_binding_overrides_channel_default() -> None:
 
 @pytest.mark.parametrize("kind", ["method", "event", "stream"])
 def test_ambiguous_bindings_are_rejected_during_registration(kind) -> None:
-    channel = RpcChannel("tasks")
+    channel = RpcChannel(namespace="tasks")
     gone = RpcErrorBinding(TaskNotFound, code="gone")
 
     async def read() -> None: ...
@@ -374,7 +375,8 @@ def test_ambiguous_channel_bindings_are_rejected_at_creation() -> None:
         ProtocolDefinitionError, match=r"RPC channel tasks: TaskNotFound"
     ):
         RpcChannel(
-            "tasks", raises=[task_not_found, RpcErrorBinding(TaskNotFound, code="gone")]
+            namespace="tasks",
+            raises=[task_not_found, RpcErrorBinding(TaskNotFound, code="gone")],
         )
 
 
@@ -382,7 +384,9 @@ async def test_child_channel_overrides_defaults_without_changing_parent() -> Non
     archived = RpcErrorBinding(ArchivedTaskNotFound, code="archived_task_missing")
     child_binding = RpcErrorBinding(TaskNotFound, code="child_task_missing")
     local_binding = RpcErrorBinding(TaskNotFound, code="local_task_missing")
-    root = RpcChannel("tasks", raises=[task_not_found, archived, HTTPTimeoutError])
+    root = RpcChannel(
+        namespace="tasks", raises=[task_not_found, archived, HTTPTimeoutError]
+    )
     child = root.child("admin", raises=[child_binding])
 
     @root.method()
@@ -425,7 +429,7 @@ async def test_child_channel_overrides_defaults_without_changing_parent() -> Non
 
 
 def test_conflicting_child_bindings_are_rejected_before_registration() -> None:
-    root = RpcChannel("tasks", raises=[task_not_found])
+    root = RpcChannel(namespace="tasks", raises=[task_not_found])
     with pytest.raises(
         ProtocolDefinitionError, match=r"RPC channel tasks.admin: TaskNotFound"
     ):
@@ -484,7 +488,7 @@ async def test_strict_errors_accept_subclasses_of_declared_rpc_errors() -> None:
     class MissingChildError(MissingError):
         pass
 
-    channel = RpcChannel("tasks")
+    channel = RpcChannel(namespace="tasks")
 
     @channel.method(raises=[MissingError])
     async def read() -> None:
@@ -500,7 +504,7 @@ async def test_strict_errors_accept_subclasses_of_declared_rpc_errors() -> None:
 async def test_failing_error_mapper_is_logged_and_contained(
     caplog, notification
 ) -> None:
-    channel = RpcChannel("tasks")
+    channel = RpcChannel(namespace="tasks")
 
     @channel.method()
     async def read() -> None:
@@ -525,7 +529,9 @@ async def test_channels_can_bind_permission_error_differently() -> None:
     service = RpcDefinition()
     channels = []
     for name, code in [("tasks", "task_denied"), ("users", "user_denied")]:
-        channel = RpcChannel(name, raises=[RpcErrorBinding(PermissionError, code=code)])
+        channel = RpcChannel(
+            namespace=name, raises=[RpcErrorBinding(PermissionError, code=code)]
+        )
 
         @channel.method()
         async def read() -> None:
@@ -543,7 +549,7 @@ async def test_channels_can_bind_permission_error_differently() -> None:
 
 
 def test_details_support_annotated_attributes_properties_and_defaults() -> None:
-    class Details(RpcModel):
+    class Details(CamelModel):
         task_id: int
         kind: str = "task"
 
@@ -587,5 +593,7 @@ def test_legacy_errors_mapping_is_removed() -> None:
     with pytest.raises(TypeError, match="errors"):
         RpcDefinition(errors={TaskNotFound: HTTPTimeoutError})
     with pytest.raises(TypeError, match="errors"):
-        RpcChannel("tasks").create_server(errors={TaskNotFound: HTTPTimeoutError})
+        RpcChannel(namespace="tasks").create_server(
+            errors={TaskNotFound: HTTPTimeoutError}
+        )
     assert not hasattr(RpcDefinition(), "errors")

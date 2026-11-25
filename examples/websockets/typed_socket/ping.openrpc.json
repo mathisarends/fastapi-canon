@@ -3,7 +3,7 @@
   "info": {
     "title": "Typed Socket",
     "version": "1.0.0",
-    "description": "Typed JSON-RPC API."
+    "description": ""
   },
   "servers": [
     {
@@ -33,7 +33,7 @@
         }
       },
       "x-rpc-request-schema": {
-        "$ref": "#/components/schemas/HealthRequest"
+        "$ref": "#/components/schemas/MessagesHealthRequest"
       },
       "servers": [
         {
@@ -95,10 +95,10 @@
         "title": "Pong",
         "type": "object"
       },
-      "HealthRequest": {
+      "MessagesHealthRequest": {
         "additionalProperties": false,
         "type": "object",
-        "title": "HealthRequest",
+        "title": "MessagesHealthRequest",
         "properties": {
           "jsonrpc": {
             "const": "2.0",

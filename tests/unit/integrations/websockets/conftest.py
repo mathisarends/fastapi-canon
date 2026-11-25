@@ -3,12 +3,8 @@ from enum import StrEnum
 from typing import Literal
 
 import pytest
-from fastapi_canon.integrations.websockets import (
-    Inject,
-    RpcChannel,
-    RpcError,
-    RpcProtocol,
-)
+from fastapi_canon import Inject
+from fastapi_canon.integrations.websockets import RpcChannel, RpcError, RpcProtocol
 from pydantic import BaseModel
 
 
@@ -57,7 +53,7 @@ class UnknownGreetingError(RpcError):
     message = "Unknown greeting"
 
 
-greeting_channel = RpcChannel("greeting")
+greeting_channel = RpcChannel(namespace="greeting")
 
 
 class GreetingState:

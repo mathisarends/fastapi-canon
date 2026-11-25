@@ -65,8 +65,8 @@ before mounting; each call takes a snapshot. RPC limits, middleware, error
 mapping and handshake rejection options are passed to `include_channel` and
 configure that endpoint. A router `prefix=` is included in endpoint paths and the
 contract. Binary streams and raw sockets are not JSON-RPC channels; declare them
-on their own `CanonWebSocketRouter` as described in [streams](streams.md) and
-[sockets](sockets.md).
+with `@router.binary_stream()` and `@router.socket()` as described in
+[streams](streams.md) and [sockets](sockets.md).
 
 ### Mount endpoints with FastAPI dependencies
 
@@ -99,7 +99,8 @@ Their return values reach RPC handlers through the configured context or resolve
 ### Mount a custom connection handler
 
 A custom FastAPI handler is a protocol-level endpoint: declare it with `serve=`
-on a `CanonWebSocketRouter` socket. It can declare `Inject[T]` arguments for the
+on the low-level `CanonWebSocketRouter` from
+`fastapi_canon.integrations.websockets.adapters.fastapi`. It can declare `Inject[T]` arguments for the
 context and resolver dependencies.
 The same connection middleware and rejection policies wrap the handler.
 
@@ -162,15 +163,19 @@ the ASGI routes, including authentication, hooks, middleware and Dishka scopes.
 
 ```python
 from fastapi_canon import APIRouter
+from fastapi_canon.integrations.websockets import RpcChannel
 from fastapi_canon.integrations.websockets.testing import RpcTestClient
 
 router = APIRouter(prefix="/api")
-channel = router.channel("/rpc", namespace="system")
+channel = RpcChannel(namespace="system")
 
 
-@channel.method
+@channel.method()
 async def ping() -> str:
     return "pong"
+
+
+router.include_channel(channel, path="/rpc")
 
 
 async def check_ping() -> None:
@@ -277,7 +282,7 @@ uv run --locked python scripts/websockets/bench_rpc_requests.py
 ```
 
 It reports sequential round-trip latency and pipelined requests per second for
-`RpcModel` and plain Pydantic params, list results, and small and 16 KiB payloads,
+camel-case and plain Pydantic params, list results, and small and 16 KiB payloads,
 each the median of `--repeat` runs. Add `--profile` for the top cProfile entries
 of the pipelined path. It covers frame decoding, validation, dispatch,
 serialization and queueing, but excludes the ASGI server, WebSocket framing and

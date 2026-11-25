@@ -510,14 +510,6 @@ class RpcDefinition:
             raise ProtocolDefinitionError("RPC sockets accept RpcChannel objects")
         if any(channel in self._channels for channel in channels):
             raise ProtocolDefinitionError("An RPC channel can only be mounted once")
-        names = [c.name for c in (*self._channels, *channels)]
-        if len(names) != len(set(names)):
-            duplicates = sorted(
-                name for name, count in Counter(names).items() if count > 1
-            )
-            raise ProtocolDefinitionError(
-                f"RPC channel names must be unique: {', '.join(duplicates)}"
-            )
         endpoint = RpcEndpoint(
             self,
             name if name is not None else _endpoint_name(path),

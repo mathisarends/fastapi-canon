@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 import pytest
 from fastapi_canon import Inject
-from fastapi_canon.integrations.websockets import CanonWebSocketRouter
+from fastapi_canon.integrations.websockets.adapters.fastapi import CanonWebSocketRouter
 
 
 @dataclass

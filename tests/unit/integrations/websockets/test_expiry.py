@@ -5,8 +5,8 @@ from time import time
 
 import fastapi_canon.integrations.websockets.connection as module
 import pytest
+from fastapi_canon import Inject
 from fastapi_canon.integrations.websockets import (
-    Inject,
     RpcChannel,
     RpcConnectionClose,
     RpcConnectionExpiry,
@@ -17,6 +17,8 @@ from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from fastapi_canon.integrations.websockets.testing import (
     InMemorySocket,
 )
+
+from tests.fixtures.websockets import socket_of
 
 
 class Timer:
@@ -43,7 +45,7 @@ def expiry_clock(monkeypatch):
 
 
 def expiring_service(timestamp, *, middleware=()):
-    channel = RpcChannel("expiry")
+    channel = RpcChannel(namespace="expiry")
 
     @channel.method()
     async def ping() -> str:
@@ -54,7 +56,7 @@ def expiring_service(timestamp, *, middleware=()):
         await asyncio.Future()
         yield b"frame"
 
-    @channel.socket()
+    @socket_of(channel)
     async def raw(socket: Inject[RpcSocket]) -> None:
         await asyncio.Future()
 
@@ -205,14 +207,14 @@ async def test_expiry_interrupts_accepted_connection_initialization(
             if phase == "activity":
                 await block()
 
-    channel = RpcChannel("expiry")
+    channel = RpcChannel(namespace="expiry")
 
     @channel.stream()
     async def frames(dependency: Inject[Dependency]) -> AsyncIterator[bytes]:
         raise AssertionError("Expired connection must not start a stream")
         yield b""
 
-    @channel.socket()
+    @socket_of(channel)
     async def raw(socket: Inject[RpcSocket], dependency: Inject[Dependency]) -> None:
         raise AssertionError("Expired connection must not start a handler")
 

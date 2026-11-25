@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import pytest
+from fastapi_canon import Inject
 from fastapi_canon.integrations.websockets import (
-    Inject,
     ProtocolDefinitionError,
     RpcChannel,
     RpcConnectionClose,
@@ -20,6 +20,7 @@ from fastapi_canon.integrations.websockets import (
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
+from tests.fixtures.websockets import socket_of
 from tests.unit.integrations.websockets.testing import RpcTestClient
 
 
@@ -34,10 +35,10 @@ class Pong(BaseModel):
     value: int
 
 
-channel = RpcChannel("messages")
+channel = RpcChannel(namespace="messages")
 
 
-@channel.socket("ping")
+@socket_of(channel, "ping")
 async def ping(message: Ping) -> Pong:
     assert isinstance(message, Ping)
     return Pong(value=message.value + 1)
@@ -75,9 +76,9 @@ async def test_message_calls_are_sequential_with_paths_and_invocation_scopes() -
         finally:
             released.append(invocation)
 
-    channel = RpcChannel("scoped", resolver_scope=scope)
+    channel = RpcChannel(namespace="scoped", resolver_scope=scope)
 
-    @channel.socket()
+    @socket_of(channel)
     async def handle(payload: Ping, multiplier: int, offset: Inject[Offset]) -> Pong:
         calls.append(payload.value)
         if payload.value == 1:
@@ -112,9 +113,9 @@ async def test_disconnect_cancels_a_message_call_and_releases_its_scope() -> Non
         finally:
             released.set()
 
-    channel = RpcChannel("cancel", resolver_scope=scope)
+    channel = RpcChannel(namespace="cancel", resolver_scope=scope)
 
-    @channel.socket()
+    @socket_of(channel)
     async def handle(message: Ping) -> Pong:
         started.set()
         await asyncio.Future()
@@ -134,12 +135,13 @@ async def test_message_handler_exceptions_use_declared_close_bindings() -> None:
     class Denied(Exception):
         pass
 
-    channel = RpcChannel("rejections")
+    channel = RpcChannel(namespace="rejections")
 
-    @channel.socket(
+    @socket_of(
+        channel,
         closes=(
             RpcErrorBinding(Denied, rejection=RpcRejection.FORBIDDEN, message="Denied"),
-        )
+        ),
     )
     async def handle(message: Ping) -> Pong:
         raise Denied("secret")
@@ -164,9 +166,9 @@ async def test_invalid_queued_input_cancels_an_active_invocation_and_its_scope()
         finally:
             released.set()
 
-    channel = RpcChannel("invalid", resolver_scope=scope)
+    channel = RpcChannel(namespace="invalid", resolver_scope=scope)
 
-    @channel.socket()
+    @socket_of(channel)
     async def handle(message: Ping) -> Pong:
         started.set()
         await asyncio.Future()
@@ -186,9 +188,9 @@ async def test_invalid_queued_input_cancels_an_active_invocation_and_its_scope()
 
 
 async def test_none_response_is_json_null() -> None:
-    channel = RpcChannel("null")
+    channel = RpcChannel(namespace="null")
 
-    @channel.socket()
+    @socket_of(channel)
     async def handle(message: Ping) -> None:
         pass
 
@@ -219,9 +221,9 @@ async def test_invalid_messages_close_without_reaching_the_handler(message) -> N
 
 
 async def test_invalid_outgoing_models_cannot_bypass_validation() -> None:
-    broken = RpcChannel("broken")
+    broken = RpcChannel(namespace="broken")
 
-    @broken.socket()
+    @socket_of(broken)
     async def invalid(message: Ping) -> Pong:
         response = Pong(value=1)
         response.value = "secret"  # type: ignore[assignment]
@@ -255,10 +257,10 @@ type Incoming = Annotated[Ping | Pong, Field(discriminator="type")]
 
 
 async def test_discriminated_unions_are_preserved() -> None:
-    union = RpcChannel("union")
+    union = RpcChannel(namespace="union")
     received = []
 
-    @union.socket()
+    @socket_of(union)
     async def handle(message: Incoming) -> Pong:
         received.append(message)
         return Pong(value=5)
@@ -280,9 +282,9 @@ class AliasedOutput(BaseModel):
 
 
 async def test_serialization_aliases_and_serializers_define_the_output() -> None:
-    channel = RpcChannel("aliases")
+    channel = RpcChannel(namespace="aliases")
 
-    @channel.socket()
+    @socket_of(channel)
     async def handle(message: Ping) -> AliasedOutput:
         return AliasedOutput(value=3)
 
@@ -303,35 +305,38 @@ async def test_serialization_aliases_and_serializers_define_the_output() -> None
 def test_typed_sockets_reject_incompatible_framing_and_encoding() -> None:
     with pytest.raises(ProtocolDefinitionError, match="text"):
 
-        @RpcChannel("binary").socket(messages=(RpcMessageType.BINARY,))
+        @socket_of(RpcChannel(namespace="binary"), messages=(RpcMessageType.BINARY,))
         async def binary(message: Ping) -> Pong: ...
 
     with pytest.raises(ProtocolDefinitionError, match="JSON"):
 
-        @RpcChannel("encoding").socket(protocol=RpcSocketProtocol("x", encoding="cbor"))
+        @socket_of(
+            RpcChannel(namespace="encoding"),
+            protocol=RpcSocketProtocol("x", encoding="cbor"),
+        )
         async def cbor(message: Ping) -> Pong: ...
 
 
 def test_message_handler_annotations_and_parameters_are_required() -> None:
     with pytest.raises(ProtocolDefinitionError, match="concrete"):
 
-        @RpcChannel("unknown").socket()
+        @socket_of(RpcChannel(namespace="unknown"))
         async def unknown(message: Any) -> Pong: ...
 
     with pytest.raises(ProtocolDefinitionError, match="return annotations"):
 
-        @RpcChannel("missing").socket()
+        @socket_of(RpcChannel(namespace="missing"))
         async def missing(message: Ping): ...
 
     with pytest.raises(ProtocolDefinitionError, match="required"):
 
-        @RpcChannel("default").socket()
+        @socket_of(RpcChannel(namespace="default"))
         async def default(message: int = 0) -> int:
             return message
 
     with pytest.raises(ProtocolDefinitionError, match="passable by name"):
 
-        @RpcChannel("positional").socket()
+        @socket_of(RpcChannel(namespace="positional"))
         async def positional(message: Ping, /) -> Pong: ...
 
     with pytest.raises(ProtocolDefinitionError, match="also be a path variable"):
@@ -344,7 +349,7 @@ def test_message_handler_signature_preserves_both_directions(tmp_path: Path) -> 
         """
 from typing import Literal, assert_type
 from pydantic import BaseModel
-from fastapi_canon.integrations.websockets import RpcChannel
+from fastapi_canon import APIRouter
 
 class Ping(BaseModel):
     type: Literal["ping"] = "ping"
@@ -352,9 +357,9 @@ class Ping(BaseModel):
 class Pong(BaseModel):
     type: Literal["pong"] = "pong"
 
-channel = RpcChannel("messages")
+router = APIRouter(namespace="messages")
 
-@channel.socket()
+@router.socket("/messages")
 async def handler(message: Ping) -> Pong:
     assert_type(message, Ping)
     return Ping()

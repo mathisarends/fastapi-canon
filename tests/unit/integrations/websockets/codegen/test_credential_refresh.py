@@ -23,7 +23,7 @@ async def test_expiry_refreshes_python_headers_or_stops_on_denial(
     client_module, expiry_clock, reject_refresh
 ):
     headers_seen, states = [], asyncio.Queue()
-    channel = RpcChannel("greeting")
+    channel = RpcChannel(namespace="greeting")
 
     class Params(BaseModel):
         name: str

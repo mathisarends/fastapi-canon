@@ -13,8 +13,8 @@ from automation_client.internal import (
 
 
 class ServerName(StrEnum):
-    PRODUCTION = "production"
     BROWSER = "browser"
+    PRODUCTION = "production"
     STREAMING = "streaming"
 
 
@@ -26,9 +26,9 @@ class Endpoint:
 
 
 _SERVERS = {
-    ServerName.PRODUCTION: RpcServerInfo(
-        name="production",
-        url="wss://{host}/automation/rpc",
+    ServerName.BROWSER: RpcServerInfo(
+        name="browser",
+        url="wss://{host}/browser/rpc",
         variables={
             "host": RpcServerVariable(
                 default="api.example.com",
@@ -40,9 +40,9 @@ _SERVERS = {
             options={"frameType": "text"},
         ),
     ),
-    ServerName.BROWSER: RpcServerInfo(
-        name="browser",
-        url="wss://{host}/browser/rpc",
+    ServerName.PRODUCTION: RpcServerInfo(
+        name="production",
+        url="wss://{host}/automation/rpc",
         variables={
             "host": RpcServerVariable(
                 default="api.example.com",
@@ -89,24 +89,24 @@ def endpoint(
     )
 
 
-def production(
-    *,
-    host: str = "api.example.com",
-) -> Endpoint:
-    return endpoint(
-        ServerName.PRODUCTION,
-        {
-            "host": host,
-        },
-    )
-
-
 def browser(
     *,
     host: str = "api.example.com",
 ) -> Endpoint:
     return endpoint(
         ServerName.BROWSER,
+        {
+            "host": host,
+        },
+    )
+
+
+def production(
+    *,
+    host: str = "api.example.com",
+) -> Endpoint:
+    return endpoint(
+        ServerName.PRODUCTION,
         {
             "host": host,
         },

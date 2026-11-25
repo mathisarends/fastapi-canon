@@ -88,7 +88,7 @@ def test_observer_module_is_removed():
 def test_observer_registration_is_removed(factory):
     from fastapi_canon.integrations.websockets import RpcChannel
 
-    channel = RpcChannel("test")
+    channel = RpcChannel(namespace="test")
     with pytest.raises(TypeError, match="observer"):
         if factory == "service":
             RpcDefinition(observer=object())

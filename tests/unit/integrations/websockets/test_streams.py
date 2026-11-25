@@ -4,8 +4,8 @@ from contextlib import asynccontextmanager
 from uuid import UUID
 
 import pytest
+from fastapi_canon import Inject
 from fastapi_canon.integrations.websockets import (
-    Inject,
     ProtocolDefinitionError,
     RpcBinaryInput,
     RpcBinaryOutput,
@@ -61,7 +61,7 @@ def _service(*streams, path: str = "/stream") -> RpcDefinition:
 
 
 def test_direction_is_derived_from_the_handler_signature() -> None:
-    channel = RpcChannel("media")
+    channel = RpcChannel(namespace="media")
 
     @channel.stream()
     async def generated() -> AsyncIterator[bytes]:
@@ -89,7 +89,7 @@ def test_direction_is_derived_from_the_handler_signature() -> None:
 
 
 def test_generator_with_input_points_to_the_coroutine_form() -> None:
-    channel = RpcChannel("media")
+    channel = RpcChannel(namespace="media")
 
     with pytest.raises(ProtocolDefinitionError, match=r"await output.send"):
 
@@ -99,7 +99,7 @@ def test_generator_with_input_points_to_the_coroutine_form() -> None:
 
 
 def test_input_content_type_requires_input() -> None:
-    channel = RpcChannel("media")
+    channel = RpcChannel(namespace="media")
 
     with pytest.raises(ProtocolDefinitionError, match="input_content_type"):
 
@@ -109,7 +109,7 @@ def test_input_content_type_requires_input() -> None:
 
 
 def test_coroutine_streams_need_binary_input_or_output() -> None:
-    channel = RpcChannel("media")
+    channel = RpcChannel(namespace="media")
 
     with pytest.raises(ProtocolDefinitionError, match="RpcBinaryInput and/or"):
 
@@ -118,7 +118,7 @@ def test_coroutine_streams_need_binary_input_or_output() -> None:
 
 
 def test_stream_path_parameters_must_be_path_variables() -> None:
-    channel = RpcChannel("media")
+    channel = RpcChannel(namespace="media")
 
     @channel.stream()
     async def upload(session_id: UUID, frames: Inject[RpcBinaryInput]) -> None: ...
@@ -128,7 +128,7 @@ def test_stream_path_parameters_must_be_path_variables() -> None:
 
 
 def test_stream_path_parameters_reject_models() -> None:
-    channel = RpcChannel("media")
+    channel = RpcChannel(namespace="media")
 
     with pytest.raises(ProtocolDefinitionError, match="path variable"):
 
@@ -138,7 +138,7 @@ def test_stream_path_parameters_reject_models() -> None:
 
 
 def test_contract_describes_direction_and_input_content_type() -> None:
-    channel = RpcChannel("media")
+    channel = RpcChannel(namespace="media")
 
     @channel.stream(input_content_type="audio/pcm")
     async def upload(frames: Inject[RpcBinaryInput]) -> None: ...
@@ -171,7 +171,7 @@ def test_contract_describes_direction_and_input_content_type() -> None:
 
 
 async def test_client_to_server_frames_arrive_in_order_until_end() -> None:
-    channel = RpcChannel("uploads")
+    channel = RpcChannel(namespace="uploads")
     recording = Recording()
 
     @channel.stream()
@@ -194,7 +194,7 @@ async def test_client_to_server_frames_arrive_in_order_until_end() -> None:
 
 
 async def test_bidirectional_output_continues_after_input_end() -> None:
-    channel = RpcChannel("voice")
+    channel = RpcChannel(namespace="voice")
 
     @channel.stream()
     async def echo(
@@ -214,7 +214,7 @@ async def test_bidirectional_output_continues_after_input_end() -> None:
 
 
 async def test_bidirectional_input_and_output_run_concurrently() -> None:
-    channel = RpcChannel("voice")
+    channel = RpcChannel(namespace="voice")
 
     @channel.stream()
     async def echo(
@@ -233,7 +233,7 @@ async def test_bidirectional_input_and_output_run_concurrently() -> None:
 
 
 async def test_push_based_output_without_input() -> None:
-    channel = RpcChannel("media")
+    channel = RpcChannel(namespace="media")
 
     @channel.stream()
     async def ticks(output: Inject[RpcBinaryOutput]) -> None:
@@ -260,7 +260,7 @@ async def test_push_based_output_without_input() -> None:
     ],
 )
 async def test_invalid_input_is_a_protocol_error(frames, expected) -> None:
-    channel = RpcChannel("uploads")
+    channel = RpcChannel(namespace="uploads")
 
     @channel.stream()
     async def upload(frames: Inject[RpcBinaryInput]) -> None:
@@ -278,7 +278,7 @@ async def test_invalid_input_is_a_protocol_error(frames, expected) -> None:
 
 
 async def test_input_on_a_server_to_client_stream_is_a_protocol_error() -> None:
-    channel = RpcChannel("media")
+    channel = RpcChannel(namespace="media")
 
     @channel.stream()
     async def frames() -> AsyncIterator[bytes]:
@@ -294,7 +294,7 @@ async def test_input_on_a_server_to_client_stream_is_a_protocol_error() -> None:
 
 
 async def test_oversized_input_frames_close_the_stream() -> None:
-    channel = RpcChannel("uploads")
+    channel = RpcChannel(namespace="uploads")
 
     @channel.stream()
     async def upload(frames: Inject[RpcBinaryInput]) -> None:
@@ -310,7 +310,7 @@ async def test_oversized_input_frames_close_the_stream() -> None:
 
 @pytest.mark.parametrize("code", [RpcConnectionClose.NORMAL, 1006])
 async def test_disconnect_before_end_aborts_the_handler(code) -> None:
-    channel = RpcChannel("uploads")
+    channel = RpcChannel(namespace="uploads")
     recording = Recording()
 
     @channel.stream()
@@ -333,7 +333,7 @@ async def test_disconnect_before_end_aborts_the_handler(code) -> None:
 
 
 async def test_reader_applies_backpressure_with_a_bounded_queue() -> None:
-    channel = RpcChannel("uploads")
+    channel = RpcChannel(namespace="uploads")
     gate = asyncio.Event()
     received: list[bytes] = []
 
@@ -360,7 +360,7 @@ async def test_reader_applies_backpressure_with_a_bounded_queue() -> None:
 
 
 async def test_path_variables_are_validated_and_typed() -> None:
-    channel = RpcChannel("voice")
+    channel = RpcChannel(namespace="voice")
     seen: list[UUID] = []
 
     @channel.stream()
@@ -386,7 +386,7 @@ async def test_path_variables_are_validated_and_typed() -> None:
 
 
 async def test_ownership_recipe_refuses_a_second_connection() -> None:
-    channel = RpcChannel("voice")
+    channel = RpcChannel(namespace="voice")
 
     @channel.stream()
     async def media(
@@ -428,7 +428,7 @@ async def test_ownership_recipe_refuses_a_second_connection() -> None:
 
 
 async def test_handler_failures_close_with_internal_error() -> None:
-    channel = RpcChannel("uploads")
+    channel = RpcChannel(namespace="uploads")
 
     @channel.stream()
     async def upload(frames: Inject[RpcBinaryInput]) -> None:
@@ -444,7 +444,7 @@ async def test_handler_failures_close_with_internal_error() -> None:
 
 
 async def test_stream_handler_can_request_a_close() -> None:
-    channel = RpcChannel("media")
+    channel = RpcChannel(namespace="media")
 
     @channel.stream()
     async def frames() -> AsyncIterator[bytes]:
@@ -462,7 +462,7 @@ async def test_stream_error_mapper_maps_close_reason() -> None:
     class MissingError(RpcError):
         pass
 
-    channel = RpcChannel("media")
+    channel = RpcChannel(namespace="media")
 
     @channel.stream()
     async def frames() -> AsyncIterator[bytes]:
@@ -508,7 +508,7 @@ class AccessRevoked(Exception):
 async def test_stream_failures_close_with_mapped_rejections(
     rejections, expected
 ) -> None:
-    channel = RpcChannel("media")
+    channel = RpcChannel(namespace="media")
 
     @channel.stream()
     async def frames() -> AsyncIterator[bytes]:
@@ -523,7 +523,7 @@ async def test_stream_failures_close_with_mapped_rejections(
 
 
 async def test_stream_raising_a_rejection_closes_with_its_code() -> None:
-    channel = RpcChannel("media")
+    channel = RpcChannel(namespace="media")
 
     @channel.stream()
     async def frames() -> AsyncIterator[bytes]:
@@ -535,7 +535,7 @@ async def test_stream_raising_a_rejection_closes_with_its_code() -> None:
 
 
 async def test_failing_rejection_mapper_closes_with_internal_error() -> None:
-    channel = RpcChannel("media")
+    channel = RpcChannel(namespace="media")
 
     @channel.stream()
     async def frames() -> AsyncIterator[bytes]:
@@ -553,7 +553,7 @@ async def test_failing_rejection_mapper_closes_with_internal_error() -> None:
 
 
 async def test_output_after_close_raises_instead_of_hanging() -> None:
-    channel = RpcChannel("media")
+    channel = RpcChannel(namespace="media")
     errors: list[Exception] = []
 
     @channel.stream()

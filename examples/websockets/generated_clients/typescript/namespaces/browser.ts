@@ -12,7 +12,11 @@ import {
 } from "../streams.js";
 import { Socket, sockets, resolveSocketEndpoint } from "../sockets.js";
 import { routes } from "../routes.js";
-import type { OpenTabParams, StartScreencastParams, Tab } from "../models.js";
+import type {
+  BrowserScreencastStartParams,
+  BrowserTabsOpenParams,
+  Tab,
+} from "../models.js";
 
 export class BrowserTabs {
   readonly #rpc: RpcClientCore;
@@ -21,7 +25,10 @@ export class BrowserTabs {
   }
 
   /** Open a browser tab. */
-  open(params: OpenTabParams, options?: RpcRequestOptions): Promise<Tab> {
+  open(
+    params: BrowserTabsOpenParams,
+    options?: RpcRequestOptions,
+  ): Promise<Tab> {
     return this.#rpc.request(routes.browserTabsOpen, params, options);
   }
 }
@@ -34,10 +41,21 @@ export class BrowserScreencast {
 
   /** Start the browser screencast. */
   async start(
-    params: StartScreencastParams = {},
+    params: BrowserScreencastStartParams = {},
     options?: RpcRequestOptions,
   ): Promise<void> {
     await this.#rpc.request(routes.browserScreencastStart, params, options);
+  }
+
+  /** Receive frames while sending input events back. */
+  control(): Promise<BinaryChannel> {
+    return this.#rpc.openStream(
+      resolveStreamEndpoint(
+        binaryStreams.browserScreencastControl,
+        this.#rpc.variables,
+      ),
+      (transport) => new BinaryChannel(transport),
+    );
   }
 
   /** Raw screencast frames as binary WebSocket messages. */
@@ -59,17 +77,6 @@ export class BrowserScreencast {
         this.#rpc.variables,
       ),
       (transport) => new BinarySender(transport),
-    );
-  }
-
-  /** Receive frames while sending input events back. */
-  control(): Promise<BinaryChannel> {
-    return this.#rpc.openStream(
-      resolveStreamEndpoint(
-        binaryStreams.browserScreencastControl,
-        this.#rpc.variables,
-      ),
-      (transport) => new BinaryChannel(transport),
     );
   }
 }

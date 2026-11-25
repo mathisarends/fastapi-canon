@@ -1,20 +1,19 @@
-from fastapi_canon.integrations.websockets import (
-    CanonWebSocketRouter,
-    RpcChannel,
-    RpcModel,
-)
+from fastapi import FastAPI
+from fastapi_canon import APIRouter, Composition, Feature, export_contracts
+from fastapi_canon.integrations.websockets import RpcChannel
+from pydantic import BaseModel
 
 
-class StatusResult(RpcModel):
+class StatusResult(BaseModel):
     status: str
 
 
-class ProfileResult(RpcModel):
+class ProfileResult(BaseModel):
     name: str
 
 
-system = RpcChannel("system")
-account = RpcChannel("account")
+system = RpcChannel(namespace="system")
+account = RpcChannel(namespace="account")
 
 
 @system.method()
@@ -27,15 +26,22 @@ async def profile() -> ProfileResult:
     return ProfileResult(name="Mathis")
 
 
-app = CanonWebSocketRouter(version=2)
-app.socket("/rpc", channels=(system, account))
+session = RpcChannel()
+session.include_channel(system)
+session.include_channel(account)
+
+router = APIRouter()
+router.include_channel(session, path="/rpc", version=2)
+app = Composition(features=[Feature(name="service", routers=[router])]).build(
+    FastAPI(title="Service")
+)
 
 
 def main() -> None:
-    protocol = app.freeze()
-    print(f"Protocol version: {protocol.version}")
-    for method in protocol.methods:
-        print(method.name)
+    contract = export_contracts(app, kinds=("openrpc",)).openrpc
+    assert contract is not None
+    for method in contract["methods"]:
+        print(method["name"])
 
 
 if __name__ == "__main__":

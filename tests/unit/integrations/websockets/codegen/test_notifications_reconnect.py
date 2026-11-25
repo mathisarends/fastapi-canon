@@ -65,7 +65,7 @@ class Notifications:
 async def test_passive_events_resume_against_a_real_served_endpoint(client_module):
     events = asyncio.Queue()
     states = asyncio.Queue()
-    channel = RpcChannel("events")
+    channel = RpcChannel(namespace="events")
 
     class Update(BaseModel):
         value: int

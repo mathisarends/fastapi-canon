@@ -62,7 +62,7 @@ class IncrementResult(BaseModel):
 
 def create_app() -> FastAPI:
     router = APIRouter()
-    channel = RpcChannel("counter")
+    channel = RpcChannel(namespace="counter")
 
     @router.post("/counter", operation_id="increment_counter")
     async def increment_http(

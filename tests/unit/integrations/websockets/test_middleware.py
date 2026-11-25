@@ -11,7 +11,6 @@ import pytest
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.testclient import TestClient
 from fastapi_canon.integrations.websockets import (
-    CanonWebSocketRouter,
     RpcChannel,
     RpcConnectionClose,
     RpcConnectionScope,
@@ -19,6 +18,9 @@ from fastapi_canon.integrations.websockets import (
     RpcRejection,
     RpcRequestScope,
     RpcStreamScope,
+)
+from fastapi_canon.integrations.websockets.adapters.fastapi import (
+    CanonWebSocketRouter,
     serve_websocket,
 )
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
@@ -43,7 +45,7 @@ async def test_unregistered_middleware_allocates_no_operation_scopes(monkeypatch
         for name in names:
             monkeypatch.setattr(module, name, unexpected_scope)
 
-    channel = RpcChannel("demo")
+    channel = RpcChannel(namespace="demo")
 
     @channel.method()
     async def ping() -> str:
@@ -87,7 +89,7 @@ async def test_unregistered_middleware_allocates_no_operation_scopes(monkeypatch
 
 
 async def test_nested_uninstrumented_connection_restores_outer_scope():
-    child_channel = RpcChannel("child")
+    child_channel = RpcChannel(namespace="child")
 
     @child_channel.method()
     async def ping() -> str:
@@ -99,7 +101,7 @@ async def test_nested_uninstrumented_connection_restores_outer_scope():
     child_service = RpcDefinition()
     child_service.socket("/child", channels=[child_channel])
     recorder = Recorder()
-    channel = RpcChannel("parent")
+    channel = RpcChannel(namespace="parent")
 
     @channel.stream()
     async def frames() -> AsyncIterator[bytes]:
@@ -130,7 +132,7 @@ async def test_uninstrumented_fastapi_rejection_does_not_update_outer_scope():
         raise ValueError("Access denied")
 
     child = RpcDefinition().socket(
-        "/child", channels=[RpcChannel("child")], context=str
+        "/child", channels=[RpcChannel(namespace="child")], context=str
     )
     router = CanonWebSocketRouter(
         context=authenticate, rejections={ValueError: RpcRejection.FORBIDDEN}
@@ -147,7 +149,7 @@ async def test_uninstrumented_fastapi_rejection_does_not_update_outer_scope():
         messages.append(message)
 
     outer = RpcDefinition(middleware=[Recorder()]).socket(
-        "/outer", channels=[RpcChannel("outer")]
+        "/outer", channels=[RpcChannel(namespace="outer")]
     )
     # Verify context-variable restoration across nested scopes and cancellation.
     async with middleware_module.serving_scope(
@@ -212,7 +214,7 @@ async def test_batch_scopes_are_isolated_and_ordered():
     order = []
     outer = Recorder("outer", order)
     inner = Recorder("inner", order)
-    channel = RpcChannel("batch")
+    channel = RpcChannel(namespace="batch")
     entered = 0
     both = asyncio.Event()
 
@@ -250,7 +252,7 @@ async def test_service_endpoint_and_serving_middleware_compose_once():
         adapter, service, endpoint = [
             Recorder(name, order) for name in ("adapter", "service", "endpoint")
         ]
-        channel = RpcChannel("demo")
+        channel = RpcChannel(namespace="demo")
 
         @channel.method()
         async def ping() -> str:
@@ -278,7 +280,7 @@ async def test_service_endpoint_and_serving_middleware_compose_once():
 
 async def test_notifications_invalid_json_and_invalid_batches_have_outcomes():
     recorder = Recorder()
-    channel = RpcChannel("demo")
+    channel = RpcChannel(namespace="demo")
 
     @channel.method()
     async def broken() -> None:
@@ -310,7 +312,7 @@ async def test_request_cancellation_finishes_all_middleware(with_middleware):
                 finally:
                     finished.append(scope.outcome)
 
-        channel = RpcChannel("demo")
+        channel = RpcChannel(namespace="demo")
 
         @channel.method()
         async def wait() -> None:
@@ -338,7 +340,7 @@ async def test_stream_cleanup_and_cancellation(cancel):
     async with asyncio.timeout(10):
         recorder = Recorder()
         released = []
-        channel = RpcChannel("media")
+        channel = RpcChannel(namespace="media")
 
         @channel.stream()
         async def frames() -> AsyncIterator[bytes]:
@@ -369,7 +371,7 @@ async def test_stream_cleanup_and_cancellation(cancel):
 
 async def test_handshake_rejection_is_observed():
     recorder = Recorder()
-    channel = RpcChannel("media")
+    channel = RpcChannel(namespace="media")
 
     @channel.stream()
     async def frames() -> AsyncIterator[bytes]:
@@ -392,7 +394,7 @@ async def test_middleware_failures_cannot_replace_a_response(caplog):
             yield
             raise RuntimeError("exit failed")
 
-    channel = RpcChannel("demo")
+    channel = RpcChannel(namespace="demo")
 
     @channel.method()
     async def ping() -> str:
@@ -408,7 +410,7 @@ async def test_middleware_failures_cannot_replace_a_response(caplog):
 
 def test_fastapi_observes_context_rejections_and_does_not_enter_twice():
     recorder = Recorder()
-    channel = RpcChannel("demo")
+    channel = RpcChannel(namespace="demo")
 
     @channel.method()
     async def ping() -> str:
@@ -463,7 +465,7 @@ async def test_structural_middleware_needs_no_observer_methods():
         def stream(self, scope):
             return nullcontext()
 
-    channel = RpcChannel("demo")
+    channel = RpcChannel(namespace="demo")
 
     @channel.method()
     async def ping() -> str:
@@ -484,7 +486,7 @@ async def test_partial_middleware_entry_cancellation_unwinds_entered_scopes():
             raise asyncio.CancelledError()
             yield
 
-    channel = RpcChannel("demo")
+    channel = RpcChannel(namespace="demo")
 
     @channel.method()
     async def ping() -> str:
@@ -514,7 +516,7 @@ async def test_stream_generator_and_di_cleanup_errors_are_observed():
                     cleanup.append("di")
                     raise ValueError("DI cleanup failed")
 
-        channel = RpcChannel("media")
+        channel = RpcChannel(namespace="media")
 
         @channel.stream()
         async def frames() -> AsyncIterator[bytes]:
@@ -540,7 +542,7 @@ async def test_stream_generator_and_di_cleanup_errors_are_observed():
 def test_custom_handlers_report_accepted_connections_and_close_codes(peer_disconnect):
     recorder = Recorder()
     endpoint = RpcDefinition(middleware=[recorder]).socket(
-        "/rpc", channels=[RpcChannel("demo")]
+        "/rpc", channels=[RpcChannel(namespace="demo")]
     )
 
     async def handler(websocket: WebSocket) -> None:
@@ -592,7 +594,7 @@ def test_custom_handlers_support_activity_callbacks_on_middleware(with_instrumen
 
     endpoint = RpcDefinition(
         middleware=[Instrumentation()] if with_instrumentation else []
-    ).socket("/rpc", channels=[RpcChannel("demo")])
+    ).socket("/rpc", channels=[RpcChannel(namespace="demo")])
 
     async def handler(websocket: WebSocket) -> None:
         if not with_instrumentation:
@@ -628,7 +630,7 @@ def test_custom_handlers_compose_delegated_middleware_once(stream, registered, s
     order = []
     configured = Recorder("configured", order)
     delegated = configured if shared else Recorder("delegated", order)
-    channel = RpcChannel("demo")
+    channel = RpcChannel(namespace="demo")
     rpc = RpcDefinition(middleware=[configured] if registered else [])
 
     @channel.method()
@@ -675,7 +677,7 @@ async def test_custom_handlers_report_cancellation_and_failed_acceptance(cancel)
     async with asyncio.timeout(10):
         recorder = Recorder()
         endpoint = RpcDefinition(middleware=[recorder]).socket(
-            "/rpc", channels=[RpcChannel("demo")]
+            "/rpc", channels=[RpcChannel(namespace="demo")]
         )
         accepted = asyncio.Event()
         failure = RuntimeError("accept failed")

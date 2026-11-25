@@ -7,8 +7,8 @@ from dishka import Provider, Scope, provide
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketException
 from pydantic import BaseModel
 
-from fastapi_canon import APIRouter, Composition, Error, Feature
-from fastapi_canon.integrations.websockets import Inject, RpcChannel, RpcRejection
+from fastapi_canon import APIRouter, Composition, Error, Feature, Inject
+from fastapi_canon.integrations.websockets import RpcChannel, RpcRejection
 from fastapi_canon.integrations.websockets.adapters.dishka import Dishka
 from fastapi_canon.integrations.websockets.testing import (
     RpcTestClient,
@@ -54,7 +54,7 @@ async def test_composed_asgi_client_runs_auth_di_errors_and_cleanup(
     mounted: bool,
 ) -> None:
     events: list[str] = []
-    channel = RpcChannel("items")
+    channel = RpcChannel(namespace="items")
     missing = Error(Missing, status=404, code="missing", title="Missing")
 
     @channel.method(raises=[missing])
@@ -136,12 +136,14 @@ async def test_http_handshake_denial_keeps_the_production_status_and_body() -> N
     async def deny() -> str:
         raise HTTPException(401, "sign in")
 
-    router = APIRouter()
-    channel = router.channel("/rpc", context=deny)
+    channel = RpcChannel()
 
-    @channel.method
+    @channel.method()
     async def ping() -> str:
         return "pong"
+
+    router = APIRouter()
+    router.include_channel(channel, path="/rpc", context=deny)
 
     async with asyncio.timeout(5), RpcTestClient(router, "/rpc") as client:
         with pytest.raises(RpcTestConnectionClosed):
@@ -153,7 +155,7 @@ async def test_http_handshake_denial_keeps_the_production_status_and_body() -> N
 
 
 async def test_rpc_error_propagates_through_the_application_lifespan() -> None:
-    channel = RpcChannel("items")
+    channel = RpcChannel(namespace="items")
     missing = Error(Missing, status=404, code="missing", title="Missing")
 
     @channel.method(raises=[missing])
@@ -178,7 +180,7 @@ async def test_rpc_error_propagates_through_the_application_lifespan() -> None:
 
 
 async def test_asgi_application_failure_unblocks_pending_requests() -> None:
-    channel = RpcChannel("items")
+    channel = RpcChannel(namespace="items")
 
     @channel.method
     async def ping() -> str:

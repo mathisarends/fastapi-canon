@@ -26,8 +26,8 @@ def test_one_router_exports_http_sse_rpc_and_webrtc_with_effective_paths() -> No
         called.append("sse")
         yield project_id
 
-    projects = RpcChannel()
-    tasks = RpcChannel()
+    projects = RpcChannel(namespace="projects")
+    tasks = RpcChannel(namespace="tasks")
 
     @projects.method("rename")
     async def rename() -> None:
@@ -38,8 +38,8 @@ def test_one_router_exports_http_sse_rpc_and_webrtc_with_effective_paths() -> No
         called.append("rpc")
 
     session = RpcChannel()
-    session.include_channel(projects, namespace="projects")
-    session.include_channel(tasks, namespace="tasks")
+    session.include_channel(projects)
+    session.include_channel(tasks)
     router.include_channel(session, path="/{project_id}/session")
 
     rtc = WebRtcRouter(prefix="/projects")
@@ -82,8 +82,8 @@ def test_one_router_exports_http_sse_rpc_and_webrtc_with_effective_paths() -> No
 
 
 def test_multiple_channel_endpoints_with_the_same_suffix_export_separately() -> None:
-    projects = RpcChannel()
-    tasks = RpcChannel()
+    projects = RpcChannel(namespace="projects")
+    tasks = RpcChannel(namespace="tasks")
 
     @projects.method("rename")
     async def rename() -> None:
@@ -94,8 +94,8 @@ def test_multiple_channel_endpoints_with_the_same_suffix_export_separately() -> 
         return None
 
     router = APIRouter(prefix="/projects")
-    router.include_channel(projects, path="/{project_id}/session", namespace="projects")
-    router.include_channel(tasks, path="/{project_id}/tasks/session", namespace="tasks")
+    router.include_channel(projects, path="/{project_id}/session")
+    router.include_channel(tasks, path="/{project_id}/tasks/session")
     app = FastAPI()
     app.include_router(router)
     contract = export_contracts(app, kinds=["openrpc"]).openrpc

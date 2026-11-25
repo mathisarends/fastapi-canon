@@ -49,8 +49,6 @@ async def ping(message: Ping) -> Pong:
 `@router.socket` declares typed and untyped socket handlers with the connection
 options of `include_channel`, plus `protocol=`, `messages=` and `closes=`. The
 operation name is the router's namespace plus the function name (`messages.ping`).
-Handlers declared on an `RpcChannel` with `@channel.socket(...)` still mount with
-`CanonWebSocketRouter().socket(path, ping)`.
 
 The first parameter without `Inject[...]` is the incoming message; its name is
 not significant. Further non-injected parameters are path variables. Message
@@ -136,13 +134,14 @@ Declare incoming and outgoing JSON types in the injected socket annotation. The
 handler runs once per connection and owns its receive/send loop:
 
 ```python
-from fastapi_canon.integrations.websockets import Inject, RpcSocket
+from fastapi_canon import Inject
+from fastapi_canon.integrations.websockets import RpcSocket
 
 
 type PingSocket = RpcSocket[Ping, Pong]
 
 
-@channel.socket("session")
+@router.socket("/session")
 async def session(socket: Inject[PingSocket]) -> None:
     await socket.send(Pong(value=0))  # An unsolicited initial message.
     async for message in socket:
@@ -174,13 +173,11 @@ native client library through a protocol binding, inject bare `RpcSocket`.
 ```python
 import asyncio
 
+from fastapi_canon import APIRouter, Inject
 from fastapi_canon.integrations.websockets import (
-    Inject,
-    RpcChannel,
     RpcErrorBinding,
-    RpcSocket,
     RpcRejection,
-    CanonWebSocketRouter,
+    RpcSocket,
 )
 
 
@@ -199,10 +196,10 @@ CDP_UNAVAILABLE = RpcErrorBinding(
     message="Browser CDP unavailable",
 )
 
-browser = RpcChannel("browser")
+router = APIRouter(prefix="/browser", namespace="browser")
 
 
-@browser.socket("cdp", closes=(UNKNOWN_BROWSER, CDP_UNAVAILABLE))
+@router.socket("/cdp", closes=(UNKNOWN_BROWSER, CDP_UNAVAILABLE))
 async def cdp(socket: Inject[RpcSocket], browsers: Inject[BrowserService]) -> None:
     async with browsers.connect_page_cdp() as upstream:
 
@@ -215,10 +212,6 @@ async def cdp(socket: Inject[RpcSocket], browsers: Inject[BrowserService]) -> No
             async for message in upstream:
                 await socket.send(message)
             forwarding.cancel()
-
-
-app = CanonWebSocketRouter()
-app.socket("/browser/cdp", cdp)
 ```
 
 The handler is an async function that returns `None` and injects
@@ -226,12 +219,6 @@ The handler is an async function that returns `None` and injects
 mounted path becomes its own WebSocket endpoint. Handler parameters without
 `Inject[...]` are path variables, validated before the handshake is accepted,
 exactly as for [binary streams](streams.md#path-variables).
-
-`CanonWebSocketRouter.socket()` mounts both kinds of WebSocket endpoint. With
-`channels=...` it serves rpckit's managed JSON-RPC protocol. With a handler
-decorated by `@channel.socket()` it serves a socket whose messages belong to
-the handler. JSON-RPC-only options such as `error_mapper=`, `path_model=`, and
-`close_when_events_complete=` are rejected for socket handlers.
 
 `messages=` declares the accepted message types and defaults to
 `(RpcMessageType.TEXT, RpcMessageType.BINARY)`. fastapi_canon.integrations.websockets closes the socket with
@@ -257,7 +244,7 @@ CDP = RpcSocketProtocol(
 )
 
 
-@browser.socket("cdp", protocol=CDP, messages=(RpcMessageType.TEXT,))
+@router.socket("/cdp", protocol=CDP, messages=(RpcMessageType.TEXT,))
 async def cdp(socket: Inject[RpcSocket], browsers: Inject[BrowserService]) -> None: ...
 ```
 

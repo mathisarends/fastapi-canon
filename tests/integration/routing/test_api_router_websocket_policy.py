@@ -14,6 +14,7 @@ from fastapi_canon import APIRouter, Composition, Error, Feature, Inject
 from fastapi_canon.errors import ConfigurationError
 from fastapi_canon.integrations.websockets import (
     ProtocolDefinitionError,
+    RpcChannel,
     RpcConnectionScope,
     RpcErrorBinding,
     RpcMiddleware,
@@ -74,11 +75,13 @@ def test_policy_admits_each_connection_before_accepting_it(kind: str) -> None:
     router = APIRouter(prefix="/me", namespace="me", websocket_policy=policy)
     endpoint = {"middleware": [Recorder("endpoint", events)]}
     if kind == "channel":
-        session = router.channel("/session", **endpoint)
+        session = RpcChannel(namespace="me")
 
         @session.method()
         async def name(user: Inject[User]) -> str:
             return user.name
+
+        router.include_channel(session, path="/session", **endpoint)
 
     elif kind == "socket":
 

@@ -7,8 +7,8 @@ from urllib.parse import urlsplit
 from uuid import UUID
 
 import pytest
+from fastapi_canon import Inject
 from fastapi_canon.integrations.websockets import (
-    Inject,
     RpcBinaryInput,
     RpcBinaryOutput,
     RpcChannel,
@@ -36,8 +36,8 @@ class Recording:
         self.finished = asyncio.Event()
 
 
-uploads = RpcChannel("uploads")
-voice = RpcChannel("voice")
+uploads = RpcChannel(namespace="uploads")
+voice = RpcChannel(namespace="voice")
 
 
 @uploads.stream("audio", input_content_type="audio/pcm")

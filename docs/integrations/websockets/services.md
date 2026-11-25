@@ -10,32 +10,36 @@ independently addressable APIs while still producing one contract.
 
 ## Define a method
 
-Methods are async free functions. Their public input is either absent or one
-Pydantic model, and their return annotation describes the result.
+Methods are async free functions. As in FastAPI, the signature is the contract:
+
+- Named parameters form the `params` object. Their names are the wire names,
+  defaults make them optional and unknown names are rejected. Canon names the
+  generated params model after the operation, such as `TasksCreateParams`.
+- A single Pydantic model parameter is the whole `params` object.
+- `Annotated[T, Path()]` reads a path variable; see [mount endpoints](#mount-endpoints).
+- `Inject[T]` parameters are dependencies; see [dependency injection](dependencies.md).
+
+The return annotation describes the result.
 
 ```python
 from fastapi import FastAPI
+from pydantic import BaseModel
 
 from fastapi_canon import APIRouter, Composition, Feature, export_contracts
 from fastapi_canon.integrations.websockets import RpcChannel
-from fastapi_canon.integrations.websockets import RpcModel
 
 
-class CreateTask(RpcModel):
-    title: str
-
-
-class Task(RpcModel):
+class Task(BaseModel):
     id: int
     title: str
 
 
-tasks = RpcChannel("tasks")
+tasks = RpcChannel(namespace="tasks")
 
 
 @tasks.method()
-async def create(params: CreateTask) -> Task:
-    return Task(id=1, title=params.title)
+async def create(title: str, done: bool = False) -> Task:
+    return Task(id=1, title=title)
 
 
 @tasks.method()
@@ -62,17 +66,16 @@ async def list_tasks() -> list[Task]:
 ```
 
 If `summary` is omitted, the first line of the function docstring becomes the
-contract summary. Handlers may add any number of injected parameters after the
-optional params model; see [Dependency injection](dependencies.md).
+contract summary.
 
 ## Namespaces
 
-By default, the channel name is also its namespace. Set a different namespace,
-or use an empty one for root-level method names:
+Operation names are `<namespace>.<function_name>`. Omit the namespace for
+root-level names:
 
 ```python
-admin = RpcChannel("admin", namespace="internal.admin")
-system = RpcChannel("system", namespace="")
+admin = RpcChannel(namespace="internal.admin")
+system = RpcChannel()
 ```
 
 Channels, operations, and namespaces must remain unambiguous across a service.
@@ -93,12 +96,12 @@ Its concrete return annotation supplies the type available to handlers through
 from the shared Dishka container.
 
 To serve several channels on one socket, include them in a root channel and
-mount that:
+mount that. Included channels keep their namespace, prefixed with the parent's:
 
 ```python
-project = RpcChannel("project", namespace="")
-project.include_channel(tasks, namespace="tasks")
-project.include_channel(admin, namespace="internal.admin")
+project = RpcChannel()
+project.include_channel(tasks)  # tasks.create
+project.include_channel(admin)  # internal.admin.*
 
 router.include_channel(
     project,
@@ -110,15 +113,27 @@ router.include_channel(
 )
 ```
 
-Path variables are available from `RpcConnection.path_params`. Endpoint names
-identify servers in OpenRPC and generated clients; when omitted, the name is
-derived from the full path, such as `rpc_ws` for `/ws`.
+Read path variables with `Path()`. Canon validates them before accepting the
+connection and rejects parameters that are not variables of the mounted path:
+
+```python
+from typing import Annotated
+
+from fastapi import Path
+
+
+@tasks.method()
+async def archive(task_id: int, project_id: Annotated[int, Path()]) -> None: ...
+```
+
+Endpoint names identify servers in OpenRPC and generated clients; when omitted,
+the name is derived from the full path, such as `rpc_ws` for `/ws`.
 
 Use child channels for nested wire namespaces. Mount only the root; its children
 inherit declared errors and the resolver scope:
 
 ```python
-voice = RpcChannel("voice", raises=(ResourceNotFoundError,))
+voice = RpcChannel(namespace="voice", raises=(ResourceNotFoundError,))
 turn = voice.child("turn")
 
 
@@ -143,8 +158,7 @@ own `raises=` or `resolver_scope=`; local bindings override inherited bindings
 for the same domain exception. A dotted name uses its channel's
 configuration.
 
-For a standalone dotted namespace, the channel name can default to it:
-`RpcChannel(namespace="voice.turn")`.
+A namespace may itself be dotted, such as `RpcChannel(namespace="voice.turn")`.
 
 `include_channel` mounts a snapshot. Later registrations on the source channel
 do not change an endpoint that is already mounted.
@@ -341,22 +355,6 @@ This is a worker-local bound for one asyncio event loop. Multiple workers each
 own independent counters; use deployment connection limits or coordinated
 accounting when the required bound spans workers or hosts.
 
-## Use Pydantic directly
-
-`RpcModel` is fastapi_canon.integrations.websockets's strict Pydantic base model. Existing Pydantic
-`BaseModel` classes are supported too, so domain models do not need to inherit
-from `RpcModel` merely to appear in an RPC signature.
-Plain models retain their declared field names, validation/serialization aliases,
-nested model configuration, validators and extra-field policy. RPC does not clone
-them or install its own alias generator. For example, `project_id: int` stays
-`project_id` on the wire unless the model declares an alias.
-
-When migrating from automatic adaptation, use `RpcModel` to retain camel-case
-names and rejection of unknown fields, or configure that policy explicitly on
-the Pydantic model. Regenerate clients after choosing the wire contract. See
-[shared DTOs](../../06-codegen.md).
-
-[Back to documentation](../../04-websockets.md)
 ## Idempotent methods
 
 Declare `@channel.method(idempotent=True)` only when concurrent or repeated
@@ -365,3 +363,14 @@ execution with the same params has the same intended effect. The contract export
 false declarations leave methods non-idempotent. This is a service guarantee:
 fastapi_canon.integrations.websockets does not deduplicate requests or provide idempotency keys. Read operations
 often qualify; writes require careful service-level design.
+
+## Pydantic models
+
+Parameter and result models are plain Pydantic models. Their field names,
+aliases, validators and extra-field policy define the wire shape; RPC adds no
+alias generator. `project_id: int` stays `project_id` on the wire unless the
+model declares an alias. For camelCase wire names, give your models a shared
+base with `alias_generator=to_camel` and regenerate clients. See
+[shared DTOs](../../06-codegen.md).
+
+[Back to documentation](../../04-websockets.md)

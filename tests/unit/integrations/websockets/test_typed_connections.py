@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Any, Literal
 
 import pytest
+from fastapi_canon import Inject
 from fastapi_canon.integrations.websockets import (
-    Inject,
     ProtocolDefinitionError,
     RpcChannel,
     RpcConnectionClose,
@@ -19,6 +19,7 @@ from fastapi_canon.integrations.websockets import (
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
 from pydantic import BaseModel
 
+from tests.fixtures.websockets import socket_of
 from tests.unit.integrations.websockets.test_typed_sockets import Ping, Pong
 from tests.unit.integrations.websockets.testing import RpcTestClient
 
@@ -30,10 +31,10 @@ class Ready(BaseModel):
 type Output = Pong | Ready
 type SessionSocket = RpcSocket[Ping, Output]
 
-channel = RpcChannel("sessions")
+channel = RpcChannel(namespace="sessions")
 
 
-@channel.socket()
+@socket_of(channel)
 async def session(socket: Inject[SessionSocket]) -> None:
     await socket.send(Ready())
     async for message in socket:
@@ -72,9 +73,9 @@ async def test_typed_connection_revalidates_mutated_output_and_releases_handler(
     None
 ):
     released = asyncio.Event()
-    local = RpcChannel("invalid")
+    local = RpcChannel(namespace="invalid")
 
-    @local.socket()
+    @socket_of(local)
     async def invalid(socket: Inject[RpcSocket[Ping, Pong]]) -> None:
         try:
             output = Pong(value=1)
@@ -109,9 +110,9 @@ async def test_typed_connection_keeps_one_scope_and_releases_it_on_disconnect() 
         finally:
             released.set()
 
-    local = RpcChannel("scoped", resolver_scope=scope)
+    local = RpcChannel(namespace="scoped", resolver_scope=scope)
 
-    @local.socket()
+    @socket_of(local)
     async def scoped(
         socket: Inject[RpcSocket[Ping, Pong]], multiplier: int, offset: Inject[Offset]
     ) -> None:
@@ -156,22 +157,25 @@ def test_typed_connection_exports_directional_schemas() -> None:
 def test_typed_connections_require_concrete_types_and_json_text() -> None:
     with pytest.raises(ProtocolDefinitionError, match="concrete"):
 
-        @RpcChannel("unknown").socket()
+        @socket_of(RpcChannel(namespace="unknown"))
         async def unknown(socket: Inject[RpcSocket[Any, Pong]]) -> None: ...
 
     with pytest.raises(ProtocolDefinitionError, match="concrete"):
 
-        @RpcChannel("unknown").socket()
+        @socket_of(RpcChannel(namespace="unknown"))
         async def unknown_output(socket: Inject[RpcSocket[Ping, Any]]) -> None: ...
 
     with pytest.raises(ProtocolDefinitionError, match="text"):
 
-        @RpcChannel("binary").socket(messages=(RpcMessageType.BINARY,))
+        @socket_of(RpcChannel(namespace="binary"), messages=(RpcMessageType.BINARY,))
         async def binary(socket: Inject[SessionSocket]) -> None: ...
 
     with pytest.raises(ProtocolDefinitionError, match="encoding"):
 
-        @RpcChannel("encoding").socket(protocol=RpcSocketProtocol("x", encoding="cbor"))
+        @socket_of(
+            RpcChannel(namespace="encoding"),
+            protocol=RpcSocketProtocol("x", encoding="cbor"),
+        )
         async def cbor(socket: Inject[SessionSocket]) -> None: ...
 
 
@@ -183,7 +187,8 @@ def test_connection_annotations_preserve_ide_types_and_reject_wrong_sends(
         """
 from typing import assert_type
 from pydantic import BaseModel
-from fastapi_canon.integrations.websockets import Inject, RpcChannel, RpcSocket
+from fastapi_canon import APIRouter, Inject
+from fastapi_canon.integrations.websockets import RpcSocket
 
 class Ping(BaseModel):
     value: int
@@ -192,7 +197,7 @@ class Pong(BaseModel):
 
 type Session = RpcSocket[Ping, Pong]
 
-@RpcChannel("sessions").socket()
+@APIRouter(namespace="sessions").socket("/session")
 async def session(socket: Inject[Session]) -> None:
     assert_type(await socket.receive(), Ping)
     async for message in socket:

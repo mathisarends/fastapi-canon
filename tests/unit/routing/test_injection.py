@@ -2,7 +2,6 @@ from typing import Annotated, get_args, get_type_hints
 
 from fastapi_canon import Inject
 from fastapi_canon.integrations.mcp import Inject as McpInject
-from fastapi_canon.integrations.websockets import Inject as RpcInject
 from fastapi_canon.routing.injection import (
     injected_dependency,
     injected_resolver_dependency,
@@ -13,7 +12,7 @@ type WrappedService = Annotated[Service, "other metadata"]
 
 
 def test_injection_is_shared_across_transports() -> None:
-    assert Inject is McpInject is RpcInject
+    assert Inject is McpInject
 
 
 def test_aliases_keep_the_dependency_type() -> None:

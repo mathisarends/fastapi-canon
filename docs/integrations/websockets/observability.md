@@ -20,33 +20,27 @@ providers. Without a configured SDK, the OTEL API uses its normal no-op behavior
 ```python
 from collections.abc import AsyncIterator
 
-from fastapi import FastAPI
-
-from fastapi_canon.integrations.websockets import RpcChannel, CanonWebSocketRouter
+from fastapi_canon import APIRouter
 from fastapi_canon.integrations.websockets.adapters.opentelemetry import OpenTelemetry
 
-media = RpcChannel("media")
+router = APIRouter(prefix="/media", namespace="media")
 
 
-@media.stream(content_type="application/octet-stream")
+@router.binary_stream(
+    "/frames",
+    content_type="application/octet-stream",
+    middleware=[OpenTelemetry()],
+)
 async def frames() -> AsyncIterator[bytes]:
     yield b"frame"
-
-
-rpc = CanonWebSocketRouter(middleware=[OpenTelemetry()])
-rpc.stream("/media/frames", frames)
-
-web = FastAPI()
-web.include_router(rpc)
 ```
 
-For a JSON-RPC channel, pass the middleware when mounting it:
+Channels and sockets take the same option:
 `router.include_channel(channel, path="/rpc", middleware=[OpenTelemetry()])`.
-Binary and raw endpoints such as the one above configure it on their
-`CanonWebSocketRouter`. Middleware wraps connection-context dependencies, RPC
-calls and binary or raw endpoints; endpoint-specific `middleware=` extends the
-router configuration. Low-level `serve_websocket()`
-and channel/endpoint `create_server()` also accept middleware.
+Middleware wraps connection-context dependencies, RPC calls and binary or raw
+endpoints. The low-level `serve_websocket()` in
+`fastapi_canon.integrations.websockets.adapters.fastapi` and channel/endpoint
+`create_server()` also accept middleware.
 
 ## Configure signals and providers
 

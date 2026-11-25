@@ -21,10 +21,10 @@ from fastapi_canon.integrations.websockets import RpcChannel
 from backend.features.projects.application import ProjectService
 
 from .errors import PROJECT_MISSING
-from .schemas import Project, ProjectEvent, RenameProject
+from .schemas import Project, ProjectEvent
 
 router = APIRouter(namespace="projects", prefix="/projects")
-channel = RpcChannel("projects")
+channel = RpcChannel(namespace="projects")
 
 
 @router.get("/events", response_class=EventSourceResponse)
@@ -36,16 +36,20 @@ async def events(
 
 
 @channel.method("rename", raises=[PROJECT_MISSING])
-async def rename(params: RenameProject, projects: Inject[ProjectService]) -> Project:
-    return await projects.rename(params.project_id, params.title)
+async def rename(
+    project_id: int, title: str, projects: Inject[ProjectService]
+) -> Project:
+    return await projects.rename(project_id, title)
 
 
 router.include_channel(channel, path="/rpc")
 ```
 
 The stream exports as `projects.events`. Router `namespace=` names HTTP/SSE
-operations; RPC names still come from `RpcChannel("projects")` and its declared
-methods. Follow the shared [operation naming rules](http-feature.md#operation-ids),
+operations; RPC names still come from `RpcChannel(namespace="projects")` and its declared
+methods. Like FastAPI bodies, one Pydantic model parameter is the whole params
+object; otherwise named parameters form it. Use `Annotated[T, Path()]` for path
+variables of the mounted endpoint. Follow the shared [operation naming rules](http-feature.md#operation-ids),
 including explicit overrides and collision handling.
 
 Declare channel operations before inclusion: each mount captures a snapshot.
@@ -93,8 +97,7 @@ backend.app:create_app --output-dir contracts` so effective paths and problem
 types match runtime. JSON-RPC problem data lives inside its protocol envelope.
 Binary streams and sockets are not JSON-RPC channels; they keep their own
 endpoints, framing and close rules. Mount them with
-`@router.binary_stream(path, ...)` and `@router.socket(path, ...)`. Declare a
-single JSON-RPC endpoint with `session = router.channel(path)`. See
+`@router.binary_stream(path, ...)` and `@router.socket(path, ...)`. See
 [integrations/websockets/services.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/integrations/websockets/services.md) and
 [problems.md](https://github.com/mathisarends/fastapi-canon/blob/main/docs/02-problems.md).
 

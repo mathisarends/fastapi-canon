@@ -7,8 +7,8 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from fastapi_canon import Inject
 from fastapi_canon.integrations.websockets import (
-    Inject,
     ProtocolDefinitionError,
     RpcChannel,
     RpcConnection,
@@ -19,13 +19,13 @@ from fastapi_canon.integrations.websockets import (
     RpcHandshake,
     RpcLimits,
     RpcMiddleware,
-    RpcModel,
     RpcRejection,
     RpcRequestCancelledError,
     RpcRequestTimeoutError,
 )
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
 
+from tests.fixtures.websockets import CamelModel
 from tests.unit.integrations.websockets.deadlines import ControlledDeadlines
 from tests.unit.integrations.websockets.testing import InMemorySocket, RpcTestClient
 
@@ -71,7 +71,7 @@ async def test_hung_calls_expire_including_queued_batch_item_and_release_capacit
     entered = asyncio.Queue()
     finished = []
     recorder = DeadlineRecorder()
-    channel = RpcChannel("deadlines")
+    channel = RpcChannel(namespace="deadlines")
 
     @channel.method()
     async def work() -> None:
@@ -132,7 +132,7 @@ async def test_cancel_bypasses_saturated_slots_preserves_id_types_and_cleans_sco
         async def resolve(self, dependency):
             return "dependency"
 
-    channel = RpcChannel("deadlines")
+    channel = RpcChannel(namespace="deadlines")
 
     @channel.method()
     async def work(value: Inject[str]) -> None:
@@ -198,7 +198,7 @@ async def test_cancel_bypasses_saturated_slots_preserves_id_types_and_cleans_sco
 
 
 async def test_same_batch_cancel_before_task_start_keeps_one_batch_response():
-    channel = RpcChannel("deadlines")
+    channel = RpcChannel(namespace="deadlines")
 
     @channel.method()
     async def work() -> None:
@@ -244,7 +244,7 @@ async def test_same_batch_cancel_before_task_start_keeps_one_batch_response():
 async def test_malformed_cancel_notifications_do_not_cancel_work(invalid):
     async with asyncio.timeout(10):
         entered, release = asyncio.Event(), asyncio.Event()
-        channel = RpcChannel("deadlines")
+        channel = RpcChannel(namespace="deadlines")
 
         @channel.method()
         async def work() -> str:
@@ -271,7 +271,7 @@ async def test_malformed_cancel_notifications_do_not_cancel_work(invalid):
 async def test_duplicate_in_flight_ids_close_without_overwriting_original(batch):
     async with asyncio.timeout(10):
         entered, stopped = asyncio.Event(), asyncio.Event()
-        channel = RpcChannel("deadlines")
+        channel = RpcChannel(namespace="deadlines")
 
         @channel.method()
         async def work() -> None:
@@ -311,7 +311,7 @@ async def test_cancel_is_processed_while_writer_and_outgoing_queue_are_full(inva
 
         entered, stopped = asyncio.Event(), asyncio.Event()
         recorder = DeadlineRecorder()
-        channel = RpcChannel("deadlines")
+        channel = RpcChannel(namespace="deadlines")
 
         @channel.method()
         async def work() -> None:
@@ -372,7 +372,7 @@ async def test_middleware_interruption_returns_and_observes_failure(
                     entered.set()
                     await asyncio.Future()
 
-        channel = RpcChannel("deadlines")
+        channel = RpcChannel(namespace="deadlines")
 
         @channel.method()
         async def work() -> int:
@@ -405,7 +405,7 @@ async def test_middleware_interruption_returns_and_observes_failure(
 
 
 async def test_boolean_batch_id_cannot_alias_a_valid_request_id():
-    channel = RpcChannel("deadlines")
+    channel = RpcChannel(namespace="deadlines")
     executions = []
 
     @channel.method()
@@ -427,7 +427,7 @@ async def test_boolean_batch_id_cannot_alias_a_valid_request_id():
 
 
 async def test_response_frames_from_the_client_are_invalid_requests():
-    channel = RpcChannel("deadlines")
+    channel = RpcChannel(namespace="deadlines")
 
     @channel.method()
     async def work() -> int:
@@ -465,7 +465,7 @@ async def test_shutdown_cancellation_releases_admission_without_cancelled_respon
         before = asyncio.all_tasks()
         entered, stopped = asyncio.Event(), asyncio.Event()
         recorder = DeadlineRecorder()
-        channel = RpcChannel("deadlines")
+        channel = RpcChannel(namespace="deadlines")
 
         @channel.method()
         async def work() -> None:
@@ -497,11 +497,11 @@ async def test_shutdown_cancellation_releases_admission_without_cancelled_respon
         assert not asyncio.all_tasks() - before
 
 
-class Params(RpcModel):
+class Params(CamelModel):
     value: str
 
 
-channel = RpcChannel("demo")
+channel = RpcChannel(namespace="demo")
 connections = []
 
 
@@ -576,7 +576,7 @@ async def test_client_close_information_is_exposed_on_the_connection() -> None:
 
 
 async def test_binary_stream() -> None:
-    streams = RpcChannel("streams")
+    streams = RpcChannel(namespace="streams")
 
     class StreamMetrics(RpcMiddleware):
         def __init__(self) -> None:
@@ -616,10 +616,10 @@ async def test_unsupported_subprotocol_is_rejected_before_acceptance() -> None:
 
 
 async def test_socket_path_model_is_validated_and_injected() -> None:
-    class RoomPath(RpcModel):
+    class RoomPath(CamelModel):
         room_id: UUID
 
-    room = RpcChannel("room")
+    room = RpcChannel(namespace="room")
 
     @room.method()
     async def get(path: Inject[RoomPath]) -> str:
@@ -641,7 +641,7 @@ async def test_socket_path_model_is_validated_and_injected() -> None:
 
 
 def test_socket_path_model_fields_must_match_template() -> None:
-    class WrongPath(RpcModel):
+    class WrongPath(CamelModel):
         other: UUID
 
     rpc = RpcDefinition()
@@ -701,7 +701,7 @@ async def test_pending_rejection_logs_are_bounded_even_at_debug(caplog) -> None:
     async with asyncio.timeout(10):
         caplog.set_level(logging.DEBUG, logger="fastapi_canon.integrations.websockets")
         entered, release = asyncio.Event(), asyncio.Event()
-        channel = RpcChannel("flood")
+        channel = RpcChannel(namespace="flood")
         finished = []
 
         class Instrumentation(RpcMiddleware):
@@ -755,7 +755,7 @@ async def test_pending_rejection_logs_are_bounded_even_at_debug(caplog) -> None:
 
 async def test_requests_beyond_the_pending_limit_are_rejected() -> None:
     async with asyncio.timeout(10):
-        pending = RpcChannel("pending")
+        pending = RpcChannel(namespace="pending")
         release = asyncio.Event()
 
         @pending.method()
@@ -802,7 +802,7 @@ async def test_batches_reserve_capacity_per_item_and_preserve_response_shape():
     async with asyncio.timeout(10):
         release = asyncio.Event()
         started = asyncio.Queue()
-        channel = RpcChannel("capacity")
+        channel = RpcChannel(namespace="capacity")
 
         @channel.method
         async def wait(params: Params) -> Params:
@@ -913,7 +913,7 @@ async def test_item_capacity_is_released_after_every_outcome(ending, monkeypatch
 
         monkeypatch.setattr(runtime_module, "PendingRequests", capacity)
         entered, release, finished = asyncio.Event(), asyncio.Event(), asyncio.Event()
-        channel = RpcChannel("release")
+        channel = RpcChannel(namespace="release")
 
         @channel.method
         async def work() -> None:
@@ -1017,7 +1017,7 @@ async def test_documented_shared_capacity_releases_worker_permits(ending):
         capacity = Capacity(connections=2, requests=1)
         started = asyncio.Queue()
         release = asyncio.Event()
-        channel = RpcChannel("shared")
+        channel = RpcChannel(namespace="shared")
 
         @channel.method
         async def wait(params: Params) -> None:
@@ -1149,7 +1149,7 @@ async def test_invalid_or_oversized_rpc_frames_close_the_connection(
 
 
 async def test_server_events_are_sent_as_typed_notifications() -> None:
-    events = RpcChannel("events")
+    events = RpcChannel(namespace="events")
     ready = asyncio.Event()
 
     @events.event(payload=Params)
@@ -1179,7 +1179,7 @@ async def test_server_events_are_sent_as_typed_notifications() -> None:
 
 
 async def test_invalid_server_event_does_not_close_connection() -> None:
-    events = RpcChannel("events")
+    events = RpcChannel(namespace="events")
     ready = asyncio.Event()
 
     @events.event(payload=Params)
@@ -1201,7 +1201,7 @@ async def test_invalid_server_event_does_not_close_connection() -> None:
 
 
 async def test_event_can_opt_in_to_closing_on_error() -> None:
-    events = RpcChannel("events")
+    events = RpcChannel(namespace="events")
 
     @events.event(payload=Params, on_error="close")
     async def changed() -> AsyncIterator[Params]:
@@ -1223,7 +1223,7 @@ async def test_mapped_event_source_failure_closes_the_connection() -> None:
     class AccessRevoked(Exception):
         pass
 
-    events = RpcChannel("events")
+    events = RpcChannel(namespace="events")
 
     @events.event(payload=Params)
     async def changed() -> AsyncIterator[Params]:
@@ -1281,7 +1281,7 @@ class DelayedSocket(InMemorySocket):
 
 
 async def test_closing_after_the_final_event_delivers_queued_notifications() -> None:
-    events = RpcChannel("events")
+    events = RpcChannel(namespace="events")
 
     @events.event(payload=Params)
     async def finished(
@@ -1301,7 +1301,7 @@ async def test_closing_after_the_final_event_delivers_queued_notifications() -> 
 
 
 async def test_socket_closes_when_its_events_complete() -> None:
-    events = RpcChannel("events")
+    events = RpcChannel(namespace="events")
 
     @events.event(payload=Params)
     async def first() -> AsyncIterator[Params]:
@@ -1370,7 +1370,7 @@ async def test_rejections_are_looked_up_from_call_to_endpoint_to_service(
     )
     rpc.socket(
         "/rpc",
-        channels=(RpcChannel("sessions"),),
+        channels=(RpcChannel(namespace="sessions"),),
         before_accept=authenticate,
         rejects=[rejects(SessionNotFound, RpcRejection.NOT_FOUND)],
     )
@@ -1382,7 +1382,7 @@ async def test_rejections_are_looked_up_from_call_to_endpoint_to_service(
 
 
 async def test_stream_endpoints_apply_their_contracts() -> None:
-    audio = RpcChannel("audio")
+    audio = RpcChannel(namespace="audio")
 
     @audio.stream()
     async def frames() -> AsyncIterator[bytes]:
@@ -1407,7 +1407,7 @@ async def test_contracts_reject_with_their_message_by_default() -> None:
     rpc = RpcDefinition()
     rpc.socket(
         "/rpc",
-        channels=(RpcChannel("sessions"),),
+        channels=(RpcChannel(namespace="sessions"),),
         before_accept=authenticate,
         rejects=[RpcErrorBinding(SessionNotFound, rejection=RpcRejection.NOT_FOUND)],
     )
@@ -1428,7 +1428,7 @@ async def test_event_bindings_are_scoped_and_exported(declared, caplog) -> None:
     fallback = RpcErrorBinding(
         SessionNotFound, code="session_denied", rejection=RpcRejection.FORBIDDEN
     )
-    channel = RpcChannel("session", raises=[fallback] if declared else [])
+    channel = RpcChannel(namespace="session", raises=[fallback] if declared else [])
 
     @channel.event(raises=[binding] if declared else [], on_error="close")
     async def updates() -> AsyncIterator[Params]:
@@ -1474,7 +1474,7 @@ async def test_event_bindings_are_scoped_and_exported(declared, caplog) -> None:
 def test_endpoint_rejects_takes_one_rejecting_binding_per_exception(raises) -> None:
     with pytest.raises(ProtocolDefinitionError):
         RpcDefinition().socket(
-            "/rpc", channels=(RpcChannel("sessions"),), rejects=raises
+            "/rpc", channels=(RpcChannel(namespace="sessions"),), rejects=raises
         )
 
 

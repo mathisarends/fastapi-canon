@@ -11,7 +11,8 @@ from fastapi_canon import APIRouter as ApplicationRouter
 from fastapi_canon import Composition, Feature, Inject
 from fastapi_canon.diagnostics import CheckContext, CheckIssue
 from fastapi_canon.errors import FeatureConfigurationError
-from fastapi_canon.integrations.websockets import CanonWebSocketRouter, RpcChannel
+from fastapi_canon.integrations.websockets import RpcChannel
+from fastapi_canon.integrations.websockets.adapters.fastapi import CanonWebSocketRouter
 
 
 class MissingService:

@@ -26,7 +26,7 @@ from fastapi_canon.integrations.opentelemetry import (
     Telemetry,
     instrument,
 )
-from fastapi_canon.integrations.websockets import CanonWebSocketRouter
+from fastapi_canon.integrations.websockets.adapters.fastapi import CanonWebSocketRouter
 from tests.fixtures.telemetry import SpanCapture
 
 
@@ -659,7 +659,7 @@ def test_websocket_controllers_export_independent_traces_before_disconnect() -> 
 
     with SpanCapture() as capture:
         options = Telemetry(tracer_provider=capture.provider)
-        channel = RpcChannel("tasks")
+        channel = RpcChannel(namespace="tasks")
         tracer = capture.provider.get_tracer("application")
 
         @channel.method("ping")

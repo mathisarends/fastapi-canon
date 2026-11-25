@@ -19,7 +19,7 @@ The handler's signature determines the stream's direction:
 from collections.abc import AsyncIterator
 
 from fastapi_canon import APIRouter
-from fastapi_canon.integrations.websockets import Inject
+from fastapi_canon import Inject
 
 
 class FrameSource:
@@ -40,9 +40,7 @@ async def preview(source: Inject[FrameSource]) -> AsyncIterator[bytes]:
 
 `@router.binary_stream` accepts the connection options of `include_channel`
 (`context=`, `hooks=`, `rejects=`, `limits=`, `middleware=` and so on). The
-operation name is the router's namespace plus the function name. Streams declared
-on an `RpcChannel` with `@channel.stream(...)` still mount with
-`CanonWebSocketRouter().stream(path, preview)`.
+operation name is the router's namespace plus the function name.
 
 A generator stream must be annotated as `AsyncIterator[bytes]` or
 `AsyncGenerator[bytes, ...]`. Each decorated stream can be mounted once.
@@ -62,7 +60,7 @@ import asyncio
 from fastapi_canon.integrations.websockets import RpcBinaryInput, RpcBinaryOutput
 
 
-uploads = RpcChannel("uploads")
+uploads = RpcChannel(namespace="uploads")
 
 
 @uploads.stream("audio", input_content_type="audio/pcm")
@@ -110,15 +108,16 @@ Handler parameters without `Inject[...]` are variables of the mounted path.
 Pydantic validates them before the WebSocket is accepted:
 
 ```python
-@voice.stream("media", content_type="audio/pcm")
+@router.binary_stream(
+    "/v1/voice-sessions/{voice_session_id}/media",
+    content_type="audio/pcm",
+    input_content_type="audio/pcm",
+)
 async def media(
     voice_session_id: UUID,
     frames: Inject[RpcBinaryInput],
     output: Inject[RpcBinaryOutput],
 ) -> None: ...
-
-
-app.stream("/v1/voice-sessions/{voice_session_id}/media", media)
 ```
 
 Use scalar types such as `str`, `int`, `UUID`, or an `Enum`. Mounting fails if a

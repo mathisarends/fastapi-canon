@@ -9,9 +9,10 @@ from collections.abc import AsyncIterator
 
 from fastapi_canon import APIRouter, Inject
 from fastapi_canon.integrations.websockets import RpcChannel
-from fastapi_canon.integrations.websockets import RpcConnection, RpcModel
+from fastapi_canon.integrations.websockets import RpcConnection
+from pydantic import BaseModel
 
-tasks = RpcChannel("tasks")
+tasks = RpcChannel(namespace="tasks")
 router = APIRouter()
 router.include_channel(tasks, path="/rpc")
 ```
@@ -92,8 +93,7 @@ router.include_channel(
 An `Error` with another status is refused at declaration; bind it with
 `RpcErrorBinding(..., rejection=...)`.
 
-`include_channel`, `serve()`, `serve_websocket()`, and
-`RpcTestClient` accept `rejections=` for call-specific policies: a mapping from
+`include_channel`, the socket decorators and `RpcTestClient` accept `rejections=` for call-specific policies: a mapping from
 exception types to `RpcRejection` values, using the exception text as reason,
 or a callable that returns an `RpcReject` or `None`:
 
@@ -207,7 +207,7 @@ An event is an async generator. Each yielded Pydantic value becomes a JSON-RPC
 notification sent to every connection on that endpoint:
 
 ```python
-class TaskUpdated(RpcModel):
+class TaskUpdated(BaseModel):
     task_id: int
     title: str
 
@@ -245,8 +245,7 @@ needs input from the client, let the client call a server method instead.
 ### Finite event sockets
 
 By default a socket stays open after its event sources finish. For a socket
-that only reports a finite job, declare a protocol-level `CanonWebSocketRouter`
-endpoint that closes it:
+that only reports a finite job, close it when its sources finish:
 
 ```python
 @exports.event()
@@ -256,10 +255,9 @@ async def progress(job: Inject[ExportJob]) -> AsyncIterator[ExportProgress]:
     yield ExportProgress(percent=100, done=True)
 
 
-rpc = CanonWebSocketRouter()
-rpc.socket(
-    "/exports/{job_id}",
-    channels=(exports,),
+router.include_channel(
+    exports,
+    path="/exports/{job_id}",
     close_when_events_complete=True,
 )
 ```
@@ -281,7 +279,7 @@ Use [message streams](message-streams.md) for the full server, Python and
 TypeScript API, wire lifecycle, cleanup and recovery contract.
 
 `@channel.event()` remains a passive notification source without an individual
-open request. `AsyncIterator[bytes]` selects a [binary stream](streams.md).
+open request. Binary frames use a [binary stream](streams.md).
 
 ## Instrument requests and connections
 

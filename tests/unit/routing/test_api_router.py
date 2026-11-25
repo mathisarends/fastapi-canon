@@ -15,7 +15,8 @@ from fastapi_canon import (
     RouteOptions,
 )
 from fastapi_canon.errors import ConfigurationError
-from fastapi_canon.integrations.websockets import CanonWebSocketRouter, WebSocketPolicy
+from fastapi_canon.integrations.websockets import RpcChannel, WebSocketPolicy
+from fastapi_canon.integrations.websockets.adapters.fastapi import CanonWebSocketRouter
 from fastapi_canon.routing.http import FastAPIRouterOptions
 
 
@@ -63,7 +64,7 @@ def test_declarations_conflicting_with_the_policy_fail_before_registration() -> 
     with pytest.raises(ConfigurationError, match="strict_errors"):
         router.socket("/socket", strict_errors=False)
     with pytest.raises(ConfigurationError, match="strict_errors"):
-        router.channel("/session", strict_errors=False)
+        router.include_channel(RpcChannel(), path="/session", strict_errors=False)
     assert router.routes == []
 
 

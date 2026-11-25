@@ -23,9 +23,9 @@ from automation_client.internal import (
 
 
 class BinaryStreamName(StrEnum):
+    BROWSER_SCREENCAST_CONTROL = "browser.screencast.control"
     BROWSER_SCREENCAST_FRAMES = "browser.screencast.frames"
     BROWSER_SCREENCAST_UPLOAD = "browser.screencast.upload"
-    BROWSER_SCREENCAST_CONTROL = "browser.screencast.control"
 
 
 type BinaryStreamDirection = Literal[
@@ -363,6 +363,18 @@ class BinaryWebSocketStream:
 
 
 BINARY_STREAMS: Mapping[BinaryStreamName, BinaryStreamInfo] = {
+    BinaryStreamName.BROWSER_SCREENCAST_CONTROL: BinaryStreamInfo(
+        name=BinaryStreamName.BROWSER_SCREENCAST_CONTROL,
+        url="wss://{host}/browser/screencast/control",
+        content_type="image/jpeg",
+        direction="bidirectional",
+        input_content_type="application/x-input-event",
+        variables={
+            "host": RpcServerVariable(
+                default="api.example.com",
+            ),
+        },
+    ),
     BinaryStreamName.BROWSER_SCREENCAST_FRAMES: BinaryStreamInfo(
         name=BinaryStreamName.BROWSER_SCREENCAST_FRAMES,
         url="wss://{host}/browser/screencast",
@@ -378,18 +390,6 @@ BINARY_STREAMS: Mapping[BinaryStreamName, BinaryStreamInfo] = {
         url="wss://{host}/browser/screencast/upload",
         direction="client-to-server",
         input_content_type="video/webm",
-        variables={
-            "host": RpcServerVariable(
-                default="api.example.com",
-            ),
-        },
-    ),
-    BinaryStreamName.BROWSER_SCREENCAST_CONTROL: BinaryStreamInfo(
-        name=BinaryStreamName.BROWSER_SCREENCAST_CONTROL,
-        url="wss://{host}/browser/screencast/control",
-        content_type="image/jpeg",
-        direction="bidirectional",
-        input_content_type="application/x-input-event",
         variables={
             "host": RpcServerVariable(
                 default="api.example.com",

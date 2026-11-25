@@ -5,10 +5,10 @@ from collections.abc import AsyncIterator
 
 from automation_client.internal import RpcClientCore
 from automation_client.models import (
-    CreateTaskParams,
-    DeleteTaskParams,
     Task,
     TaskList,
+    TasksCreateParams,
+    TasksDeleteParams,
     TaskUpdated,
 )
 from automation_client.routes import (
@@ -37,7 +37,7 @@ class Tasks:
         """Create a task."""
         values: dict[str, object] = {}
         values["title"] = title
-        params = CreateTaskParams.model_validate(values)
+        params = TasksCreateParams.model_validate(values)
         return await self._rpc.request(
             TASKS_CREATE,
             params=params,
@@ -50,8 +50,8 @@ class Tasks:
     ) -> bool:
         """Delete a task."""
         values: dict[str, object] = {}
-        values["taskId"] = task_id
-        params = DeleteTaskParams.model_validate(values)
+        values["task_id"] = task_id
+        params = TasksDeleteParams.model_validate(values)
         return await self._rpc.request(
             TASKS_DELETE,
             params=params,

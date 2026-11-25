@@ -3,8 +3,8 @@ from collections.abc import AsyncIterator
 from uuid import UUID
 
 import pytest
+from fastapi_canon import Inject
 from fastapi_canon.integrations.websockets import (
-    Inject,
     ProtocolDefinitionError,
     RpcChannel,
     RpcConnectionClose,
@@ -20,6 +20,7 @@ from fastapi_canon.integrations.websockets import (
 )
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
 
+from tests.fixtures.websockets import socket_of
 from tests.unit.integrations.websockets.testing import (
     RpcTestClient,
     RpcTestConnectionClosed,
@@ -88,10 +89,11 @@ async def relay(socket: RpcSocket, upstream: Upstream) -> None:
         upstream.released.set()
 
 
-browser = RpcChannel("browser")
+browser = RpcChannel(namespace="browser")
 
 
-@browser.socket(
+@socket_of(
+    browser,
     "cdp",
     closes=(BROWSER_NOT_FOUND, CDP_UNAVAILABLE),
     summary="Proxy the Chrome DevTools Protocol.",
@@ -143,9 +145,10 @@ async def test_failures_close_with_declared_outcomes(
 
 
 async def test_a_catch_all_binding_configures_the_internal_error_reason() -> None:
-    channel = RpcChannel("browser")
+    channel = RpcChannel(namespace="browser")
 
-    @channel.socket(
+    @socket_of(
+        channel,
         "cdp",
         closes=(
             RpcErrorBinding(
@@ -202,10 +205,10 @@ async def test_pre_acceptance_failures_reject_the_handshake() -> None:
 
 
 async def test_handlers_close_with_explicit_codes() -> None:
-    channel = RpcChannel("browser")
+    channel = RpcChannel(namespace="browser")
     cleaned = asyncio.Event()
 
-    @channel.socket("cdp")
+    @socket_of(channel, "cdp")
     async def proxy(socket: Inject[RpcSocket]) -> None:
         try:
             await socket.close(RpcConnectionClose.POLICY_VIOLATION, reason="Busy")
@@ -221,10 +224,10 @@ async def test_handlers_close_with_explicit_codes() -> None:
 
 
 async def test_undeclared_message_types_are_rejected() -> None:
-    channel = RpcChannel("browser")
+    channel = RpcChannel(namespace="browser")
     sent: list[Exception] = []
 
-    @channel.socket("cdp", messages=(RpcMessageType.TEXT,))
+    @socket_of(channel, "cdp", messages=(RpcMessageType.TEXT,))
     async def proxy(socket: Inject[RpcSocket]) -> None:
         try:
             await socket.send(b"binary")
@@ -276,10 +279,10 @@ async def test_middleware_counts_messages_in_both_directions() -> None:
 
 
 async def test_path_variables_are_validated_before_acceptance() -> None:
-    channel = RpcChannel("browser")
+    channel = RpcChannel(namespace="browser")
     seen: list[UUID] = []
 
-    @channel.socket("page")
+    @socket_of(channel, "page")
     async def page(browser_id: UUID, socket: Inject[RpcSocket]) -> None:
         seen.append(browser_id)
 
@@ -331,48 +334,50 @@ def test_contract_exports_sockets_outside_json_rpc_methods() -> None:
 
 
 def test_sockets_must_inject_the_socket_once() -> None:
-    channel = RpcChannel("browser")
+    channel = RpcChannel(namespace="browser")
 
     with pytest.raises(ProtocolDefinitionError, match="exactly once"):
 
-        @channel.socket()
+        @socket_of(channel)
         async def missing() -> None: ...
 
 
 def test_sockets_must_be_coroutines_returning_none() -> None:
-    channel = RpcChannel("browser")
+    channel = RpcChannel(namespace="browser")
 
     with pytest.raises(ProtocolDefinitionError, match="async function"):
 
-        @channel.socket()
+        @socket_of(channel)
         def blocking(socket: Inject[RpcSocket]) -> None: ...
 
     with pytest.raises(ProtocolDefinitionError, match="return None"):
 
-        @channel.socket()
+        @socket_of(channel)
         async def returning(socket: Inject[RpcSocket]) -> bytes:
             return b""
 
 
 def test_socket_declarations_are_validated() -> None:
-    channel = RpcChannel("browser")
+    channel = RpcChannel(namespace="browser")
+
+    async def proxy(socket: Inject[RpcSocket]) -> None: ...
 
     with pytest.raises(ProtocolDefinitionError, match="at least one"):
-        channel.socket(messages=())
+        socket_of(channel, messages=())(proxy)
 
     with pytest.raises(ProtocolDefinitionError, match="RpcMessageType"):
-        channel.socket(messages=("json",))
+        socket_of(channel, messages=("json",))(proxy)
 
     with pytest.raises(ProtocolDefinitionError, match="with a rejection"):
 
-        @channel.socket(closes=(RpcErrorBinding(BrowserNotFound),))
+        @socket_of(channel, closes=(RpcErrorBinding(BrowserNotFound),))
         async def unbound(socket: Inject[RpcSocket]) -> None: ...
 
 
 def test_socket_path_parameters_must_be_path_variables() -> None:
-    channel = RpcChannel("browser")
+    channel = RpcChannel(namespace="browser")
 
-    @channel.socket()
+    @socket_of(channel)
     async def page(browser_id: str, socket: Inject[RpcSocket]) -> None: ...
 
     with pytest.raises(ProtocolDefinitionError, match="browser_id"):
@@ -387,21 +392,21 @@ def test_sockets_can_only_be_mounted_once() -> None:
 
 
 def test_socket_names_share_the_operation_namespace() -> None:
-    channel = RpcChannel("browser")
+    channel = RpcChannel(namespace="browser")
 
     @channel.method("cdp")
     async def method() -> None: ...
 
     with pytest.raises(ProtocolDefinitionError, match="Duplicate RPC route"):
 
-        @channel.socket("cdp")
+        @socket_of(channel, "cdp")
         async def socket(socket: Inject[RpcSocket]) -> None: ...
 
 
 def test_service_sockets_take_channels_or_a_socket_handler() -> None:
-    channel = RpcChannel("terminal")
+    channel = RpcChannel(namespace="terminal")
 
-    @channel.socket()
+    @socket_of(channel)
     async def shell(socket: Inject[RpcSocket]) -> None: ...
 
     async def undecorated(socket: Inject[RpcSocket]) -> None: ...
@@ -410,7 +415,7 @@ def test_service_sockets_take_channels_or_a_socket_handler() -> None:
     with pytest.raises(ProtocolDefinitionError, match=r"channels=... or a"):
         service.socket("/rpc")
     with pytest.raises(ProtocolDefinitionError, match="either channels"):
-        service.socket("/shell", shell, channels=(RpcChannel("other"),))
+        service.socket("/shell", shell, channels=(RpcChannel(namespace="other"),))
     with pytest.raises(ProtocolDefinitionError, match="only apply to JSON-RPC"):
         service.socket("/shell", shell, close_when_events_complete=True)
     with pytest.raises(ProtocolDefinitionError, match=r"@channel\.socket\(\)"):
@@ -430,10 +435,10 @@ CDP = RpcSocketProtocol(
 
 
 async def test_a_declared_protocol_is_exported_and_visible_to_the_handler() -> None:
-    channel = RpcChannel("browser")
+    channel = RpcChannel(namespace="browser")
     seen: list[RpcSocketProtocol | None] = []
 
-    @channel.socket("cdp", protocol=CDP)
+    @socket_of(channel, "cdp", protocol=CDP)
     async def cdp(socket: Inject[RpcSocket]) -> None:
         seen.append(socket.protocol)
         for _ in range(2):
@@ -479,5 +484,8 @@ def test_protocol_declarations_are_validated() -> None:
         RpcSocketProtocol("cdp", schemas=("a b.json",))
     with pytest.raises(ValueError, match="distinct"):
         RpcSocketProtocol("cdp", schemas=("a.json", "a.json"))
+
+    async def proxy(socket: Inject[RpcSocket]) -> None: ...
+
     with pytest.raises(ProtocolDefinitionError, match="RpcSocketProtocol"):
-        RpcChannel("browser").socket(protocol="cdp")  # type: ignore[arg-type]
+        socket_of(RpcChannel(namespace="browser"), protocol="cdp")(proxy)

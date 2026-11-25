@@ -1,14 +1,14 @@
-import asyncio
 from dataclasses import dataclass
 
-from fastapi_canon.integrations.websockets import Inject, RpcChannel, RpcModel
+from dishka import Provider, Scope
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from fastapi_canon import APIRouter, Composition, Feature, Inject
+from fastapi_canon.integrations.websockets import RpcChannel
+from pydantic import BaseModel
 
 
-class GreetParams(RpcModel):
-    name: str
-
-
-class Greeting(RpcModel):
+class Greeting(BaseModel):
     text: str
 
 
@@ -17,26 +17,35 @@ class Greeter:
     salutation: str
 
 
-router = RpcChannel("greeting")
+greeting = RpcChannel(namespace="greeting")
 
 
-@router.method()
-async def say(params: GreetParams, greeter: Inject[Greeter]) -> Greeting:
-    return Greeting(text=f"{greeter.salutation}, {params.name}!")
+@greeting.method()
+async def say(name: str, greeter: Inject[Greeter]) -> Greeting:
+    return Greeting(text=f"{greeter.salutation}, {name}!")
 
 
-async def main() -> None:
-    server = router.create_server(context=Greeter("Hello"))
-    response = await server.handle(
-        {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "greeting.say",
-            "params": {"name": "World"},
-        }
-    )
-    print(response)
+router = APIRouter()
+router.include_channel(greeting, path="/rpc")
+providers = Provider()
+providers.provide(lambda: Greeter("Hello"), provides=Greeter, scope=Scope.APP)
+app = Composition(
+    features=[Feature(name="greeting", routers=[router], providers=[providers])]
+).build(FastAPI())
+
+
+def main() -> None:
+    with TestClient(app) as client, client.websocket_connect("/rpc") as socket:
+        socket.send_json(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "greeting.say",
+                "params": {"name": "World"},
+            }
+        )
+        print(socket.receive_json())
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

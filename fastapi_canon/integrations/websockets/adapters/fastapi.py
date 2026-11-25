@@ -189,7 +189,7 @@ async def _reject(
         await websocket.close(REJECTION_CLOSE_CODES[rejection], close_reason(reason))
 
 
-async def serve_websocket(
+async def serve_websocket(  # smelt: ignore[VIS009] -- external API
     endpoint: RpcAnyEndpoint,
     websocket: WebSocket,
     *,
@@ -654,7 +654,7 @@ class CanonWebSocketRouter(APIRouter):
         # Inspect a snapshot: checking must not freeze caller-owned channels.
         snapshot = RpcChannel()
         for channel in endpoint.channels:
-            snapshot.include_channel(channel, namespace=channel.namespace)
+            snapshot.include_channel(channel)
         protocol = snapshot.freeze()
         available = {RpcConnection, *self._context_values}
         if self._context is not None and endpoint.context is not None:

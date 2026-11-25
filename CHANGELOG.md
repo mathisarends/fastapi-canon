@@ -21,6 +21,30 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0290).
   on `get()`, `post()` or `api_route()`. Such routes on a Canon `APIRouter` are
   typed Canon streams and must yield a concrete event model, not
   `ServerSentEvent`. OpenAPI and generated clients are unchanged.
+- **`CANON-029-RPC-SIGNATURE-PARAMS`** — RPC methods and message streams read
+  params from their signature, like FastAPI bodies: a single Pydantic model
+  parameter is the whole params object; otherwise named parameters form a
+  synthesized `<Namespace><Method>Params` model that rejects unknown fields.
+  Contracts and generated clients name params models after the operation;
+  regenerate clients.
+- **`CANON-029-RPC-MODEL-REMOVED`** — `RpcModel` is removed and wire names
+  follow the Pydantic fields as written. Inherit from `BaseModel`, or define a
+  base with `alias_generator=to_camel` and `populate_by_name=True` to keep
+  camel-case wire names. Built-in protocol errors such as `RpcInvalidParams`
+  are plain models.
+- **`CANON-029-RPC-CHANNEL-ROUTING`** — `APIRouter.channel()`,
+  `RpcChannel.socket()` and the `namespace=` and `path_model=` arguments of
+  `include_channel()` are removed. Declare an `RpcChannel` and mount it with
+  `router.include_channel(channel, path=...)`; declare sockets with
+  `@router.socket()`. Included channels keep their namespace under the parent's.
+  Read path variables with `Annotated[T, Path()]` parameters; invalid values
+  reject the handshake with 404.
+- **`CANON-029-RPC-CHANNEL-NAMESPACE`** — `RpcChannel` takes the namespace only as
+  a keyword: `RpcChannel(namespace="tasks")`.
+- **`CANON-029-WEBSOCKETS-FACADE`** — `fastapi_canon.integrations.websockets` no
+  longer exports `Inject`, `CanonWebSocketRouter`, `FastApiSocket` or
+  `serve_websocket`. Import `Inject` from `fastapi_canon` and the adapter types
+  from `fastapi_canon.integrations.websockets.adapters.fastapi`.
 - **`CANON-029-COMPLETE-ERROR-CHECK`** — `check errors` follows ordinary Python
   instead of reporting it as `CAN003`: library handlers and context managers,
   generic and union annotations, properties, loop elements, `super()`,
@@ -39,6 +63,10 @@ See the [upgrade guide](docs/package-migration.md#upgrade-to-0290).
 - Canon routers, operations and `include_router()` accept FastAPI's
   `max_body_size` and `form_limits`. Form limits and bodies that grow past the
   limit return Canon problems. See [request limits](docs/08-file-transfers.md#request-limits).
+- `APIRouter.include_channel(..., close_when_events_complete=True)` closes a
+  finite event socket once its sources finish.
+- The `[contract]` source of `rpcgen.toml` accepts a FastAPI application,
+  with `base_url` and `[contract.variables]` for its server URL.
 
 ### Fixed
 

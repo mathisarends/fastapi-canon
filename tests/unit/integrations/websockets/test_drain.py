@@ -9,8 +9,8 @@ import httpx
 import pytest
 import uvicorn
 from fastapi import FastAPI
+from fastapi_canon import Inject
 from fastapi_canon.integrations.websockets import (
-    Inject,
     RpcChannel,
     RpcConnectionClose,
     RpcDisconnect,
@@ -28,7 +28,7 @@ from pydantic import BaseModel
 from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed, InvalidStatus
 
-from tests.fixtures.websockets import router_for
+from tests.fixtures.websockets import router_for, socket_of
 
 
 def request(request_id, method="work.slow"):
@@ -37,7 +37,7 @@ def request(request_id, method="work.slow"):
 
 def slow_service(*, middleware=()):
     entered, release, cancelled = (asyncio.Event() for _ in range(3))
-    channel = RpcChannel("work")
+    channel = RpcChannel(namespace="work")
 
     @channel.method()
     async def slow() -> int:
@@ -156,7 +156,7 @@ async def test_drain_stops_event_producer_and_flushes_queued_response():
         producer_started, stopped, send_started, allow_send = (
             asyncio.Event() for _ in range(4)
         )
-        channel = RpcChannel("work")
+        channel = RpcChannel(namespace="work")
 
         class Update(BaseModel):
             value: int
@@ -205,7 +205,7 @@ async def test_drain_stops_event_producer_and_flushes_queued_response():
 async def test_shutdown_cleans_subscription_while_another_request_is_stuck(drain):
     before = asyncio.all_tasks()
     subscribed, stopped, working = (asyncio.Event() for _ in range(3))
-    channel = RpcChannel("work")
+    channel = RpcChannel(namespace="work")
 
     @channel.stream()
     async def events() -> AsyncIterator[int]:
@@ -254,7 +254,7 @@ async def test_blocked_flush_is_cancelled_at_grace_expiry(monkeypatch):
         send_started, send_cancelled, expired, timer_started = (
             asyncio.Event() for _ in range(4)
         )
-        channel = RpcChannel("work")
+        channel = RpcChannel(namespace="work")
 
         @channel.method()
         async def quick() -> int:
@@ -311,7 +311,7 @@ async def test_drain_rechecks_handshake_after_authentication_race():
             await release.wait()
 
         service.socket(
-            "/rpc", channels=[RpcChannel("auth")], before_accept=authenticate
+            "/rpc", channels=[RpcChannel(namespace="auth")], before_accept=authenticate
         )
         async with InMemorySocketFactory(service) as factory:
             opening = asyncio.create_task(factory("ws://test/rpc"))
@@ -349,7 +349,7 @@ async def test_long_lived_streams_close_with_restart_at_grace_expiry(kind, monke
         import fastapi_canon.integrations.websockets.drain as module
 
         entered, cancelled, expired, timer_started = (asyncio.Event() for _ in range(4))
-        channel = RpcChannel("streams")
+        channel = RpcChannel(namespace="streams")
 
         @channel.stream()
         async def frames() -> AsyncIterator[bytes]:
@@ -360,7 +360,7 @@ async def test_long_lived_streams_close_with_restart_at_grace_expiry(kind, monke
             finally:
                 cancelled.set()
 
-        @channel.socket()
+        @socket_of(channel)
         async def raw(socket: Inject[RpcSocket]) -> None:
             entered.set()
             try:

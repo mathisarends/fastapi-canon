@@ -9,7 +9,6 @@ can contribute HTTP calls, typed SSE and JSON-RPC channels:
 | `@router.get(...)`, `post(...)`, etc. | HTTP with Canon error/success contracts |
 | `@router.get(..., response_class=EventSourceResponse)` | Typed HTTP event stream, terminal problems and completion |
 | `router.include_channel(channel, path=...)` | JSON-RPC methods and message streams over one WebSocket |
-| `session = router.channel(path)` | A JSON-RPC WebSocket; register methods, events and message streams on `session` |
 | `@router.binary_stream(path)` | A binary stream on its own WebSocket; the signature sets the direction |
 | `@router.socket(path)` | A typed or raw message socket on its own WebSocket |
 | `@router.websocket(...)` | Native FastAPI WebSocket handler and application protocol |
@@ -195,44 +194,34 @@ their own contracts before writing; the workflow adds no global SDK naming rules
 ## Compose channels before choosing their URL
 
 Channels describe operations. The router decides where clients connect.
-Each inclusion copies the current declarations; subsequent changes to the
-source channel do not change its already included or mounted snapshots.
+Each inclusion copies the current declarations; later changes to the source
+channel do not change an already mounted snapshot.
 
 ```python
-from collections.abc import AsyncIterator
+from typing import Annotated
 
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import FastAPI, Path
 
 from fastapi_canon import APIRouter, Composition, Feature
 from fastapi_canon.integrations.websockets import RpcChannel
-from fastapi_canon.integrations.websockets import Inject, RpcConnection
+
+projects = RpcChannel(namespace="projects")
+tasks = RpcChannel(namespace="tasks")
 
 
-class RenameProject(BaseModel):
-    title: str
+@projects.method()
+async def rename(title: str, project_id: Annotated[int, Path()]) -> str:
+    return f"{project_id}: {title}"
 
 
-projects = RpcChannel()
-tasks = RpcChannel()
-
-
-@projects.method("rename")
-async def rename_project(
-    params: RenameProject, connection: Inject[RpcConnection]
-) -> str:
-    project_id = connection.path_params["project_id"]
-    return f"{project_id}: {params.title}"
-
-
-@tasks.method("create")
-async def create_task() -> str:
+@tasks.method()
+async def create() -> str:
     return "created"
 
 
 session = RpcChannel()
-session.include_channel(projects, namespace="projects")
-session.include_channel(tasks, namespace="tasks")
+session.include_channel(projects)
+session.include_channel(tasks)
 
 router = APIRouter(prefix="/projects")
 router.include_channel(session, path="/{project_id}/session")
@@ -243,63 +232,43 @@ app = Composition(features=[Feature(name="projects", routers=[router])]).build(
 ```
 
 One connection to `/projects/42/session` provides `projects.rename` and
-`tasks.create`. For a single channel, declare it on the router instead:
-
-```python
-router = APIRouter(prefix="/projects", namespace="projects")
-session = router.channel("/{project_id}/session")
-
-
-@session.method()
-async def rename(params: RenameProject) -> str: ...
-```
-
-`router.channel(path, ...)` takes the options of `include_channel` and returns
-the channel. Operation names use the router's namespace. The channel is mounted
-when the router's routes are first read, for example when it is included in the
-application, and frozen afterwards: registering on it later fails explicitly.
-Use `RpcChannel` with `include_channel` to combine channels or mount one channel
-at several paths.
-
-A message on the composed session:
+`tasks.create`:
 
 ```json
 {"jsonrpc":"2.0","id":1,"method":"projects.rename","params":{"title":"Updated"}}
 ```
 
-RPC methods retain the existing typed signature: at most one Pydantic request
-model and explicitly injected dependencies. URL values belong to the connection,
-not the client's `params`. Use `Inject[RpcConnection]` for the path context,
-or a typed connection context/path model using the existing RPC options.
+As in FastAPI, the signature is the contract:
 
-`namespace=` on `channel.include_channel()` replaces the included channel's root
-namespace; nested namespaces are retained. Anonymous channels have no automatic
-wire prefix. Named channels keep their existing behavior. Error registries and
-per-operation resolver scopes stay attached to their declarations. Duplicate
-operation names, namespace conflicts and stream-control collisions fail explicitly.
+- Named parameters form the `params` object; their names are the wire names.
+  Defaults make a parameter optional, and unknown names are rejected.
+- A single Pydantic model parameter is the whole `params` object.
+- `Annotated[T, Path()]` reads a path variable of the mounted URL. Canon validates
+  it before accepting the connection and rejects names missing from the path.
+- `Inject[T]` resolves dependencies and stays out of the contract.
+
+An included channel keeps its namespace, prefixed with the parent's namespace.
+Duplicate operation names, namespace conflicts and stream-control collisions
+fail explicitly. Error registries and per-operation resolver scopes stay
+attached to their declarations.
 
 Separate URLs create separate connections:
 
 ```python
 router = APIRouter(prefix="/projects")
-router.include_channel(projects, path="/{project_id}/session", namespace="projects")
-router.include_channel(tasks, path="/{project_id}/tasks/session", namespace="tasks")
+router.include_channel(projects, path="/{project_id}/session")
+router.include_channel(tasks, path="/{project_id}/tasks/session")
 ```
 
-Call `include_channel()` multiple times to register multiple endpoints. Each
-connection has its own limits, pending requests and message streams. Its
-`context`, `resolver`, `middleware`, `limits` and other RPC options configure the
-existing WebSocket adapter. They are typed as `ChannelOptions`, so editors
-complete them and type checkers reject unknown names. `dependencies=` runs
-ordinary FastAPI dependencies before acceptance. Native FastAPI router prefixes and dependency overrides apply.
-When Composition installs Dishka providers, omitted `resolver=` automatically
-uses the application's container for `Inject[T]` in methods, streams and context
-hooks. APP, SESSION and REQUEST lifetimes retain their existing cleanup behavior.
-An explicit resolver takes precedence.
-Duplicate WebSocket paths on the application router are rejected before inclusion.
-Endpoint names default to the complete local path, including the router prefix,
-so separate URLs ending in `/session` export separately. Pass `name=` when a
-contract needs an explicit stable endpoint name.
+Each connection has its own limits, pending requests and message streams.
+`context`, `resolver`, `middleware`, `limits` and the other `include_channel`
+options are typed as `ChannelOptions`. `dependencies=` runs ordinary FastAPI
+dependencies before acceptance. When Composition installs Dishka providers, an
+omitted `resolver=` uses the application's container for `Inject[T]`; APP,
+SESSION and REQUEST lifetimes keep their cleanup behavior.
+Duplicate WebSocket paths on the application router are rejected. Endpoint
+names default to the complete local path, including the router prefix; pass
+`name=` when a contract needs a stable endpoint name.
 
 ## Message streams on the same connection
 
@@ -311,8 +280,9 @@ async def project_events() -> AsyncIterator[str]:
     yield "updated"
 ```
 
-Register the stream before including `projects` in `session`. The existing wire
+Register the stream before including `projects` in `session`. The wire
 controls are `projects.events.open` and `projects.events.cancel`, using `streamId`.
+Stream parameters follow the same signature rules as methods.
 Normal completion and failures retain the existing terminal notifications.
 Cancelling one stream leaves other streams and methods usable; disconnect cleans
 up all connection-owned work. This adds no new wire protocol and requires no SDK
@@ -329,13 +299,13 @@ async def preview(project_id: int) -> AsyncIterator[bytes]: ...
 async def terminal(message: Command) -> Output: ...
 ```
 
-`include_channel()` rejects a channel that contains binary streams or sockets and
-points to these decorators.
+`include_channel()` rejects a channel that contains binary streams and points to
+`@router.binary_stream`.
 
 ## Share WebSocket connection policy
 
 Pass a `WebSocketPolicy` to the router to share connection options across its
-`channel()`, `include_channel()`, `socket()` and `binary_stream()` declarations.
+`include_channel()`, `socket()` and `binary_stream()` declarations.
 
 ```python
 from fastapi_canon.integrations.websockets import WebSocketPolicy

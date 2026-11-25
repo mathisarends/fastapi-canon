@@ -14,6 +14,7 @@ from fastapi_canon.integrations.websockets.activity import (
 )
 from fastapi_canon.integrations.websockets.adapter import adapter
 from fastapi_canon.integrations.websockets.codec import RpcCodec
+from fastapi_canon.integrations.websockets.dispatch import handler_arguments
 from fastapi_canon.integrations.websockets.envelopes import (
     RpcErrorData,
     RpcFailure,
@@ -193,12 +194,7 @@ class SubscriptionSession:
         generator = None
         try:
             async with definition.resolver_scope(self._resolver) as resolver:
-                arguments = {
-                    item.name: await resolver.resolve(item.dependency)
-                    for item in definition.injected_parameters
-                }
-                if definition.params_parameter is not None:
-                    arguments[definition.params_parameter] = params
+                arguments = await handler_arguments(definition, params, resolver)
                 generator = definition.function(**arguments)
                 async for payload in generator:
                     value = adapter(definition.payload).validate_python(payload)

@@ -5,11 +5,11 @@
 import type { RpcClientCore, RpcRequestOptions } from "../core.js";
 import { routes, notifications } from "../routes.js";
 import type {
-  CreateTaskParams,
-  DeleteTaskParams,
   Task,
   TaskList,
   TaskUpdated,
+  TasksCreateParams,
+  TasksDeleteParams,
 } from "../models.js";
 
 export class Tasks {
@@ -24,13 +24,16 @@ export class Tasks {
   }
 
   /** Create a task. */
-  create(params: CreateTaskParams, options?: RpcRequestOptions): Promise<Task> {
+  create(
+    params: TasksCreateParams,
+    options?: RpcRequestOptions,
+  ): Promise<Task> {
     return this.#rpc.request(routes.tasksCreate, params, options);
   }
 
   /** Delete a task. */
   delete_(
-    params: DeleteTaskParams,
+    params: TasksDeleteParams,
     options?: RpcRequestOptions,
   ): Promise<boolean> {
     return this.#rpc.request(routes.tasksDelete, params, options);

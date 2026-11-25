@@ -4,7 +4,11 @@
 from contextlib import AbstractAsyncContextManager
 
 from automation_client.internal import UNSET, RpcClientCore, UnsetType
-from automation_client.models import OpenTabParams, StartScreencastParams, Tab
+from automation_client.models import (
+    BrowserScreencastStartParams,
+    BrowserTabsOpenParams,
+    Tab,
+)
 from automation_client.routes import BROWSER_SCREENCAST_START, BROWSER_TABS_OPEN
 from automation_client.sockets import (
     SOCKETS,
@@ -36,7 +40,7 @@ class BrowserTabs:
         """Open a browser tab."""
         values: dict[str, object] = {}
         values["url"] = url
-        params = OpenTabParams.model_validate(values)
+        params = BrowserTabsOpenParams.model_validate(values)
         return await self._rpc.request(
             BROWSER_TABS_OPEN,
             params=params,
@@ -56,10 +60,21 @@ class BrowserScreencast:
         values: dict[str, object] = {}
         if quality is not UNSET:
             values["quality"] = quality
-        params = StartScreencastParams.model_validate(values)
+        params = BrowserScreencastStartParams.model_validate(values)
         await self._rpc.request(
             BROWSER_SCREENCAST_START,
             params=params,
+        )
+
+    def control(self) -> AbstractAsyncContextManager[BinaryChannel]:
+        """Receive frames while sending input events back."""
+        return open_binary_stream(
+            resolve_stream_endpoint(
+                BINARY_STREAMS[BinaryStreamName.BROWSER_SCREENCAST_CONTROL],
+                self._rpc.variables,
+            ),
+            self._rpc.stream_opener,
+            BinaryChannel,
         )
 
     def frames(self) -> AbstractAsyncContextManager[BinaryReceiver]:
@@ -82,17 +97,6 @@ class BrowserScreencast:
             ),
             self._rpc.stream_opener,
             BinarySender,
-        )
-
-    def control(self) -> AbstractAsyncContextManager[BinaryChannel]:
-        """Receive frames while sending input events back."""
-        return open_binary_stream(
-            resolve_stream_endpoint(
-                BINARY_STREAMS[BinaryStreamName.BROWSER_SCREENCAST_CONTROL],
-                self._rpc.variables,
-            ),
-            self._rpc.stream_opener,
-            BinaryChannel,
         )
 
 

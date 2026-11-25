@@ -7,15 +7,13 @@ from typing import Any
 import pytest
 from fastapi import FastAPI, WebSocket
 from fastapi.testclient import TestClient
-from fastapi_canon.integrations.websockets import (
-    CanonWebSocketRouter,
-    Inject,
-    RpcChannel,
-)
+from fastapi_canon import Inject
+from fastapi_canon.integrations.websockets import RpcChannel
 from fastapi_canon.integrations.websockets.adapters.dishka import (
     Dishka,
     DishkaResolver,
 )
+from fastapi_canon.integrations.websockets.adapters.fastapi import CanonWebSocketRouter
 from fastapi_canon.integrations.websockets.definition import RpcDefinition
 
 from tests.fixtures.websockets import router_for
@@ -113,7 +111,7 @@ def test_dishka_router_reads_the_app_container_at_connection_time() -> None:
     root = Container({})
     root.child = session
 
-    channel = RpcChannel("demo")
+    channel = RpcChannel(namespace="demo")
 
     @channel.method()
     async def resolve(service: Inject[Service]) -> bool:
@@ -154,7 +152,7 @@ def test_dishka_exposes_the_context_to_dishka_providers() -> None:
     async def resolve_owner(owner_id: int) -> Owner:
         return Owner(owner_id)
 
-    channel = RpcChannel("demo")
+    channel = RpcChannel(namespace="demo")
 
     @channel.method()
     async def owner(streamer: Inject[Streamer]) -> int:
@@ -195,7 +193,7 @@ def test_dishka_injects_the_context_function(transport_parameter: str) -> None:
         def owners(self) -> Owners:
             return Owners("owner")
 
-    channel = RpcChannel("demo")
+    channel = RpcChannel(namespace="demo")
 
     @channel.method()
     async def owner(owner: Inject[Owner]) -> str:
@@ -303,7 +301,9 @@ def test_custom_handlers_resolve_context_and_providers_in_one_session(
 
     service = RpcDefinition()
     endpoint = service.socket(
-        "/owners/{owner_id}/rpc", channels=(RpcChannel("demo"),), context=Owner
+        "/owners/{owner_id}/rpc",
+        channels=(RpcChannel(namespace="demo"),),
+        context=Owner,
     )
     router = CanonWebSocketRouter(
         prefix="/owners", context=open_owner, resolver=Dishka()
