@@ -157,7 +157,7 @@ def test_router_policy_applies_to_webrtc_admission_and_contract() -> None:
 def test_invalid_declarations_fail_during_configuration() -> None:
     router = WebRtcRouter(engine=NoPeerEngine(), raises=[MISSING])
     with pytest.raises(ErrorConfigurationError, match="Error instance"):
-        router.session("/s", raises=[object()])  # type: ignore[list-item]
+        router.session("/s", raises=[object()])  # type: ignore[list-item]  # Non-error raises entry under test.
     with pytest.raises(ErrorConfigurationError, match="derives admission_errors"):
         router.session("/s", admission_errors=lambda app: [])
 

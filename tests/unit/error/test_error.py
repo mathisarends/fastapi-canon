@@ -318,4 +318,4 @@ def test_error_is_frozen() -> None:
     error = make_error()
 
     with pytest.raises(FrozenInstanceError):
-        error.title = "Changed"  # type: ignore[misc]
+        error.title = "Changed"  # type: ignore[misc]  # Frozen error under test.

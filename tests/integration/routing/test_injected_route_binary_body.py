@@ -81,7 +81,7 @@ def test_binary_body_rejects_two_stream_consumers() -> None:
 def test_binary_body_rejects_a_second_body_parameter(body_type: object) -> None:
     router = APIRouter()
 
-    async def upload(chunks: BinaryChunks, parsed: body_type) -> None:  # type: ignore[valid-type]
+    async def upload(chunks: BinaryChunks, parsed: body_type) -> None:  # type: ignore[valid-type]  # Parametrized annotation is a runtime value.
         pass
 
     with pytest.raises(ConfigurationError, match="cannot be combined with"):

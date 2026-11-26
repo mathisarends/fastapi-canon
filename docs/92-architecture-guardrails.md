@@ -1,7 +1,7 @@
 # 92. Architecture and test guardrails
 
 [smelt.yml](../smelt.yml) defines dependency boundaries, source conventions and
-test policies. The development lockfile pins `smelt-cli==0.16.1`.
+test policies. The development lockfile pins `smelt-cli==0.18.0`.
 [.smelt.schema.json](../.smelt.schema.json) provides editor completion.
 
 ## Run the policy
@@ -65,7 +65,9 @@ or test structure.
 
 Fix a finding or document a narrow, concrete exception beside the affected code.
 Do not add debt baselines, broad exclusions or weaker rules to pass checks.
-Unused suppressions fail. Shared exports must have a consumer contract.
+Unused suppressions fail. Every `noqa`, `type: ignore` and `pylint: disable`
+and every test skip or xfail needs a reason. Shared exports must have a consumer
+contract.
 
 Tests must assert observable outcomes, use bounded waits and subprocesses, and
 avoid private production access. Integration and contract tests prohibit mocks;
@@ -78,8 +80,8 @@ tests use documented imports.
 ## Upgrade Smelt
 
 Regenerate the editor schema as UTF-8 and review the
-[upstream rule catalog](https://github.com/mathisarends/smelt/blob/v0.16.1/docs/rules/README.md)
-and [upgrade guide](https://github.com/mathisarends/smelt/blob/v0.16.1/docs/upgrading.md).
+[upstream rule catalog](https://github.com/mathisarends/smelt/blob/v0.18.0/docs/rules/README.md)
+and [upgrade guide](https://github.com/mathisarends/smelt/blob/v0.18.0/docs/upgrading.md).
 Run the full policy and inspect new findings before adopting rules.
 Keep suppressions and exclusions tied to actual contracts.
 

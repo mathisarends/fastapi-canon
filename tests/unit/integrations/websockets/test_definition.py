@@ -49,7 +49,7 @@ def test_endpoints_record_their_declared_context() -> None:
         service.socket(
             "/invalid",
             channels=(RpcChannel(namespace="invalid"),),
-            context="Session",  # type: ignore[arg-type]
+            context="Session",  # type: ignore[arg-type]  # String context under test.
         )
 
 

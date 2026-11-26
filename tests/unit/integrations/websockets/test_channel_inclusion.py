@@ -124,4 +124,4 @@ def test_channels_cannot_include_themselves() -> None:
 @pytest.mark.parametrize("namespace", [None, 4, "bad/name", "two..parts"])
 def test_channels_reject_invalid_namespaces(namespace: object) -> None:
     with pytest.raises(ProtocolDefinitionError, match="namespace"):
-        RpcChannel(namespace=namespace)  # type: ignore[arg-type]
+        RpcChannel(namespace=namespace)  # type: ignore[arg-type]  # Invalid namespace under test.

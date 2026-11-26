@@ -194,7 +194,7 @@ def test_application_error_options_validate_at_declaration(
     parameter: str, value: str
 ) -> None:
     with pytest.raises(ConfigurationError):
-        ErrorOptions(**{parameter: value})  # type: ignore[arg-type]
+        ErrorOptions(**{parameter: value})  # type: ignore[arg-type]  # Invalid option value under test.
 
 
 @pytest.mark.parametrize("code", ["request_validation_error", "internal_server_error"])

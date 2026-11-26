@@ -22,7 +22,7 @@ async def test_jitter_without_a_stream_clock_rate_is_unavailable(
     report = RTCStatsReport()
     report.add(
         RTCInboundRtpStreamStats(
-            timestamp=datetime.now(UTC),
+            timestamp=datetime(2026, 1, 1, tzinfo=UTC),
             type="inbound-rtp",
             id="inbound",
             ssrc=42,
@@ -35,7 +35,7 @@ async def test_jitter_without_a_stream_clock_rate_is_unavailable(
     )
     report.add(
         RTCOutboundRtpStreamStats(
-            timestamp=datetime.now(UTC),
+            timestamp=datetime(2026, 1, 1, tzinfo=UTC),
             type="outbound-rtp",
             id="outbound",
             ssrc=43,

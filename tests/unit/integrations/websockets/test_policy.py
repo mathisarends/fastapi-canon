@@ -74,4 +74,4 @@ def test_extend_cannot_replace_a_policy_scalar() -> None:
 
 def test_policy_sequences_reject_strings() -> None:
     with pytest.raises(ConfigurationError, match="rejects"):
-        WebSocketPolicy(rejects="unauthorized")  # type: ignore[arg-type]
+        WebSocketPolicy(rejects="unauthorized")  # type: ignore[arg-type]  # Invalid rejection under test.

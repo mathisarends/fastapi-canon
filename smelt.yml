@@ -465,6 +465,9 @@ rules:
   modeling/parallel-record-fields: hint
   idioms/loop-invariant-collection: error
   meta/unused-suppression: error
+  meta/missing-tool-suppression-reason: error
+  layout/redundant-comment: error
+  tests/missing-skip-reason: error
   meta/resolved-debt: error
   architecture/uncovered-source: error
   tests/excess-patches: {severity: error, max: 1}

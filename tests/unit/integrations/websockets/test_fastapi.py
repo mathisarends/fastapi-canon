@@ -693,10 +693,10 @@ def test_rpc_routes_reject_invalid_mounts() -> None:
         with pytest.raises(TypeError, match="needs a concrete class"):
             CanonWebSocketRouter(context=context)
     with pytest.raises(TypeError, match="expects an async function"):
-        CanonWebSocketRouter(context=JobSession)  # type: ignore[arg-type]
+        CanonWebSocketRouter(context=JobSession)  # type: ignore[arg-type]  # Invalid argument under test.
     with pytest.raises(TypeError, match="declares context none, but these routes"):
         CanonWebSocketRouter(context=open_actor).mount(
-            create_service().endpoint("rpc")  # type: ignore[arg-type]
+            create_service().endpoint("rpc")  # type: ignore[arg-type]  # Invalid argument under test.
         )
     with pytest.raises(TypeError, match="declares context JobSession, but these"):
         CanonWebSocketRouter(prefix="/jobs").mount(service.endpoint("events"))
@@ -1015,7 +1015,7 @@ def test_custom_handlers_require_explicit_context_injection() -> None:
         (variadic, "must be positional-or-keyword or keyword-only"),
     ]:
         with pytest.raises(TypeError, match=message):
-            routes.mount(endpoint, handler=handler)  # type: ignore[arg-type]
+            routes.mount(endpoint, handler=handler)  # type: ignore[arg-type]  # Invalid argument under test.
 
 
 async def test_custom_handlers_release_the_scope_on_cancellation() -> None:

@@ -1,6 +1,6 @@
 from collections.abc import AsyncIterator
 from enum import StrEnum
-from typing import Literal
+from typing import Literal, cast
 
 import pytest
 from fastapi_canon import Inject
@@ -129,4 +129,4 @@ class TestResolver:
         self,
         dependency: type[DependencyT],
     ) -> DependencyT:
-        return self.values[dependency]  # type: ignore[return-value]
+        return cast(DependencyT, self.values[dependency])

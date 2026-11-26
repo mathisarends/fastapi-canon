@@ -133,8 +133,8 @@ def _terminal_stream(
                                 "utf-8"
                             )
                         )
+        # This boundary handles arbitrary application generator exceptions.
         except Exception as exc:  # pylint: disable=broad-exception-caught
-            # This boundary handles arbitrary application generator exceptions.
             declared = catalog.resolve(exc)
             effective_errors = (*errors, *_inherited_stream_errors(request))
             try:
@@ -144,8 +144,8 @@ def _terminal_stream(
                     and any(declared is e for e in effective_errors)
                     else None
                 )
+            # Public renderers are application callbacks and may fail arbitrarily.
             except Exception:  # pylint: disable=broad-exception-caught
-                # Public renderers are application callbacks and may fail arbitrarily.
                 logger.exception("SSE problem renderer failed")
                 problem = None
             if problem is None:

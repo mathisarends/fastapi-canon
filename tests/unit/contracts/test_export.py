@@ -34,4 +34,4 @@ def test_selection_rejects_duplicate_feature_identity() -> None:
 
 def test_selection_rejects_a_single_feature_instead_of_a_tuple() -> None:
     with pytest.raises(TypeError, match="tuple of Feature objects, not one"):
-        ContractSelection(features=Feature(name="browser"))  # type: ignore[arg-type]
+        ContractSelection(features=Feature(name="browser"))  # type: ignore[arg-type]  # Single feature instead of a sequence under test.

@@ -2,7 +2,7 @@ import builtins
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from fastapi import FastAPI, WebSocket
@@ -40,7 +40,7 @@ class Container:
         self.exited = False
 
     async def get[DependencyT](self, dependency: type[DependencyT]) -> DependencyT:
-        return self.values[dependency]  # type: ignore[return-value]
+        return cast(DependencyT, self.values[dependency])
 
     @asynccontextmanager
     async def __call__(self, **kwargs: Any) -> AsyncGenerator["Container", None]:
@@ -60,7 +60,7 @@ async def test_dishka_resolver_maps_connection_and_call_scopes_to_containers() -
     root = Container({})
     root.child = session
     connection = Connection("session-1")
-    resolver = DishkaResolver(root)  # type: ignore[arg-type]
+    resolver = DishkaResolver(root)  # type: ignore[arg-type]  # Fake stands in for AsyncContainer.
 
     async with resolver.enter_connection({Connection: connection}) as connected:
         assert isinstance(connected, DishkaResolver)
@@ -84,7 +84,7 @@ async def test_dishka_resolver_explains_a_broken_required_dependency(
         return original_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", missing_dishka)
-    resolver = DishkaResolver(Container({}))  # type: ignore[arg-type]
+    resolver = DishkaResolver(Container({}))  # type: ignore[arg-type]  # Fake stands in for AsyncContainer.
 
     with pytest.raises(
         ModuleNotFoundError, match="requires a complete fastapi-canon installation"
@@ -96,7 +96,7 @@ async def test_dishka_resolver_explains_a_broken_required_dependency(
 async def test_dishka_resolver_rejects_a_non_app_container() -> None:
     container = Container({})
     container.scope = Scope.SESSION
-    resolver = DishkaResolver(container)  # type: ignore[arg-type]
+    resolver = DishkaResolver(container)  # type: ignore[arg-type]  # Fake stands in for AsyncContainer.
 
     with pytest.raises(ValueError, match=r"needs the APP container.*SESSION"):
         async with resolver.enter_connection({}):

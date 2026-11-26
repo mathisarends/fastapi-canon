@@ -8,7 +8,7 @@ from fastapi_canon.integrations.webrtc.capacity import SlotReservation
 @pytest.mark.parametrize("max_sessions", [0, -1, True, 1.5])
 def test_capacity_rejects_non_positive_limits(max_sessions: object) -> None:
     with pytest.raises(ValueError, match="max_sessions must be positive"):
-        SessionCapacity(max_sessions=max_sessions)  # type: ignore[arg-type]
+        SessionCapacity(max_sessions=max_sessions)  # type: ignore[arg-type]  # Invalid limit under test.
 
 
 def test_reservation_holds_one_slot_in_every_capacity_until_released() -> None:

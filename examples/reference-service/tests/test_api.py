@@ -7,7 +7,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel import SQLModel
 
-import app.features.tasks.infrastructure.models  # noqa: F401
+import app.features.tasks.infrastructure.models  # noqa: F401  # Registers the task tables.
 from app.main import create_app
 
 

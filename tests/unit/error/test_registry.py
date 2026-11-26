@@ -80,7 +80,7 @@ def test_registry_deduplicates_same_error_identity() -> None:
 @pytest.mark.parametrize("name", ["", "two\nlines", 42])
 def test_registry_rejects_invalid_name(name: object) -> None:
     with pytest.raises(ErrorConfigurationError):
-        ErrorRegistry(errors=[], name=name)  # type: ignore[arg-type]
+        ErrorRegistry(errors=[], name=name)  # type: ignore[arg-type]  # Invalid argument under test.
 
 
 @pytest.mark.parametrize(
@@ -89,12 +89,12 @@ def test_registry_rejects_invalid_name(name: object) -> None:
 )
 def test_registry_rejects_invalid_type_base(type_base: object) -> None:
     with pytest.raises(ErrorConfigurationError):
-        ErrorRegistry(errors=[], type_base=type_base)  # type: ignore[arg-type]
+        ErrorRegistry(errors=[], type_base=type_base)  # type: ignore[arg-type]  # Invalid argument under test.
 
 
 def test_registry_rejects_non_error_members() -> None:
     with pytest.raises(ErrorConfigurationError):
-        ErrorRegistry(errors=[object()])  # type: ignore[list-item]
+        ErrorRegistry(errors=[object()])  # type: ignore[list-item]  # Non-error entry under test.
 
 
 def test_registry_retains_explicit_type() -> None:
@@ -191,7 +191,7 @@ def test_merge_rejects_shared_error_with_incompatible_feature_bases() -> None:
 
 def test_merge_rejects_non_registry_argument() -> None:
     with pytest.raises(ErrorConfigurationError):
-        ErrorRegistry.merge(object())  # type: ignore[arg-type]
+        ErrorRegistry.merge(object())  # type: ignore[arg-type]  # Invalid argument under test.
 
 
 def test_merge_reports_original_feature_owners_on_collision() -> None:
@@ -235,4 +235,4 @@ def test_registry_is_frozen() -> None:
     registry = ErrorRegistry(errors=[])
 
     with pytest.raises(FrozenInstanceError):
-        registry.name = "changed"  # type: ignore[misc]
+        registry.name = "changed"  # type: ignore[misc]  # Frozen registry under test.
