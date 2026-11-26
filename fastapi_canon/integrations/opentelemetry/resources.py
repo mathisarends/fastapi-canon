@@ -89,6 +89,6 @@ def _decorator(provided: type[Any], adapter: ResourceInstrumentation) -> Any:
     instrument.__annotations__ = {
         "resource": provided,
         "telemetry": Telemetry,
-        "return": Iterator[provided],  # type: ignore[valid-type]
+        "return": Iterator[provided],  # type: ignore[valid-type]  # Dishka reads this runtime-built annotation.
     }
     return instrument

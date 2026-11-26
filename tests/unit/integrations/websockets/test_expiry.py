@@ -153,7 +153,8 @@ async def test_expiry_can_be_renewed_or_removed_and_disconnect_cancels_timer(
 async def test_expiry_waits_for_the_wall_clock_deadline():
     loop = asyncio.get_running_loop()
     started = loop.time()
-    service = expiring_service(time() + 0.2)
+    deadline = time() + 0.2  # smelt: ignore[TST011] -- tests the wall-clock deadline
+    service = expiring_service(deadline)
     async with served(service, "/rpc") as (client, serving):
         await asyncio.wait_for(serving, 5)
         assert loop.time() - started >= 0.15

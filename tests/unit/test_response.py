@@ -45,7 +45,7 @@ def test_response_is_immutable_and_detaches_schema_and_headers() -> None:
         "headers": {"X-Request-ID": {"schema": {"type": "string"}}},
     }
     with pytest.raises(FrozenInstanceError):
-        response.status = 202  # type: ignore[misc]
+        response.status = 202  # type: ignore[misc]  # Frozen response under test.
 
 
 def test_response_convenience_constructors() -> None:
@@ -92,7 +92,7 @@ def test_response_convenience_constructors() -> None:
 )
 def test_response_rejects_invalid_contracts(response: object) -> None:
     with pytest.raises(ErrorConfigurationError):
-        response()  # type: ignore[operator]
+        response()  # type: ignore[operator]  # Non-callable contract under test.
 
 
 def test_success_contract_replaces_fastapi_default_media_type() -> None:

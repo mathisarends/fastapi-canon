@@ -15,9 +15,9 @@ from telemetry import SpanCapture
 pytest.importorskip("opentelemetry.instrumentation.httpx")
 pytest.importorskip("opentelemetry.exporter.otlp.proto.http.trace_exporter")
 
-from opentelemetry.trace import SpanKind  # noqa: E402
+from opentelemetry.trace import SpanKind  # noqa: E402  # Follows the optional exporter guard.
 
-import app.telemetry_demo as demo  # noqa: E402
+import app.telemetry_demo as demo  # noqa: E402  # Follows the optional exporter guard.
 
 
 # providers and HTTP

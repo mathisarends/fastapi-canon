@@ -158,4 +158,4 @@ def test_admission_provider_receives_app_and_exports_detached_metadata() -> None
 def test_admission_provider_must_be_callable() -> None:
     router = SessionRouter(engine=FakeEngine())
     with pytest.raises(TypeError, match="contract provider"):
-        router.session("/s", admission_errors=42)(lambda: Session())  # type: ignore[arg-type]
+        router.session("/s", admission_errors=42)(lambda: Session())  # type: ignore[arg-type]  # Invalid admission errors under test.

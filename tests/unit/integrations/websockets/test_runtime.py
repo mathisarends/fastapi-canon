@@ -1184,7 +1184,7 @@ async def test_invalid_server_event_does_not_close_connection() -> None:
 
     @events.event(payload=Params)
     async def changed() -> AsyncIterator[Params]:
-        yield {}  # type: ignore[misc]
+        yield {}  # type: ignore[misc]  # Invalid event payload under test.
 
     @events.event(payload=Params)
     async def healthy() -> AsyncIterator[Params]:
@@ -1205,7 +1205,7 @@ async def test_event_can_opt_in_to_closing_on_error() -> None:
 
     @events.event(payload=Params, on_error="close")
     async def changed() -> AsyncIterator[Params]:
-        yield {}  # type: ignore[misc]
+        yield {}  # type: ignore[misc]  # Invalid event payload under test.
 
     rpc = RpcDefinition()
     rpc.socket("/events", channels=(events,))

@@ -226,7 +226,7 @@ async def test_invalid_outgoing_models_cannot_bypass_validation() -> None:
     @socket_of(broken)
     async def invalid(message: Ping) -> Pong:
         response = Pong(value=1)
-        response.value = "secret"  # type: ignore[assignment]
+        response.value = "secret"  # type: ignore[assignment]  # Invalid field value under test.
         return response
 
     app = RpcDefinition()

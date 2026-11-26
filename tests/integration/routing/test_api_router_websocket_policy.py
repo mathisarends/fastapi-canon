@@ -8,7 +8,7 @@ from fastapi import APIRouter as FastAPIRouter
 from fastapi import Depends, FastAPI, Header, WebSocket
 from fastapi.testclient import TestClient
 from starlette.routing import WebSocketRoute
-from starlette.testclient import WebSocketDenialResponse
+from starlette.testclient import WebSocketDenialResponse, WebSocketTestSession
 
 from fastapi_canon import APIRouter, Composition, Error, Feature, Inject
 from fastapi_canon.errors import ConfigurationError
@@ -287,10 +287,10 @@ def test_included_routers_cannot_add_routes_without_the_policy_later() -> None:
         grandchild.socket("/anonymous")(anonymous)
 
 
-def _receive(kind: str, socket: object) -> str:
+def _receive(kind: str, socket: WebSocketTestSession) -> str:
     if kind == "channel":
-        socket.send_json({"jsonrpc": "2.0", "id": 1, "method": "me.name"})  # type: ignore[attr-defined]
-        return str(socket.receive_json()["result"])  # type: ignore[attr-defined]
+        socket.send_json({"jsonrpc": "2.0", "id": 1, "method": "me.name"})
+        return str(socket.receive_json()["result"])
     if kind == "socket":
-        return str(socket.receive_text())  # type: ignore[attr-defined]
-    return bytes(socket.receive_bytes()).decode()  # type: ignore[attr-defined]
+        return str(socket.receive_text())
+    return bytes(socket.receive_bytes()).decode()

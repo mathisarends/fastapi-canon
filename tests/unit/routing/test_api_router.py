@@ -43,7 +43,7 @@ def test_core_router_import_keeps_optional_transports_lazy() -> None:
 def test_invalid_channel_does_not_change_routes() -> None:
     router = APIRouter()
     with pytest.raises(ConfigurationError, match="RpcChannel"):
-        router.include_channel(object(), path="/session")  # type: ignore[arg-type]
+        router.include_channel(object(), path="/session")  # type: ignore[arg-type]  # Invalid argument under test.
     assert router.routes == []
 
 
@@ -55,7 +55,7 @@ def test_channel_options_match_the_websocket_adapter() -> None:
 
 def test_websocket_policy_must_be_a_policy() -> None:
     with pytest.raises(ConfigurationError, match="WebSocketPolicy"):
-        APIRouter(websocket_policy=object())  # type: ignore[arg-type]
+        APIRouter(websocket_policy=object())  # type: ignore[arg-type]  # Invalid argument under test.
 
 
 def test_declarations_conflicting_with_the_policy_fail_before_registration() -> None:

@@ -79,7 +79,7 @@ async def test_typed_connection_revalidates_mutated_output_and_releases_handler(
     async def invalid(socket: Inject[RpcSocket[Ping, Pong]]) -> None:
         try:
             output = Pong(value=1)
-            output.value = "secret"  # type: ignore[assignment]
+            output.value = "secret"  # type: ignore[assignment]  # Invalid field value under test.
             await socket.send(output)
         finally:
             released.set()

@@ -139,7 +139,7 @@ def test_positional_message_mistake_has_a_targeted_error() -> None:
         pass
 
     with pytest.raises(TypeError, match=r"did you mean.*message="):
-        ResourceNotFoundError("Not found: x")  # type: ignore[arg-type]
+        ResourceNotFoundError("Not found: x")  # type: ignore[arg-type]  # Positional message under test.
 
 
 class TaskNotFound(Exception):

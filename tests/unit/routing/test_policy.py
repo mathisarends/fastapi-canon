@@ -67,7 +67,7 @@ def test_policy_copies_sequences_and_is_frozen() -> None:
     assert len(policy.dependencies) == 1
     assert policy.raises == (AUTHENTICATION_REQUIRED,)
     with pytest.raises(FrozenInstanceError):
-        policy.raises = ()  # type: ignore[misc]
+        policy.raises = ()  # type: ignore[misc]  # Frozen policy under test.
 
 
 @pytest.mark.parametrize(
@@ -202,7 +202,7 @@ def test_router_factory_policy_extends_nested_feature_routers() -> None:
 
 def test_invalid_policy_type_is_rejected() -> None:
     with pytest.raises(ErrorConfigurationError, match="RouterPolicy instance"):
-        CanonAPIRouter(policy=object())  # type: ignore[arg-type]
+        CanonAPIRouter(policy=object())  # type: ignore[arg-type]  # Invalid policy under test.
 
 
 @pytest.mark.parametrize("scope", ["router", "composition"])

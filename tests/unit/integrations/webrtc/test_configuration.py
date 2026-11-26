@@ -81,7 +81,7 @@ def test_directions() -> None:
 )
 def test_invalid_channels(kwargs: dict[str, object], message: str) -> None:
     with pytest.raises(ValueError, match=message):
-        DataChannelSpec(**kwargs)  # type: ignore[call-overload]
+        DataChannelSpec(**kwargs)  # type: ignore[call-overload]  # Invalid channel options under test.
 
 
 def test_channel_formats_and_adapters() -> None:
@@ -115,7 +115,7 @@ def test_channel_specs_infer_message_types() -> None:
     assert_type(DataChannelSpec("raw"), DataChannelSpec[Any, Any])
     assert union.receive_format == "json"
     with pytest.raises(TypeError):
-        DataChannelSpec("c", None, None, True)  # type: ignore[call-overload]
+        DataChannelSpec("c", None, None, True)  # type: ignore[call-overload]  # Invalid channel options under test.
 
 
 def test_message_handlers_accept_specs_and_names() -> None:
@@ -147,7 +147,7 @@ def test_reliability_options_are_exclusive_including_zero(
 @pytest.mark.parametrize("value", [-1, 65536, 0.5, True])
 def test_invalid_reliability_values(option: str, value: object) -> None:
     with pytest.raises(ValueError, match=f"{option} must be an integer between"):
-        DataChannelSpec(name="c", **{option: value})  # type: ignore[call-overload]
+        DataChannelSpec(name="c", **{option: value})  # type: ignore[call-overload]  # Invalid channel options under test.
 
 
 @pytest.mark.parametrize("option", ["max_retransmits", "max_packet_life_time_ms"])
@@ -231,7 +231,7 @@ def test_invalid_session_names_and_limits() -> None:
 )
 def test_invalid_limits(field: str, value: float, message: str) -> None:
     with pytest.raises(ValueError, match=message):
-        SessionLimits(**{field: value})  # type: ignore[arg-type]
+        SessionLimits(**{field: value})  # type: ignore[arg-type]  # Invalid argument under test.
 
 
 def test_turn_rest_credentials() -> None:
@@ -271,7 +271,7 @@ def test_turn_rest_credentials() -> None:
 )
 def test_invalid_turn_credentials(kwargs: dict[str, object], message: str) -> None:
     with pytest.raises(ValueError, match=message):
-        TurnRestCredentials(**kwargs)  # type: ignore[arg-type]
+        TurnRestCredentials(**kwargs)  # type: ignore[arg-type]  # Invalid argument under test.
 
 
 def test_turn_usernames_cannot_contain_separators() -> None:
@@ -280,7 +280,7 @@ def test_turn_usernames_cannot_contain_separators() -> None:
 
 
 async def test_resolve_ice_servers() -> None:
-    context = SessionContext(name="s", session_id="id", websocket=None)  # type: ignore[arg-type]
+    context = SessionContext(name="s", session_id="id", websocket=None)  # type: ignore[arg-type]  # ICE resolution needs no WebSocket.
     stun = IceServer(urls=("stun:a",))
     assert await resolve_ice_servers(None, context) == IceServers()
     assert await resolve_ice_servers([stun], context) == IceServers(client=(stun,))
@@ -293,7 +293,7 @@ async def test_resolve_ice_servers() -> None:
 
     assert (await resolve_ice_servers(provider, context)).engine == ()
     with pytest.raises(TypeError, match="IceServer"):
-        await resolve_ice_servers(lambda c: ["stun:a"], context)  # type: ignore[arg-type]
+        await resolve_ice_servers(lambda c: ["stun:a"], context)  # type: ignore[arg-type]  # Plain URL result under test.
 
 
 def test_sdp_summary() -> None:
@@ -358,7 +358,7 @@ def test_stats_helpers() -> None:
 )
 def test_allowed_origins_are_validated(origins: object, error: type[Exception]) -> None:
     with pytest.raises(error):
-        WebRtcRouter(engine=FakeEngine(), allowed_origins=origins)  # type: ignore[arg-type]
+        WebRtcRouter(engine=FakeEngine(), allowed_origins=origins)  # type: ignore[arg-type]  # Invalid argument under test.
 
 
 def test_allowed_origins_are_normalized() -> None:

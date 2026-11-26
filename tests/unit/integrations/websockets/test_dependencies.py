@@ -1,7 +1,7 @@
 from collections.abc import AsyncGenerator, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 import pytest
 from fastapi_canon import Inject
@@ -27,7 +27,7 @@ class Resolver:
 
     async def resolve[DependencyT](self, dependency: type[DependencyT]) -> DependencyT:
         self.calls.append(dependency)
-        return self.values[dependency]  # type: ignore[return-value]
+        return cast(DependencyT, self.values[dependency])
 
 
 class ScopedResolver(Resolver):

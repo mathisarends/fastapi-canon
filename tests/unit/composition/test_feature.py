@@ -1,6 +1,6 @@
 import asyncio
 from collections.abc import AsyncIterator, Callable, Sequence
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import FrozenInstanceError, replace
 from typing import cast
 
@@ -33,7 +33,7 @@ def test_feature_copies_inputs_and_is_frozen() -> None:
 
     assert feature.routers == (router,)
     with pytest.raises(FrozenInstanceError):
-        feature.routers = ()  # type: ignore[misc]
+        feature.routers = ()  # type: ignore[misc]  # Frozen value under test.
 
 
 @pytest.mark.parametrize("name", ["", "   ", "two\nlines"])
@@ -205,17 +205,17 @@ def test_composition_and_error_options_are_immutable() -> None:
     assert composition.features == (feature,)
     assert composition.errors is options
     with pytest.raises(FrozenInstanceError):
-        composition.features = ()  # type: ignore[misc]
+        composition.features = ()  # type: ignore[misc]  # Frozen value under test.
     with pytest.raises(FrozenInstanceError):
-        options.type_base = None  # type: ignore[misc]
+        options.type_base = None  # type: ignore[misc]  # Frozen value under test.
 
 
 def test_error_options_reject_invalid_values() -> None:
     with pytest.raises(FeatureConfigurationError, match="type_base"):
-        ErrorOptions(type_base=42)  # type: ignore[arg-type]
+        ErrorOptions(type_base=42)  # type: ignore[arg-type]  # Invalid option value under test.
 
     with pytest.raises(FeatureConfigurationError, match="include_http_exceptions"):
-        ErrorOptions(include_http_exceptions=1)  # type: ignore[arg-type]
+        ErrorOptions(include_http_exceptions=1)  # type: ignore[arg-type]  # Invalid option value under test.
 
 
 def test_composition_rejects_shared_router_without_partial_application() -> None:
@@ -299,7 +299,7 @@ def test_provider_class_and_factory_are_materialized_during_apply() -> None:
 
 def test_invalid_provider_factory_result_names_its_feature() -> None:
     def invalid_factory() -> Provider:
-        return "not a provider"  # type: ignore[return-value]
+        return "not a provider"  # type: ignore[return-value]  # Invalid factory result under test.
 
     with pytest.raises(FeatureConfigurationError, match=r"feature 'catalog'.*str"):
         Composition(
@@ -344,7 +344,7 @@ def test_lifespans_start_in_order_and_stop_in_reverse_order() -> None:
         yield
         events.append("app stop")
 
-    def lifespan(name: str):  # type: ignore[no-untyped-def]
+    def lifespan(name: str) -> Callable[[FastAPI], AbstractAsyncContextManager[None]]:
         @asynccontextmanager
         async def manager(app: FastAPI) -> AsyncIterator[None]:
             del app

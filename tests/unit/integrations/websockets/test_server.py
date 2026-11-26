@@ -445,7 +445,7 @@ async def test_invalid_handler_result_is_internal(caplog) -> None:
 
     @channel.method()
     async def broken() -> int:
-        return "abc"  # type: ignore[return-value]
+        return "abc"  # type: ignore[return-value]  # Invalid handler result under test.
 
     with caplog.at_level(logging.ERROR, logger="fastapi_canon.integrations.websockets"):
         response = await channel.create_server().handle(
@@ -465,7 +465,7 @@ async def test_matching_dict_handler_result_is_accepted() -> None:
 
     @channel.method()
     async def valid() -> Result:
-        return {"value": 3}  # type: ignore[return-value]
+        return {"value": 3}  # type: ignore[return-value]  # A plain dict validates as Result.
 
     response = await channel.create_server().handle(
         {"jsonrpc": "2.0", "id": 1, "method": "result.valid"}

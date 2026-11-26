@@ -50,7 +50,7 @@ def test_async_runtime_factories_are_rejected(parameter: str) -> None:
 @pytest.mark.parametrize("parameter", ["stateless_http", "mask_error_details"])
 def test_runtime_flags_reject_non_booleans(parameter: str) -> None:
     with pytest.raises(FeatureConfigurationError, match=parameter):
-        Mcp(**{parameter: "true"})  # type: ignore[arg-type]
+        Mcp(**{parameter: "true"})  # type: ignore[arg-type]  # Invalid option value under test.
 
 
 def test_runtime_defaults_preserve_fastmcp_settings() -> None:

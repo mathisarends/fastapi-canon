@@ -479,7 +479,7 @@ def test_protocol_declarations_are_validated() -> None:
     with pytest.raises(ValueError, match="encodings"):
         RpcSocketProtocol("cdp", encoding="JSON")
     with pytest.raises(TypeError, match="sequence of strings"):
-        RpcSocketProtocol("cdp", schemas="schema.json")  # type: ignore[arg-type]
+        RpcSocketProtocol("cdp", schemas="schema.json")  # type: ignore[arg-type]  # Invalid schemas under test.
     with pytest.raises(ValueError, match="without whitespace"):
         RpcSocketProtocol("cdp", schemas=("a b.json",))
     with pytest.raises(ValueError, match="distinct"):

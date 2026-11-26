@@ -334,9 +334,9 @@ def test_instrument_returns_one_part_for_all_ports(ports: tuple[type, ...]) -> N
 
 def test_instrument_requires_a_positional_port() -> None:
     with pytest.raises(TypeError, match="port"):
-        instrument()  # type: ignore[call-arg]
+        instrument()  # type: ignore[call-arg]  # Missing port under test.
     with pytest.raises(TypeError, match="port"):
-        instrument(port=Repository)  # type: ignore[call-arg]
+        instrument(port=Repository)  # type: ignore[call-arg]  # Keyword port under test.
     with pytest.raises(FeatureConfigurationError, match="unique"):
         instrument(Repository, Repository)
 
@@ -423,7 +423,7 @@ def test_instrumentation_is_immutable_and_copied_by_feature() -> None:
     assert declaration.component == "named"
     assert feature.integrations == (declaration,)
     with pytest.raises(FrozenInstanceError):
-        declaration.component = "other"  # type: ignore[misc]
+        declaration.component = "other"  # type: ignore[misc]  # Frozen declaration under test.
     assert not hasattr(telemetry_api, "observe")
 
 
@@ -608,17 +608,17 @@ def test_invalid_instrumentation() -> None:
     with pytest.raises(FeatureConfigurationError, match="public async methods"):
         instrument(Repository, SyncPort)
     with pytest.raises(FeatureConfigurationError, match="port must be a class"):
-        instrument(object())  # type: ignore[arg-type]
+        instrument(object())  # type: ignore[arg-type]  # Invalid argument under test.
     with pytest.raises(FeatureConfigurationError, match="Exception subclasses"):
-        instrument(Repository, expected=[str])  # type: ignore[list-item]
+        instrument(Repository, expected=[str])  # type: ignore[list-item]  # Invalid entry under test.
     with pytest.raises(FeatureConfigurationError, match="component must be a string"):
-        instrument(Repository, component=None)  # type: ignore[arg-type]
+        instrument(Repository, component=None)  # type: ignore[arg-type]  # Invalid argument under test.
     with pytest.raises(FeatureConfigurationError, match="integration part"):
-        Feature(name="invalid", integrations=[Repository])  # type: ignore[list-item]
+        Feature(name="invalid", integrations=[Repository])  # type: ignore[list-item]  # Invalid entry under test.
     with pytest.raises(FeatureConfigurationError, match="list of integration parts"):
-        Feature(name="invalid", integrations=instrument(Repository))  # type: ignore[arg-type]
+        Feature(name="invalid", integrations=instrument(Repository))  # type: ignore[arg-type]  # Invalid argument under test.
     with pytest.raises(FeatureConfigurationError, match="ResourceInstrumentation"):
-        Telemetry(resources=[object()])  # type: ignore[list-item]
+        Telemetry(resources=[object()])  # type: ignore[list-item]  # Invalid entry under test.
 
 
 @pytest.mark.parametrize("enabled", [False, True])

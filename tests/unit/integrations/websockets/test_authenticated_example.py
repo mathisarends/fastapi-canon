@@ -32,10 +32,11 @@ def test_authenticated_calls_and_expiry(monkeypatch):
         return SimpleNamespace(cancel=lambda: None)
 
     monkeypatch.setattr(connection_module, "_schedule_expiry", schedule)
+    expiry = time.time() + 3600  # smelt: ignore[TST011] -- logins expire by wall clock
     app = create_app()
     with TestClient(app) as client:
         sessions = client.portal.call(app.state.dishka_container.get, Sessions)
-        login = Login("grace", time.time() + 3600)
+        login = Login("grace", expiry)
         sessions.values["short"] = login
         with client.websocket_connect(
             "/rpc",
