@@ -130,6 +130,39 @@ def test_sse_raises_registers_shared_and_local_processing_errors(
     assert len(operation["x-canon-stream"]["problems"]) == 1
 
 
+def test_sse_logs_registered_error_missing_from_raises(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from fastapi import FastAPI
+    from fastapi.sse import EventSourceResponse
+
+    from examples.canonical_errors.app import ProjectMissing
+    from fastapi_canon import APIRouter
+
+    router = APIRouter()
+
+    @router.get("/events", response_class=EventSourceResponse)
+    async def events() -> AsyncIterator[int]:
+        yield 1
+        raise ProjectMissing("private failure")
+
+    app = Composition(
+        features=[Feature(name="events", routers=[router], errors=[project_missing])]
+    ).build(FastAPI())
+    with TestClient(app) as client:
+        response = client.get("/events")
+
+    assert response.status_code == 200
+    assert "event: canon.problem" in response.text
+    assert "internal_server_error" in response.text
+    assert "private failure" not in response.text
+    assert "project_missing" not in response.text
+    assert (
+        "events raised registered error 'project_missing' missing from raises="
+        in caplog.text
+    )
+
+
 def test_nested_plain_router_keeps_declarations_isolated_between_applications() -> None:
     from fastapi import APIRouter, FastAPI
 

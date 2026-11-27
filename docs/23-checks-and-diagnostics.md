@@ -363,6 +363,18 @@ fastapi-canon check errors src --strict --require-complete
 
 See [source error checking](07-error-checking.md) for its coverage and exit policy.
 
+### Inspect RPC mounts (unreleased)
+
+```console
+fastapi-canon inspect app.main:app --rpc
+```
+
+Each mount lists its effective WebSocket path, mounted JSON-RPC methods and any
+methods registered on its source channel after `router.include_channel()`.
+Register those methods before mounting if they should be available on that path.
+With `--format json`, the report has `schema_version: 1` and a `rpc_mounts` array
+with `path`, `methods` and `methods_added_after_mount` for each endpoint.
+
 ## Explain diagnostic codes
 
 `fastapi-canon explain CODE` gives the meaning, a minimal example, a repair and
@@ -394,6 +406,7 @@ and application documentation, rather than a built-in catalogue entry.
 | `CAN002` | A supported explicit application exception lacks a known mapping; see [source checking](07-error-checking.md). |
 | `CAN003` | Source analysis is incomplete; see [analysis boundaries](07-error-checking.md#analysis-boundaries). |
 | `canon.*` composition codes | Configuration, routing, provider-root and contract checks; see [findings and coverage](23-checks-and-diagnostics.md#findings-and-coverage). |
+| `CANON-029-*` (unreleased) | Migration instructions for [upgrading to 0.29](24-upgrading.md#upgrade-to-0290). |
 
 The catalogue also links specific [RPC roots](23-checks-and-diagnostics.md#rpc-method-dependency-preflight),
 [HTTP/SSE roots](23-checks-and-diagnostics.md#http-and-sse-endpoint-dependency-preflight),

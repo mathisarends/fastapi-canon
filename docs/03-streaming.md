@@ -57,6 +57,10 @@ dependency, like `require_run` above.
 | the generator | `canon.problem` event, then the stream ends |
 | the network | a transport error |
 
+Declare public generator failures in `raises=` and let Canon send the terminal
+event. A registered error missing from the stream's `raises=` sends a generic
+`internal_server_error`; the server log identifies the missing declaration.
+
 ## POST streams
 
 Use `@router.post` when the request needs a JSON body, as most chat and agent

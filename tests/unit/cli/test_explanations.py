@@ -62,6 +62,25 @@ def test_text_explanations_keep_existing_code_names(
     assert "Guide: https://github.com/" in output
 
 
+@pytest.mark.parametrize(
+    ("code", "replacement"),
+    [
+        ("CANON-029-NATIVE-SSE-ROUTES", "response_class=EventSourceResponse"),
+        ("CANON-029-RPC-CHANNEL-ROUTING", "router.include_channel("),
+        ("CANON-029-WEBSOCKETS-FACADE", "Import Inject from fastapi_canon."),
+    ],
+)
+def test_migration_id_explains_replacement_and_links_upgrade_guide(
+    code: str, replacement: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert canon_cli.main(["explain", code, "--format", "json"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["schema_version"] == 1
+    assert report["code"] == code
+    assert replacement in report["repair"]
+    assert report["guide"].endswith("24-upgrading.md#upgrade-to-0290")
+
+
 @pytest.mark.parametrize("code", ["CAN999", "projects.W001"])
 @pytest.mark.parametrize("output_format", ["text", "json"])
 def test_unknown_or_application_codes_return_actionable_exit_two(

@@ -137,19 +137,28 @@ def _terminal_stream(
         except Exception as exc:  # pylint: disable=broad-exception-caught
             declared = catalog.resolve(exc)
             effective_errors = (*errors, *_inherited_stream_errors(request))
-            try:
-                problem = (
-                    problem_for(catalog, exc)
-                    if declared is not None
-                    and any(declared is e for e in effective_errors)
-                    else None
+            problem = None
+            if declared is None:
+                logger.error(
+                    "SSE operation %s failed", endpoint.__qualname__, exc_info=exc
                 )
-            # Public renderers are application callbacks and may fail arbitrarily.
-            except Exception:  # pylint: disable=broad-exception-caught
-                logger.exception("SSE problem renderer failed")
-                problem = None
+            elif not any(declared is error for error in effective_errors):
+                logger.error(
+                    "SSE operation %s raised registered error %r missing from raises=. "
+                    "Add its Error to raises= if clients should handle it.",
+                    endpoint.__qualname__,
+                    declared.code,
+                    exc_info=exc,
+                )
+            else:
+                try:
+                    problem = problem_for(catalog, exc)
+                # Public renderers are application callbacks and may fail arbitrarily.
+                except Exception:  # pylint: disable=broad-exception-caught
+                    logger.exception(
+                        "SSE problem renderer failed for %s", endpoint.__qualname__
+                    )
             if problem is None:
-                logger.error("SSE operation %s failed", endpoint.__name__, exc_info=exc)
                 problem = internal_problem(catalog)
             yield ServerSentEvent(event="canon.problem", data=problem.as_dict())
             return

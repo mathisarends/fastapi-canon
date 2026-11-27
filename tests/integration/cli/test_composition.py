@@ -60,6 +60,74 @@ def test_cli_inspect_uses_the_installed_snapshot_as_json(
     assert document["operations"][0]["operation_id"] == "projects.get"
 
 
+def test_cli_inspect_rpc_reports_methods_for_each_mounted_snapshot(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "rpc_app.py").write_text(
+        dedent("""
+        from fastapi import FastAPI
+        from fastapi_canon import APIRouter, Composition, Feature
+        from fastapi_canon.integrations.websockets import RpcChannel
+
+        channel = RpcChannel(namespace="projects")
+        router = APIRouter(prefix="/projects")
+
+        @channel.method()
+        async def read() -> str:
+            return "first"
+
+        router.include_channel(channel, path="/first")
+
+        @channel.method()
+        async def update() -> str:
+            return "second"
+
+        router.include_channel(channel, path="/second")
+        composition = Composition(
+            features=[Feature(name="projects", routers=[router])],
+            router_factory=lambda: APIRouter(prefix="/api"),
+        )
+
+        def create_app():
+            return composition.build(FastAPI())
+        """),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "fastapi_canon",
+            "inspect",
+            "rpc_app:create_app",
+            "--rpc",
+            "--format",
+            "json",
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "schema_version": 1,
+        "rpc_mounts": [
+            {
+                "path": "/api/projects/first",
+                "methods": ["projects.read"],
+                "methods_added_after_mount": ["projects.update"],
+            },
+            {
+                "path": "/api/projects/second",
+                "methods": ["projects.read", "projects.update"],
+                "methods_added_after_mount": [],
+            },
+        ],
+    }
+
+
 @pytest.mark.parametrize("options", [[], ["--factory"]])
 def test_cli_inspect_accepts_a_factory_and_its_compatibility_flag(
     application_module: Path,

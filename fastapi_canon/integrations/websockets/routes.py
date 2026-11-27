@@ -1,4 +1,5 @@
 from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from dishka import DependencyKey, Scope
@@ -6,6 +7,13 @@ from fastapi import FastAPI
 
 from fastapi_canon.diagnostics import CheckIssue, CheckResult, qualified_name
 from fastapi_canon.integration import IntegrationRoute, RouteContext
+from fastapi_canon.integrations.websockets.channel import RpcChannel
+from fastapi_canon.integrations.websockets.definition import (
+    ENDPOINT_ATTRIBUTE,
+    SOURCE_CHANNEL_ATTRIBUTE,
+    RpcEndpoint,
+)
+from fastapi_canon.routing.traversal import iter_contract_routes
 
 type DependencyRoots = Iterable[tuple[str, Sequence[Any] | None]]
 
@@ -83,3 +91,33 @@ class RegisteredRpcRoute(IntegrationRoute):
                     )
                 )
             context.record(CheckResult(name, "failed" if missing else "passed"))
+
+
+@dataclass(frozen=True, slots=True)
+class RpcMountInfo:
+    path: str
+    methods: tuple[str, ...]
+    methods_added_after_mount: tuple[str, ...]
+
+
+def inspect_rpc_mounts(app: FastAPI) -> tuple[RpcMountInfo, ...]:
+    mounts: list[RpcMountInfo] = []
+    for path, route in iter_contract_routes(app.routes):
+        handler = getattr(route, "endpoint", None)
+        endpoint = getattr(handler, ENDPOINT_ATTRIBUTE, None)
+        if not isinstance(endpoint, RpcEndpoint):
+            continue
+        methods = tuple(sorted(method.name for method in endpoint.protocol.methods))
+        source = getattr(handler, SOURCE_CHANNEL_ATTRIBUTE, None)
+        added: tuple[str, ...] = ()
+        if isinstance(source, RpcChannel):
+            added = tuple(sorted(set(_method_names(source)).difference(methods)))
+        mounts.append(RpcMountInfo(path, methods, added))
+    return tuple(mounts)
+
+
+def _method_names(channel: RpcChannel) -> Iterable[str]:
+    for route in channel.routes:
+        yield route.name
+    for child in channel.children:
+        yield from _method_names(child)

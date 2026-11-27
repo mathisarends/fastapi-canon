@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 
 from fastapi import FastAPI
 
+from fastapi_canon.diagnostics import qualified_name
 from fastapi_canon.error.contracts import AnyError as AnyError
 from fastapi_canon.error.error import Error
 from fastapi_canon.error.handlers import install_handlers
@@ -279,7 +280,8 @@ def _collision_error(
     second: _RegistryEntry,
 ) -> ErrorConfigurationError:
     return ErrorConfigurationError(
-        f"conflicting {dimension} {value!r}: error {first.error.code!r} from "
-        f"registry {first.source!r} conflicts with error {second.error.code!r} "
-        f"from registry {second.source!r}"
+        f"conflicting {dimension} {value!r}: error {first.error.code!r} "
+        f"({qualified_name(first.error.exception)}) from registry {first.source!r} "
+        f"conflicts with error {second.error.code!r} "
+        f"({qualified_name(second.error.exception)}) from registry {second.source!r}"
     )

@@ -15,6 +15,9 @@ PyPI project or add further Python import changes.
 
 See the [changelog](../CHANGELOG.md#0290---2026-11-25).
 
+Unreleased builds can look up 0.29 migration IDs from the changelog, for example
+`fastapi-canon explain CANON-029-NATIVE-SSE-ROUTES`.
+
 - Regenerate strict SSE clients. If generation reports a stale allowance,
   delete that entry from `allow-diagnostics`: the `uri-reference` diagnostics on
   Canon problem `type` and `instance` fields are no longer reported. Remove an

@@ -209,6 +209,12 @@ def test_merge_reports_original_feature_owners_on_collision() -> None:
 
     assert "sessions" in str(error.value)
     assert "accounts" in str(error.value)
+    assert f"{SessionNotFound.__module__}.{SessionNotFound.__qualname__}" in str(
+        error.value
+    )
+    assert f"{AccountNotFound.__module__}.{AccountNotFound.__qualname__}" in str(
+        error.value
+    )
 
 
 def test_resolution_uses_most_specific_registered_mro_class() -> None:
