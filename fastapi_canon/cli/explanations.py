@@ -15,11 +15,12 @@ class _Explanation:
 
 _DOCS = "https://github.com/mathisarends/fastapi-canon/blob/main/docs/"
 _CHECKS = _DOCS + "23-checks-and-diagnostics.md#findings-and-coverage"
+_UPGRADE_029 = _DOCS + "24-upgrading.md#upgrade-to-0290"
 _EXPLANATIONS = {
     "CAN001": _Explanation(
         "A reachable application exception has a known Error mapping but is missing from the operation's raises declaration.",
         "An existing missing = Error(Missing, ...) is registered; read() raises Missing, but @router.get('/items') omits raises=[missing].",
-        "Reference the existing Error in raises=[missing] on each affected operation; keep one mapping for the exception.",
+        "Follow the trace to the raise site. Add the existing Error to raises= if callers should handle it. Handle or translate internal failures where the application can distinguish them from public errors.",
         _DOCS + "07-error-checking.md",
     ),
     "CAN002": _Explanation(
@@ -33,6 +34,78 @@ _EXPLANATIONS = {
         "An operation calls item.save() on a receiver of unknown type while application classes define save; the message lists the candidates.",
         "Annotate the receiver, pass the missing import roots, or replace dynamic dispatch such as getattr(obj, name)(). Fix the top root causes in the report first.",
         _DOCS + "07-error-checking.md#analysis-boundaries",
+    ),
+    "CANON-029-RPC-WIRE-FIELDS": _Explanation(
+        "RPC request fields need distinct flat validation names.",
+        "A request field only accepts AliasPath('user', 'name').",
+        "Add a distinct flat AliasChoices alternative or enable validation by field name. Path parameters need a flat name matching the route placeholder. Regenerate RPC clients.",
+        _UPGRADE_029,
+    ),
+    "CANON-029-PROBLEM-URI-DIAGNOSTICS": _Explanation(
+        "Strict SSE code generation now recognizes URI references in Canon problem schemas.",
+        "An allowance for a uri-reference diagnostic on a generated problem's type or instance field is stale.",
+        "Remove the stale allowance. If its file becomes empty, remove that file and its allow-diagnostics setting.",
+        _UPGRADE_029,
+    ),
+    "CANON-029-FASTAPI-0165": _Explanation(
+        "Canon 0.29 requires FastAPI >=0.165.",
+        "The application pins FastAPI to 0.143.1.",
+        "Update the FastAPI pin and lockfile before upgrading Canon. Review your use of form defaults, JSON null bodies and extra fields in parameter models.",
+        _UPGRADE_029,
+    ),
+    "CANON-029-NATIVE-SSE-ROUTES": _Explanation(
+        "Canon 0.29 uses FastAPI's EventSourceResponse to declare typed streams.",
+        "@router.sse('/events', methods=['POST'])",
+        "Import EventSourceResponse from fastapi.sse. Use @router.post('/events', response_class=EventSourceResponse) for POST or router.get() for GET. Replace StreamOptions with APIRouteOptions.",
+        _UPGRADE_029,
+    ),
+    "CANON-029-RPC-SIGNATURE-PARAMS": _Explanation(
+        "RPC methods and message streams take their request parameters from the handler signature.",
+        "async def rename(title: str) -> None: ...",
+        "Use named handler parameters or one positional-or-keyword Pydantic model for the entire params object. Regenerate RPC clients.",
+        _UPGRADE_029,
+    ),
+    "CANON-029-RPC-MODEL-REMOVED": _Explanation(
+        "RpcModel was removed. Pydantic fields and aliases define the RPC wire names.",
+        "class Rename(RpcModel): ...",
+        "Inherit from BaseModel. Apply the alias and validation settings in the upgrade guide to retain camel-case wire names and rejection of extra fields.",
+        _UPGRADE_029,
+    ),
+    "CANON-029-RPC-CHANNEL-ROUTING": _Explanation(
+        "APIRouter.channel() and RpcChannel.socket() were removed.",
+        "router.channel('/rpc', namespace='tasks')",
+        "Declare RpcChannel(namespace='tasks') and its handlers, then call router.include_channel(channel, path='/rpc'). Declare sockets with @router.socket() and use Annotated[T, Path()] in place of path_model=.",
+        _UPGRADE_029,
+    ),
+    "CANON-029-RPC-PATH-DECLARATIONS": _Explanation(
+        "Operations at the same WebSocket path need compatible declarations for each shared path variable.",
+        "Two RPC handlers use different aliases or constraints for project_id.",
+        "Align each handler's Path() type, alias and constraints with the shared URL placeholder.",
+        _UPGRADE_029,
+    ),
+    "CANON-029-RPC-CHANNEL-NAMESPACE": _Explanation(
+        "RpcChannel now accepts namespace as a keyword only.",
+        "RpcChannel('tasks')",
+        "Use RpcChannel(namespace='tasks').",
+        _UPGRADE_029,
+    ),
+    "CANON-029-BODY-LIMIT-PROBLEMS": _Explanation(
+        "Canon's HTTP exception handling returns a 413 Problem Details response for fixed-length and streamed body-limit rejections.",
+        "A client parses the plain-text 413 response to an oversized Content-Length.",
+        "Read the 413 response as application/problem+json.",
+        _UPGRADE_029,
+    ),
+    "CANON-029-WEBSOCKETS-FACADE": _Explanation(
+        "Several imports moved out of the WebSocket integration facade.",
+        "from fastapi_canon.integrations.websockets import Inject, CanonWebSocketRouter",
+        "Import Inject from fastapi_canon. Import CanonWebSocketRouter, FastApiSocket and serve_websocket from fastapi_canon.integrations.websockets.adapters.fastapi.",
+        _UPGRADE_029,
+    ),
+    "CANON-029-COMPLETE-ERROR-CHECK": _Explanation(
+        "The source checker follows more exception paths in Canon 0.29.",
+        "A previously unresolved call now reports a missing raises= entry.",
+        "Run fastapi-canon check errors src --strict and review the new traces. Declare public failures, handle internal failures and use the reported root causes to resolve remaining CAN003 findings.",
+        _UPGRADE_029,
     ),
     "canon.composition.E001": _Explanation(
         "The application cannot accept this composition at its current installation phase or with its current integration options.",
@@ -179,10 +252,12 @@ _EXPLANATIONS = {
 def main(arguments: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="fastapi-canon explain",
-        description="Explain built-in source, composition and generation diagnostic codes without importing application code.",
-        epilog="Examples: CAN003, canon.routing.E002, canon.routing.E002. Codes are case-sensitive. Exit codes: 0 explained; 2 unknown code or invalid arguments. Application-defined codes use their own CheckIssue hint.",
+        description="Explain built-in diagnostics and Canon 0.29 migration IDs without importing application code.",
+        epilog="Examples: CAN003, canon.routing.E002, CANON-029-NATIVE-SSE-ROUTES. Codes are case-sensitive. Exit codes: 0 explained; 2 unknown code or invalid arguments. Application-defined codes use their own CheckIssue hint.",
     )
-    parser.add_argument("code", help="Diagnostic code exactly as printed in its report")
+    parser.add_argument(
+        "code", help="Diagnostic code or migration ID from the changelog"
+    )
     parser.add_argument(
         "--format",
         choices=("text", "json"),

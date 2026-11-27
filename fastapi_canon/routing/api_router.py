@@ -220,7 +220,11 @@ class APIRouter(CanonRouter):
             close_when_events_complete=close_when_events_complete,
         )
         self._include_websocket_adapter(
-            adapter, path, dependencies, default_name=name is None
+            adapter,
+            path,
+            dependencies,
+            default_name=name is None,
+            source_channel=channel,
         )
 
     def binary_stream[Stream: Callable[..., Any]](
@@ -446,9 +450,11 @@ class APIRouter(CanonRouter):
         dependencies: Sequence[Depends],
         *,
         default_name: bool,
+        source_channel: RpcChannel | None = None,
     ) -> None:
         from fastapi_canon.integrations.websockets.definition import (
             DEFAULT_ENDPOINT_NAME_ATTRIBUTE,
+            SOURCE_CHANNEL_ATTRIBUTE,
         )
 
         adapter.freeze()
@@ -459,6 +465,8 @@ class APIRouter(CanonRouter):
             raise ConfigurationError("The channel adapter did not produce a WebSocket")
         if default_name:
             route.endpoint.__dict__[DEFAULT_ENDPOINT_NAME_ATTRIBUTE] = True
+        if source_channel is not None:
+            route.endpoint.__dict__[SOURCE_CHANNEL_ATTRIBUTE] = source_channel
         if self.websocket_policy is not None:
             route.endpoint.__dict__["__canon_websocket_policy__"] = (
                 self.websocket_policy

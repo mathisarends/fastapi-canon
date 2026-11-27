@@ -16,6 +16,14 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 - The skill is a short overview that points agents to the installed source
   for details, and matches the 0.29 API.
+- SSE logs identify registered errors missing from a stream's `raises=`.
+  Error registry conflicts include both exception classes.
+
+### Added
+
+- `fastapi-canon inspect APP --rpc` shows mounted RPC methods and methods
+  registered on the source channel after each mount.
+- `fastapi-canon explain` accepts the 0.29 migration IDs from the changelog.
 
 ## 0.29.0 - 2026-11-25
 

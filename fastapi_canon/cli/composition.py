@@ -53,6 +53,11 @@ def main(arguments: Sequence[str], *, inspect: bool = False) -> int:
     )
     if inspect:
         parser.add_argument(
+            "--rpc",
+            action="store_true",
+            help="List mounted JSON-RPC methods, including methods registered on the source channel after each mount",
+        )
+        parser.add_argument(
             "--factory",
             action="store_true",
             help="Compatibility flag: synchronous app factories are accepted automatically and called without arguments",
@@ -83,6 +88,8 @@ def main(arguments: Sequence[str], *, inspect: bool = False) -> int:
             "one application each, checked in its own process when repeated; not combined with a target or --app",
         )
     args = parser.parse_args(arguments)
+    if inspect and args.rpc:
+        return _inspect_rpc(args)
     if not inspect and args.configs:
         if args.target is not None or args.app:
             return _fail(
@@ -90,6 +97,36 @@ def main(arguments: Sequence[str], *, inspect: bool = False) -> int:
             )
         return _check_configured(args)
     return _run(args, inspect=inspect, root=Path.cwd())
+
+
+def _inspect_rpc(args: argparse.Namespace) -> int:
+    from fastapi_canon.integrations.websockets.routes import inspect_rpc_mounts
+
+    try:
+        with open_application(
+            args.target, root=Path.cwd(), close_factory=close_installed_app
+        ) as app:
+            mounts = inspect_rpc_mounts(app)
+    except (ImportError, AttributeError, ValueError, TypeError) as error:
+        return _fail(args.format, str(error))
+    if args.format == "json":
+        print(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "rpc_mounts": [asdict(mount) for mount in mounts],
+                },
+                indent=2,
+            )
+        )
+        return 0
+    for mount in mounts:
+        print(f"WEBSOCKET {mount.path}")
+        for method in mount.methods:
+            print(f"  method: {method}")
+        for method in mount.methods_added_after_mount:
+            print(f"  registered after include_channel(): {method}")
+    return 0
 
 
 def _check_configured(args: argparse.Namespace) -> int:

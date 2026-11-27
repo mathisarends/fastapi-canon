@@ -168,6 +168,8 @@ A namespace may itself be dotted, such as `RpcChannel(namespace="voice.turn")`.
 
 `include_channel` mounts a snapshot. Later registrations on the source channel
 do not change an endpoint that is already mounted.
+The unreleased [RPC inspection command](../../23-checks-and-diagnostics.md#inspect-rpc-mounts-unreleased)
+shows each mount's effective path and methods.
 
 ## Protocol version
 

@@ -35,7 +35,7 @@ project_missing = Error(
     title="Project not found",
     detail="Choose another project.",
 )
-router = APIRouter()
+router = APIRouter(namespace="projects")
 
 
 def require_project(project_id: int) -> None:
@@ -43,18 +43,16 @@ def require_project(project_id: int) -> None:
         raise ProjectMissing()
 
 
-@router.get(
-    "/projects/{project_id}",
-    operation_id="projects.get",
-    raises=[project_missing],
-)
-async def get_project(project_id: int) -> Project:
+@router.get("/projects/{project_id}", raises=[project_missing])
+async def get(project_id: int) -> Project:
     require_project(project_id)
     return Project(id=project_id)
 ```
 
 `GET /projects/0` returns a 404 `application/problem+json` response, and
 OpenAPI documents it. The exception stays plain Python.
+The namespace and function name form the operation ID `projects.get`.
+Use an explicit `operation_id="projects.get"` to keep that ID when renaming it.
 
 ## Step 2: a typed stream
 
@@ -72,7 +70,6 @@ class ProjectEvent(BaseModel):
 @router.get(
     "/projects/{project_id}/events",
     response_class=EventSourceResponse,
-    operation_id="projects.events",
     dependencies=[Depends(require_project)],
     raises=[project_missing],
 )
@@ -117,7 +114,8 @@ app = Composition(
 uv run uvicorn src.app:app --reload
 ```
 
-`build` validates every contract before the app starts.
+`build` checks composition before the app starts. Use the source check below
+to find exceptions missing from operation declarations.
 
 ## Step 5: generate clients
 

@@ -60,6 +60,7 @@ from fastapi_canon.integrations.websockets.server import (
 
 ENDPOINT_ATTRIBUTE = "__canon_rpc_endpoint__"
 DEFAULT_ENDPOINT_NAME_ATTRIBUTE = "__canon_rpc_default_endpoint_name__"
+SOURCE_CHANNEL_ATTRIBUTE = "__canon_rpc_source_channel__"
 
 
 @dataclass(frozen=True, slots=True, eq=False)

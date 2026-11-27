@@ -70,6 +70,10 @@ Default mode reports and exits zero. `--strict` exits one for CAN001/CAN002;
 supported operations. Invalid roots, duplicate modules and syntax errors exit two.
 The [quickstart](01-quickstart.md#step-6-keep-it-honest-in-ci) shows a minimal CI setup.
 
+For `CAN001`, follow the trace before changing the public contract. Add the existing
+error to `raises=` when clients are expected to handle it. Handle or translate
+internal failures where the application can distinguish them from public errors.
+
 Text output ends with the root causes of incomplete analysis, ranked by the number
 of affected operations; fix the top entries first. `--format json` reports each
 operation's `transport`, `diagnostics` and `complete` flag, plus `contract_gaps`,
